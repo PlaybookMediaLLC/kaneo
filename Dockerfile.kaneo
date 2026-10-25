@@ -94,7 +94,7 @@ RUN pnpm run build && find dist -type f -name '*.map' -delete
 
 FROM node:24.22.1-alpine AS runtime
 
-RUN apk add --no-cache nginx=~1.30.4 && \
+RUN apk add --no-cache nginx=~1.30.6 && \
   addgroup -g 1001 appuser && \
   adduser -u 1001 -G appuser -D appuser && \
   mkdir -p /app /app/apps/api/data /var/cache/nginx /var/run/nginx /var/log/nginx /var/lib/nginx/logs /var/lib/nginx/tmp /usr/share/nginx/html /docker-entrypoint.d && \

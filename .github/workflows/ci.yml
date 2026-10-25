@@ -448,8 +448,7 @@ jobs:
           head="$(git rev-parse --verify --quiet "$HEAD_REF" 2>/dev/null || true)"
           # Runs as a downloaded binary instead of the trufflesecurity/trufflehog
           # action or its container: the action hard-codes --github-actions
-          # (conflicts with --sarif), and a container cannot resolve the
-          # Blacksmith git mirror backing this checkout, so cloning it there fails.
+          # (conflicts with --sarif).
           # --fail still writes a complete SARIF file before exiting 183.
           "$RUNNER_TEMP/trufflehog" git "file://$PWD" \
             --results=verified,unknown \
@@ -513,9 +512,12 @@ jobs:
     steps:
       - name: Require every validation job to pass
         env:
-          RESULTS: ${{ join(needs.*.result, ' ') }}
+          RESULTS: ${{ toJson(needs) }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          test -n "$RESULTS"
-          for result in $RESULTS; do
-            test "$result" = success || exit 1
-          done
+          jq -e --arg event "$EVENT_NAME" '
+            length > 0 and all(to_entries[];
+              .value.result == "success" or
+              (.key == "secret-scan" and $event == "schedule" and .value.result == "skipped")
+            )
+          ' <<< "$RESULTS"
