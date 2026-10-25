@@ -24,7 +24,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
           package-manager-cache: false
       - run: npm ci --ignore-scripts
         working-directory: scripts/ui-review-bot
@@ -40,7 +40,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
           package-manager-cache: false
       - run: npm ci --ignore-scripts --no-audit --no-fund
         working-directory: scripts/slop-labeler
@@ -62,7 +62,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
           cache: pnpm
 
       - name: Install dependencies
@@ -88,7 +88,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
           cache: pnpm
 
       - name: Install dependencies
@@ -114,7 +114,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
           cache: pnpm
 
       - name: Install dependencies
@@ -138,7 +138,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
           cache: pnpm
 
       - name: Install dependencies
@@ -162,7 +162,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
           cache: pnpm
 
       - name: Install dependencies
@@ -194,7 +194,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
           cache: pnpm
 
       - name: Install dependencies
@@ -242,7 +242,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
           cache: pnpm
 
       - name: Install dependencies
@@ -278,7 +278,7 @@ jobs:
           version: 10.32.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts --filter @kaneo/api...
       - run: npm ci --ignore-scripts
@@ -369,7 +369,7 @@ jobs:
           version: 10.32.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Start disposable S3 storage
@@ -508,3 +508,18 @@ jobs:
             --data-binary @"$RUNNER_TEMP/discord-payload.json" \
             "$TRUFFLEHOG_WEBHOOK" \
             || echo "::warning::Discord notification could not be delivered."
+
+  ci-validation:
+    name: CI validation
+    if: always()
+    needs: [peekareq-tests, slop-labeler-tests, lint, i18n, openapi, typecheck, unit, build, integration, docker-build, workflows, storage, split-images, secret-scan]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every validation job to pass
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          test -n "$RESULTS"
+          for result in $RESULTS; do
+            test "$result" = success || exit 1
+          done
