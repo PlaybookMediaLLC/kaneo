@@ -7,7 +7,7 @@ This is a dependency-ordered roadmap for a feedback-to-implementation product fo
 | ID | Milestone | Tracker | Dependency | Exit condition |
 | --- | --- | --- | --- | --- |
 | M0 | Repository foundation and upstream boundaries | [#6](https://github.com/PlaybookMediaLLC/kaneo/issues/6) | None | Docs, directory ownership, license/brand rules and upstream policy approved |
-| M1 | Customer feedback capture and public experience | [#7](https://github.com/PlaybookMediaLLC/kaneo/issues/7) | M0 | Portal/widget submit requests securely, with votes/comments and abuse protections |
+| M1 | Feedback product parity: portal, boards, roadmap, changelog, widget, headless API/MCP, Slack, optional conversations | [#7](https://github.com/PlaybookMediaLLC/kaneo/issues/7) | M0 | Portal/widget submit requests securely, with votes/comments and abuse protections |
 | M2 | Triage, decisions, and Kaneo task linkage | [#8](https://github.com/PlaybookMediaLLC/kaneo/issues/8) | M1 | Founder reviews feedback and links it to canonical Kaneo tasks without losing evidence |
 | M3 | GitHub handoff and unmodified Orchestrator intake | [#9](https://github.com/PlaybookMediaLLC/kaneo/issues/9) | M2 | Founder approval creates one actionable GitHub issue; configured Orchestrator can discover it without source modifications |
 | M4 | Feedback-aware MCP and API integrations | [#10](https://github.com/PlaybookMediaLLC/kaneo/issues/10) | M2 (M3 for end-to-end) | Claude Code and other authorized clients can read context and propose work without credential sharing |
@@ -17,7 +17,7 @@ This is a dependency-ordered roadmap for a feedback-to-implementation product fo
 
 ## Sequencing
 
-M0 creates only source-layout documentation. M1 and M2 provide value without agents. M3 ships the lowest-maintenance automation path: **Kaneo-approved work -> GitHub issue -> official, locally installed Orchestrator**. M4 adds richer MCP/API access to feedback; it does not require a bespoke coding model. M5 only calls a feature *released* after deployment or explicit founder verification. M6 tests the complete founder journey. M7 is intentionally deferred and is **not** required for launch.
+M0 starts as source-layout documentation and expands into the 11 foundation contracts tracked in #15–#25. M1 is now an expanded, prioritised UserJot functional-parity plan with 30 child issues (#26–#55), documented in [the parity matrix](../userjot-parity.md). It includes P0 core feedback, P1 Slack/headless/AI extensions, and P2 conversation/knowledge/iOS breadth. M1 and M2 can provide value without coding agents. M3 ships the lowest-maintenance automation path: **Kaneo-approved work -> GitHub issue -> official, locally installed Orchestrator**. M4 adds richer MCP/API access to feedback; it does not require a bespoke coding model. M5 only calls a feature *released* after deployment or explicit founder verification. M6 tests the complete founder journey. M7 is intentionally deferred and is **not** required for launch.
 
 Keep the original Kaneo project-management engine upstream-owned. Do not begin by rebuilding its backlog, boards, tasks, roles, comments, or existing GitHub sync. Do not patch Orchestrator. Read [architecture](../architecture.md) and [upstream policy](../upstream-policy.md) before starting any milestone.
 
@@ -25,4 +25,4 @@ Keep the original Kaneo project-management engine upstream-owned. Do not begin b
 
 Each feature PR must document its owner boundary and APIs, authorization and tenancy behavior, schema migrations if any, tests (unit/integration/browser as appropriate), migration/rollback considerations, upstream compatibility, and direct evidence for the customer-visible behavior. A passing test suite is necessary but not sufficient to claim a customer-facing release.
 
-No implementation has been attempted as part of this scaffold.
+The parity matrix and child issues are planning artifacts only; they do not establish feature implementation.

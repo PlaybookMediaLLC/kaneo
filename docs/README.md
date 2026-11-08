@@ -4,6 +4,7 @@ This directory documents the planned feedback-to-development product built on th
 
 Start here:
 
+- [UserJot parity matrix](userjot-parity.md): verified features, priorities, issue links, and acceptance journeys for M0/M1.
 - [Architecture](architecture.md): product boundaries, data ownership, and feedback-to-release lifecycle.
 - [Milestones](milestones/README.md): ordered delivery plan and tracking issues.
 - [Upstream policy](upstream-policy.md): how to keep Kaneo and Orchestrator current without adopting upstream product ownership.
