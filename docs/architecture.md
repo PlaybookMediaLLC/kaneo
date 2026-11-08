@@ -35,7 +35,7 @@ Customer portal / embedded widget
     -> optional Orchestrator installation polls matching issues
     -> local Claude Code / Codex / OpenCode worker
     -> branch, tests, GitHub PR, CI and review
-    -> Kanoe task / Playbook feedback view updated from authoritative GitHub evidence
+    -> Kaneo task / Playbook feedback view updated from authoritative GitHub evidence
     -> deployment or founder-verified release
     -> changelog and customer notification
 ```
@@ -63,7 +63,7 @@ Keep existing Kaneo permissions, tenancy boundaries, and task IDs authoritative.
 
 Distinguish `requested`, `under_review`, `planned`, `in_progress`, `in_review`, `implemented`, and `released`. A merged PR is **not** automatically a deployed release. Do not notify customers that their request shipped until an authoritative deployment signal is available or an authorized founder manually verifies release.
 
-Each handoff needs an idempotency key and durable mappings: feedback ID(s) -> Kanoe task ID -> GitHub issue/PR -> release. Do not use an in-process emitter as the only source of durable execution jobs.
+Each handoff needs an idempotency key and durable mappings: feedback ID(s) -> Kaneo task ID -> GitHub issue/PR -> release. Do not use an in-process emitter as the only source of durable execution jobs.
 
 ## Optional second path: local bridge
 

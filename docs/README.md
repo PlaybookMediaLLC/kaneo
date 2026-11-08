@@ -13,6 +13,6 @@ Start here:
 
 The external customer is an independent software founder. A customer reports a problem; the founder decides whether to build it; Kaneo manages the work; an **optional, unmodified Orchestrator** installation can act on an approved GitHub issue; GitHub verifies the PR; a confirmed release closes the loop with the requester.
 
-The customer-facing name is undecided. Do not use the Kanoe, UserJot, or Orchestrator brands as the new product name. (The upstream project is spelled **Kaneo**.)
+The customer-facing name is undecided. Do not reuse the Kaneo, UserJot, or Orchestrator brands as the new product name.
 
 Existing upstream packages and applications should not be moved just to match this planning structure. New directories remain README-only until their respective milestones begin.
