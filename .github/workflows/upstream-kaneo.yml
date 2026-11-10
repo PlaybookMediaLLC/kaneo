@@ -24,7 +24,7 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            const base = 'develop';
+            const base = 'staging';
             const head = 'usekaneo:main';
             const { data: comparison } = await github.rest.repos.compareCommitsWithBasehead({
               ...context.repo,
@@ -34,7 +34,7 @@ jobs:
               throw new Error('Unexpected upstream comparison; no pull request was created.');
             }
             if (comparison.ahead_by === 0) {
-              core.info('develop already contains upstream main; nothing to sync.');
+              core.info('staging already contains upstream main; nothing to sync.');
               return;
             }
 
@@ -49,9 +49,9 @@ jobs:
                 ...context.repo,
                 base,
                 head,
-                title: 'chore: sync upstream main into develop',
+                title: 'chore: sync upstream main into staging',
                 body: [
-                  'Automated update from [`usekaneo/kaneo:main`](https://github.com/usekaneo/kaneo/tree/main) into `develop`.',
+                  'Automated update from [`usekaneo/kaneo:main`](https://github.com/usekaneo/kaneo/tree/main) into `staging`.',
                   '',
                   'This PR tracks the upstream branch directly. Further upstream commits update this PR without rewriting fork branches.',
                   '',

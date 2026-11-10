@@ -70,7 +70,7 @@ that loading the original entry point does not load Quackback modules.
 ## Updating either upstream
 
 Follow `docs/upstream-policy.md`: integrate `usekaneo/kaneo` through a reviewed
-sync branch targeting `develop`. Keep this directory intact and reconcile shared
+sync branch targeting `staging`. Keep this directory intact and reconcile shared
 package manifests/build configuration explicitly; regenerate the lockfile using
 pnpm. Do not use blanket ours/union merge drivers or ignore tracked files.
 
