@@ -5,6 +5,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as kaneo from "../../database/schema";
 import quillsRouter from "../index";
+import * as contentFixtures from "../content/index.fixture";
 import * as deliveryFixtures from "../delivery/index.fixture";
 import publicRouter from "../public";
 import * as directoryFixtures from "../directory/index.fixture";
@@ -80,6 +81,7 @@ const fixtures: Record<string, Fixture> = {
   ...taxonomyFixtures,
   ...portalFixtures,
   ...widgetFixtures,
+  ...contentFixtures,
 };
 const app = contractApp(quillsRouter, publicRouter);
 

@@ -1,3 +1,4 @@
+import content from "./content/index";
 import delivery from "./delivery";
 import directory from "./directory/index";
 import feedback from "./feedback/core";
@@ -62,4 +63,5 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", delivery)
   .route("/", taxonomy)
   .route("/", portalAccessSettings)
+  .route("/", content)
   .openapi(...context);
