@@ -8236,6 +8236,1404 @@
         }
       }
     },
+    "/quills-public/{workspace}/portal/config": {
+      "get": {
+        "operationId": "getQuillsPublicPortalConfig",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get the public portal configuration",
+        "description": "Sign-in uses the existing Kaneo account endpoints under /api/auth; portal customers need no workspace membership.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The public portal configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "features": {
+                      "type": "object",
+                      "properties": {
+                        "allowAnonymous": {
+                          "type": "boolean"
+                        },
+                        "allowEditAfterEngagement": {
+                          "type": "boolean"
+                        },
+                        "allowDeleteAfterEngagement": {
+                          "type": "boolean"
+                        },
+                        "showPublicEditHistory": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "allowAnonymous",
+                        "allowEditAfterEngagement",
+                        "allowDeleteAfterEngagement",
+                        "showPublicEditHistory"
+                      ]
+                    },
+                    "portalAccess": {
+                      "type": "object",
+                      "properties": {
+                        "isPrivate": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "isPrivate"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "features",
+                    "portalAccess"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/portal/access": {
+      "get": {
+        "operationId": "evaluateQuillsMyPortalAccess",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Evaluate the caller's portal access",
+        "description": "A workspace member is granted with the reason team but still acts as a customer on portal routes.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The access decision",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "granted": {
+                      "type": "boolean"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "public",
+                        "team",
+                        "domain",
+                        "segment",
+                        "unauthenticated",
+                        "unauthorized"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "granted",
+                    "reason"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/portal/access-denied": {
+      "post": {
+        "operationId": "recordQuillsPortalAccessDenied",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Record that the portal denied the caller",
+        "description": "The server evaluates the decision again; a caller who has access records nothing.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Whether a denial was recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "recorded": {
+                      "type": "boolean"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "public",
+                        "team",
+                        "domain",
+                        "segment",
+                        "unauthenticated",
+                        "unauthorized"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "recorded",
+                    "reason"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/user/profile": {
+      "get": {
+        "operationId": "getQuillsCustomerProfile",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get the caller's customer profile",
+        "description": "linked is false until the account first acts in this workspace; name and email then come from the Kaneo account.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The caller's customer profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "linked": {
+                      "type": "boolean"
+                    },
+                    "principalId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "customerId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "avatarUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "linked",
+                    "principalId",
+                    "customerId",
+                    "name",
+                    "email",
+                    "avatarUrl"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateQuillsCustomerProfile",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Update the caller's customer profile",
+        "description": "Creates the profile when the account has none here. Changes the name in this workspace only.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 100
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The caller's customer profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "linked": {
+                      "type": "boolean"
+                    },
+                    "principalId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "customerId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "avatarUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "linked",
+                    "principalId",
+                    "customerId",
+                    "name",
+                    "email",
+                    "avatarUrl"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "unlinkQuillsCustomerProfile",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Unlink the caller's customer profile",
+        "description": "Removes the link between the Kaneo account and its customer profile here. The profile, its history and the Kaneo account stay.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Whether a link was removed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "changed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "changed"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/user/avatar/{customerId}": {
+      "get": {
+        "operationId": "getQuillsCustomerAvatar",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get a customer's avatar URL",
+        "description": "JSON instead of the source's redirect. Only http(s) URLs are returned.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "customerId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The avatar URL, or null",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "url"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Customer not found; Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/widget/config.json": {
+      "get": {
+        "operationId": "getQuillsWidgetConfig",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get the public widget configuration",
+        "description": "config is null while the widget is disabled. Identify always needs an ssoToken signed with the widget secret.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The public widget configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "config": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "tabs": {
+                          "type": "object",
+                          "properties": {
+                            "feedback": {
+                              "type": "boolean"
+                            },
+                            "changelog": {
+                              "type": "boolean"
+                            },
+                            "help": {
+                              "type": "boolean"
+                            },
+                            "messenger": {
+                              "type": "boolean"
+                            },
+                            "tickets": {
+                              "type": "boolean"
+                            },
+                            "home": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "feedback",
+                            "changelog",
+                            "help",
+                            "messenger",
+                            "tickets",
+                            "home"
+                          ]
+                        },
+                        "hmacRequired": {
+                          "type": "boolean"
+                        },
+                        "visitorAnalytics": {
+                          "type": "boolean"
+                        },
+                        "visitorDeviceTracking": {
+                          "type": "boolean"
+                        },
+                        "launcherGreeting": {
+                          "type": "string"
+                        },
+                        "launcherLabel": {
+                          "type": "string"
+                        },
+                        "position": {
+                          "type": "string",
+                          "enum": [
+                            "left",
+                            "right"
+                          ]
+                        },
+                        "theme": {
+                          "type": "object",
+                          "properties": {
+                            "themeMode": {
+                              "type": "string",
+                              "enum": [
+                                "light",
+                                "dark",
+                                "user"
+                              ]
+                            },
+                            "lightPrimary": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "lightPrimaryForeground": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "darkPrimary": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "darkPrimaryForeground": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "themeMode",
+                            "lightPrimary",
+                            "lightPrimaryForeground",
+                            "darkPrimary",
+                            "darkPrimaryForeground"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "tabs",
+                        "hmacRequired",
+                        "visitorAnalytics",
+                        "visitorDeviceTracking",
+                        "launcherGreeting",
+                        "launcherLabel",
+                        "position",
+                        "theme"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "config"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/widget/capabilities": {
+      "get": {
+        "operationId": "getQuillsWidgetCapabilities",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get the widget's realtime capabilities",
+        "description": "Kaneo has no Quills chat stream yet, so the widget polls.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The realtime capabilities",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "chat": {
+                      "type": "object",
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "live",
+                            "poll"
+                          ]
+                        },
+                        "pollIntervalMs": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "mode",
+                        "pollIntervalMs"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "chat"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/widget/locale": {
+      "get": {
+        "operationId": "getQuillsWidgetLocale",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Resolve the widget locale",
+        "description": "An explicit supported locale wins; otherwise the best Accept-Language match; otherwise en.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 35
+            },
+            "required": false,
+            "name": "locale",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The resolved locale",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "locale": {
+                      "type": "string",
+                      "enum": [
+                        "en",
+                        "de",
+                        "fr",
+                        "es",
+                        "ar",
+                        "ru",
+                        "pt-br",
+                        "zh-cn",
+                        "zh-tw",
+                        "nl",
+                        "pl",
+                        "th",
+                        "uk"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "locale"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/widget/install-context": {
+      "post": {
+        "operationId": "redeemQuillsWidgetInstallCode",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Redeem a widget install pairing code",
+        "description": "Returns the widget signing secret to the holder of a live pairing code and turns the widget on. Use HTTPS.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 80
+                  }
+                },
+                "required": [
+                  "code"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The widget signing secret",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "signingSecret": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "signingSecret"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Invalid or expired install code; Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/widget/identify": {
+      "post": {
+        "operationId": "identifyQuillsWidgetVisitor",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Identify a widget visitor with a signed token",
+        "description": "Creates or updates the customer that the host app's signed ssoToken names and returns a widget session token for the Authorization header. The token needs sub (or id), email and exp.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ssoToken": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  }
+                },
+                "required": [
+                  "ssoToken"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The widget session and the identified customer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sessionToken": {
+                      "type": "string"
+                    },
+                    "principalId": {
+                      "type": "string"
+                    },
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "avatarUrl": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email",
+                        "avatarUrl"
+                      ]
+                    },
+                    "canPortalHandoff": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "sessionToken",
+                    "principalId",
+                    "user",
+                    "canPortalHandoff"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Widget disabled, identify not configured, invalid token or blocked person",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The email belongs to another customer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/widget/session": {
+      "get": {
+        "operationId": "getQuillsWidgetSession",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Validate the widget session",
+        "description": "user is null for an anonymous visitor. The session expires 7 days after identify.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The session's visitor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "avatarUrl": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "email",
+                        "avatarUrl"
+                      ]
+                    },
+                    "canPortalHandoff": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "user",
+                    "canPortalHandoff"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Valid widget session required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/widget/device": {
+      "post": {
+        "operationId": "linkQuillsWidgetDevice",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Link the visitor's device to the widget session",
+        "description": "device is the untrusted device ID from host-page storage, scoped to this workspace. Earlier unclaimed page views of the device move to the session's visitor.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "device": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                },
+                "required": [
+                  "device"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The device is linked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "linked": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "linked"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Valid widget session required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/auth/get-session": {
       "get": {
         "operationId": "getSession",
@@ -44756,7 +46154,12 @@
                         "post.merged",
                         "post.unmerged",
                         "post_view.created",
-                        "post_view.deleted"
+                        "post_view.deleted",
+                        "settings.portal_access_updated",
+                        "settings.widget_install_code_redeemed",
+                        "portal.access_denied",
+                        "customer.profile_updated",
+                        "customer.profile_unlinked"
                       ]
                     },
                     "minItems": 1,
@@ -45078,7 +46481,12 @@
                         "post.merged",
                         "post.unmerged",
                         "post_view.created",
-                        "post_view.deleted"
+                        "post_view.deleted",
+                        "settings.portal_access_updated",
+                        "settings.widget_install_code_redeemed",
+                        "portal.access_denied",
+                        "customer.profile_updated",
+                        "customer.profile_unlinked"
                       ]
                     },
                     "minItems": 1,
@@ -52316,6 +53724,124 @@
           },
           "404": {
             "description": "View not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/settings/portal/access": {
+      "put": {
+        "operationId": "updateQuillsPortalAccess",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Update who may open a private portal",
+        "description": "Fields that are not sent keep their value. Unknown or deleted segments are dropped. A workspace member always has access.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "visibility": {
+                    "type": "string",
+                    "enum": [
+                      "public",
+                      "private"
+                    ]
+                  },
+                  "allowedDomains": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 253
+                    },
+                    "maxItems": 100
+                  },
+                  "allowedSegmentIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 100
+                  }
+                },
+                "required": [
+                  "visibility"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The portal access policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "visibility": {
+                      "type": "string",
+                      "enum": [
+                        "public",
+                        "private"
+                      ]
+                    },
+                    "allowedDomains": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "allowedSegmentIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "visibility",
+                    "allowedDomains",
+                    "allowedSegmentIds"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
             "content": {
               "application/json": {
                 "schema": {
