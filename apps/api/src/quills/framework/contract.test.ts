@@ -3,9 +3,11 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as kaneo from "../../database/schema";
 import quillsRouter from "../index";
+import * as directoryFixtures from "../directory/index.fixture";
 import * as contextFixtures from "../index.fixture";
 import * as jobFixtures from "../jobs/routes.fixture";
 import * as linkFixtures from "../links.fixture";
+import * as settingsFixtures from "../settings/index.fixture";
 import * as teamFixtures from "../teams.fixture";
 import {
   checkRoute,
@@ -40,6 +42,8 @@ const fixtures: Record<string, Fixture> = {
   ...jobFixtures,
   ...linkFixtures,
   ...teamFixtures,
+  ...directoryFixtures,
+  ...settingsFixtures,
 };
 const app = contractApp(quillsRouter);
 

@@ -11,12 +11,20 @@ const team = z.object({
   name: z.string(),
   kaneoTeamId: z.string().nullable(),
   isDefault: z.boolean(),
+  icon: z.string().nullable(),
+  color: z.string().nullable(),
+  description: z.string().nullable(),
+  assignmentMethod: z.string(),
 });
 const teamFields = {
   id: teams.id,
   name: teams.name,
   kaneoTeamId: teams.kaneoTeamId,
   isDefault: teams.isDefault,
+  icon: teams.icon,
+  color: teams.color,
+  description: teams.description,
+  assignmentMethod: teams.assignmentMethod,
 };
 const errors = { 404: "Team not found" };
 
@@ -107,6 +115,79 @@ const updateBinding = defineQuillsRoute({
   },
 });
 
+const teamParams = z.object({ teamId: flexibleToTypeIdSchema("team") });
+
+// The name and roster of a bound team belong to Kaneo; only Quills fields change here.
+const updateTeam = defineQuillsRoute({
+  method: "put",
+  path: "/teams/{teamId}",
+  operationId: "updateQuillsTeam",
+  summary: "Update the Quills settings of a team",
+  action: "manage_settings",
+  params: teamParams,
+  body: z
+    .object({
+      icon: z.string().max(16).nullable().optional(),
+      color: z.string().max(32).nullable().optional(),
+      description: z.string().max(500).nullable().optional(),
+      assignmentMethod: z
+        .enum(["manual", "round_robin", "balanced"])
+        .optional(),
+    })
+    .refine((b) => Object.keys(b).length > 0, "Send at least one field"),
+  response: team,
+  responseDescription: "Team",
+  errors,
+  event: ({ params }) => ({
+    type: "team.updated",
+    entityType: "team",
+    entityId: params.teamId,
+  }),
+  handler: async ({ db, params, body }) => {
+    const [row] = await db
+      .update(teams)
+      .set({
+        icon: body.icon,
+        color: body.color,
+        description: body.description,
+        assignmentMethod: body.assignmentMethod,
+      })
+      .where(and(eq(teams.id, params.teamId), isNull(teams.deletedAt)))
+      .returning(teamFields);
+    if (!row)
+      throw new HTTPException(404, { message: "Quills team not found" });
+    return row;
+  },
+});
+
+const deleteTeam = defineQuillsRoute({
+  method: "delete",
+  path: "/teams/{teamId}",
+  operationId: "deleteQuillsTeam",
+  summary: "Delete a Quills team",
+  description: "Soft delete. The Kaneo team and its members stay.",
+  action: "manage_settings",
+  params: teamParams,
+  response: z.object({ id: z.string() }),
+  responseDescription: "The deleted team",
+  errors,
+  event: ({ params }) => ({
+    type: "team.deleted",
+    entityType: "team",
+    entityId: params.teamId,
+  }),
+  handler: async ({ db, params }) => {
+    const [row] = await db
+      .update(teams)
+      .set({ deletedAt: new Date(), isDefault: false })
+      .where(and(eq(teams.id, params.teamId), isNull(teams.deletedAt)))
+      .returning({ id: teams.id });
+    if (!row)
+      throw new HTTPException(404, { message: "Quills team not found" });
+    return row;
+  },
+});
+
 const listTeams = defineQuillsRoute({
   method: "get",
   path: "/teams",
@@ -138,4 +219,6 @@ const listTeams = defineQuillsRoute({
 export default apiRouter<BaseVariables & { workspaceId: string }>()
   .openapi(...bindTeam)
   .openapi(...updateBinding)
-  .openapi(...listTeams);
+  .openapi(...listTeams)
+  .openapi(...updateTeam)
+  .openapi(...deleteTeam);

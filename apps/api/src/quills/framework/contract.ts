@@ -186,6 +186,9 @@ export async function stopContract() {
   await pool.end();
 }
 
+/** The seeded workspaces and helpers, for feature tests that run after startContract. */
+export const contractEnv = () => env;
+
 /** The Quills router behind header identity and the API's error responses. */
 export function contractApp(router: App) {
   const app = new Hono<{

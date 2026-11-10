@@ -1,7 +1,12 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import platformDb from "../../database";
-import { projectTable, taskTable, teamTable } from "../../database/schema";
+import {
+  projectTable,
+  taskTable,
+  teamTable,
+  workspaceUserTable,
+} from "../../database/schema";
 import { findInaccessibleProjectIds } from "../../project-access/find-inaccessible-project-ids";
 
 // The only module that reads public tables for Quills routes. Every read filters on workspaceId.
@@ -30,6 +35,18 @@ export async function canonicalTeam(workspaceId: string, id: string) {
     .limit(1);
   if (!team) throw new HTTPException(404, { message: "Team not found" });
   return team;
+}
+
+/** The current members of this workspace and their Kaneo roles. */
+export async function workspaceMembers(workspaceId: string) {
+  // ponytail: loads the whole roster; page it when workspaces reach thousands of members.
+  return platformDb
+    .select({
+      userId: workspaceUserTable.userId,
+      role: workspaceUserTable.role,
+    })
+    .from(workspaceUserTable)
+    .where(eq(workspaceUserTable.workspaceId, workspaceId));
 }
 
 type Links = {

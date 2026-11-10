@@ -41,6 +41,15 @@ export const updateQuillsTeamBinding = fixture({
   foreign: ({ b }: Ids) => ({ teamId: b.teamId, kaneoTeamId: b.kaneoTeamId }),
 });
 
+const byTeam = (body?: unknown) =>
+  fixture({
+    seed,
+    valid: ({ a }: Ids) => ({ params: { teamId: a.teamId }, body }),
+    foreign: ({ b }: Ids) => ({ teamId: b.teamId }),
+  });
+export const updateQuillsTeam = byTeam({ color: "#336699" });
+export const deleteQuillsTeam = byTeam();
+
 export const listQuillsTeams = fixture({
   // A bound team, so the projected roster has a member to list.
   seed: async (env) => {
