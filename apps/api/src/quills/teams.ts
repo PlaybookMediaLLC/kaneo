@@ -49,7 +49,9 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
     createRoute({
       method: "post",
       path: "/{workspaceId}/teams",
+      operationId: "bindQuillsTeam",
       tags: ["Quills"],
+      summary: "Bind a workspace team to Quills",
       middleware,
       request: {
         params,
@@ -110,7 +112,9 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
     createRoute({
       method: "put",
       path: "/{workspaceId}/teams/{teamId}/binding",
+      operationId: "updateQuillsTeamBinding",
       tags: ["Quills"],
+      summary: "Change the team binding of a Quills team",
       middleware,
       request: {
         params: params.extend({ teamId: flexibleToTypeIdSchema("team") }),
@@ -158,7 +162,9 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
     createRoute({
       method: "get",
       path: "/{workspaceId}/teams",
+      operationId: "listQuillsTeams",
       tags: ["Quills"],
+      summary: "List Quills teams and their rosters",
       middleware,
       request: { params },
       responses: {

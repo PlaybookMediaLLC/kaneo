@@ -135,7 +135,9 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
     createRoute({
       method: "put",
       path: "/{workspaceId}/boards/{boardId}/projects/{projectId}",
+      operationId: "linkQuillsBoardToProject",
       tags: ["Quills"],
+      summary: "Link a Quills board to a project",
       middleware,
       request: { params: boardParams },
       responses,
@@ -146,7 +148,9 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
     createRoute({
       method: "delete",
       path: "/{workspaceId}/boards/{boardId}/projects/{projectId}",
+      operationId: "unlinkQuillsBoardFromProject",
       tags: ["Quills"],
+      summary: "Unlink a Quills board from a project",
       middleware,
       request: { params: boardParams },
       responses,
@@ -157,7 +161,9 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
     createRoute({
       method: "put",
       path: "/{workspaceId}/posts/{postId}/tasks/{taskId}",
+      operationId: "linkQuillsPostToTask",
       tags: ["Quills"],
+      summary: "Link a Quills post to a task",
       middleware,
       request: { params: postParams },
       responses,
@@ -168,7 +174,9 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
     createRoute({
       method: "delete",
       path: "/{workspaceId}/posts/{postId}/tasks/{taskId}",
+      operationId: "unlinkQuillsPostFromTask",
       tags: ["Quills"],
+      summary: "Unlink a Quills post from a task",
       middleware,
       request: { params: postParams },
       responses,
@@ -179,7 +187,9 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
     createRoute({
       method: "get",
       path: "/{workspaceId}/links",
+      operationId: "listQuillsLinks",
       tags: ["Quills"],
+      summary: "List visible Quills board and post links",
       middleware,
       request: {
         params: workspace,
