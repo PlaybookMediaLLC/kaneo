@@ -8,6 +8,7 @@ import { workspaceUserTable, userTable } from "../../database/schema";
 import { roleHasWorkspacePermission } from "../../utils/require-workspace-permission";
 import { broadcastToUserAndWait } from "../../ws";
 import { fanOut } from "./fanout";
+import { fanOutIntegrations, runIntegrationJob } from "./handlers/integration";
 import { runMailJob } from "./handlers/mail";
 import { runNotificationJob } from "./handlers/notification";
 import { runWebhookJob } from "./handlers/webhook";
@@ -24,7 +25,11 @@ const handlers: Record<
   Exclude<QuillsQueue, "quills.event">,
   (workspaceId: string, job: JobQueueRow) => Promise<unknown>
 > = {
-  "quills.webhook": runWebhookJob,
+  // Integration deliveries share this queue until a quills.integration queue is runnable (integrations/ROUTES.md).
+  "quills.webhook": (workspaceId, job) =>
+    "operationId" in (job.payload as object)
+      ? runIntegrationJob(workspaceId, job)
+      : runWebhookJob(workspaceId, job),
   "quills.mail": runMailJob,
   "quills.notification": runNotificationJob,
 };
@@ -108,6 +113,7 @@ export async function drainQuillsWorkspace(
         // Before the broadcast, so a websocket or Redis outage cannot lose deliveries.
         // Enqueue is deduplicated, so a rerun after a failure below adds no second delivery.
         await fanOut(workspaceId, payload.eventId);
+        await fanOutIntegrations(workspaceId, payload.eventId);
         let timer: ReturnType<typeof setTimeout> | undefined;
         try {
           await Promise.race([

@@ -2,6 +2,7 @@ import delivery from "./delivery";
 import directory from "./directory/index";
 import feedback from "./feedback/core";
 import files from "./files/routes";
+import integrations from "./integrations/index";
 import jobs from "./jobs/routes";
 import links from "./links";
 import quillsSettings from "./settings/index";
@@ -60,4 +61,5 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", feedback)
   .route("/", delivery)
   .route("/", taxonomy)
+  .route("/", integrations)
   .openapi(...context);
