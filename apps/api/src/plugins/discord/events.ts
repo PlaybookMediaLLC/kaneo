@@ -1,3 +1,4 @@
+import { brandText } from "@kaneo/branding";
 import { and, eq } from "drizzle-orm";
 import db from "../../database";
 import {
@@ -7,6 +8,7 @@ import {
   userTable,
   workspaceTable,
 } from "../../database/schema";
+import { safeOutboundError } from "../../utils/outbound-request";
 import type {
   PluginContext,
   TaskCommentCreatedEvent,
@@ -48,19 +50,6 @@ function truncate(value: string, maxLength: number): string {
   }
 
   return `${value.slice(0, maxLength - 1)}…`;
-}
-
-function redactWebhookUrl(value: string): string {
-  try {
-    const url = new URL(value);
-    const parts = url.pathname.split("/").filter(Boolean);
-    const token = parts.at(-1) ?? "";
-    const maskedToken =
-      token.length > 6 ? `${token.slice(0, 2)}…${token.slice(-4)}` : "redacted";
-    return `${url.origin}/${parts.slice(0, -1).join("/")}/${maskedToken}`;
-  } catch {
-    return "redacted";
-  }
 }
 
 async function getDiscordEventData(
@@ -178,17 +167,14 @@ async function sendDiscordMessage(
           footer: {
             text: safeActor
               ? `Triggered by ${safeActor}`
-              : "Triggered by Kaneo",
+              : brandText("Triggered by Kaneo"),
           },
         },
       ],
     });
   } catch (error) {
     console.error("sendDiscordMessage postToDiscord failed", {
-      error,
-      webhookUrl: redactWebhookUrl(config.webhookUrl),
-      channelName: config.channelName ?? null,
-      taskUrl: data.taskUrl,
+      error: safeOutboundError(error),
     });
   }
 }

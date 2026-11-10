@@ -3,6 +3,7 @@ import {
   CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadBucketCommand,
   type HeadObjectCommandOutput,
   PutObjectCommand,
   S3Client,
@@ -495,6 +496,17 @@ export function isStorageConfigured() {
   }
 }
 
+/** Check that the bucket answers with the configured credentials. */
+export async function headStorageBucket(abortSignal: AbortSignal) {
+  const config = getStorageConfig();
+  await getClient(config).send(
+    new HeadBucketCommand({ Bucket: config.bucket }),
+    {
+      abortSignal,
+    },
+  );
+}
+
 export function assertTaskImageKeyMatchesContext(
   key: string,
   context: Omit<TaskImageUploadContext, "filename" | "contentType">,
@@ -596,5 +608,16 @@ export async function deleteS3Object(key: string): Promise<void> {
       Bucket: config.bucket,
       Key: key,
     }),
+  );
+}
+
+/** Operator-only archive imports verify every referenced object before committing. */
+export async function verifyPrivateObjectExists(key: string) {
+  const config = getStorageConfig();
+  await headUploadedObject(
+    getClient(config),
+    config.bucket,
+    key,
+    AbortSignal.timeout(10000),
   );
 }

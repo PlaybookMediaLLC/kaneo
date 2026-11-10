@@ -1,3 +1,4 @@
+import { brandText } from "@kaneo/branding";
 import { and, eq } from "drizzle-orm";
 import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
@@ -92,8 +93,9 @@ const verifyRoute = createRoute({
   path: "/verify",
   tags: ["GitHub"],
   summary: "Verify GitHub installation",
-  description:
+  description: brandText(
     "Check that the GitHub App is installed on a repository and holds the permissions Kaneo needs. Always 200 -- problems are reported in the body so the client can guide the user.",
+  ),
   middleware: [
     requireUserSession,
     scopeToProjectFromBody,
@@ -123,14 +125,19 @@ const getIntegrationRoute = createRoute({
   summary: "Get GitHub integration",
   description:
     "Get the GitHub integration for a project, or null when none is configured.",
-  middleware: [workspaceAccess.fromProject("projectId")] as const,
+  middleware: [
+    workspaceAccess.fromProject("projectId"),
+    requireWorkspacePermission({ project: ["read"] }),
+  ] as const,
   request: { params: projectIdParam },
   responses: {
     200: jsonResponse(
       "GitHub integration details, or null",
       githubIntegrationSchema.nullable(),
     ),
-    403: errorResponse("No access to the project"),
+    403: errorResponse(
+      "No access to the project, or missing project:read permission",
+    ),
     404: errorResponse("Project not found"),
   },
 });

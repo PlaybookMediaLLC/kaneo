@@ -16,12 +16,12 @@ concurrency:
 
 jobs:
   label:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       # Only read trusted base-branch configuration, including for fork PRs.
       - name: Checkout size configuration
-        uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           persist-credentials: false
@@ -29,7 +29,7 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Label PR based on size
-        uses: cbrgm/pr-size-labeler-action@6b70abfe1f75f6f35ca24731f6d25fb7251b6127 # v1.3.13
+        uses: cbrgm/pr-size-labeler-action@371213a8a3de4b4c8f107ec8adcbb7ca293e970f # v1.4.1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           github_repository: ${{ github.repository }}

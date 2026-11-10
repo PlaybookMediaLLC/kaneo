@@ -1,4 +1,5 @@
-import { render } from "@react-email/render";
+import { brandText } from "@kaneo/branding";
+import { render } from "react-email";
 import { createElement } from "react";
 import { describe, expect, it } from "vite-plus/test";
 import { OTP_EXPIRY_SECONDS } from "../otp-expiry";
@@ -9,6 +10,12 @@ describe("OtpEmail", () => {
     const html = await render(createElement(OtpEmail, { otp: "123456" }));
     expect(html).toContain("123456");
     expect(html).toContain("verification code");
+  });
+
+  it("keeps the code in one piece so it copies cleanly", async () => {
+    const html = await render(createElement(OtpEmail, { otp: "482913" }));
+    expect(html).toMatch(/>482913</);
+    expect(html).not.toMatch(/>4</);
   });
 
   it.each([
@@ -30,7 +37,7 @@ describe("OtpEmail", () => {
       createElement(OtpEmail, { otp: "123456", locale: "ja-JP" }),
     );
     expect(html).toContain("確認コード");
-    expect(html).toContain("Kaneo セキュリティメール");
+    expect(html).toContain(brandText("Kaneo セキュリティメール"));
   });
 
   it("renders the request details in the recipient's language", async () => {

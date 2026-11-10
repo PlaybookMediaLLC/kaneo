@@ -1,3 +1,4 @@
+import { brandText } from "@kaneo/branding";
 import { and, eq } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../database";
@@ -85,14 +86,19 @@ const getGenericWebhookIntegrationRoute = createRoute({
   summary: "Get webhook integration",
   description:
     "Get the outgoing webhook integration for a project, or null when none is configured.",
-  middleware: [workspaceAccess.fromProject("projectId")] as const,
+  middleware: [
+    workspaceAccess.fromProject("projectId"),
+    requireWorkspacePermission({ project: ["read"] }),
+  ] as const,
   request: { params: projectIdParam },
   responses: {
     200: jsonResponse(
       "Webhook integration details, or null",
       genericWebhookIntegrationSchema.nullable(),
     ),
-    403: errorResponse("No access to the project"),
+    403: errorResponse(
+      "No access to the project, or missing project:read permission",
+    ),
     404: errorResponse("Project not found"),
   },
 });
@@ -103,8 +109,9 @@ const createGenericWebhookIntegrationRoute = createRoute({
   path: "/project/{projectId}",
   tags: ["Generic Webhook"],
   summary: "Create webhook integration",
-  description:
+  description: brandText(
     "Create or replace the outgoing webhook for a project. Kaneo POSTs the selected task events to this URL, signed with the secret when one is set.",
+  ),
   middleware: manageAccess,
   request: {
     params: projectIdParam,

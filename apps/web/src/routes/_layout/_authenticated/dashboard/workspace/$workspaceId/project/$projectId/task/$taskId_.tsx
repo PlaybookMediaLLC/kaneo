@@ -94,6 +94,7 @@ function RouteComponent() {
           <TaskPropertiesRailSkeleton />
         ) : isTaskError || !task ? null : (
           <PropertiesRail
+            key={taskId}
             taskId={taskId}
             projectId={projectId}
             workspaceId={workspaceId}
@@ -108,9 +109,10 @@ function RouteComponent() {
             ? t("tasks:common.loadingTask")
             : isTaskError || !task
               ? t("tasks:common.taskNotFound")
-              : `${project?.slug}-${task?.number} · ${task?.title}`
+              : project
+                ? `${project.slug}-${task.number} ${task.title}`
+                : undefined
         }
-        hideAppName
       />
       {!isLoading && task && (
         <TaskShortcuts
@@ -155,6 +157,7 @@ function RouteComponent() {
         </div>
       ) : (
         <TaskDetailsContent
+          key={taskId}
           taskId={taskId}
           projectId={projectId}
           workspaceId={workspaceId}

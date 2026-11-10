@@ -1,12 +1,6 @@
-import {
-  Column,
-  Container,
-  Head,
-  Html,
-  Img,
-  Preview,
-} from "@react-email/components";
-import React from "react";
+import { Column, Container, Head, Html, Img, Preview } from "react-email";
+import React, { useContext } from "react";
+import { BrandNameContext } from "./brand-name-context";
 import { Row } from "./row";
 import { emailAsset } from "./assets";
 import { themeCss } from "./theme";
@@ -18,6 +12,10 @@ type EmailShellProps = {
   title: string;
   preview: string;
   lang: string;
+  dir?: "ltr" | "rtl";
+  brandName?: string;
+  logoUrl?: string;
+  logoAlt?: string;
   children: React.ReactNode;
 };
 
@@ -25,10 +23,15 @@ export function EmailShell({
   title,
   preview,
   lang,
+  dir = "ltr",
+  brandName,
+  logoUrl,
+  logoAlt = "",
   children,
 }: EmailShellProps) {
+  const instanceName = useContext(BrandNameContext);
   return (
-    <Html lang={lang} dir="ltr">
+    <Html lang={lang} dir={dir}>
       <Head>
         <title>{title}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -47,7 +50,7 @@ export function EmailShell({
           aria-roledescription="email"
           aria-label={title}
           lang={lang}
-          dir="ltr"
+          dir={dir}
           className="k-bg"
           style={page}
         >
@@ -55,15 +58,15 @@ export function EmailShell({
             <Row style={brand}>
               <Column style={markCell}>
                 <Img
-                  src={emailAsset("mark")}
+                  src={logoUrl ?? emailAsset("mark")}
                   width="28"
                   height="28"
-                  alt=""
+                  alt={logoAlt}
                   style={mark}
                 />
               </Column>
               <Column className="k-text" style={wordmark}>
-                Kaneo
+                {brandName ?? instanceName}
               </Column>
             </Row>
             {children}

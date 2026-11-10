@@ -1,3 +1,4 @@
+import { brandText } from "@kaneo/branding";
 import type { TaskComment } from "../api/comments.js";
 import type { Column, Project } from "../api/schemas.js";
 import type {
@@ -21,7 +22,7 @@ const project: Project = {
   id: "p1",
   workspaceId: "ws_1",
   slug: "kan",
-  name: "Kaneo Web",
+  name: brandText("Kaneo Web"),
   icon: null,
   description: null,
   archivedAt: null,
@@ -78,6 +79,12 @@ export const resolvedTask: ResolvedTask = {
     priority: "urgent",
     startDate: at(-6),
     dueDate: at(2),
+    recurrence: {
+      frequency: "weekly",
+      interval: 1,
+      weekdays: [1, 4],
+      timeZone: "Europe/Madrid",
+    },
     createdAt: at(-8),
     assigneeId: "u1",
     assigneeName: "Ada Lovelace",

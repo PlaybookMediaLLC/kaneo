@@ -1,5 +1,6 @@
 import { Logo } from "@/components/landing/logo";
 import { press } from "@/lib/press";
+import { appStoreUrl } from "@/lib/product";
 
 export function Footer() {
   return (
@@ -24,6 +25,16 @@ export function Footer() {
               >
                 Open Cloud
               </a>
+              {appStoreUrl && (
+                <a
+                  className="block text-muted-foreground transition-colors hover:text-foreground"
+                  href={appStoreUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  iOS app
+                </a>
+              )}
               <a
                 className="block text-muted-foreground transition-colors hover:text-foreground"
                 href="/docs/core"

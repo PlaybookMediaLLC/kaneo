@@ -15,16 +15,97 @@ permissions:
   contents: read
 
 jobs:
-  peekareq-tests:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+  detect-pr-changes:
+    permissions:
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
+    outputs:
+      skip_expensive: ${{ steps.classify.outputs.skip_expensive }}
     steps:
-      - uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.2
+          package-manager-cache: false
+      - id: classify
+        name: Classify complete pull request diff
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/ci/pr-change-classification.mjs
+
+  smoke:
+    needs: detect-pr-changes
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && (needs.detect-pr-changes.result != 'success' || needs.detect-pr-changes.outputs.skip_expensive != 'true') }}
+    name: Chromium smoke tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      KANEO_E2E_HOST: localhost
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: 12.18.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24.22.2
+          package-manager-cache: false
+      - run: pnpm --dir tests/e2e install --frozen-lockfile --ignore-scripts
+
+      - name: Check browser-test dependency security regressions
+        run: pnpm --dir tests/e2e test:security
+
+      - run: pnpm --dir tests/e2e exec playwright install --with-deps chromium
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+      - name: Build this revision of Kaneo
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          file: Dockerfile.kaneo
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: kaneo-browserstack:test
+
+      - name: Start disposable test instance
+        run: docker compose -f tests/e2e/compose.yml up --no-build --wait --wait-timeout 180
+      - name: Run browser smoke tests
+        run: pnpm test:e2e
+
+      - name: Collect instance logs
+        if: failure()
+        run: |
+          mkdir -p .cache/e2e
+          docker compose -f tests/e2e/compose.yml logs --no-color > .cache/e2e/instance.log
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
+        with:
+          name: browser-test-results
+          path: .cache/e2e/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Stop disposable test instance
+        if: always()
+        run: docker compose -f tests/e2e/compose.yml down --volumes
+
+  peekareq-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24.22.2
           package-manager-cache: false
       - run: npm ci --ignore-scripts
         working-directory: scripts/ui-review-bot
@@ -32,137 +113,82 @@ jobs:
         working-directory: scripts/ui-review-bot
 
   slop-labeler-tests:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.2
           package-manager-cache: false
       - run: npm ci --ignore-scripts --no-audit --no-fund
         working-directory: scripts/slop-labeler
       - run: npm test
         working-directory: scripts/slop-labeler
 
-  lint:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 15
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
-          version: 10.32.1
+          version: 12.18.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.2
           cache: pnpm
 
-      - name: Install dependencies
+      - id: install
+        name: Install dependencies
+        timeout-minutes: 15
         run: pnpm install --frozen-lockfile
 
       - name: Run Vite+ checks
+        timeout-minutes: 15
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm lint
 
-  i18n:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 15
-    steps:
-      - name: Checkout repository
-        uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1
-        with:
-          persist-credentials: false
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          version: 10.32.1
-
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: 24.19.0
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
       - name: Check locale files against en-US
+        timeout-minutes: 15
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm i18n:check
 
-  openapi:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 15
-    steps:
-      - name: Checkout repository
-        uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1
-        with:
-          persist-credentials: false
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          version: 10.32.1
-
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: 24.19.0
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
       - name: Check the API reference against the routes
+        timeout-minutes: 15
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm openapi:check
 
-  typecheck:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 15
-    steps:
-      - name: Checkout repository
-        uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          version: 10.32.1
-
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: 24.19.0
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
       - name: Run typecheck
+        timeout-minutes: 15
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm typecheck
 
   unit:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout repository
-        uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
-          version: 10.32.1
+          version: 12.18.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.2
           cache: pnpm
 
       - name: Install dependencies
@@ -170,7 +196,7 @@ jobs:
 
       - name: Test release security controls
         run: |
-          docker pull nginx:1.29.5-alpine
+          docker pull nginx:1.30.6-alpine
           node --test scripts/security/*.test.mjs scripts/ci/*.test.mjs scripts/contribution-eligibility/*.test.mjs
 
       - name: Run unit tests
@@ -180,21 +206,21 @@ jobs:
         run: pnpm test
 
   build:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout repository
-        uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
-          version: 10.32.1
+          version: 12.18.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.2
           cache: pnpm
 
       - name: Install dependencies
@@ -207,11 +233,17 @@ jobs:
         run: pnpm --filter @kaneo/site seo:check
 
   integration:
+    needs: detect-pr-changes
+    if: ${{ !cancelled() && (needs.detect-pr-changes.result != 'success' || needs.detect-pr-changes.outputs.skip_expensive != 'true') }}
     timeout-minutes: 15
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     services:
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:0.8.7-pg18-bookworm
         env:
           POSTGRES_DB: kaneo_test
           POSTGRES_USER: postgres
@@ -232,39 +264,40 @@ jobs:
       DISABLE_GUEST_ACCESS: "false"
     steps:
       - name: Checkout repository
-        uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
-          version: 10.32.1
+          version: 12.18.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.2
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Run API integration tests
-        run: pnpm test:integration
+        # Each shard has its own Postgres service; files within a shard stay serial.
+        run: pnpm --filter @kaneo/api exec vp run test:integration:run --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
   docker-build:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: detect-pr-changes
+    if: ${{ !cancelled() && (needs.detect-pr-changes.result != 'success' || needs.detect-pr-changes.outputs.skip_expensive != 'true') }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Setup Blacksmith Builder
-        uses: useblacksmith/setup-docker-builder@19215110ab936351210feebdfa5b440b4493e184 # v2.2.0
-        with:
-          cache-key: ${{ github.repository }}/kaneo
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
       - name: Build bundled image for runtime tests
-        uses: useblacksmith/build-push-action@9b0579bbec7a6cad2f171596c57e7ac1e7658850 # v2
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
           file: ./Dockerfile.kaneo
@@ -273,29 +306,31 @@ jobs:
           load: true
           tags: kaneo:ci
 
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
-          version: 10.32.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+          version: 12.18.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.2
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts --filter @kaneo/api...
       - run: npm ci --ignore-scripts
         working-directory: scripts/ui-review-bot
       - run: scripts/ui-review-bot/node_modules/.bin/playwright install --with-deps chromium
+      - name: Allocate runtime test ports
+        run: bash scripts/ci/gateway-env.sh >> "$GITHUB_ENV"
       - name: Start bundled image without Redis
         run: docker compose --env-file /dev/null -p kaneo-ci -f scripts/ci/compose.yml up -d --wait --wait-timeout 120 postgres minio app
       - name: Browser regression and workspace isolation
-        run: node scripts/ci/browser.mjs http://127.0.0.1:55173
+        run: node scripts/ci/browser.mjs "$KANEO_CI_APP_ORIGIN"
       - name: Verify realtime without Redis
-        run: node scripts/ci/realtime.mjs http://127.0.0.1:55173
+        run: node scripts/ci/realtime.mjs "$KANEO_CI_APP_ORIGIN"
       - name: Start two API instances with Redis
         env:
           KANEO_CI_REDIS_URL: redis://redis:6379
         run: docker compose --env-file /dev/null -p kaneo-ci -f scripts/ci/compose.yml --profile realtime up -d --wait --wait-timeout 120 app second redis
       - name: Verify Redis fan-out
-        run: node scripts/ci/realtime.mjs http://127.0.0.1:55173 http://127.0.0.1:55174
+        run: node scripts/ci/realtime.mjs "$KANEO_CI_APP_ORIGIN" "$KANEO_CI_SECOND_ORIGIN"
       - name: Upgrade from the latest stable release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -305,7 +340,7 @@ jobs:
         run: |
           mkdir -p .cache/ci-results
           docker compose --env-file /dev/null -p kaneo-ci -f scripts/ci/compose.yml --profile realtime --profile upgrade logs --no-color > .cache/ci-results/containers.log
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: failure()
         with:
           name: runtime-failures
@@ -317,10 +352,10 @@ jobs:
         run: docker compose --env-file /dev/null -p kaneo-ci -f scripts/ci/compose.yml --profile realtime --profile upgrade down -v
 
   workflows:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Install verified actionlint
@@ -358,18 +393,20 @@ jobs:
           fi
 
   storage:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: detect-pr-changes
+    if: ${{ !cancelled() && (needs.detect-pr-changes.result != 'success' || needs.detect-pr-changes.outputs.skip_expensive != 'true') }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
-          version: 10.32.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+          version: 12.18.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.2
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Start disposable S3 storage
@@ -396,22 +433,22 @@ jobs:
         run: docker rm -f -v kaneo-storage-ci
 
   split-images:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: detect-pr-changes
+    if: ${{ !cancelled() && (needs.detect-pr-changes.result != 'success' || needs.detect-pr-changes.outputs.skip_expensive != 'true') }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         name: [api, web]
     steps:
-      - uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Setup Blacksmith Builder
-        uses: useblacksmith/setup-docker-builder@19215110ab936351210feebdfa5b440b4493e184 # v2.2.0
-        with:
-          cache-key: ${{ github.repository }}/${{ matrix.name }}
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
       - name: Build standalone image
-        uses: useblacksmith/build-push-action@9b0579bbec7a6cad2f171596c57e7ac1e7658850 # v2
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
           file: ./apps/${{ matrix.name }}/Dockerfile
@@ -422,14 +459,14 @@ jobs:
     # Scheduled runs get a dedicated full-history scan in nightly.yml instead,
     # so the default diff scan here does not duplicate the entire-branch scan.
     if: ${{ github.event_name != 'schedule' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
       security-events: write
     steps:
       - name: Checkout repository
-        uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a # v1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           # TruffleHog resolves the diff base locally, so the base commit must exist.
@@ -465,7 +502,7 @@ jobs:
       - name: Upload results to GitHub Code Scanning
         # Fork pull requests hold a read-only token and cannot write code scanning data.
         if: ${{ always() && !github.event.pull_request.head.repo.fork }}
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           sarif_file: trufflehog-results.sarif
       - name: Notify Discord on findings
@@ -508,3 +545,21 @@ jobs:
             --data-binary @"$RUNNER_TEMP/discord-payload.json" \
             "$TRUFFLEHOG_WEBHOOK" \
             || echo "::warning::Discord notification could not be delivered."
+
+  ci-result:
+    if: ${{ always() }}
+    needs: [detect-pr-changes, smoke, peekareq-tests, slop-labeler-tests, quality, unit, build, integration, docker-build, workflows, storage, split-images, secret-scan]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24.22.2
+          package-manager-cache: false
+      - name: Reject failed, cancelled, and unexpected skipped checks
+        env:
+          CI_SKIP_EXPENSIVE: ${{ needs.detect-pr-changes.outputs.skip_expensive }}
+          CI_GATE_JOBS: '{"detect-pr-changes":"${{ needs.detect-pr-changes.result }}","smoke":"${{ needs.smoke.result }}","peekareq-tests":"${{ needs.peekareq-tests.result }}","slop-labeler-tests":"${{ needs.slop-labeler-tests.result }}","quality":"${{ needs.quality.result }}","unit":"${{ needs.unit.result }}","build":"${{ needs.build.result }}","integration":"${{ needs.integration.result }}","docker-build":"${{ needs.docker-build.result }}","workflows":"${{ needs.workflows.result }}","storage":"${{ needs.storage.result }}","split-images":"${{ needs.split-images.result }}","secret-scan":"${{ needs.secret-scan.result }}"}'
+        run: node scripts/ci/pr-change-classification.mjs

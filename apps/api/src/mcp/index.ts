@@ -1,4 +1,4 @@
-import { McpServer as LegacyMcpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { brandText } from "@kaneo/branding";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import {
   isJsonContentType,
@@ -17,7 +17,11 @@ import {
 } from "./controllers/oauth-consent";
 import { createModernMcpHandler } from "./modern";
 import { exchangeCode } from "./oauth";
-import { oauthRequestBounds } from "./request-bounds";
+import {
+  MCP_BODY_BYTES,
+  mcpRequestBounds,
+  oauthRequestBounds,
+} from "./request-bounds";
 import {
   authorizationDecisionResponseSchema,
   authorizationDecisionSchema,
@@ -28,7 +32,7 @@ import {
   clientRegistrationSchema,
   oauthErrorSchema,
 } from "./schemas";
-import { registerMcpTools, toMcpToolRegistrar } from "./tools";
+import { createMcpServerForUser } from "./legacy-server";
 
 const publicApiUrl = (process.env.KANEO_API_URL || "http://localhost:1337")
   .replace(/\/api\/?$/, "")
@@ -38,15 +42,6 @@ const internalApiUrl = (
 )
   .replace(/\/api\/?$/, "")
   .replace(/\/+$/, "");
-
-function createMcpServerForUser(token: string): LegacyMcpServer {
-  const server = new LegacyMcpServer({
-    name: "kaneo-mcp",
-    version: "1.0.0",
-  });
-  registerMcpTools(toMcpToolRegistrar(server), internalApiUrl, token);
-  return server;
-}
 
 async function validateBearerToken(
   req: Request,
@@ -136,12 +131,13 @@ const authorizeRoute = createRoute({
   path: "/mcp/authorize",
   tags: ["MCP"],
   summary: "Start MCP authorization",
-  description:
+  description: brandText(
     "Begin an MCP OAuth authorization. Redirects the browser to the Kaneo consent page, which then approves or denies the request.",
+  ),
   security: [],
   request: { query: authorizationQuerySchema },
   responses: {
-    302: { description: "Redirect to the Kaneo consent page" },
+    302: { description: brandText("Redirect to the Kaneo consent page") },
     400: jsonError("Invalid authorization request"),
   },
 });
@@ -306,7 +302,11 @@ mcp.get("/.well-known/oauth-authorization-server/api", (c) =>
 mcp.all("/mcp", async (c) => {
   const authResult = await validateBearerToken(c.req.raw);
   if (!authResult) {
-    const prmUrl = `${publicApiUrl}/api/.well-known/oauth-protected-resource/api/mcp`;
+    // Canonical RFC 9728 URL: the well-known path goes before the resource
+    // path. MCP clients discover from this header, so it must be the URL
+    // auditors accept; the /api/.well-known alias below stays for clients
+    // that cached the previously advertised URL.
+    const prmUrl = `${publicApiUrl}/.well-known/oauth-protected-resource/api/mcp`;
     c.header("WWW-Authenticate", `Bearer resource_metadata="${prmUrl}"`);
     return c.json(
       {
@@ -325,7 +325,13 @@ mcp.all("/mcp", async (c) => {
     return c.json({ error: "Unsupported Media Type" }, 415);
   }
 
-  if (!(await isLegacyRequest(c.req.raw.clone()))) {
+  await mcpRequestBounds(c, async () => {});
+
+  if (
+    !(await isLegacyRequest(c.req.raw.clone(), undefined, {
+      maxRequestBodySize: MCP_BODY_BYTES,
+    }))
+  ) {
     const modern = createModernMcpHandler(authResult.token, internalApiUrl);
     return modern.fetch(c.req.raw);
   }
@@ -334,8 +340,9 @@ mcp.all("/mcp", async (c) => {
   // accepts session IDs issued before this change after their owner is gone.
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
+    maxRequestBodySize: MCP_BODY_BYTES,
   });
-  const server = createMcpServerForUser(authResult.token);
+  const server = createMcpServerForUser(authResult.token, internalApiUrl);
   await server.connect(transport);
   return transport.handleRequest(c.req.raw);
 });

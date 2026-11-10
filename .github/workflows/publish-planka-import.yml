@@ -19,12 +19,12 @@ concurrency:
 jobs:
   publish:
     # npm provenance and trusted publishing require a GitHub-hosted runner.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     if: ${{ github.event_name == 'push' || startsWith(github.event.release.tag_name, 'planka-import-v') }}
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -40,15 +40,15 @@ jobs:
           git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
-          version: 10.32.1
+          version: 12.18.0
 
       # No registry-url here on purpose: it writes an .npmrc referencing
       # NODE_AUTH_TOKEN, and npm only attempts the tokenless OIDC exchange when
       # no auth is configured. Node 24 is required for npm >= 11.5.1 (OIDC).
       - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
           # Publish workflows must not read cache content that a pull
@@ -57,6 +57,11 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Require approved public branding
+        run: |
+          pnpm branding:release
+          node -e "require('./branding/index.cjs').assertPackageBrand()"
 
       - name: Run PLANKA import checks
         run: |
@@ -83,8 +88,9 @@ jobs:
         id: version_check
         run: |
           PACKAGE_VERSION=$(node -p "require('./packages/planka-import/package.json').version")
+          PACKAGE_NAME=$(node -p "'@' + require('./branding/config.json').npmScope + '/planka-import'")
 
-          if npm view "@kaneo/planka-import@${PACKAGE_VERSION}" version >/dev/null 2>&1; then
+          if npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version >/dev/null 2>&1; then
             echo "already_published=true" >> "$GITHUB_OUTPUT"
             echo "@kaneo/planka-import@${PACKAGE_VERSION} is already published; skipping publish."
           else
@@ -94,8 +100,8 @@ jobs:
       - name: Publish @kaneo/planka-import
         if: ${{ steps.version_check.outputs.already_published == 'false' }}
         run: |
-          cd packages/planka-import
-          npm publish --access public --provenance
+          node scripts/branding/prepare-package.mjs packages/planka-import
+          npm publish .cache/npm/planka-import --access public --provenance
 
       - name: Create PLANKA import release
         if: ${{ github.event_name == 'push' }}

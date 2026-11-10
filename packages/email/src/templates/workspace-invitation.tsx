@@ -1,3 +1,4 @@
+import { brandText } from "@kaneo/branding";
 import React from "react";
 import { Badge } from "../components/badge";
 import { DetailRows } from "../components/detail-rows";
@@ -46,15 +47,17 @@ export type WorkspaceInvitationEmailCopy = {
 };
 
 const DEFAULT_COPY: WorkspaceInvitationEmailCopy = {
-  subject: "{{inviterName}} invited you to join {{workspaceName}} on Kaneo",
-  preview: "You're invited to {{workspaceName}} on Kaneo",
+  subject:
+    "{{inviterName}} invited you to join {{workspaceName}} on {{instanceName}}",
+  preview: brandText("You're invited to {{workspaceName}} on Kaneo"),
   title: "Join {{workspaceName}}",
-  subtitle:
+  subtitle: brandText(
     "{{inviterName}} ({{inviterEmail}}) invited you to collaborate in Kaneo.",
+  ),
   cta: "Accept invitation",
   sameEmail: "You can accept with the same email that received this message.",
   ignore: "If this wasn't expected, you can safely ignore this email.",
-  footer: "Kaneo workspace invitation",
+  footer: brandText("Kaneo workspace invitation"),
   details: {
     title: "Invitation details",
     sentTo: "Sent to",
@@ -134,12 +137,12 @@ WorkspaceInvitationEmail.PreviewProps = {
   workspaceName: "Acme",
   inviterName: "Sarah Chen",
   inviterEmail: "sarah@acme.com",
-  invitationLink: "https://cloud.kaneo.app/invitation/accept/abc123",
+  invitationLink: brandText("https://cloud.kaneo.app/invitation/accept/abc123"),
   to: "maya@example.com",
   locale: "en-US",
   role: "Member",
   expiresAt: "2026-10-13T14:12:00.000Z",
-  instance: "cloud.kaneo.app",
+  instance: brandText("cloud.kaneo.app"),
 } as WorkspaceInvitationEmailProps;
 
 export default WorkspaceInvitationEmail;

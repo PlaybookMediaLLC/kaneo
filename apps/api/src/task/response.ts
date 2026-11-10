@@ -1,4 +1,5 @@
 import { nullableResponseTimestamp, responseTimestamp, z } from "../openapi";
+import { taskRecurrenceSchema } from "./recurrence/schema";
 
 const priorityDescription = "One of: no-priority, low, medium, high, urgent.";
 
@@ -28,6 +29,7 @@ export const taskSchema = z
     priority: z.string().openapi({ description: priorityDescription }),
     startDate: nullableResponseTimestamp,
     dueDate: nullableResponseTimestamp,
+    recurrence: z.union([taskRecurrenceSchema, z.null()]).optional(),
     createdAt: responseTimestamp,
     customFields: z
       .array(z.object({ fieldId: z.string(), value: z.string() }))
@@ -45,6 +47,7 @@ export const taskWithAssigneeSchema = taskSchema
       description:
         "The referenced workflow column; null for virtual statuses and legacy tasks without a column reference.",
     }),
+    isSubtask: z.boolean().optional(),
     subtaskCounts: z
       .object({ completed: z.number(), total: z.number() })
       .optional(),
@@ -106,6 +109,7 @@ export const boardTaskSchema = z
     priority: z.string().openapi({ description: priorityDescription }),
     startDate: nullableResponseTimestamp,
     dueDate: nullableResponseTimestamp,
+    recurrence: z.union([taskRecurrenceSchema, z.null()]),
     position: z.number().nullable(),
     createdAt: responseTimestamp,
     userId: z.string().nullable(),
@@ -113,6 +117,7 @@ export const boardTaskSchema = z
     assigneeId: z.string().nullable(),
     assigneeImage: z.string().nullable(),
     projectId: z.string(),
+    isSubtask: z.boolean().optional(),
     subtaskCounts: z
       .object({
         completed: z.number().int().nonnegative(),
@@ -153,6 +158,7 @@ export const boardSchema = z
             "True when a project description above 64 KiB is omitted; use project detail or public project description pages for full text.",
         }),
         isPublic: z.boolean().nullable(),
+        includeSubtasks: z.boolean().optional(),
         workspaceId: z.string(),
         backgroundVersion: z.string().nullable(),
         columns: z.array(boardColumnSchema),

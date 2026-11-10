@@ -1,3 +1,5 @@
+import type { TaskRecurrence } from "./recurrence";
+
 type TaskLabel = {
   id: string;
   name: string;
@@ -30,6 +32,7 @@ type Task = {
   priority: string | null;
   startDate: string | null;
   dueDate: string | null;
+  recurrence?: TaskRecurrence | null;
   position: number | null;
   createdAt: string;
   updatedAt?: string;
@@ -39,6 +42,7 @@ type Task = {
   assigneeImage?: string | null;
   projectId: string;
   columnId?: string | null;
+  isSubtask?: boolean;
   subtaskCounts?: { completed: number; total: number };
   labels?: TaskLabel[];
   externalLinks?: TaskExternalLink[];

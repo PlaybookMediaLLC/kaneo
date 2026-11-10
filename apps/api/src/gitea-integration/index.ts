@@ -1,3 +1,4 @@
+import { brandText } from "@kaneo/branding";
 import { and, eq } from "drizzle-orm";
 import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
@@ -77,8 +78,9 @@ const verifyRoute = createRoute({
   path: "/verify",
   tags: ["Gitea"],
   summary: "Verify Gitea access",
-  description:
+  description: brandText(
     "Check that the base URL is a Gitea instance and that the token can reach the repository with the permissions Kaneo needs. Repository permission failures are reported in the body; invalid credentials and upstream errors return an error status. Omit accessToken to use the saved token for the unchanged base URL.",
+  ),
   middleware: manageAccess,
   request: {
     body: {
@@ -88,7 +90,7 @@ const verifyRoute = createRoute({
   },
   responses: {
     200: jsonResponse("Verification result", giteaVerificationResultSchema),
-    401: errorResponse("Kaneo authentication required"),
+    401: errorResponse(brandText("Kaneo authentication required")),
     500: errorResponse("Gitea verification failed"),
     400: errorResponse("Invalid body, or invalid Gitea credentials"),
     403: errorResponse(
@@ -106,14 +108,19 @@ const getIntegrationRoute = createRoute({
   summary: "Get Gitea integration",
   description:
     "Get the Gitea integration for a project, or null when none is configured. The webhook secret is included only for callers with workspace:manage_settings.",
-  middleware: [workspaceAccess.fromProject("projectId")] as const,
+  middleware: [
+    workspaceAccess.fromProject("projectId"),
+    requireWorkspacePermission({ project: ["read"] }),
+  ] as const,
   request: { params: projectIdParam },
   responses: {
     200: jsonResponse(
       "Gitea integration details, or null",
       giteaIntegrationSchema.nullable(),
     ),
-    403: errorResponse("No access to the project"),
+    403: errorResponse(
+      "No access to the project, or missing project:read permission",
+    ),
     404: errorResponse("Project not found"),
   },
 });

@@ -1,3 +1,4 @@
+import enUS from "@i18n/en-US.json";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
@@ -54,6 +55,9 @@ let storedProject: { id: string; columns: unknown[] } | null = null;
 let uploadAsset: ((file: File) => Promise<unknown>) | undefined;
 const stageUpload = vi.fn();
 let customFieldDefs: unknown[] | undefined;
+let projectMembers:
+  | { id: string; name: string; image: string | null }[]
+  | undefined;
 vi.mock("@/lib/upload-draft-asset", () => ({
   uploadDraftAsset: (...args: unknown[]) => stageUpload(...args),
 }));
@@ -66,6 +70,7 @@ beforeEach(() => {
   ];
   storedProject = null;
   customFieldDefs = undefined;
+  projectMembers = undefined;
   columnsError = false;
   columnsFetching = false;
   refetchColumns.mockImplementation(async () => ({
@@ -152,7 +157,7 @@ vi.mock(
 );
 
 vi.mock("@/hooks/queries/workspace-users/use-get-project-members", () => ({
-  default: () => ({ data: undefined }),
+  default: () => ({ data: projectMembers }),
 }));
 
 vi.mock("@/hooks/use-workspace-permission", () => ({
@@ -191,11 +196,72 @@ vi.mock("@/lib/toast", () => ({
 }));
 
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({
+    t: (key: string) => {
+      if (key === "tasks:popover.dueDate.clear")
+        return enUS.tasks.popover.dueDate.clear;
+      // Keep the real source bundle involved so a deleted clear label fails.
+      if (key === "common:modals.createTask.clearDueDate") {
+        const source: Record<string, unknown> = enUS.common.modals.createTask;
+        return typeof source.clearDueDate === "string"
+          ? source.clearDueDate
+          : key;
+      }
+      return key;
+    },
+    i18n: { language: "en-US" },
+  }),
   initReactI18next: { type: "3rdParty", init: vi.fn() },
 }));
 
 describe("CreateTaskModal", () => {
+  it("stops offering recurrence when the target changes to a final column", async () => {
+    projectColumns = [
+      { id: "todo", slug: "to-do", name: "To Do", isFinal: false },
+      { id: "done", slug: "done", name: "Done", isFinal: true },
+    ];
+    const onClose = vi.fn();
+    const { rerender } = render(<CreateTaskModal open onClose={onClose} />, {
+      wrapper: createWrapper(),
+    });
+    await chooseBeta();
+    enterTitle();
+    fireEvent.click(screen.getByText("common:modals.createTask.dueDate"));
+    fireEvent.click(await screen.findByText("tasks:popover.recurrence.toggle"));
+    rerender(<CreateTaskModal open status="done" onClose={onClose} />);
+    expect(
+      screen.queryByText("tasks:popover.recurrence.toggle"),
+    ).not.toBeInTheDocument();
+    submit();
+    await vi.waitFor(() =>
+      expect(createTask).toHaveBeenCalledWith(
+        expect.objectContaining({ status: "done", recurrence: undefined }),
+      ),
+    );
+  });
+
+  it("shows a translated clear-date action and clears the selected due date", async () => {
+    render(<CreateTaskModal open onClose={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    await chooseBeta();
+    const trigger = screen
+      .getByText("common:modals.createTask.dueDate")
+      .closest("button")!;
+    fireEvent.click(trigger);
+    fireEvent.click(await screen.findByText("tasks:due.today"));
+    fireEvent.click(trigger);
+    fireEvent.click(await screen.findByText("Clear date"));
+    expect(trigger).toHaveTextContent("common:modals.createTask.dueDate");
+    enterTitle();
+    submit();
+    await vi.waitFor(() =>
+      expect(createTask).toHaveBeenCalledWith(
+        expect.objectContaining({ dueDate: undefined }),
+      ),
+    );
+  });
+
   it("keeps unsaved input while discard confirmation is open", async () => {
     useLocation.mockReturnValue({
       pathname: "/dashboard/workspace/workspace-1/project/project-1/board",
@@ -280,6 +346,46 @@ describe("CreateTaskModal", () => {
     ).toBeTruthy();
   });
 
+  it("closes single-choice pickers after a selection", async () => {
+    projectMembers = [{ id: "user-1", name: "Ada", image: null }];
+
+    render(<CreateTaskModal open onClose={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+
+    fireEvent.click(screen.getByText("common:modals.createTask.selectProject"));
+    fireEvent.click(await screen.findByText("Beta"));
+    await vi.waitFor(() => {
+      expect(screen.getAllByText("Beta")).toHaveLength(1);
+    });
+
+    fireEvent.click(screen.getByText("tasks:priority.no-priority"));
+    fireEvent.click(await screen.findByText("tasks:priority.high"));
+    await vi.waitFor(() => {
+      expect(screen.getAllByText("tasks:priority.high")).toHaveLength(1);
+    });
+
+    fireEvent.click(screen.getByText("common:modals.createTask.assign"));
+    fireEvent.click(await screen.findByText("Ada"));
+    await vi.waitFor(() => {
+      expect(screen.getAllByText("Ada")).toHaveLength(1);
+    });
+
+    fireEvent.click(screen.getByText("Ada"));
+    fireEvent.click(
+      await screen.findByText("common:modals.createTask.assignUnassigned"),
+    );
+    await vi.waitFor(() => {
+      expect(
+        screen.queryByText("common:modals.createTask.assignUnassigned"),
+      ).toBeNull();
+    });
+    expect(screen.queryByText("Ada")).toBeNull();
+    expect(
+      screen.getByText("common:modals.createTask.assign"),
+    ).toBeInTheDocument();
+  });
+
   it("shows a project picker and creates the task in the chosen project", async () => {
     useLocation.mockReturnValue({
       pathname: "/dashboard/workspace/workspace-1",
@@ -336,6 +442,31 @@ describe("CreateTaskModal", () => {
       expect(createTask).toHaveBeenCalledWith(
         expect.objectContaining({ status: "ready-for-work" }),
       ),
+    );
+  });
+
+  it("creates a repeating task from the due date picker", async () => {
+    render(<CreateTaskModal open onClose={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    await chooseBeta();
+    enterTitle();
+    fireEvent.click(screen.getByText("common:modals.createTask.dueDate"));
+    fireEvent.click(await screen.findByText("tasks:popover.recurrence.toggle"));
+    submit();
+    await vi.waitFor(() =>
+      expect(createTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recurrence: expect.objectContaining({
+            frequency: "weekly",
+            interval: 1,
+          }),
+        }),
+      ),
+    );
+    // The rule follows the due date's weekday until the user picks days.
+    expect(createTask.mock.calls.at(-1)?.[0].recurrence).not.toHaveProperty(
+      "weekdays",
     );
   });
 

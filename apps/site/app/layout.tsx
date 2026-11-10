@@ -1,5 +1,5 @@
+import { brand } from "@kaneo/branding";
 import type { Metadata, Viewport } from "next";
-import Script from "next/script";
 import { ThemeSync } from "@/components/landing/theme-sync";
 import { landing } from "@/lib/landing";
 import "./globals.css";
@@ -22,12 +22,12 @@ export const metadata: Metadata = {
   },
   description: siteDescription,
   keywords: [
-    "kaneo",
+    brand.name,
     "project management",
-    "open source",
+    "project management software",
     "kanban",
     "task management",
-    "self-hosted",
+    "issue tracking",
     "team collaboration",
   ],
   applicationName: "Kaneo",
@@ -95,6 +95,22 @@ const jsonLd = [
     url: "https://kaneo.app",
     image: "https://kaneo.app/images/hero.png",
     license: "https://github.com/usekaneo/kaneo/blob/main/LICENSE",
+    offers: [
+      {
+        "@type": "Offer",
+        name: "Kaneo Cloud Personal",
+        price: "4",
+        priceCurrency: "USD",
+        url: "https://kaneo.app/pricing",
+      },
+      {
+        "@type": "Offer",
+        name: "Kaneo Cloud Team",
+        price: "5",
+        priceCurrency: "USD",
+        url: "https://kaneo.app/pricing",
+      },
+    ],
   },
 ];
 
@@ -129,17 +145,6 @@ export default function RootLayout({
           // eslint-disable-next-line react/no-danger -- JSON-LD structured data must be inlined as a script tag for search engines to parse.
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
-        <Script
-          defer
-          data-domain="kaneo.app"
-          src="https://plausible.kaneo.app/js/script.file-downloads.hash.outbound-links.pageview-props.revenue.tagged-events.js"
-          strategy="afterInteractive"
-        />
-        <Script id="plausible-init" strategy="afterInteractive">
-          {
-            "window.plausible = window.plausible || function() { (window.plausible.q = window.plausible.q || []).push(arguments) }"
-          }
-        </Script>
       </body>
     </html>
   );
