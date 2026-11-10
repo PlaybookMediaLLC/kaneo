@@ -98,7 +98,9 @@ describe.skipIf(!url)("Quills directory", () => {
     pool = new Pool({ connectionString: url, max: 5 });
     await startContract(pool, url!);
   }, 120000);
-  afterAll(() => stopContract());
+  // The bound test leaves 10,001 customers. Deleting their workspace runs about 100 foreign-key
+  // checks per customer: measured 9.3 s on local PostgreSQL 16, above the 10 s default hook limit.
+  afterAll(() => stopContract(), 60_000);
 
   it("lists customers only: no teammate, linked member profile, test customer or workspace B customer", async () => {
     const env = contractEnv();

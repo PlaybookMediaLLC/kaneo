@@ -220,6 +220,25 @@ describe.skipIf(!url)("Feedback visibility", () => {
     ).toBe(404);
   });
 
+  it("refuses to link a hidden board to a project the caller can open", async () => {
+    const { member } = world.users;
+    const links = () =>
+      world.scoped(world.a, world.users.owner, (db) =>
+        db
+          .select({ projectId: boardProjects.projectId })
+          .from(boardProjects)
+          .where(eq(boardProjects.boardId, ids.hidden)),
+      );
+    const before = await links();
+    const path = `/boards/${ids.hidden}/projects/${world.projects.open}`;
+    expect((await world.request(member, "PUT", path)).status).toBe(404);
+    expect((await world.request(member, "DELETE", path)).status).toBe(404);
+    expect(await links()).toEqual(before);
+    expect(
+      (await world.request(member, "GET", `/boards/${ids.hidden}`)).status,
+    ).toBe(404);
+  });
+
   it("hides posts and comments of hidden boards in lists and reads", async () => {
     const { owner, member } = world.users;
     const memberPosts = await list(member, "/posts?limit=100");

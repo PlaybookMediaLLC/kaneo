@@ -6,9 +6,9 @@ import {
   boardProjects,
   postTasks,
 } from "../database/quills/schema/platform-links";
-import { boards } from "../database/quills/schema/boards";
 import { posts } from "../database/quills/schema/posts";
 import { defineQuillsRoute } from "./framework/define-route";
+import { findBoard, loadProjects } from "./feedback/visibility";
 import { taskProjectId, visibleLinks } from "./framework/platform-reads";
 
 const native = { project: ["read"] };
@@ -38,6 +38,8 @@ const boardLink = <M extends "put" | "delete">(method: M) =>
       projectId: z.string().min(1),
     }),
     project: ({ params }) => params.projectId,
+    // The caller must also see the board: a hidden board must not become visible by a new link.
+    load: loadProjects,
     event: ({ params }, result) =>
       result.changed && {
         type:
@@ -46,13 +48,8 @@ const boardLink = <M extends "put" | "delete">(method: M) =>
         entityId: params.boardId,
         payload: { projectId: params.projectId },
       },
-    handler: async ({ db, params }) => {
-      const [board] = await db
-        .select({ id: boards.id })
-        .from(boards)
-        .where(and(eq(boards.id, params.boardId), isNull(boards.deletedAt)))
-        .limit(1);
-      if (!board) throw new HTTPException(404, { message: "Board not found" });
+    handler: async ({ db, params, loaded: projects }) => {
+      await findBoard(db, params.boardId, projects);
       const rows =
         method === "put"
           ? await db
