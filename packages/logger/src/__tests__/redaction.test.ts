@@ -130,7 +130,8 @@ describe("logger redaction", () => {
     );
 
     expect(sink.raw()).not.toContain("leak");
-    expect(sink.last().req.headers.host).toBe("localhost");
+    // `headers` is a sensitive container, so the whole subtree is dropped.
+    expect(sink.last().req.headers).toBeUndefined();
     expect(sink.last().post_id).toBe("keep_me");
   });
 

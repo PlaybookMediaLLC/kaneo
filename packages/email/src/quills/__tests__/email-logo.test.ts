@@ -236,11 +236,11 @@ it("resolves default logo configuration at render time", async () => {
       dashboardUrl: "https://app.quills.test/dashboard",
     };
     expect(await render(WelcomeEmail(props))).toContain(
-      'src="https://app.quills.test/email/mark.png"',
+      'src="https://app.quills.test/email/mark.png?brand=',
     );
     vi.stubEnv("KANEO_EMAIL_ASSETS_URL", "https://assets.quills.test/mail");
     expect(await render(WelcomeEmail(props))).toContain(
-      'src="https://assets.quills.test/mail/mark.png"',
+      'src="https://assets.quills.test/mail/mark.png?brand=',
     );
   } finally {
     vi.unstubAllEnvs();
