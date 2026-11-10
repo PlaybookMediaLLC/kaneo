@@ -175,6 +175,9 @@ export async function startContract(testPool: Pool, url: string) {
   };
 }
 
+/** Workspaces A and B and their helpers, for feature tests that run after startContract. */
+export const contractEnv = () => env;
+
 export async function stopContract() {
   if (!pool) return;
   await pool.query("DELETE FROM public.workspace WHERE id = ANY($1::text[])", [

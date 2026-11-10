@@ -3,6 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import platformDb from "../../database";
 import { projectTable, taskTable, teamTable } from "../../database/schema";
 import { findInaccessibleProjectIds } from "../../project-access/find-inaccessible-project-ids";
+import { listAccessibleProjectIds } from "../../project-access/list-accessible-project-ids";
 
 // The only module that reads public tables for Quills routes. Every read filters on workspaceId.
 
@@ -100,4 +101,12 @@ export async function visibleLinks(
     ),
     posts: page.posts.filter((p) => allowedTasks.has(p.taskId)),
   };
+}
+
+/** The projects of this workspace that the user can open. */
+export async function accessibleProjectIds(
+  workspaceId: string,
+  userId: string,
+): Promise<string[]> {
+  return [...(await listAccessibleProjectIds(platformDb, workspaceId, userId))];
 }

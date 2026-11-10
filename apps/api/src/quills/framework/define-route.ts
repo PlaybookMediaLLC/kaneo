@@ -17,7 +17,7 @@ import { recordQuillsChange, type changeSchema } from "../events";
 import { withQuillsRequest, type QuillsAction } from "../with-quills-request";
 import { registry } from "./registry";
 
-type Method = "get" | "post" | "put" | "delete";
+type Method = "get" | "post" | "put" | "patch" | "delete";
 type Env = { Variables: BaseVariables & { workspaceId: string } };
 type Errors = Partial<Record<403 | 404 | 409, string>>;
 type Output<S> = S extends z.ZodType ? z.output<S> : undefined;
@@ -53,7 +53,7 @@ export type QuillsRouteDeclaration<
   query?: Q;
   body?: B;
   /** Platform reads the handler needs. Runs after the permission checks, before the transaction. */
-  load?: (input: QuillsRouteInput<P, Q, B>) => Promise<L>;
+  load?: (input: QuillsRouteInput<P, Q, B> & { userId: string }) => Promise<L>;
   /** The persisted project to authorize. Runs after the permission checks. */
   project?: (input: QuillsRouteInput<P, Q, B>) => string | Promise<string>;
   response: R;
@@ -203,7 +203,8 @@ export function buildQuillsRoute<
         projectId:
           (load || project) &&
           (async () => {
-            if (load) loaded = await load(input);
+            if (load)
+              loaded = await load({ ...input, userId: c.get("userId") });
             if (!project) return undefined;
             const projectId = await project(input);
             if (!projectId)
