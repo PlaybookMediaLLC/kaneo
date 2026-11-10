@@ -46,6 +46,8 @@ export default settingsArea({
   title: "Portal",
   label: "portal",
   response: z.object({
+    /** Portals are opt-in: every portal and public route is 404 until a teammate turns this on. */
+    enabled: z.boolean(),
     features: z.object({
       allowAnonymous: z.boolean(),
       allowEditAfterEngagement: z.boolean(),
@@ -73,6 +75,7 @@ export default settingsArea({
     const moderation = record(config.moderationDefault);
     const access = record(config.access);
     return {
+      enabled: config.enabled === true,
       features: {
         // A missing flag denies anonymous interaction, as the portal gate does.
         allowAnonymous: features.allowAnonymous === true,
@@ -121,6 +124,7 @@ export default settingsArea({
     };
   },
   patch: z.object({
+    enabled: z.boolean().optional(),
     allowAnonymous: z.boolean().optional(),
     openSignup: z.boolean().optional(),
     supportEnabled: z.boolean().optional(),
@@ -132,6 +136,7 @@ export default settingsArea({
     return {
       portalConfig: JSON.stringify({
         ...config,
+        ...(patch.enabled !== undefined && { enabled: patch.enabled }),
         ...(patch.allowAnonymous !== undefined && {
           features: {
             ...record(config.features),

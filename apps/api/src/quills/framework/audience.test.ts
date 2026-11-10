@@ -72,9 +72,12 @@ async function call(
   return { status: res.status, body: await res.json().catch(() => null) };
 }
 
+// Portals are opt-in: each write keeps workspace A's portal on.
 const portalAccess = (access: Record<string, unknown>) =>
   contractEnv().scoped(contractEnv().a, (db) =>
-    db.update(settings).set({ portalConfig: JSON.stringify({ access }) }),
+    db
+      .update(settings)
+      .set({ portalConfig: JSON.stringify({ enabled: true, access }) }),
   );
 
 /** A teammate route of workspace A, called by its owner. */
@@ -97,6 +100,7 @@ describe.skipIf(!url)("Quills audiences", () => {
   beforeAll(async () => {
     pool = new Pool({ connectionString: url, max: 5 });
     await startContract(pool, url!);
+    await portalAccess({ visibility: "public" });
   }, 120000);
   afterAll(async () => {
     await pool?.query(
@@ -138,8 +142,14 @@ describe.skipIf(!url)("Quills audiences", () => {
       },
     ]);
     // A teammate's first Quills request initializes a workspace; this does the same for C and D.
-    for (const id of [c, `audience_d_${suffix}`])
+    for (const id of [c, `audience_d_${suffix}`]) {
       await withQuillsSystemWorkspace(id, async () => {});
+      await withQuillsAudience({ workspace: id }, (db) =>
+        db
+          .update(settings)
+          .set({ portalConfig: JSON.stringify({ enabled: true }) }),
+      );
+    }
     expect(
       (await call("GET", "/portal/config", { workspace: `slug-c-${suffix}` }))
         .body.name,
@@ -174,7 +184,10 @@ describe.skipIf(!url)("Quills audiences", () => {
     });
     await withQuillsAudience({ workspace: c }, (db) =>
       db.update(settings).set({
-        portalConfig: JSON.stringify({ access: { visibility: "private" } }),
+        portalConfig: JSON.stringify({
+          enabled: true,
+          access: { visibility: "private" },
+        }),
       }),
     );
     const access = (workspace: string) =>
@@ -185,7 +198,10 @@ describe.skipIf(!url)("Quills audiences", () => {
     });
     await withQuillsAudience({ workspace: `audience_d_${suffix}` }, (db) =>
       db.update(settings).set({
-        portalConfig: JSON.stringify({ access: { visibility: "private" } }),
+        portalConfig: JSON.stringify({
+          enabled: true,
+          access: { visibility: "private" },
+        }),
       }),
     );
     expect((await access(`audience_d_${suffix}`)).body).toEqual({

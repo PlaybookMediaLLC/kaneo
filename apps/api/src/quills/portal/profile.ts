@@ -4,13 +4,11 @@ import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
 import { apiRouter, z } from "../../openapi";
 import { principal, user as customer } from "../../database/quills/schema/auth";
 import { defineQuillsRoute } from "../framework/define-route";
+import { httpUrl, requirePortal } from "./feedback/viewer";
 
 // The calling Kaneo account's customer profile in this workspace (decision D1). Every route
 // acts on the caller's own link; no route takes another person's ID except the public avatar.
 // The Kaneo account (its email, password and sessions) belongs to Kaneo and is never changed here.
-
-const httpUrl = (value: string | null) =>
-  value && /^https?:\/\//i.test(value) ? value : null;
 
 const profile = z.object({
   linked: z.boolean(),
@@ -33,6 +31,7 @@ const getProfile = defineQuillsRoute({
   response: profile,
   responseDescription: "The caller's customer profile",
   handler: async ({ db, caller }) => {
+    await requirePortal(db);
     const account = caller.account!;
     const [row] = caller.customerId
       ? await db
@@ -73,6 +72,7 @@ const updateProfile = defineQuillsRoute({
     entityId: result.principalId!,
   }),
   handler: async ({ db, caller, body }) => {
+    await requirePortal(db);
     const [row] = await db
       .update(customer)
       .set({ name: body.name })
@@ -111,16 +111,19 @@ const unlinkProfile = defineQuillsRoute({
       entityType: "workspace",
       entityId: workspaceId,
     },
-  handler: async ({ db, caller }) => ({
-    changed:
-      (
-        await db
-          .update(customer)
-          .set({ kaneoUserId: null })
-          .where(eq(customer.kaneoUserId, caller.account!.id))
-          .returning({ id: customer.id })
-      ).length > 0,
-  }),
+  handler: async ({ db, caller }) => {
+    await requirePortal(db);
+    return {
+      changed:
+        (
+          await db
+            .update(customer)
+            .set({ kaneoUserId: null })
+            .where(eq(customer.kaneoUserId, caller.account!.id))
+            .returning({ id: customer.id })
+        ).length > 0,
+    };
+  },
 });
 
 const avatar = defineQuillsRoute({
@@ -137,6 +140,7 @@ const avatar = defineQuillsRoute({
   responseDescription: "The avatar URL, or null",
   errors: { 404: "Customer not found" },
   handler: async ({ db, params }) => {
+    await requirePortal(db);
     const [row] = await db
       .select({ image: customer.image })
       .from(customer)
