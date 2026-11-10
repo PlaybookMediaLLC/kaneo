@@ -4,13 +4,6 @@ This directory is Playbook-owned. Kaneo's original `@kaneo/email` entry point,
 SMTP implementation, and callers remain separate. No application flow uses these
 senders until it explicitly imports them.
 
-Source: `PlaybookMediaLLC/quackback`, `packages/email/src`, commit
-`42ef2e01b2b48db87f1a9dadabbe6d57af0dd10c`.
-Kaneo baseline: `f963869e97879b0f7667714c468e653d1c21d0a7`.
-The source package declares AGPL-3.0; its repository license is retained in
-`LICENSE` beside this file. Template content is preserved; product URLs and the anonymous placeholder domain
-use `quills.io` as requested.
-
 ## Usage and contracts
 
 Import senders from `@kaneo/email/quills`, templates from
