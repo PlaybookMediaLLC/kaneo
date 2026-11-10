@@ -31,14 +31,16 @@ Use an original brand and assets for the Playbook-owned site and feedback widget
 
 Retain required copyright and license notices. Consult [attribution](attribution.md).
 
-## 4. Update automation (planned only)
+## 4. Update automation
 
-- `upstream-kaneo.yml`: would detect a new Kaneo upstream revision and create a reviewable update PR.
+- [`upstream-kaneo.yml`](../.github/workflows/upstream-kaneo.yml): checks `usekaneo:main` every night at 07:17 UTC and can also run manually from Actions. New upstream commits open a review PR into `develop`; an existing open PR is reused. No PR is created when upstream is already integrated. The PR tracks upstream directly, so later upstream commits update it without a mirror branch, force-push or unattended merge.
 - `upstream-orchestrator.yml`: would monitor compatible Orchestrator releases/source pins, not modify the runtime or install it for customers.
 - `integration-tests.yml`: would validate agreed API, issue-intake and feedback handoffs.
 - `release.yml`: **already exists** in Kaneo; do not overwrite it with a placeholder.
 
-No new workflow YAML or automation is implemented by this scaffold. Upstream compatibility is a release gate, not a claim that every upstream release is compatible.
+The nightly job uses the built-in `GITHUB_TOKEN` with read-only repository content access and permission to open PRs. It never checks out or executes upstream code. Repository Actions settings must allow GitHub Actions to create PRs; this setting is already enabled in this fork. GitHub may require a maintainer to approve CI runs on the resulting PR. The workflow does not approve its own runs, merge changes or dispatch releases.
+
+Schedules become active after the workflow is merged into the default branch (`develop`). GitHub can delay scheduled runs. The Orchestrator and integration-test automations above remain planned; the existing release workflow is unchanged. Upstream compatibility and public branding remain review/release gates, not claims that every upstream revision is compatible.
 
 ## 5. Review checklist
 
