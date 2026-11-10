@@ -11,6 +11,7 @@ import operations from "./operations/index";
 import quillsSettings from "./settings/index";
 import sharedTeams from "./teams";
 import taxonomy from "./feedback/taxonomy";
+import supportTickets from "./support/tickets-router";
 import { brandText } from "@kaneo/branding";
 import { apiRouter, z, type BaseVariables } from "../openapi";
 import { settings } from "../database/quills/schema/auth";
@@ -68,4 +69,5 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", content)
   .route("/", integrations)
   .route("/", operations)
+  .route("/", supportTickets)
   .openapi(...context);
