@@ -173,8 +173,6 @@ test("asset paths cannot escape and hashes detect changes", () => {
 test("docs preparation writes branded output without copy findings", async () => {
   await mkdir(path.join(root, ".cache"), { recursive: true });
   const output = await mkdtemp(path.join(root, ".cache/branded-docs-test-"));
-  const strict = process.env.BRANDING_STRICT_OUTPUT;
-  process.env.BRANDING_STRICT_OUTPUT = "1";
   try {
     await assert.rejects(prepareDocs(path.join(root, ".cache")), /escapes/);
     await prepareDocs(output);
@@ -185,36 +183,26 @@ test("docs preparation writes branded output without copy findings", async () =>
     assert.equal(config.analytics, undefined);
     assert.equal(config.integrations?.plausible, undefined);
   } finally {
-    if (strict === undefined) delete process.env.BRANDING_STRICT_OUTPUT;
-    else process.env.BRANDING_STRICT_OUTPUT = strict;
     await rm(output, { recursive: true, force: true });
   }
 });
 
-test("output copy findings warn unless strict mode is on", async () => {
+test("output packaging blocks leftover copy and unapproved artwork", async () => {
   const dir = await mkdtemp(path.join(root, ".cache-branding-test-"));
-  const strict = process.env.BRANDING_STRICT_OUTPUT;
-  delete process.env.BRANDING_STRICT_OUTPUT;
   try {
     const relative = path.relative(root, dir);
     await writeFile(path.join(dir, "index.html"), "<title>Kaneo</title>");
-    await packageOutput("apps/web/public", relative);
-    // Unapproved artwork still blocks in warn mode.
-    const image = path.join(dir, "unknown-logo.png");
-    await writeFile(image, "unapproved image bytes");
-    await assert.rejects(
-      packageOutput("apps/web/public", relative),
-      /unknown-logo\.png:1: unapproved-output-asset/,
+    await writeFile(
+      path.join(dir, "unknown-logo.png"),
+      "unapproved image bytes",
     );
-    await rm(image);
-    process.env.BRANDING_STRICT_OUTPUT = "1";
     await assert.rejects(
       packageOutput("apps/web/public", relative),
-      /index\.html:1: text: Kaneo/,
+      (error) =>
+        /index\.html:1: text: Kaneo/.test(error.message) &&
+        /unknown-logo\.png:1: unapproved-output-asset/.test(error.message),
     );
   } finally {
-    if (strict === undefined) delete process.env.BRANDING_STRICT_OUTPUT;
-    else process.env.BRANDING_STRICT_OUTPUT = strict;
     await rm(dir, { recursive: true, force: true });
   }
 });
@@ -238,6 +226,29 @@ test("output packaging replaces only an identical renamed asset", async () => {
       packageOutput("apps/web/public", relative),
       /Asset rename collision/,
     );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("bundle checks skip catalog keys and env placeholders but not copy", async () => {
+  await mkdir(path.join(root, ".cache/npm"), { recursive: true });
+  const dir = await mkdtemp(path.join(root, ".cache/npm/branding-test-"));
+  try {
+    await writeFile(
+      path.join(dir, "app.js"),
+      [
+        `JSON.parse('{"goToKaneo":"Go to quills","leak":"Try Kaneo"}');`,
+        `e("settings:syncRules.useKaneo");`,
+        `const url = "KANEO_CLIENT_URL";`,
+        `const title = "Kaneo rocks";`,
+      ].join("\n"),
+    );
+    const findings = await checkOutput(path.relative(root, dir));
+    assert.deepEqual(findings.map((finding) => finding.value).sort(), [
+      "Kaneo rocks",
+      'leak: "Try Kaneo"',
+    ]);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

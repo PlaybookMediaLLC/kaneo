@@ -25,6 +25,7 @@ import { brandInstaller } from "./installer.mjs";
 import { brandHtml } from "./html.mjs";
 import {
   brandingBindings,
+  catalogKey,
   copyNodes,
   prohibited,
   transformCopy,
@@ -157,6 +158,31 @@ function scanValues(value, filename, original, key = "") {
   return Object.entries(value).flatMap(([childKey, child]) =>
     scanValues(child, filename, null, key ? `${key}.${childKey}` : childKey),
   );
+}
+
+// `key.path: "text"` → `"text"`, the form a bundle keeps once it drops the namespace.
+function catalogText(value) {
+  return value.slice(value.indexOf(": ") + 2);
+}
+
+// Bundlers inline catalogs as JSON strings. Their keys stay upstream-compatible, so scan values.
+function scanBundle(source, filename) {
+  const catalogs = new Set();
+  return scanCode(source, filename).flatMap((finding) => {
+    if (!/^[[{]/.test(finding.value)) return [finding];
+    let data;
+    try {
+      data = JSON.parse(finding.value);
+    } catch {
+      return [finding];
+    }
+    if (catalogs.has(finding.value)) return [];
+    catalogs.add(finding.value);
+    return scanValues(data, filename).map((item) => ({
+      ...item,
+      catalog: true,
+    }));
+  });
 }
 
 export async function sourceFindings() {
@@ -356,10 +382,35 @@ export async function checkOutput(directory) {
   const helper = await readFile(path.join(root, "branding/index.cjs"), "utf8");
   for (const finding of scanCode(helper, "branding/index.cjs"))
     reviewedCode.add(`${exceptionValue(finding.value)}\0${finding.term}`);
+  // Bundled catalogs lose their file and namespace, so match reviewed i18n values by text.
+  const reviewedCatalog = new Set(
+    exceptions
+      .filter((item) => item.file.startsWith("i18n/"))
+      .flatMap((item) =>
+        [catalogText(item.value), brandText(catalogText(item.value))].map(
+          (value) => `${exceptionValue(value)}\0${item.term ?? ""}`,
+        ),
+      ),
+  );
+  // Bundlers join templates and constants; each retained token needs an exact reviewed fragment.
+  const covered = (finding) => {
+    const value = exceptionValue(finding.value);
+    const key = `${value}\0`;
+    if (reviewedCode.has(key + finding.term) || reviewedCode.has(key))
+      return true;
+    let uncovered = value;
+    for (const entry of reviewedCode) {
+      const [fragment, term] = entry.split("\0");
+      if (fragment.length >= 8 && (!term || term === finding.term))
+        uncovered = uncovered.split(fragment).join(" ".repeat(fragment.length));
+    }
+    return !matches(uncovered).some((match) => match.term === finding.term);
+  };
   const compiled =
-    /^(?:packages\/[^/]+\/dist|\.cache\/npm\/[^/]+|apps\/(?:web\/dist|site\/\.next))(?:\/|$)/.test(
+    /^(?:packages\/[^/]+\/dist|\.cache\/npm\/[^/]+|apps\/(?:web\/dist|site\/(?:\.next|out)))(?:\/|$)/.test(
       directory,
     );
+  const exported = /^apps\/site\/out(?:\/|$)/.test(directory);
   const inventory = JSON.parse(
     await readFile(path.join(root, "branding/asset-review.json"), "utf8"),
   );
@@ -404,32 +455,34 @@ export async function checkOutput(directory) {
       continue;
     }
     const scanned = code.test(file)
-      ? scanCode(source, relative)
+      ? scanBundle(source, relative)
       : /\.(json|webmanifest)$/.test(file)
         ? scanValues(JSON.parse(source), relative)
         : scanText(source, relative);
     // Compilers lose source paths; retain only exact reviewed technical values. Source CI still checks their original locations.
     findings.push(
       ...scanned.filter((finding) => {
-        if (compiled && code.test(file)) {
-          const value = exceptionValue(finding.value);
-          const key = `${value}\0`;
-          if (reviewedCode.has(key + finding.term) || reviewedCode.has(key))
-            return false;
-          // Bundlers join templates and constants; each retained token needs an exact reviewed fragment.
-          let uncovered = value;
-          for (const entry of reviewedCode) {
-            const [fragment, term] = entry.split("\0");
-            if (fragment.length >= 8 && (!term || term === finding.term))
-              uncovered = uncovered
-                .split(fragment)
-                .join(" ".repeat(fragment.length));
-          }
-          return uncovered.includes(finding.term);
+        if (finding.catalog) {
+          const value = exceptionValue(catalogText(finding.value));
+          return (
+            !reviewedCatalog.has(`${value}\0${finding.term}`) &&
+            !reviewedCatalog.has(`${value}\0`)
+          );
         }
+        // Minifiers rename `t` and keep env placeholders; whole catalog keys and env names stay technical.
+        if (compiled && code.test(file))
+          return (
+            !covered(finding) &&
+            !catalogKey(finding.value) &&
+            !/^KANEO_[A-Z0-9_]+$/.test(finding.value)
+          );
+        // Static exports inline compiled code into HTML and RSC payloads.
+        if (exported && /\.(html|txt)$/.test(file) && covered(finding))
+          return false;
         const sourceFile = relative
           .replace(/^\.cache\/npm\/([^/]+)\//, "packages/$1/")
           .replace(/^apps\/web\/dist\//, "apps/web/public/")
+          .replace(/^apps\/site\/out\//, "apps/site/public/")
           .replace(/^\.cache\/branded-docs(-test-[^/]+)?\//, "apps/docs/");
         const key = `${sourceFile}\0${exceptionValue(finding.value)}\0`;
         return !reviewedText.has(key + finding.term) && !reviewedText.has(key);

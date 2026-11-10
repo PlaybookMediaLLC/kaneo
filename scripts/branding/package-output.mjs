@@ -46,21 +46,9 @@ export async function packageOutput(surface, directory) {
     await rename(file, target);
   }
   const findings = await checkOutput(directory);
-  // ponytail: copy findings warn until the rebrand is complete. BRANDING_STRICT_OUTPUT=1
-  // enforces them in direct runs only, because vp tasks drop undeclared env.
-  const blocking =
-    process.env.BRANDING_STRICT_OUTPUT === "1"
-      ? findings
-      : findings.filter(
-          (finding) => finding.rule === "unapproved-output-asset",
-        );
-  if (findings.length > blocking.length)
-    console.warn(
-      `${directory}: ${findings.length - blocking.length} branding copy findings. List them with: node scripts/branding/check.mjs --output ${directory}`,
-    );
-  if (blocking.length)
+  if (findings.length)
     throw new Error(
-      blocking
+      findings
         .map(
           (finding) =>
             `${finding.file}:${finding.line}: ${finding.rule}: ${finding.term}`,
