@@ -1,0 +1,20 @@
+import { apiRouter } from "../../../openapi";
+import { boardRoutes, taxonomyRoutes } from "./boards";
+import { changelogRoutes } from "./changelog";
+import { commentRoutes, ownCommentRoutes } from "./comments";
+import feeds from "./feeds";
+import { ownPostRoutes, postRoutes } from "./posts";
+import roadmaps from "./roadmaps";
+
+// Portal feedback routes and the public feeds under /quills-public/{workspace}. The widget
+// mounts the same shared factories with audience "widget" in ../../widget/feedback.
+export default apiRouter()
+  .route("/", boardRoutes("portal"))
+  .route("/", taxonomyRoutes)
+  .route("/", postRoutes("portal"))
+  .route("/", ownPostRoutes)
+  .route("/", commentRoutes("portal"))
+  .route("/", ownCommentRoutes)
+  .route("/", roadmaps)
+  .route("/", changelogRoutes("portal"))
+  .route("/", feeds);

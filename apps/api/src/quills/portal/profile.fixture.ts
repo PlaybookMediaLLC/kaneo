@@ -1,9 +1,11 @@
 import { eq } from "drizzle-orm";
 import { principal, user as customer } from "../../database/quills/schema/auth";
 import { fixture, type ContractEnv } from "../framework/contract";
+import { enablePortal } from "./seed.fixture";
 
 /** Customer A's portal profile in A, renamed to a value only customer A may read. */
 async function customerA(env: ContractEnv) {
+  await enablePortal(env, env.a);
   const ids = await env.portalCustomer(env.a, env.customerA);
   const name = env.id("own");
   await env.scoped(env.a, (db) =>
@@ -70,7 +72,7 @@ async function avatarCustomer(env: ContractEnv, workspaceId: string) {
 
 export const getQuillsCustomerAvatar = fixture({
   seed: async (env) => ({
-    a: await avatarCustomer(env, env.a),
+    a: await enablePortal(env, env.a).then(() => avatarCustomer(env, env.a)),
     b: await avatarCustomer(env, env.b),
   }),
   valid: (ids) => ({ params: { customerId: ids.a.id } }),

@@ -1,7 +1,8 @@
 import { apiRouter, z } from "../../openapi";
 import { settings } from "../../database/quills/schema/auth";
 import { defineQuillsRoute } from "../framework/define-route";
-import { bool, parseJson, record } from "../settings/area";
+import { bool, record } from "../settings/area";
+import { requirePortal } from "./feedback/viewer";
 
 // The portal configuration that anyone may read. The access policy (allowed domains and
 // segments) stays server-side; only "is the portal private" leaves.
@@ -27,11 +28,11 @@ const portalConfig = defineQuillsRoute({
   }),
   responseDescription: "The public portal configuration",
   handler: async ({ db }) => {
+    const config = await requirePortal(db);
     const [row] = await db
-      .select({ name: settings.name, portalConfig: settings.portalConfig })
+      .select({ name: settings.name })
       .from(settings)
       .limit(1);
-    const config = parseJson(row?.portalConfig ?? null);
     const features = record(config.features);
     return {
       name: row?.name ?? "",
