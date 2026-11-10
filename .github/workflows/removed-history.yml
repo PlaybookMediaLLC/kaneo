@@ -1,0 +1,30 @@
+name: Removed history
+
+on:
+  pull_request:
+    branches: [staging, main]
+
+permissions:
+  contents: read
+
+jobs:
+  removed-history:
+    name: Removed history
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Block the removed upstream license
+        run: |
+          # On 2026-11-10 the fork rewrote its history to remove d3851549, which added this license file.
+          # Branches made from the old history bring the commit and the file back.
+          if git merge-base --is-ancestor d38515490070676edc1900de65f8645f27030f77 HEAD 2>/dev/null; then
+            echo "This pull request contains removed commit d3851549. Make the branch again from the current staging branch."
+            exit 1
+          fi
+          if [[ -e apps/api/src/database/quills/UPSTREAM_LICENSE ]]; then
+            echo "apps/api/src/database/quills/UPSTREAM_LICENSE was removed. Do not add it again."
+            exit 1
+          fi
