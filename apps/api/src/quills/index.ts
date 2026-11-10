@@ -3,6 +3,7 @@ import delivery from "./delivery";
 import directory from "./directory/index";
 import feedback from "./feedback/core";
 import files from "./files/routes";
+import integrations from "./integrations/index";
 import jobs from "./jobs/routes";
 import links from "./links";
 import portalAccessSettings from "./portal/access-settings";
@@ -64,4 +65,5 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", taxonomy)
   .route("/", portalAccessSettings)
   .route("/", content)
+  .route("/", integrations)
   .openapi(...context);

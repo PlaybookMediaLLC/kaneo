@@ -44,6 +44,7 @@ const allowedImport = (file: string, specifier: string) => {
       [
         "framework/define-route",
         "framework/files",
+        "framework/integration-config",
         "framework/platform-reads",
         "framework/webhook-config",
         "framework/audience",

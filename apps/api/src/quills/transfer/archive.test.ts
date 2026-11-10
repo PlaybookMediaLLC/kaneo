@@ -83,6 +83,14 @@ describe("Workspace archive validation", () => {
       "new/video",
     ]);
   });
+  it("pauses an imported integration so it delivers nothing until an admin enables it", () => {
+    const archive = base();
+    archive.tables.integrations = [
+      { id: "integration", integration_type: "n8n", status: "active" },
+    ];
+    const result = prepareArchive(archive, {}, "target", []);
+    expect(result.tables.integrations![0]).toMatchObject({ status: "paused" });
+  });
   it("rejects public numbers that cannot be allocated safely", () => {
     for (const number of [0, -1, "9007199254740991", "9223372036854775807"]) {
       const archive = base();
