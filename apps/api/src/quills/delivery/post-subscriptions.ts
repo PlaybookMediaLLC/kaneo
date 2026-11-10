@@ -1,13 +1,12 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import type { PostId, PrincipalId } from "@kaneo/ids";
 import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
 import { apiRouter, z, type BaseVariables } from "../../openapi";
 import { postSubscriptions } from "../../database/quills/schema/notifications";
-import { boardProjects } from "../../database/quills/schema/platform-links";
-import { postVotes, posts } from "../../database/quills/schema/posts";
+import { postVotes } from "../../database/quills/schema/posts";
 import { defineQuillsRoute, type Database } from "../framework/define-route";
-import { openProjectIds, seesBoard } from "../framework/platform-reads";
+import { findPost, loadProjects } from "../feedback/visibility";
 
 // A teammate's own subscription needs only `read`: it changes what is sent to them, not the post.
 const postParams = z.object({ postId: flexibleToTypeIdSchema("post") });
@@ -24,37 +23,6 @@ const errors = { 403: "Insufficient permission", 404: "Post not found" };
 const personal = {
   none: "The caller's own subscription; no shared record changes.",
 };
-
-// Read before the transaction, so a request never holds two pool connections.
-const load = ({
-  workspaceId,
-  userId,
-}: {
-  workspaceId: string;
-  userId: string;
-}) => openProjectIds(workspaceId, userId);
-
-/** 404 unless the post is live and its board is visible to the caller. */
-async function visiblePost(db: Database, open: Set<string>, postId: PostId) {
-  const [post] = await db
-    .select({ boardId: posts.boardId })
-    .from(posts)
-    .where(and(eq(posts.id, postId), isNull(posts.deletedAt)));
-  const links = post
-    ? await db
-        .select({ projectId: boardProjects.projectId })
-        .from(boardProjects)
-        .where(eq(boardProjects.boardId, post.boardId))
-    : [];
-  if (
-    !post ||
-    !seesBoard(
-      open,
-      links.map((link) => link.projectId),
-    )
-  )
-    throw new HTTPException(404, { message: "Post not found" });
-}
 
 const subscription = (postId: PostId, principalId: PrincipalId) =>
   and(
@@ -93,9 +61,9 @@ const getSubscription = defineQuillsRoute({
   response: status,
   responseDescription: "The caller's subscription level",
   errors,
-  load,
+  load: loadProjects,
   handler: async ({ db, actor, params, loaded }) => {
-    await visiblePost(db, loaded, params.postId);
+    await findPost(db, params.postId, loaded);
     const [row] = await db
       .select({
         notifyComments: postSubscriptions.notifyComments,
@@ -127,9 +95,9 @@ const subscribe = defineQuillsRoute({
   responseDescription: "The caller's subscription level",
   errors,
   event: personal,
-  load,
+  load: loadProjects,
   handler: async ({ db, actor, params, body, loaded }) => {
-    await visiblePost(db, loaded, params.postId);
+    await findPost(db, params.postId, loaded);
     await setLevel(db, params.postId, actor.principalId, body.level, "manual");
     return { level: body.level };
   },
@@ -146,9 +114,9 @@ const unsubscribe = defineQuillsRoute({
   responseDescription: "Whether a subscription was removed",
   errors,
   event: personal,
-  load,
+  load: loadProjects,
   handler: async ({ db, actor, params, loaded }) => {
-    await visiblePost(db, loaded, params.postId);
+    await findPost(db, params.postId, loaded);
     const rows = await db
       .delete(postSubscriptions)
       .where(subscription(params.postId, actor.principalId))
@@ -177,9 +145,9 @@ const setVoterSubscription = defineQuillsRoute({
     entityId: params.postId,
     payload: { principalId: params.principalId, level: body.level },
   }),
-  load,
+  load: loadProjects,
   handler: async ({ db, params, body, loaded }) => {
-    await visiblePost(db, loaded, params.postId);
+    await findPost(db, params.postId, loaded);
     const [vote] = await db
       .select({ id: postVotes.id })
       .from(postVotes)

@@ -17,7 +17,7 @@ import { defineQuillsRoute, type Database } from "../framework/define-route";
 import {
   boardVisible,
   findBoard,
-  loadHidden,
+  loadProjects,
   notTestPrincipal,
 } from "./visibility";
 
@@ -213,12 +213,12 @@ const listBoards = defineQuillsRoute({
   }),
   responseDescription: "Boards",
   errors,
-  load: loadHidden,
-  handler: async ({ db, query, loaded: hidden }) => {
+  load: loadProjects,
+  handler: async ({ db, query, loaded: projects }) => {
     const rows = await db
       .select(columns)
       .from(boards)
-      .where(boardVisible(hidden))
+      .where(boardVisible(projects))
       .orderBy(asc(boards.name), asc(boards.id))
       .offset(query.offset)
       .limit(query.limit + 1);
@@ -262,9 +262,9 @@ const getBoard = defineQuillsRoute({
   response: board,
   responseDescription: "Board",
   errors,
-  load: loadHidden,
-  handler: async ({ db, params, loaded: hidden }) => {
-    await findBoard(db, params.boardId, hidden);
+  load: loadProjects,
+  handler: async ({ db, params, loaded: projects }) => {
+    await findBoard(db, params.boardId, projects);
     const [row] = await db
       .select(columns)
       .from(boards)
@@ -341,9 +341,9 @@ const updateBoard = defineQuillsRoute({
     entityId: params.boardId,
     payload: { slug: result.slug },
   }),
-  load: loadHidden,
-  handler: async ({ db, params, body, loaded: hidden }) => {
-    const current = await findBoard(db, params.boardId, hidden);
+  load: loadProjects,
+  handler: async ({ db, params, body, loaded: projects }) => {
+    const current = await findBoard(db, params.boardId, projects);
     await checkSegments(db, body.access);
     let nextSlug: string | undefined;
     if (body.slug !== undefined && body.slug !== current.slug) {
@@ -392,9 +392,9 @@ const deleteBoard = defineQuillsRoute({
     entityType: "board",
     entityId: params.boardId,
   }),
-  load: loadHidden,
-  handler: async ({ db, params, loaded: hidden }) => {
-    await findBoard(db, params.boardId, hidden);
+  load: loadProjects,
+  handler: async ({ db, params, loaded: projects }) => {
+    await findBoard(db, params.boardId, projects);
     const [row] = await db
       .update(boards)
       .set({ deletedAt: new Date() })

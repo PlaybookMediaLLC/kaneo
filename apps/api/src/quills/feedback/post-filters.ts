@@ -64,7 +64,7 @@ export const restorable = () =>
 export function filterConditions(
   db: Database,
   f: Filters,
-  hidden: string[],
+  projects: string[],
   omit?: Facet,
 ) {
   return and(
@@ -75,7 +75,7 @@ export function filterConditions(
         : isNull(posts.deletedAt),
     isNull(posts.canonicalPostId),
     notTestPrincipal(db, posts.principalId),
-    boardVisible(hidden),
+    boardVisible(projects),
     omit !== "board" && f.boardIds?.length
       ? inArray(posts.boardId, f.boardIds)
       : undefined,

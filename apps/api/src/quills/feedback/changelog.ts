@@ -47,7 +47,7 @@ import {
 } from "../framework/define-route";
 import { requireAll } from "./id-sets";
 import { idList, someField } from "./schemas";
-import { loadProjects, visibleBoard, visiblePost } from "./taxonomy-visibility";
+import { boardVisible, loadProjects, visiblePost } from "./visibility";
 
 type Db = Parameters<AnyQuillsRoute["handler"]>[0]["db"];
 type Status = "draft" | "scheduled" | "published";
@@ -603,13 +603,7 @@ const searchShippedPosts = defineQuillsRoute({
       const [board] = await db
         .select({ id: boards.id })
         .from(boards)
-        .where(
-          and(
-            eq(boards.id, query.boardId),
-            isNull(boards.deletedAt),
-            visibleBoard(boards.id, loaded),
-          ),
-        );
+        .where(and(eq(boards.id, query.boardId), boardVisible(loaded)));
       if (!board) throw new HTTPException(404, { message: "Board not found" });
     }
     return {

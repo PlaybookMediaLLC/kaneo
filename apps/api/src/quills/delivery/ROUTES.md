@@ -52,7 +52,7 @@ Merged: 11 (`listQuillsWebhooks`+`fetchQuillsWebhooks`, `getQuillsWebhooks`, `cr
 
 | operationId | Route | Action | Tables | Event | Tests |
 |---|---|---|---|---|---|
-| `listQuillsNotifications` | `GET /notifications` (`limit` ≤ 100, `offset`, `unreadOnly`) | read | `in_app_notifications`, `posts`, `board_projects` | - | contract, read-leak |
+| `listQuillsNotifications` | `GET /notifications` (`limit` ≤ 100, `offset`, `unreadOnly`) | read | `in_app_notifications`, `posts`, `boards`, `board_projects` | - | contract, read-leak |
 | `getQuillsNotificationUnreadCount` | `GET /notifications/unread-count` | read | `in_app_notifications` | - | contract |
 | `markQuillsNotificationRead` | `POST /notifications/{notificationId}/read` | read | `in_app_notifications` | none (personal) | contract, rollback |
 | `archiveQuillsNotification` | `POST /notifications/{notificationId}/archive` | read | `in_app_notifications` | none (personal) | contract, rollback |
@@ -82,7 +82,7 @@ A PATCH `matrix` replaces the stored overrides, as in the source. GET returns de
 
 | operationId | Route | Action | Tables | Event | Tests |
 |---|---|---|---|---|---|
-| `getQuillsPostSubscription` | `GET /posts/{postId}/subscription` | read | `post_subscriptions`, `posts`, `board_projects` | - | contract |
+| `getQuillsPostSubscription` | `GET /posts/{postId}/subscription` | read | `post_subscriptions`, `posts`, `boards`, `board_projects` | - | contract |
 | `setQuillsPostSubscription` | `PUT /posts/{postId}/subscription` (`level`: `all`, `status_only`) | read | `post_subscriptions` | none (personal) | contract, rollback |
 | `deleteQuillsPostSubscription` | `DELETE /posts/{postId}/subscription` | read | `post_subscriptions` | none (personal) | contract, rollback |
 | `setQuillsVoterSubscription` | `PUT /posts/{postId}/subscribers/{principalId}` (`level`: `all`, `status_only`, `none`) | update | `post_subscriptions`, `post_votes` | `post.subscription_changed` | contract, rollback |

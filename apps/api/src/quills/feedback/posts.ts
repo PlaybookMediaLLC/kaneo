@@ -46,7 +46,7 @@ import { loadPost, postSchema, selectPosts, withTags } from "./post-view";
 import {
   findBoard,
   findPost,
-  loadHidden,
+  loadProjects,
   notFound,
   relatedPosts,
 } from "./visibility";
@@ -102,7 +102,7 @@ const loadWithMembers = async (input: {
   workspaceId: string;
   userId: string;
 }) => ({
-  hidden: await loadHidden(input),
+  projects: await loadProjects(input),
   members: await memberUserIds(input.workspaceId),
 });
 
@@ -128,14 +128,14 @@ const listPosts = defineQuillsRoute({
   }),
   responseDescription: "One page of posts",
   errors,
-  load: loadHidden,
-  handler: async ({ db, query, loaded: hidden }) => {
+  load: loadProjects,
+  handler: async ({ db, query, loaded: projects }) => {
     // A cursor is a post the caller can see; a hidden or missing one is 404, not a probe.
-    if (query.cursor) await findPost(db, query.cursor, hidden, true);
+    if (query.cursor) await findPost(db, query.cursor, projects, true);
     const rows = await selectPosts(
       db,
       and(
-        filterConditions(db, query, hidden),
+        filterConditions(db, query, projects),
         query.cursor && afterCursor(query.cursor, query.sort),
       ),
     )
@@ -165,8 +165,8 @@ const getCounts = defineQuillsRoute({
   }),
   responseDescription: "Post counts",
   errors,
-  load: loadHidden,
-  handler: async ({ db, query, loaded: hidden }) => {
+  load: loadProjects,
+  handler: async ({ db, query, loaded: projects }) => {
     const from = <K extends typeof posts.statusId | typeof posts.boardId>(
       key: K,
       omit: Facet,
@@ -175,7 +175,7 @@ const getCounts = defineQuillsRoute({
         .select({ id: key, count: count() })
         .from(posts)
         .innerJoin(boards, eq(boards.id, posts.boardId))
-        .where(and(filterConditions(db, query, hidden, omit), isNotNull(key)))
+        .where(and(filterConditions(db, query, projects, omit), isNotNull(key)))
         .groupBy(key);
     // One transaction client: the queries run one after another.
     const statuses = await from(posts.statusId, "status");
@@ -188,7 +188,7 @@ const getCounts = defineQuillsRoute({
       .innerJoin(postTags, eq(postTags.id, postTagAssignments.tagId))
       .where(
         and(
-          filterConditions(db, query, hidden, "tags"),
+          filterConditions(db, query, projects, "tags"),
           isNull(postTags.deletedAt),
         ),
       )
@@ -197,7 +197,9 @@ const getCounts = defineQuillsRoute({
       .select({ count: count() })
       .from(posts)
       .innerJoin(boards, eq(boards.id, posts.boardId))
-      .where(and(filterConditions(db, query, hidden, "deleted"), restorable()));
+      .where(
+        and(filterConditions(db, query, projects, "deleted"), restorable()),
+      );
     return {
       statuses: statuses.map((row) => ({ id: row.id!, count: row.count })),
       boards: boardCounts,
@@ -257,9 +259,9 @@ const getPost = defineQuillsRoute({
   response: postSchema.extend({ hasVoted: z.boolean() }),
   responseDescription: "Post",
   errors,
-  load: loadHidden,
-  handler: async ({ db, actor, params, loaded: hidden }) => {
-    const post = await findPost(db, params.postId, hidden);
+  load: loadProjects,
+  handler: async ({ db, actor, params, loaded: projects }) => {
+    const post = await findPost(db, params.postId, projects);
     // Votes count on the post a merged post points to, as the vote routes store them.
     const voted = await db
       .select({ id: postVotes.id })
@@ -305,9 +307,9 @@ const createPost = defineQuillsRoute({
     entityId: result.id,
     payload: { boardId: result.boardId },
   }),
-  load: loadHidden,
-  handler: async ({ db, actor, body, loaded: hidden }) => {
-    const board = await findBoard(db, body.boardId, hidden);
+  load: loadProjects,
+  handler: async ({ db, actor, body, loaded: projects }) => {
+    const board = await findBoard(db, body.boardId, projects);
     const status = await findStatus(db, body.statusId);
     const tagIds = await checkTags(db, body.tagIds);
     const [post] = await db
@@ -375,9 +377,9 @@ const updatePost = defineQuillsRoute({
         .join(","),
     },
   }),
-  load: loadHidden,
-  handler: async ({ db, actor, params, body, loaded: hidden }) => {
-    const post = await findPost(db, params.postId, hidden);
+  load: loadProjects,
+  handler: async ({ db, actor, params, body, loaded: projects }) => {
+    const post = await findPost(db, params.postId, projects);
     if (
       (body.title !== undefined && body.title !== post.title) ||
       (body.content !== undefined && body.content !== post.content)
@@ -435,9 +437,9 @@ const setStatus = defineQuillsRoute({
     entityId: params.postId,
     payload: { statusId: body.statusId },
   }),
-  load: loadHidden,
-  handler: async ({ db, actor, params, body, loaded: hidden }) => {
-    const post = await findPost(db, params.postId, hidden);
+  load: loadProjects,
+  handler: async ({ db, actor, params, body, loaded: projects }) => {
+    const post = await findPost(db, params.postId, projects);
     const next = (await findStatus(db, body.statusId))!;
     if (post.statusId !== next.id) {
       const [previous] = post.statusId
@@ -483,10 +485,10 @@ const setBoard = defineQuillsRoute({
     entityId: params.postId,
     payload: { boardId: body.boardId },
   }),
-  load: loadHidden,
-  handler: async ({ db, actor, params, body, loaded: hidden }) => {
-    const post = await findPost(db, params.postId, hidden);
-    const target = await findBoard(db, body.boardId, hidden);
+  load: loadProjects,
+  handler: async ({ db, actor, params, body, loaded: projects }) => {
+    const post = await findPost(db, params.postId, projects);
+    const target = await findBoard(db, body.boardId, projects);
     if (post.boardId !== target.id) {
       await db
         .update(posts)
@@ -530,7 +532,7 @@ const setOwner = defineQuillsRoute({
   }),
   load: loadWithMembers,
   handler: async ({ db, actor, params, body, loaded }) => {
-    const post = await findPost(db, params.postId, loaded.hidden);
+    const post = await findPost(db, params.postId, loaded.projects);
     const [owner] = body.ownerPrincipalId
       ? await db
           .select({ name: principal.displayName })
@@ -596,9 +598,9 @@ const setTags = defineQuillsRoute({
     entityType: "post",
     entityId: params.postId,
   }),
-  load: loadHidden,
-  handler: async ({ db, actor, params, body, loaded: hidden }) => {
-    const post = await findPost(db, params.postId, hidden);
+  load: loadProjects,
+  handler: async ({ db, actor, params, body, loaded: projects }) => {
+    const post = await findPost(db, params.postId, projects);
     const next = await checkTags(db, body.tagIds);
     const current = (
       await db
@@ -671,9 +673,9 @@ const deletePost = defineQuillsRoute({
     entityType: "post",
     entityId: params.postId,
   }),
-  load: loadHidden,
-  handler: async ({ db, actor, params, loaded: hidden }) => {
-    const post = await findPost(db, params.postId, hidden);
+  load: loadProjects,
+  handler: async ({ db, actor, params, loaded: projects }) => {
+    const post = await findPost(db, params.postId, projects);
     // The state in WHERE makes the second of two parallel deletes a 404, not a repeat.
     const [row] = await db
       .update(posts)
@@ -703,9 +705,9 @@ const restorePost = defineQuillsRoute({
     entityType: "post",
     entityId: params.postId,
   }),
-  load: loadHidden,
-  handler: async ({ db, actor, params, loaded: hidden }) => {
-    const post = await findPost(db, params.postId, hidden, true);
+  load: loadProjects,
+  handler: async ({ db, actor, params, loaded: projects }) => {
+    const post = await findPost(db, params.postId, projects, true);
     if (post.deletedAt && post.deletedAt.getTime() < Date.now() - RESTORE_MS)
       throw new HTTPException(409, {
         message: "Posts can be restored within 30 days of deletion",
@@ -744,9 +746,9 @@ const listActivity = defineQuillsRoute({
   }),
   responseDescription: "Activity",
   errors,
-  load: loadHidden,
-  handler: async ({ db, params, query, loaded: hidden }) => {
-    await findPost(db, params.postId, hidden);
+  load: loadProjects,
+  handler: async ({ db, params, query, loaded: projects }) => {
+    await findPost(db, params.postId, projects);
     const rows = await db
       .select({
         id: postActivity.id,

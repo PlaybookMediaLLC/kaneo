@@ -1,13 +1,13 @@
-import { and, count, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, count, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import type { PrincipalId } from "@kaneo/ids";
 import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
 import { apiRouter, z, type BaseVariables } from "../../openapi";
 import { inAppNotifications } from "../../database/quills/schema/notifications";
-import { boardProjects } from "../../database/quills/schema/platform-links";
+import { boards } from "../../database/quills/schema/boards";
 import { posts } from "../../database/quills/schema/posts";
-import { defineQuillsRoute, type Database } from "../framework/define-route";
-import { openProjectIds, seesBoard } from "../framework/platform-reads";
+import { defineQuillsRoute } from "../framework/define-route";
+import { boardVisible, loadProjects } from "../feedback/visibility";
 
 // The caller's own inbox. `read` is enough: a viewer manages the notifications sent to them, and nobody else's.
 const personal = {
@@ -59,8 +59,7 @@ const listNotifications = defineQuillsRoute({
   }),
   responseDescription: "One page of notifications, newest first",
   errors: { 403: "Insufficient permission" },
-  // Read before the transaction, so a request never holds two pool connections.
-  load: ({ workspaceId, userId }) => openProjectIds(workspaceId, userId),
+  load: loadProjects,
   handler: async ({ db, actor, query, loaded }) => {
     const where =
       query.unreadOnly === "true"
@@ -77,13 +76,14 @@ const listNotifications = defineQuillsRoute({
         readAt: inAppNotifications.readAt,
         createdAt: inAppNotifications.createdAt,
         postTitle: posts.title,
-        boardId: posts.boardId,
+        boardId: boards.id,
       })
       .from(inAppNotifications)
       .leftJoin(
         posts,
         and(eq(posts.id, inAppNotifications.postId), isNull(posts.deletedAt)),
       )
+      .leftJoin(boards, and(eq(boards.id, posts.boardId), boardVisible(loaded)))
       .where(where)
       .orderBy(desc(inAppNotifications.createdAt), desc(inAppNotifications.id))
       .limit(query.limit)
@@ -96,16 +96,9 @@ const listNotifications = defineQuillsRoute({
       .select({ n: count() })
       .from(inAppNotifications)
       .where(and(mine(actor.principalId), isNull(inAppNotifications.readAt)));
-    const hidden = await hiddenBoards(
-      db,
-      loaded,
-      rows.flatMap((row) => (row.boardId ? [row.boardId] : [])),
-    );
     return {
       notifications: rows.map((row) => {
-        const denied =
-          row.postId !== null &&
-          (!row.boardId || hidden.has(row.boardId) || !row.postTitle);
+        const denied = row.postId !== null && (!row.boardId || !row.postTitle);
         return {
           id: row.id,
           type: row.type,
@@ -129,36 +122,6 @@ const listNotifications = defineQuillsRoute({
     };
   },
 });
-
-/** Boards that are linked only to projects the user cannot open. */
-async function hiddenBoards(
-  db: Database,
-  open: Set<string>,
-  boardIds: (typeof boardProjects.$inferSelect.boardId)[],
-) {
-  const unique = [...new Set(boardIds)];
-  const links = unique.length
-    ? await db
-        .select({
-          boardId: boardProjects.boardId,
-          projectId: boardProjects.projectId,
-        })
-        .from(boardProjects)
-        .where(inArray(boardProjects.boardId, unique))
-    : [];
-  const hidden = new Set<string>();
-  for (const boardId of unique)
-    if (
-      !seesBoard(
-        open,
-        links
-          .filter((link) => link.boardId === boardId)
-          .map((link) => link.projectId),
-      )
-    )
-      hidden.add(boardId);
-  return hidden;
-}
 
 const unreadCount = defineQuillsRoute({
   method: "get",

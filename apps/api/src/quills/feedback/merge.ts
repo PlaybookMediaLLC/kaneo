@@ -34,12 +34,7 @@ import {
   type AnyQuillsRoute,
 } from "../framework/define-route";
 import { page, pageQuery } from "./schemas";
-import {
-  loadProjects,
-  notTest,
-  visibleBoard,
-  visiblePost,
-} from "./taxonomy-visibility";
+import { loadProjects, notTest, visibleBoard, visiblePost } from "./visibility";
 
 type Db = Parameters<AnyQuillsRoute["handler"]>[0]["db"];
 

@@ -38,7 +38,7 @@ import { recordActivity } from "./activity";
 import {
   findComment,
   findPost,
-  loadHidden,
+  loadProjects,
   notFound,
   notTestPrincipal,
 } from "./visibility";
@@ -211,9 +211,9 @@ const listComments = defineQuillsRoute({
   }),
   responseDescription: "Comments",
   errors,
-  load: loadHidden,
-  handler: async ({ db, actor, params, query, loaded: hidden }) => {
-    const post = await findPost(db, params.postId, hidden);
+  load: loadProjects,
+  handler: async ({ db, actor, params, query, loaded: projects }) => {
+    const post = await findPost(db, params.postId, projects);
     return loadComments(db, actor, eq(postComments.postId, post.id), query);
   },
 });
@@ -228,9 +228,9 @@ const getComment = defineQuillsRoute({
   response: commentSchema,
   responseDescription: "Comment",
   errors,
-  load: loadHidden,
-  handler: async ({ db, actor, params, loaded: hidden }) => {
-    await findComment(db, params.commentId, hidden);
+  load: loadProjects,
+  handler: async ({ db, actor, params, loaded: projects }) => {
+    await findComment(db, params.commentId, projects);
     return loadComment(db, actor, params.commentId);
   },
 });
@@ -253,11 +253,11 @@ const createComment = defineQuillsRoute({
   responseDescription: "Created comment",
   errors,
   event: commentEvent("comment.created"),
-  load: loadHidden,
-  handler: async ({ db, actor, params, body, loaded: hidden }) => {
-    const post = await findPost(db, params.postId, hidden);
+  load: loadProjects,
+  handler: async ({ db, actor, params, body, loaded: projects }) => {
+    const post = await findPost(db, params.postId, projects);
     const parent = body.parentId
-      ? await findComment(db, body.parentId, hidden, true)
+      ? await findComment(db, body.parentId, projects, true)
       : undefined;
     if (parent && parent.postId !== post.id) throw notFound("Parent comment");
     const [comment] = await db
@@ -295,9 +295,9 @@ const updateComment = defineQuillsRoute({
     entityId: params.commentId,
     payload: { postId: result.postId },
   }),
-  load: loadHidden,
-  handler: async ({ db, actor, params, body, loaded: hidden }) => {
-    const comment = await findComment(db, params.commentId, hidden);
+  load: loadProjects,
+  handler: async ({ db, actor, params, body, loaded: projects }) => {
+    const comment = await findComment(db, params.commentId, projects);
     await db.insert(postCommentEditHistory).values({
       commentId: comment.id,
       editorPrincipalId: actor.principalId,
@@ -326,9 +326,9 @@ const deleteComment = defineQuillsRoute({
   responseDescription: "Deleted comment",
   errors,
   event: commentEvent("comment.deleted"),
-  load: loadHidden,
-  handler: async ({ db, actor, params, loaded: hidden }) => {
-    const comment = await findComment(db, params.commentId, hidden);
+  load: loadProjects,
+  handler: async ({ db, actor, params, loaded: projects }) => {
+    const comment = await findComment(db, params.commentId, projects);
     // The state in WHERE makes the second of two parallel deletes a 404, so the count moves once.
     const [row] = await db
       .update(postComments)
@@ -374,9 +374,9 @@ const restoreComment = defineQuillsRoute({
   responseDescription: "Restored comment",
   errors,
   event: commentEvent("comment.restored"),
-  load: loadHidden,
-  handler: async ({ db, actor, params, loaded: hidden }) => {
-    const comment = await findComment(db, params.commentId, hidden, true);
+  load: loadProjects,
+  handler: async ({ db, actor, params, loaded: projects }) => {
+    const comment = await findComment(db, params.commentId, projects, true);
     const [row] = await db
       .update(postComments)
       .set({ deletedAt: null, deletedByPrincipalId: null })
@@ -424,14 +424,14 @@ const pin = <M extends "put" | "delete">(method: M) =>
         entityId: params.commentId,
         payload: { postId: params.postId },
       },
-    load: loadHidden,
-    handler: async ({ db, actor, params, loaded: hidden }) => {
-      const post = await findPost(db, params.postId, hidden);
+    load: loadProjects,
+    handler: async ({ db, actor, params, loaded: projects }) => {
+      const post = await findPost(db, params.postId, projects);
       // A deleted comment can still be unpinned, never pinned.
       const comment = await findComment(
         db,
         params.commentId,
-        hidden,
+        projects,
         method === "delete",
       );
       if (comment.postId !== post.id) throw notFound("Comment");
@@ -521,9 +521,9 @@ const reaction = <M extends "put" | "delete">(method: M) =>
         entityId: params.commentId,
         payload: { emoji: query.emoji },
       },
-    load: loadHidden,
-    handler: async ({ db, actor, params, query, loaded: hidden }) => {
-      const comment = await findComment(db, params.commentId, hidden);
+    load: loadProjects,
+    handler: async ({ db, actor, params, query, loaded: projects }) => {
+      const comment = await findComment(db, params.commentId, projects);
       const key = and(
         eq(postCommentReactions.commentId, comment.id),
         eq(postCommentReactions.principalId, actor.principalId),

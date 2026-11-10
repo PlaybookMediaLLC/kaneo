@@ -28,7 +28,7 @@ import { defineQuillsRoute } from "../framework/define-route";
 import { bucketsBetween, parseBucket } from "./roadmap-buckets";
 import { roadmapById, roadmapParams, type Db } from "./roadmaps";
 import { pageQuery } from "./schemas";
-import { loadProjects, visiblePost } from "./taxonomy-visibility";
+import { loadProjects, visiblePost } from "./visibility";
 
 type Roadmap = Awaited<ReturnType<typeof roadmapById>>;
 

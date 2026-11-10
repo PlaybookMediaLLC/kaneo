@@ -3,10 +3,9 @@ import {
   eq,
   isNotNull,
   isNull,
-  not,
-  notExists,
   or,
   sql,
+  type AnyColumn,
   type SQL,
   type SQLWrapper,
 } from "drizzle-orm";
@@ -17,54 +16,71 @@ import { boards } from "../../database/quills/schema/boards";
 import { boardProjects } from "../../database/quills/schema/platform-links";
 import { postComments, posts } from "../../database/quills/schema/posts";
 import type { Database } from "../framework/define-route";
-import { hiddenProjectIds } from "../framework/platform-reads";
+import { accessibleProjectIds } from "../framework/platform-reads";
 
-/** The `load` step of every feedback route: the projects that hide a board from the caller. */
-export const loadHidden = (input: { workspaceId: string; userId: string }) =>
-  hiddenProjectIds(input.workspaceId, input.userId);
+// The one board-visibility rule. A board with project links is visible only when the caller can open
+// at least one linked project; a board without links is visible to every teammate. A deleted board is
+// never visible: `boardVisible`, `onVisibleBoard` and `visiblePost` check that, `visibleBoard` does not.
+
+/** The `load` step of every route that reads boards or posts: the projects that the caller can open. */
+export const loadProjects = (input: { workspaceId: string; userId: string }) =>
+  accessibleProjectIds(input.workspaceId, input.userId);
 
 export const notFound = (what: string) =>
   new HTTPException(404, { message: `${what} not found` });
 
-/**
- * A board is visible when it is not deleted and it has no project link,
- * or a link to a project that the caller can open.
- */
-export function boardVisible(hidden: string[]): SQL {
-  const active = isNull(boards.deletedAt);
-  if (!hidden.length) return active;
+/** The project-link part of the rule, for any column that holds a board ID. */
+export const visibleBoard = (boardId: AnyColumn, projects: string[]): SQL => {
   const link = (extra?: SQL) =>
-    sql`exists (select 1 from ${boardProjects} where ${and(eq(boardProjects.boardId, boards.id), extra)})`;
-  // One array parameter, however many projects are hidden.
-  const open = sql`${boardProjects.projectId} <> all(${sql.param(hidden)}::text[])`;
-  return and(active, or(not(link()), link(open)))!;
-}
+    sql`exists (select 1 from ${boardProjects} where ${and(eq(boardProjects.boardId, boardId), extra)})`;
+  // One array parameter, however many projects the caller can open.
+  const open = sql`${boardProjects.projectId} = any(${sql.param(projects)}::text[])`;
+  return sql`(not ${link()} or ${link(open)})`;
+};
 
-/** True for a real author. Same rule as database/quills/test-data.ts, which route modules cannot import. */
+/** The project-link part of the rule, for a board whose links were read already. */
+export const seesBoard = (
+  projects: readonly string[],
+  linked: readonly string[],
+) => !linked.length || linked.some((id) => projects.includes(id));
+
+/** The `boards` row is live and visible to the caller. */
+export const boardVisible = (projects: string[]): SQL =>
+  and(isNull(boards.deletedAt), visibleBoard(boards.id, projects))!;
+
+/** The current `posts` row is on a live board that the caller can see. */
+export const onVisibleBoard = (projects: string[]): SQL =>
+  and(
+    sql`exists (select 1 from ${boards} where ${eq(boards.id, posts.boardId)} and ${isNull(boards.deletedAt)})`,
+    visibleBoard(posts.boardId, projects),
+  )!;
+
+/** False for content written by a test customer. Same rule as database/quills/test-data.ts, which route modules cannot import. */
+export const notTest = (principalId: SQLWrapper | TypeId<"principal">): SQL =>
+  sql`not exists (select 1 from ${principal} where ${eq(principal.id, principalId)} and ${isNotNull(principal.testOwnerPrincipalId)})`;
+
+/** True for a real author: `notTest` with the signature that the P1a routes use. */
 export const notTestPrincipal = (
-  db: Database,
+  _db: Database,
   id: SQLWrapper | TypeId<"principal">,
-) =>
-  notExists(
-    db
-      .select({ id: principal.id })
-      .from(principal)
-      .where(
-        and(
-          eq(principal.id, id as TypeId<"principal">),
-          isNotNull(principal.testOwnerPrincipalId),
-        ),
-      ),
-  );
+) => notTest(id);
+
+/** A post that the caller may see in a list: not deleted, on a live and visible board, not test data. */
+export const visiblePost = (projects: string[]): SQL =>
+  and(
+    isNull(posts.deletedAt),
+    onVisibleBoard(projects),
+    notTest(posts.principalId),
+  )!;
 
 /**
  * A post and the active posts merged into it: one vote per person across all of them.
- * With `hidden`, only posts on boards the caller can see.
+ * With `projects`, only posts on boards the caller can see.
  */
 export const relatedPosts = (
   db: Database,
   postId: TypeId<"post">,
-  hidden?: string[],
+  projects?: string[],
 ) =>
   db
     .select({ id: posts.id })
@@ -76,19 +92,19 @@ export const relatedPosts = (
           eq(posts.id, postId),
           and(eq(posts.canonicalPostId, postId), isNull(posts.deletedAt)),
         ),
-        hidden && boardVisible(hidden),
+        projects && boardVisible(projects),
       ),
     );
 
 export async function findBoard(
   db: Database,
   id: TypeId<"board">,
-  hidden: string[],
+  projects: string[],
 ) {
   const [board] = await db
     .select({ id: boards.id, name: boards.name, slug: boards.slug })
     .from(boards)
-    .where(and(eq(boards.id, id), boardVisible(hidden)))
+    .where(and(eq(boards.id, id), boardVisible(projects)))
     .limit(1);
   if (!board) throw notFound("Board");
   return board;
@@ -98,7 +114,7 @@ export async function findBoard(
 export async function findPost(
   db: Database,
   id: TypeId<"post">,
-  hidden: string[],
+  projects: string[],
   includeDeleted = false,
 ) {
   const [post] = await db
@@ -122,7 +138,7 @@ export async function findPost(
       and(
         eq(posts.id, id),
         includeDeleted ? undefined : isNull(posts.deletedAt),
-        boardVisible(hidden),
+        boardVisible(projects),
       ),
     )
     .limit(1);
@@ -134,7 +150,7 @@ export async function findPost(
 export async function findComment(
   db: Database,
   id: TypeId<"post_comment">,
-  hidden: string[],
+  projects: string[],
   includeDeleted = false,
 ) {
   const [comment] = await db
@@ -158,7 +174,7 @@ export async function findComment(
         eq(postComments.id, id),
         includeDeleted ? undefined : isNull(postComments.deletedAt),
         isNull(posts.deletedAt),
-        boardVisible(hidden),
+        boardVisible(projects),
       ),
     )
     .limit(1);

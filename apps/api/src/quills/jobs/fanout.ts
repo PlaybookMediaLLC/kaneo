@@ -15,16 +15,17 @@ import {
   type Database,
 } from "../../database/quills/client";
 import { principal } from "../../database/quills/schema/auth";
+import { boards } from "../../database/quills/schema/boards";
 import { events, type EventRow } from "../../database/quills/schema/events";
 import { postSubscriptions } from "../../database/quills/schema/notifications";
 import { boardProjects } from "../../database/quills/schema/platform-links";
 import { postComments, posts } from "../../database/quills/schema/posts";
 import { postStatuses } from "../../database/quills/schema/statuses";
 import { webhooks } from "../../database/quills/schema/webhooks";
+import { seesBoard } from "../feedback/visibility";
 import {
-  openProjectIds,
+  accessibleProjectIds,
   quillsReaders,
-  seesBoard,
 } from "../framework/platform-reads";
 import { enqueueQuillsJob } from "./queue";
 
@@ -270,7 +271,14 @@ export async function fanOut(workspaceId: string, eventId: string) {
           await db
             .select({ boardId: posts.boardId })
             .from(posts)
-            .where(and(eq(posts.id, postId), isNull(posts.deletedAt)))
+            .innerJoin(boards, eq(boards.id, posts.boardId))
+            .where(
+              and(
+                eq(posts.id, postId),
+                isNull(posts.deletedAt),
+                isNull(boards.deletedAt),
+              ),
+            )
         )[0]
       : undefined;
     const links = post
@@ -298,8 +306,8 @@ export async function fanOut(workspaceId: string, eventId: string) {
       readers.has(teammate.userId!) &&
       seesBoard(
         plan.links.length
-          ? await openProjectIds(workspaceId, teammate.userId!)
-          : new Set(),
+          ? await accessibleProjectIds(workspaceId, teammate.userId!)
+          : [],
         plan.links,
       )
     )

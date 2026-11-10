@@ -18,7 +18,7 @@ import {
 import { recordActivity } from "./activity";
 import {
   findPost,
-  loadHidden,
+  loadProjects,
   notFound,
   notTestPrincipal,
   relatedPosts,
@@ -40,11 +40,11 @@ const errors = { 404: "Post or voter not found" };
 async function votedPost(
   db: Database,
   postId: TypeId<"post">,
-  hidden: string[],
+  projects: string[],
 ) {
-  const post = await findPost(db, postId, hidden);
+  const post = await findPost(db, postId, projects);
   return post.canonicalPostId
-    ? findPost(db, post.canonicalPostId, hidden)
+    ? findPost(db, post.canonicalPostId, projects)
     : post;
 }
 
@@ -76,11 +76,11 @@ async function count(
 async function addVote(
   db: Database,
   postId: TypeId<"post">,
-  hidden: string[],
+  projects: string[],
   voter: TypeId<"principal">,
   addedBy?: QuillsActor,
 ) {
-  const post = await votedPost(db, postId, hidden);
+  const post = await votedPost(db, postId, projects);
   const [existing] = await db
     .select({ id: postVotes.id })
     .from(postVotes)
@@ -167,9 +167,9 @@ const listVoters = defineQuillsRoute({
   }),
   responseDescription: "Voters",
   errors,
-  load: loadHidden,
-  handler: async ({ db, params, query, loaded: hidden }) => {
-    const post = await findPost(db, params.postId, hidden);
+  load: loadProjects,
+  handler: async ({ db, params, query, loaded: projects }) => {
+    const post = await findPost(db, params.postId, projects);
     const rows = await db
       .select({
         principalId: principal.id,
@@ -186,7 +186,7 @@ const listVoters = defineQuillsRoute({
         and(
           inArray(
             postVotes.postId,
-            relatedPosts(db, post.canonicalPostId ?? post.id, hidden),
+            relatedPosts(db, post.canonicalPostId ?? post.id, projects),
           ),
           notTestPrincipal(db, postVotes.principalId),
         ),
@@ -222,9 +222,9 @@ const vote = defineQuillsRoute({
   responseDescription: "Vote result",
   errors,
   event: voteEvent("post.voted", false),
-  load: loadHidden,
-  handler: ({ db, actor, params, loaded: hidden }) =>
-    addVote(db, params.postId, hidden, actor.principalId),
+  load: loadProjects,
+  handler: ({ db, actor, params, loaded: projects }) =>
+    addVote(db, params.postId, projects, actor.principalId),
 });
 
 const proxyVote = defineQuillsRoute({
@@ -240,10 +240,10 @@ const proxyVote = defineQuillsRoute({
   responseDescription: "Vote result",
   errors,
   event: voteEvent("post.voted", true),
-  load: loadHidden,
-  handler: async ({ db, actor, params, loaded: hidden }) => {
+  load: loadProjects,
+  handler: async ({ db, actor, params, loaded: projects }) => {
     const voter = await findVoter(db, params.principalId);
-    const result = await addVote(db, params.postId, hidden, voter.id, actor);
+    const result = await addVote(db, params.postId, projects, voter.id, actor);
     if (result.changed)
       await recordActivity(db, actor, result.postId, {
         type: "vote.proxy",
@@ -266,10 +266,10 @@ const removeVote = defineQuillsRoute({
   responseDescription: "Vote result",
   errors,
   event: voteEvent("post.unvoted", true),
-  load: loadHidden,
-  handler: async ({ db, actor, params, loaded: hidden }) => {
+  load: loadProjects,
+  handler: async ({ db, actor, params, loaded: projects }) => {
     const voter = await findVoter(db, params.principalId);
-    const post = await votedPost(db, params.postId, hidden);
+    const post = await votedPost(db, params.postId, projects);
     const removed = await db
       .delete(postVotes)
       .where(

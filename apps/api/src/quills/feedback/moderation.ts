@@ -18,12 +18,12 @@ import {
 import { page, pageQuery } from "./schemas";
 import { readSettingsKey, writeSettingsKey } from "./settings-json";
 import {
+  boardVisible,
   loadProjects,
   notTest,
   onVisibleBoard,
-  visibleBoard,
   visiblePost,
-} from "./taxonomy-visibility";
+} from "./visibility";
 
 type Db = Parameters<AnyQuillsRoute["handler"]>[0]["db"];
 
@@ -234,8 +234,7 @@ const getStatus = defineQuillsRoute({
       .from(boards)
       .where(
         and(
-          isNull(boards.deletedAt),
-          visibleBoard(boards.id, loaded),
+          boardVisible(loaded),
           sql`'on' in (${boards.access}->'moderation'->>'anonPosts', ${boards.access}->'moderation'->>'signedPosts', ${boards.access}->'moderation'->>'comments')`,
         ),
       );

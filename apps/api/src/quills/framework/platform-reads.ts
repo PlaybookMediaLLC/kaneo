@@ -1,4 +1,4 @@
-import { and, eq, inArray, not, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import platformDb from "../../database";
 import {
@@ -9,7 +9,6 @@ import {
   workspaceUserTable,
 } from "../../database/schema";
 import { findInaccessibleProjectIds } from "../../project-access/find-inaccessible-project-ids";
-import { projectAccessCondition } from "../../project-access/project-access-condition";
 import { roleHasWorkspacePermission } from "../../utils/require-workspace-permission";
 import { listAccessibleProjectIds } from "../../project-access/list-accessible-project-ids";
 
@@ -51,20 +50,6 @@ export async function workspaceMembers(workspaceId: string) {
     })
     .from(workspaceUserTable)
     .where(eq(workspaceUserTable.workspaceId, workspaceId));
-}
-
-/** Projects of this workspace that the user cannot open. Empty when the user can open every project. */
-export async function hiddenProjectIds(workspaceId: string, userId: string) {
-  const rows = await platformDb
-    .select({ id: projectTable.id })
-    .from(projectTable)
-    .where(
-      and(
-        eq(projectTable.workspaceId, workspaceId),
-        not(projectAccessCondition(userId, projectTable.id)),
-      ),
-    );
-  return rows.map((row) => row.id);
 }
 
 /** The Kaneo user IDs of this workspace's current members. */
@@ -142,27 +127,6 @@ export async function visibleLinks(
   };
 }
 
-/**
- * The projects of this workspace that the user can open. A board linked to projects is visible only
- * when one of them is in this set (see `seesBoard`). Read before or after a Quills transaction, never inside one.
- */
-export async function openProjectIds(workspaceId: string, userId: string) {
-  const rows = await platformDb
-    .select({ id: projectTable.id })
-    .from(projectTable)
-    .where(
-      and(
-        eq(projectTable.workspaceId, workspaceId),
-        projectAccessCondition(userId, projectTable.id),
-      ),
-    );
-  return new Set(rows.map((row) => row.id));
-}
-
-/** An unlinked board is visible to every teammate; a linked one needs one openable project. */
-export const seesBoard = (open: Set<string>, linked: readonly string[]) =>
-  !linked.length || linked.some((id) => open.has(id));
-
 /** Current, unbanned members of this workspace who may read Quills, with their address. */
 export async function quillsReaders(
   workspaceId: string,
@@ -197,7 +161,11 @@ export async function quillsReaders(
   return readers;
 }
 
-/** The projects of this workspace that the user can open. */
+/**
+ * The projects of this workspace that the user can open, by Kaneo's own project-access rule. A board linked
+ * to projects is visible only when one of them is in this list (see feedback/visibility.ts).
+ * Read before or after a Quills transaction, never inside one.
+ */
 export async function accessibleProjectIds(
   workspaceId: string,
   userId: string,
