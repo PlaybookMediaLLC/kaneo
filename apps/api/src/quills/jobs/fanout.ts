@@ -27,7 +27,13 @@ import {
   accessibleProjectIds,
   quillsReaders,
 } from "../framework/platform-reads";
-import { enqueueQuillsJob } from "./queue";
+import { enqueueQuillsJob, type QuillsQueue } from "./queue";
+
+/** Event type → the queue whose handler does the requested work after commit. */
+export const eventQueues: Partial<Record<string, QuillsQueue>> = {
+  "custom_domain.verification_requested": "quills.domain_check",
+  "workspace.wipe_requested": "quills.wipe",
+};
 
 export type DeliveryEvent = Pick<
   EventRow,
@@ -223,6 +229,8 @@ export async function fanOut(workspaceId: string, eventId: string) {
     const event = await loadEvent(db, eventId);
     if (!event || (event.context as { deliver?: unknown }).deliver !== true)
       return undefined;
+    const queue = eventQueues[event.type];
+    if (queue) await enqueueQuillsJob(db, queue, { eventId }, eventId, 3);
     // Private comments stay inside the workspace. A board filter applies only to events about a board.
     const { boardId, isPrivate } = await placeOf(db, event);
     const hooks = isPrivate

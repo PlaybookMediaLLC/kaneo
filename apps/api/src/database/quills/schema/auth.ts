@@ -511,6 +511,8 @@ export const settings = quillsSchema
        * lost-update on concurrent writes.
        */
       authConfigVersion: integer("auth_config_version").notNull().default(0),
+      /** Whether the portal, widget and branded mail show the "Powered by" badge. */
+      showPoweredBy: boolean("show_powered_by").notNull().default(true),
     },
     (table) => [
       primaryKey({ columns: [table.workspaceId, table.id] }),

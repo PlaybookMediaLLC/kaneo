@@ -175,6 +175,13 @@ export const changeSchema = z.object({
     "integration.channel_removed",
     "integration_sync.recovered",
     "post.integration_sync_requested",
+    "custom_domain.set",
+    "custom_domain.removed",
+    "custom_domain.verification_requested",
+    "settings.powered_by_updated",
+    "custom_domain.checked",
+    "workspace.wipe_requested",
+    "workspace.wiped",
   ]),
   entityType: z.enum([
     "board",
@@ -204,6 +211,7 @@ export const changeSchema = z.object({
     "status_template",
     "integration",
     "integration_sync",
+    "custom_domain",
   ]),
   entityId: z.string().min(1).max(200),
   payload: z.record(z.string(), z.string().max(500)).default({}),
@@ -214,28 +222,34 @@ export type ChangeActor = {
   principalId: QuillsActor["principalId"] | null;
   actorType?: z.infer<typeof actorTypeSchema>;
 };
+/**
+ * Writes the audit row, the outbox event and its job in the caller's transaction.
+ * `actor` null records a change that a worker made, with no teammate or customer actor.
+ */
 export async function recordQuillsChange(
   db: Database,
-  actor: ChangeActor,
+  actor: ChangeActor | null,
   input: z.input<typeof changeSchema>,
 ) {
   const change = changeSchema.parse(input);
-  const actorType = actorTypeSchema.parse(actor.actorType ?? "user");
+  const actorType = actor
+    ? actorTypeSchema.parse(actor.actorType ?? "user")
+    : "system";
   const eventId = createId("event");
   await db.insert(auditLog).values({
-    actorPrincipalId: actor.principalId,
+    actorPrincipalId: actor?.principalId ?? null,
     actorType,
     eventType: change.type,
     targetType: change.entityType,
     targetId: change.entityId,
     metadata: change.payload,
-    channel: "api",
+    channel: actor ? "api" : "system",
   });
   await db.insert(events).values({
     eventId,
     ...change,
     actorType,
-    actorId: actor.principalId,
+    actorId: actor?.principalId ?? null,
     // Marks events recorded after delivery was enabled, so the worker never replays an older backlog.
     context: { deliver: true },
   });
