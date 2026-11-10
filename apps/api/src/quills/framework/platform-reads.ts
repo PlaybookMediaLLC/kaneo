@@ -11,6 +11,7 @@ import {
 import { findInaccessibleProjectIds } from "../../project-access/find-inaccessible-project-ids";
 import { projectAccessCondition } from "../../project-access/project-access-condition";
 import { roleHasWorkspacePermission } from "../../utils/require-workspace-permission";
+import { listAccessibleProjectIds } from "../../project-access/list-accessible-project-ids";
 
 // The only module that reads public tables for Quills routes. Every read filters on workspaceId.
 
@@ -194,4 +195,12 @@ export async function quillsReaders(
     )
       readers.set(row.userId, { email: row.email });
   return readers;
+}
+
+/** The projects of this workspace that the user can open. */
+export async function accessibleProjectIds(
+  workspaceId: string,
+  userId: string,
+): Promise<string[]> {
+  return [...(await listAccessibleProjectIds(platformDb, workspaceId, userId))];
 }

@@ -6,6 +6,7 @@ import jobs from "./jobs/routes";
 import links from "./links";
 import quillsSettings from "./settings/index";
 import sharedTeams from "./teams";
+import taxonomy from "./feedback/taxonomy";
 import { brandText } from "@kaneo/branding";
 import { apiRouter, z, type BaseVariables } from "../openapi";
 import { settings } from "../database/quills/schema/auth";
@@ -58,4 +59,5 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", quillsSettings)
   .route("/", feedback)
   .route("/", delivery)
+  .route("/", taxonomy)
   .openapi(...context);

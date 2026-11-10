@@ -176,6 +176,9 @@ export async function startContract(testPool: Pool, url: string) {
   return env;
 }
 
+/** Workspaces A and B and their helpers, for feature tests that run after startContract. */
+export const contractEnv = () => env;
+
 export async function stopContract() {
   if (!pool) return;
   await pool.query("DELETE FROM public.workspace WHERE id = ANY($1::text[])", [
@@ -186,9 +189,6 @@ export async function stopContract() {
     .where(inArray(kaneo.userTable.id, Object.values(users)));
   await pool.end();
 }
-
-/** The seeded workspaces and helpers, for feature tests that run after startContract. */
-export const contractEnv = () => env;
 
 /** The Quills router behind header identity and the API's error responses. */
 export function contractApp(router: App) {

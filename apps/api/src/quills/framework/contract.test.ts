@@ -14,6 +14,7 @@ import * as jobFixtures from "../jobs/routes.fixture";
 import * as linkFixtures from "../links.fixture";
 import * as settingsFixtures from "../settings/index.fixture";
 import * as teamFixtures from "../teams.fixture";
+import * as taxonomyFixtures from "../feedback/taxonomy.fixture";
 import {
   checkRoute,
   contractApp,
@@ -68,6 +69,7 @@ const fixtures: Record<string, Fixture> = {
   ...teamFixtures,
   ...directoryFixtures,
   ...settingsFixtures,
+  ...taxonomyFixtures,
 };
 const app = contractApp(quillsRouter);
 
