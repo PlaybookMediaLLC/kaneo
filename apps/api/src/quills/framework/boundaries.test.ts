@@ -37,6 +37,7 @@ const allowedImport = (file: string, specifier: string) => {
     (routePaths.has(target) ||
       [
         "framework/define-route",
+        "framework/files",
         "framework/platform-reads",
         "../openapi",
       ].includes(target) ||
@@ -81,6 +82,8 @@ describe("Quills module boundaries", () => {
     ).toEqual([
       // Test harness: seeds the platform rows that the contract checks need.
       "framework/contract.ts",
+      // Storage lifecycle: the shared verification lease in public.job_lease.
+      "framework/files.ts",
       "framework/platform-reads.ts",
       // Trusted maintenance: cache delivery and retention, not request paths.
       "jobs/retention.ts",
