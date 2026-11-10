@@ -6,7 +6,7 @@ const catalog = JSON.parse(
   readFileSync(new URL("../../i18n/en-US.json", import.meta.url), "utf8"),
 );
 
-function catalogKey(value) {
+export function catalogKey(value) {
   if (typeof value !== "string" || !value.includes(":")) return false;
   const [namespace, key] = value.split(":");
   return (
