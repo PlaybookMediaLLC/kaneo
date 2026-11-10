@@ -19,9 +19,10 @@ changes update the actor; deleting the account anonymizes its historical actor.
 Instance administrators retain Kaneo's existing cross-workspace override.
 
 `customer_identity` retains customer/visitor profile data. Its optional text
-`kaneo_user_id` links a profile to an existing Kaneo user. A trigger rejects links
-to users outside the workspace. Domain principals and Quills RBAC describe
-feature permissions; they never grant Kaneo workspace membership.
+`kaneo_user_id` links a profile to an existing Kaneo user. A trigger rejects a link
+to a user outside the workspace, unless `withQuillsAudience` vouches for that user
+in the same transaction (portal sign-in, see below). Domain principals and Quills
+RBAC describe feature permissions; they never grant Kaneo workspace membership.
 
 Use `withQuillsWorkspace({ workspaceId, userId }, callback)` with the user from
 Kaneo's authenticated server context. The callback receives the scoped database
@@ -42,6 +43,33 @@ Trusted background jobs can import `withQuillsSystemWorkspace` from `client.ts`.
 Never use that function with an unchecked workspace ID from a request. Partition
 maintenance takes an administrative PostgreSQL Client and applies globally;
 workspace callbacks cannot access partitions directly or execute DDL.
+
+## Portal, widget and public callers
+
+`withQuillsAudience({ workspace, kaneoUserId? }, callback)` in `client.ts` is the
+trusted entry point for callers who are not workspace members. Its only caller is
+`defineQuillsRoute` (routes with `audience: "portal" | "widget" | "public"`, mounted
+at `/quills-public/{workspace}`), through the resolvers in `src/quills/framework/audience.ts`.
+
+1. `workspace` is an ID or slug that the caller names. An ID match wins. A missing or
+   archived workspace, or one that never initialized Quills, is rejected; the route
+   returns 404. An anonymous caller never seeds a workspace.
+2. It sets the transaction-local workspace and `SET LOCAL ROLE quills_runtime`, like
+   the other helpers. It authorizes nothing else. It locks the workspace row only for
+   a write (`lock`).
+3. It never reads or writes `workspace_member` and never creates a teammate principal.
+4. `kaneoUserId` is the signed-in Kaneo account from the session (decision D1), never
+   request input. Migration `0010_customer_portal_link` lets the `customer_membership`
+   trigger accept a new `customer_identity` row linked to that one account, so a portal
+   customer needs no membership. An update never moves a link to a non-member. The resolver creates the customer profile and
+   its principal (`principal.user_id`, role and type `user`) inside the transaction.
+5. A widget session is a `kv_store` row keyed by the SHA-256 hash of its token. The
+   raw token is returned once, by identify, and never stored. The row holds a
+   fingerprint of the widget secret: rotating the secret or turning the widget off ends
+   every session. Retention deletes expired rows.
+
+Never call `withQuillsSystemWorkspace` for these callers, and never pass it a
+workspace from a request.
 
 ## Shared API and client foundation
 

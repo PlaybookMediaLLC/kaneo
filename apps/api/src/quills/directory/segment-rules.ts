@@ -239,7 +239,8 @@ export function matchingSql(rules: Stored | null): SQL | null {
     JOIN quills."customer_identity" u ON u.id = p.user_id
     LEFT JOIN quills."companies" co ON co.id = p.company_id
     WHERE p.role = 'user' AND p.type = 'user' AND p.kaneo_user_id IS NULL
-      AND u.kaneo_user_id IS NULL AND p.test_owner_principal_id IS NULL
+      AND NOT EXISTS (SELECT 1 FROM quills."principal" m WHERE m.kaneo_user_id = u.kaneo_user_id)
+      AND p.test_owner_principal_id IS NULL
       AND (${combined})`;
 }
 

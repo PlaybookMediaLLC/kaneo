@@ -6,18 +6,22 @@ import { Pool } from "pg";
 import * as kaneo from "../../database/schema";
 import quillsRouter from "../index";
 import * as deliveryFixtures from "../delivery/index.fixture";
+import publicRouter from "../public";
 import * as directoryFixtures from "../directory/index.fixture";
 import * as feedbackFixtures from "../feedback/core.fixture";
 import * as fileFixtures from "../files/routes.fixture";
 import * as contextFixtures from "../index.fixture";
 import * as jobFixtures from "../jobs/routes.fixture";
 import * as linkFixtures from "../links.fixture";
+import * as portalFixtures from "../portal/index.fixture";
 import * as settingsFixtures from "../settings/index.fixture";
 import * as teamFixtures from "../teams.fixture";
 import * as taxonomyFixtures from "../feedback/taxonomy.fixture";
+import * as widgetFixtures from "../widget/index.fixture";
 import {
   checkRoute,
   contractApp,
+  contractSession,
   startContract,
   stopContract,
   unregisteredRoutes,
@@ -58,6 +62,10 @@ vi.spyOn(S3Client.prototype, "send").mockImplementation((async (
     throw new Error("Unexpected storage call");
   return { Body: Readable.from([Buffer.from("image")]) };
 }) as never);
+// Portal routes read the Kaneo session; the contract signs in the x-test-user account instead.
+vi.mock("../../utils/get-user-session", () => ({
+  getUserSession: (headers: Headers) => contractSession(headers),
+}));
 const url = process.env.QUILLS_TEST_DATABASE_URL;
 const fixtures: Record<string, Fixture> = {
   ...contextFixtures,
@@ -70,8 +78,10 @@ const fixtures: Record<string, Fixture> = {
   ...directoryFixtures,
   ...settingsFixtures,
   ...taxonomyFixtures,
+  ...portalFixtures,
+  ...widgetFixtures,
 };
-const app = contractApp(quillsRouter);
+const app = contractApp(quillsRouter, publicRouter);
 
 describe.skipIf(!url)("Quills route contract", () => {
   beforeAll(async () => {

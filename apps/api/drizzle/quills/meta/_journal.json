@@ -78,6 +78,13 @@
 			"when": 1794339022525,
 			"tag": "0010_delivery_queues",
 			"breakpoints": true
+		},
+		{
+			"idx": 11,
+			"version": "7",
+			"when": 1794350125126,
+			"tag": "0011_customer_portal_link",
+			"breakpoints": true
 		}
 	]
 }

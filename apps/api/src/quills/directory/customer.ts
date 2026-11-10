@@ -20,7 +20,9 @@ export type Db = Parameters<AnyQuillsRoute["handler"]>[0]["db"];
 export const isCustomer = and(
   isNull(principal.kaneoUserId),
   isNull(principal.testOwnerPrincipalId),
-  isNull(user.kaneoUserId),
+  // A portal profile links a Kaneo account with no membership (decision D1) and is a customer.
+  // A profile whose account has a teammate principal here (a member, now or before) is not.
+  sql`not exists (select 1 from ${principal} m where m.kaneo_user_id = ${user.kaneoUserId})`,
   eq(principal.role, "user"),
   inArray(principal.type, ["user", "anonymous"]),
 )!;

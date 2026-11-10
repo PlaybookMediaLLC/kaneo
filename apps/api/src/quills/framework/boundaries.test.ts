@@ -46,11 +46,24 @@ const allowedImport = (file: string, specifier: string) => {
         "framework/files",
         "framework/platform-reads",
         "framework/webhook-config",
+        "framework/audience",
         "../openapi",
       ].includes(target) ||
       target.startsWith("../database/quills/schema/"))
   );
 };
+/**
+ * Portal, widget and public route modules reach the database only through withQuillsAudience
+ * (inside defineQuillsRoute). Each finding names a teammate or wider path they use.
+ */
+const audienceViolations = (file: { path: string; source: string }) =>
+  /audience:\s*"(portal|widget|public)"/.test(file.source)
+    ? [
+        ...file.source.matchAll(
+          /(?:from |import\()"([^"]*(with-quills-request|platform-reads|database\/quills\/client|\/database(\/index)?))"|\b(withQuillsRequest|withQuillsWorkspace|withQuillsSystemWorkspace|getDatabasePool)\b/g,
+        ),
+      ].map((match) => `${file.path}: ${match[1] ?? match[4]}`)
+    : [];
 const matching = (files: typeof quills, rule: RegExp) =>
   files
     .filter((file) => rule.test(file.source))
@@ -72,6 +85,33 @@ describe("Quills module boundaries", () => {
           .map((specifier) => `${file.path}: ${specifier}`),
       ),
     ).toEqual([]);
+  });
+
+  it("keeps portal, widget and public routes off teammate and platform database paths", () => {
+    const audienceModules = routeModules.filter((file) =>
+      /audience:\s*"(portal|widget|public)"/.test(file.source),
+    );
+    expect(audienceModules.length).toBeGreaterThan(0);
+    expect(routeModules.flatMap(audienceViolations)).toEqual([]);
+    // The rule itself fires on each forbidden path.
+    expect(
+      audienceViolations({
+        path: "broken.ts",
+        source: [
+          'audience: "portal",',
+          'import { withQuillsRequest } from "../with-quills-request";',
+          'import db from "../../database";',
+          'const { isMemberOfNamedWorkspace } = await import("../framework/platform-reads");',
+          "await withQuillsSystemWorkspace(id, work);",
+        ].join("\n"),
+      }),
+    ).toEqual([
+      "broken.ts: withQuillsRequest",
+      "broken.ts: ../with-quills-request",
+      "broken.ts: ../../database",
+      "broken.ts: ../framework/platform-reads",
+      "broken.ts: withQuillsSystemWorkspace",
+    ]);
   });
 
   it("does not spread request bodies into writes", () => {

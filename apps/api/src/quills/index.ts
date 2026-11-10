@@ -4,6 +4,7 @@ import feedback from "./feedback/core";
 import files from "./files/routes";
 import jobs from "./jobs/routes";
 import links from "./links";
+import portalAccessSettings from "./portal/access-settings";
 import quillsSettings from "./settings/index";
 import sharedTeams from "./teams";
 import taxonomy from "./feedback/taxonomy";
@@ -60,4 +61,5 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", feedback)
   .route("/", delivery)
   .route("/", taxonomy)
+  .route("/", portalAccessSettings)
   .openapi(...context);
