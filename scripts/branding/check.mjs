@@ -430,7 +430,7 @@ export async function checkOutput(directory) {
         const sourceFile = relative
           .replace(/^\.cache\/npm\/([^/]+)\//, "packages/$1/")
           .replace(/^apps\/web\/dist\//, "apps/web/public/")
-          .replace(/^\.cache\/branded-docs\//, "apps/docs/");
+          .replace(/^\.cache\/branded-docs(-test-[^/]+)?\//, "apps/docs/");
         const key = `${sourceFile}\0${exceptionValue(finding.value)}\0`;
         return !reviewedText.has(key + finding.term) && !reviewedText.has(key);
       }),

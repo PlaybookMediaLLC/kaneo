@@ -4,9 +4,11 @@ This fork keeps upstream package names and compatibility identifiers. Product co
 uses `@kaneo/branding`; translation **values** are adapted when loaded, while their
 keys remain upstream-compatible. Do not pass user content to `brandText`.
 
-The product is `quills`, hosted at `https://quills.playbookmedia.io`. Its name,
-public URL and client URL are set in `config.json`, alongside the other public
-destinations. Release still requires fork-owned image and registry identifiers
+The product is `quills`. The app is hosted at `https://quills.playbookmedia.io`
+(client URL) and the marketing site at `https://quills-site.playbookmedia.io`
+(public URL), on separate origins like upstream. Its name, public URL and client
+URL are set in `config.json`, alongside the other public destinations. Release
+still requires fork-owned image and registry identifiers
 and approved artwork.
 Destination mappings live in `index.cjs`; review new
 upstream links instead of inventing replacements for them.

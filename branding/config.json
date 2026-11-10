@@ -1,6 +1,6 @@
 {
 	"name": "quills",
-	"publicUrl": "https://quills.playbookmedia.io",
+	"publicUrl": "https://quills-site.playbookmedia.io",
 	"clientUrl": "https://quills.playbookmedia.io",
 	"docsUrl": "https://quilss-docs.playbookmedia.io",
 	"supportUrl": "https://quills-support.playbookmedia.io",
@@ -358,8 +358,8 @@
 	"repositoryUrl": "https://repository.playbookmedia.io",
 	"supportEmail": "support@playbookmedia.io",
 	"releaseApiUrl": "https://quills-release.playbookmedia.io",
-	"imageBase": "ghcr.io/OWNER/PRODUCT_NAME",
-	"mcpRegistryName": "io.github.OWNER/PRODUCT_NAME",
+	"imageBase": "ghcr.io/playbookmediallc",
+	"mcpRegistryName": "io.github.playbookmediallc/quills",
 	"appStoreUrl": null,
 	"npmScope": ""
 }
