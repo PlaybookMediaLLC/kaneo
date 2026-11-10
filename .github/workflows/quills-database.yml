@@ -4,7 +4,8 @@ on:
   pull_request:
     paths:
       - 'apps/api/**'
-      - 'packages/ids/**'
+      - 'packages/**'
+      - 'branding/**'
       - 'pnpm-lock.yaml'
       - 'compose*.yml'
       - 'charts/kaneo/**'
@@ -46,5 +47,5 @@ jobs:
           node-version: 24.22.2
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @kaneo/ids build
+      - run: pnpm --filter "@kaneo/api^..." build
       - run: pnpm --filter @kaneo/api test:quills
