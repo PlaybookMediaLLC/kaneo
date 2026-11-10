@@ -1,13 +1,9 @@
 import { settings } from "../../database/quills/schema/auth";
 import { fixture, type ContractEnv } from "../framework/contract";
 import { image, uploads } from "./seed.fixture";
+import { fields } from "./settings-keys";
 
-type Purpose = "logo" | "favicon" | "header_logo";
-const property = {
-  logo: "logoKey",
-  favicon: "faviconKey",
-  header_logo: "headerLogoKey",
-} as const;
+type Purpose = keyof typeof fields;
 
 const save = (purpose: Purpose) =>
   fixture({
@@ -24,7 +20,7 @@ const remove = (purpose: Purpose) =>
       for (const workspaceId of [env.a, env.b])
         await env.scoped(workspaceId, (db) =>
           db.update(settings).set({
-            [property[purpose]]: workspaceId === env.a ? keys.a : keys.b,
+            [fields[purpose].property]: workspaceId === env.a ? keys.a : keys.b,
           }),
         );
     },

@@ -70,25 +70,23 @@ const createFile = defineQuillsRoute({
       .max(255)
       .regex(/^[^\\/\p{Cc}]+$/u, "Invalid file name"),
   }),
-  response: file,
+  // `created` is false when a retry finds the file that an earlier request registered.
+  response: file.extend({ created: z.boolean() }),
   responseDescription: "Registered file",
-  errors: { 404: "Upload not found", 409: "File already registered" },
+  errors: {
+    404: "Upload not found",
+    409: "The file for this upload was removed",
+  },
   load: ({ body, workspaceId }) =>
     verifyUpload(workspaceId, filePurposes, body, { digest: true }),
-  event: (_input, result) => ({
-    type: "file.created",
-    entityType: "file",
-    entityId: result.id,
-  }),
+  event: (_input, result) =>
+    result.created && {
+      type: "file.created",
+      entityType: "file",
+      entityId: result.id,
+    },
   handler: async ({ db, actor, body, loaded }) => {
     await holdVerifiedUpload(db, loaded);
-    const [existing] = await db
-      .select({ id: files.id })
-      .from(files)
-      .where(eq(files.storageKey, loaded.key))
-      .limit(1);
-    if (existing)
-      throw new HTTPException(409, { message: "File already registered" });
     const [row] = await db
       .insert(files)
       .values({
@@ -98,14 +96,25 @@ const createFile = defineQuillsRoute({
         declaredType: body.contentType,
         family: family(loaded.contentType),
         size: loaded.size,
-        sha256: loaded.sha256!,
+        sha256: loaded.sha256,
         source: "agent",
         uploadedById: actor.principalId,
         // No preview job exists in Kaneo yet.
         previewStatus: "none",
       })
+      .onConflictDoNothing()
       .returning(fileFields);
-    return row!;
+    if (row) return { ...row, created: true };
+    const [existing] = await db
+      .select(fileFields)
+      .from(files)
+      .where(and(eq(files.storageKey, loaded.key), isNull(files.deletedAt)))
+      .limit(1);
+    if (!existing)
+      throw new HTTPException(409, {
+        message: "The file for this upload was removed",
+      });
+    return { ...existing, created: false };
   },
 });
 

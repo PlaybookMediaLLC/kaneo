@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
+import { Readable } from "node:stream";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq } from "drizzle-orm";
 import { Pool } from "pg";
@@ -14,7 +16,7 @@ import {
 } from "../../storage/s3";
 import { listWorkspaceObjectKeys } from "../../workspace/lifecycle/list-workspace-object-keys";
 import { buildQuillsRoute } from "../framework/define-route";
-import { contentPurposes } from "../framework/files";
+import { contentPurposes, holdVerifiedUpload } from "../framework/files";
 import {
   contractApp,
   startContract,
@@ -24,6 +26,7 @@ import {
 import { registry } from "../framework/registry";
 import quillsRouter from "../index";
 import { fileRow, image } from "./seed.fixture";
+import { fields } from "./settings-keys";
 
 let pool: Pool;
 vi.mock("../../database/index", () => ({
@@ -49,11 +52,16 @@ vi.mock("../../storage/s3", async (original) => ({
     async (_key: string, expected: { size: number; contentType: string }) =>
       expected,
   ),
-  getPrivateObject: vi.fn(async () => ({
-    body: new Blob(["image"]).stream(),
-  })),
   deleteS3Object: vi.fn(async () => {}),
 }));
+// The upload digest reads through its own client: answer that GET with the stored bytes.
+const storageSend = vi
+  .spyOn(S3Client.prototype, "send")
+  .mockImplementation((async (command: unknown) => {
+    if (!(command instanceof GetObjectCommand))
+      throw new Error("Unexpected storage call");
+    return { Body: Readable.from([Buffer.from("image")]) };
+  }) as never);
 
 const url = process.env.QUILLS_TEST_DATABASE_URL;
 const secret = "lifecycle-secret-value";
@@ -209,6 +217,13 @@ describe.skipIf(!url)("Quills file lifecycle", () => {
       sha256: createHash("sha256").update("image").digest("hex"),
     });
     expect(row!.uploadedById).toBeTruthy();
+    // The digest read has a time limit.
+    expect(storageSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: { Bucket: "quills-lifecycle", Key: res.body.key },
+      }),
+      expect.objectContaining({ abortSignal: expect.any(AbortSignal) }),
+    );
     expect(await listWorkspaceObjectKeys(env.a)).toContain(res.body.key);
 
     const read = await call("GET", `/files/${created.body.id}`);
@@ -231,39 +246,167 @@ describe.skipIf(!url)("Quills file lifecycle", () => {
     expect(await events()).toBe(before);
   });
 
-  it("replaces and removes a settings key and queues the old key", async () => {
-    const first = await upload("logo");
-    expect((await setLogo(first)).body).toEqual({ changed: true });
-    expect(await queued(first)).toBe(false);
+  it.each(Object.keys(fields) as (keyof typeof fields)[])(
+    "replaces and removes the %s key and queues the old key",
+    async (purpose) => {
+      const { path } = fields[purpose];
+      const column = `${purpose}_key`;
+      const set = (key: string) => call("PUT", path, { key, ...image });
+      const current = async () =>
+        (
+          await pool.query(
+            `SELECT ${column} AS key FROM quills.settings WHERE workspace_id=$1`,
+            [env.a],
+          )
+        ).rows[0].key as string | null;
 
-    const second = await upload("logo");
-    expect((await setLogo(second)).body).toEqual({ changed: true });
-    expect(await logoKey()).toBe(second);
-    expect(await queued(first)).toBe(true);
+      const first = await upload(purpose);
+      expect((await set(first)).body).toEqual({ changed: true });
+      expect(await queued(first)).toBe(false);
 
-    // The verification lease outlives the request; a retry of the same key waits for it.
-    expect((await setLogo(second)).status).toBe(503);
-    await expireLease(second);
+      const second = await upload(purpose);
+      expect((await set(second)).body).toEqual({ changed: true });
+      expect(await current()).toBe(second);
+      expect(await queued(first)).toBe(true);
+
+      // The verification lease outlives the request; a retry of the same key waits for it.
+      expect((await set(second)).status).toBe(503);
+      await expireLease(second);
+      const before = await events();
+      expect((await set(second)).body).toEqual({ changed: false });
+      expect(await events()).toBe(before);
+
+      await expireLease(first);
+      await drain([first]);
+      expect(deleteS3Object).toHaveBeenCalledWith(first);
+      expect(deleteS3Object).not.toHaveBeenCalledWith(second);
+
+      expect((await call("DELETE", path)).body).toEqual({ changed: true });
+      expect(await current()).toBeNull();
+      expect(await queued(second)).toBe(true);
+      expect((await call("DELETE", path)).body).toEqual({ changed: false });
+      await expireLease(second);
+      await drain([second]);
+      expect(deleteS3Object).toHaveBeenCalledWith(second);
+    },
+  );
+
+  it("applies the content-type rule of each purpose and registers every file purpose", async () => {
+    for (const [path, purpose] of [
+      ["/files/uploads", "post_image"],
+      ["/files/settings-uploads", "logo"],
+      ["/files/settings-uploads", "assistant_avatar"],
+    ])
+      expect(
+        (
+          await call("POST", path!, {
+            purpose,
+            filename: "notes.txt",
+            contentType: "text/plain",
+            size: 5,
+          })
+        ).status,
+      ).toBe(400);
+    for (const purpose of ["post_image", "changelog_image", "assistant_avatar"])
+      expect((await register(await upload(purpose))).body.created).toBe(true);
+  });
+
+  it("returns the registered file to a retry and hides a removed file", async () => {
+    const key = await upload("file");
+    const first = await register(key);
+    expect(first.body.created).toBe(true);
+    await expireLease(key);
     const before = await events();
-    expect((await setLogo(second)).body).toEqual({ changed: false });
+    const retry = await register(key);
+    expect(retry.status).toBe(200);
+    expect(retry.body).toMatchObject({ id: first.body.id, created: false });
     expect(await events()).toBe(before);
 
-    await expireLease(first);
-    await drain([first]);
-    expect(deleteS3Object).toHaveBeenCalledWith(first);
-    expect(deleteS3Object).not.toHaveBeenCalledWith(second);
+    await env.scoped(env.a, (db) =>
+      db
+        .update(files)
+        .set({ deletedAt: new Date() })
+        .where(eq(files.id, first.body.id)),
+    );
+    await expireLease(key);
+    expect((await register(key)).status).toBe(409);
+    expect((await call("GET", `/files/${first.body.id}`)).status).toBe(404);
+    expect((await call("POST", `/files/${first.body.id}/opened`)).status).toBe(
+      404,
+    );
+  });
 
-    expect((await call("DELETE", "/settings/logo")).body).toEqual({
-      changed: true,
-    });
-    expect(await logoKey()).toBeNull();
-    expect(await queued(second)).toBe(true);
-    expect((await call("DELETE", "/settings/logo")).body).toEqual({
-      changed: false,
-    });
-    await expireLease(second);
-    await drain([second]);
-    expect(deleteS3Object).toHaveBeenCalledWith(second);
+  it("refuses the reference when the lease is lost during verification", async () => {
+    const key = await upload("file");
+    let started!: () => void, finish!: () => void;
+    const verifying = new Promise<void>((resolve) => (started = resolve));
+    const gate = new Promise<void>((resolve) => (finish = resolve));
+    vi.mocked(verifyTaskAssetUpload).mockImplementationOnce(
+      async (_key, expected) => {
+        started();
+        await gate;
+        return expected;
+      },
+    );
+    const pending = register(key);
+    await verifying;
+    await expireLease(key);
+    finish();
+    const res = await pending;
+    expect(res.status).toBe(503);
+    expect(res.body.message).toContain("expired");
+    expect(await fileRows(key)).toBe(0);
+  });
+
+  it("removes Quills upload leases that expired an hour ago and nothing else", async () => {
+    const old = new Date(Date.now() - 2 * 3_600_000),
+      recent = new Date(Date.now() - 60_000);
+    const names = {
+      old: `storage-verification:workspace/${env.a}/quills/file/old.png`,
+      recent: `storage-verification:workspace/${env.a}/quills/file/recent.png`,
+      kaneo: `storage-verification:workspace/${env.a}/project/p/task/t/descriptions/old.png`,
+    };
+    // Through drizzle, which writes this timestamp column the way the lease code reads it.
+    await env.db.insert(kaneo.jobLeaseTable).values([
+      { name: names.old, owner: "test", expiresAt: old },
+      { name: names.recent, owner: "test", expiresAt: recent },
+      { name: names.kaneo, owner: "test", expiresAt: old },
+    ]);
+    try {
+      expect((await register(await upload("file"))).status).toBe(200);
+      const { rows } = await pool.query(
+        "SELECT name FROM public.job_lease WHERE name = ANY($1::text[])",
+        [Object.values(names)],
+      );
+      expect(rows.map((row) => row.name).sort()).toEqual(
+        [names.kaneo, names.recent].sort(),
+      );
+    } finally {
+      await pool.query("DELETE FROM public.job_lease WHERE name = ANY($1)", [
+        Object.values(names),
+      ]);
+    }
+  });
+
+  it("reports unconfigured storage and refuses uploads without it", async () => {
+    vi.stubEnv("S3_BUCKET", "");
+    try {
+      expect((await call("GET", "/storage")).body).toEqual({
+        configured: false,
+      });
+      expect(
+        (
+          await call("POST", "/files/uploads", {
+            purpose: "file",
+            filename: "a.png",
+            ...image,
+          })
+        ).status,
+      ).toBe(503);
+    } finally {
+      vi.stubEnv("S3_BUCKET", "quills-lifecycle");
+    }
+    expect((await call("GET", "/storage")).body).toEqual({ configured: true });
   });
 
   it("does not commit a reference after the verification lease expires", async () => {
@@ -299,12 +442,20 @@ describe.skipIf(!url)("Quills file lifecycle", () => {
     expect(await fileRows(key)).toBe(0);
     expect(await logoKey()).toBe(current);
     expect(await events()).toBe(before);
+
+    // The handler's own check, for a deadline that passes between verification and the write.
+    await expect(
+      env.scoped(env.a, (db) =>
+        holdVerifiedUpload(db, { key, ...image, deadline: Date.now() }),
+      ),
+    ).rejects.toThrow("expired");
   });
 
   it("keeps a queued key while its upload is verified and after the reference commits", async () => {
     const key = await upload("file");
+    // Older than any other queued row, so this worker run examines it.
     await pool.query(
-      "INSERT INTO public.storage_cleanup(object_key) VALUES ($1)",
+      "INSERT INTO public.storage_cleanup(object_key, created_at) VALUES ($1, '2000-01-01')",
       [key],
     );
     let started!: () => void, finish!: () => void;

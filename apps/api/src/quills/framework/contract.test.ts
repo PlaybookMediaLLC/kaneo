@@ -1,4 +1,6 @@
+import { Readable } from "node:stream";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as kaneo from "../../database/schema";
@@ -42,10 +44,15 @@ vi.mock("../../storage/s3", async (original) => ({
     async (_key: string, expected: { size: number; contentType: string }) =>
       expected,
   ),
-  getPrivateObject: vi.fn(async () => ({
-    body: new Blob(["image"]).stream(),
-  })),
 }));
+// The upload digest reads through its own client: answer that GET with the stored bytes.
+vi.spyOn(S3Client.prototype, "send").mockImplementation((async (
+  command: unknown,
+) => {
+  if (!(command instanceof GetObjectCommand))
+    throw new Error("Unexpected storage call");
+  return { Body: Readable.from([Buffer.from("image")]) };
+}) as never);
 const url = process.env.QUILLS_TEST_DATABASE_URL;
 const fixtures: Record<string, Fixture> = {
   ...contextFixtures,

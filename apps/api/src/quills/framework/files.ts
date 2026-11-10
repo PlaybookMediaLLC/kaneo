@@ -6,7 +6,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { createId } from "@paralleldrive/cuid2";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, like, lt } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import type { Database } from "../../database/quills/client";
 import { jobLeaseTable } from "../../database/schema";
@@ -19,7 +19,6 @@ import {
   applyKeyPrefix,
   assertStorageConfigured,
   getFileExtension,
-  getPrivateObject,
   InvalidUploadedAssetError,
   isImageContentType,
   isStorageConfigured,
@@ -46,7 +45,7 @@ export const settingsPurposes = [
 ] as const;
 /** Purposes registered in `quills.files`. Settings keys register in their own column. */
 export const filePurposes = [...contentPurposes, "assistant_avatar"] as const;
-type Purpose =
+export type Purpose =
   | (typeof contentPurposes)[number]
   | (typeof settingsPurposes)[number];
 
@@ -90,6 +89,7 @@ export const uploadedObject = z.object({
 
 export const isQuillsStorageConfigured = () => isStorageConfigured();
 
+type StorageConfig = ReturnType<typeof assertStorageConfigured>;
 function storage() {
   try {
     return assertStorageConfigured();
@@ -99,22 +99,35 @@ function storage() {
 }
 
 // ponytail: storage/s3.ts keeps its client private and signs only task and project keys, so this
-// repeats its client options. Use an upstream export that signs any key when one exists.
-function signer(config: ReturnType<typeof assertStorageConfigured>) {
-  return new S3Client({
-    endpoint: config.endpoint,
-    region: config.region,
-    forcePathStyle: config.forcePathStyle,
-    requestChecksumCalculation: "WHEN_REQUIRED",
-    credentials: resolveS3Credentials(
-      config.accessKeyId,
-      config.secretAccessKey,
-    ),
-  });
+// repeats its client options and cache. Use an upstream export that signs any key when one exists.
+let cached: { key: string; client: S3Client } | undefined;
+function client(config: StorageConfig) {
+  const key = JSON.stringify([
+    config.endpoint,
+    config.region,
+    config.accessKeyId,
+    config.forcePathStyle,
+  ]);
+  // One client per configuration, so credentials from the default provider chain stay cached.
+  if (cached?.key !== key)
+    cached = {
+      key,
+      client: new S3Client({
+        endpoint: config.endpoint,
+        region: config.region,
+        forcePathStyle: config.forcePathStyle,
+        requestChecksumCalculation: "WHEN_REQUIRED",
+        credentials: resolveS3Credentials(
+          config.accessKeyId,
+          config.secretAccessKey,
+        ),
+      }),
+    };
+  return cached.client;
 }
 
 const namespace = (
-  config: ReturnType<typeof assertStorageConfigured>,
+  config: StorageConfig,
   workspaceId: string,
   purpose: Purpose,
 ) =>
@@ -140,7 +153,7 @@ export async function createUpload(
   const extension = getFileExtension(input.filename);
   const key = `${namespace(config, workspaceId, input.purpose)}${createId()}${extension ? `.${extension}` : ""}`;
   const uploadUrl = await getSignedUrl(
-    signer(config),
+    client(config),
     new PutObjectCommand({
       Bucket: config.bucket,
       Key: key,
@@ -163,6 +176,16 @@ export async function createUpload(
   };
 }
 
+/** RFC 6266 disposition with an ASCII fallback and an RFC 5987 UTF-8 name. */
+function disposition(type: "inline" | "attachment", name: string) {
+  const ascii = name.replace(/[^\x20-\x7e]|["\\]/g, "_");
+  const encoded = encodeURIComponent(name).replace(
+    /['()*]/g,
+    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+  return `${type}; filename="${ascii}"; filename*=UTF-8''${encoded}`;
+}
+
 /** A short-lived GET for a registered file. Only images open inline. */
 export async function createDownload(file: {
   storageKey: string;
@@ -170,17 +193,17 @@ export async function createDownload(file: {
   contentType: string;
 }) {
   const config = storage();
-  const disposition = isImageContentType(file.contentType)
-    ? "inline"
-    : "attachment";
   return {
     downloadUrl: await getSignedUrl(
-      signer(config),
+      client(config),
       new GetObjectCommand({
         Bucket: config.bucket,
         Key: file.storageKey,
         ResponseContentType: file.contentType,
-        ResponseContentDisposition: `${disposition}; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+        ResponseContentDisposition: disposition(
+          isImageContentType(file.contentType) ? "inline" : "attachment",
+          file.name,
+        ),
       }),
       { expiresIn: config.presignTtlSeconds },
     ),
@@ -190,16 +213,22 @@ export async function createDownload(file: {
 
 export type VerifiedUpload = {
   key: string;
-  purpose: Purpose;
   contentType: string;
   size: number;
-  sha256?: string;
-  /** The verification lease ends here; the reference must commit before it. */
-  expiresAt: number;
+  /** The reference must commit before this time, or the lease no longer protects the object. */
+  deadline: number;
 };
 
+// The lease name and duration of withVerifiedStorageObject in storage/cleanup-queue.ts; the cleanup
+// worker skips an object while this lease is live. lifecycle.test.ts runs the real worker against it.
 const LEASE_MS = 60_000;
 const leaseName = (key: string) => `storage-verification:${key}`;
+// Room for clock skew between API instances that read the same lease.
+const SKEW_MS = 10_000;
+const expired = () =>
+  new HTTPException(503, {
+    message: "Upload verification expired; retry the upload.",
+  });
 
 /**
  * Checks that `input.key` is an upload of this workspace for one of `purposes`, takes the shared
@@ -207,14 +236,26 @@ const leaseName = (key: string) => `storage-verification:${key}`;
  * transaction: verification holds no pooled connection. The handler then calls `holdVerifiedUpload`.
  *
  * ponytail: a verified lease is not released after commit, because define-route has no post-commit
- * hook for mutations. It expires after 60 s; a retry of the same key in that time gets 503.
+ * hook for mutations. It expires after 60 s (a retry of the same key in that time gets 503), and a
+ * later verification deletes it.
  */
 export async function verifyUpload(
   workspaceId: string,
   purposes: readonly Purpose[],
   input: z.output<typeof uploadedObject>,
+): Promise<VerifiedUpload>;
+export async function verifyUpload(
+  workspaceId: string,
+  purposes: readonly Purpose[],
+  input: z.output<typeof uploadedObject>,
+  options: { digest: true },
+): Promise<VerifiedUpload & { sha256: string }>;
+export async function verifyUpload(
+  workspaceId: string,
+  purposes: readonly Purpose[],
+  input: z.output<typeof uploadedObject>,
   options: { digest?: boolean } = {},
-): Promise<VerifiedUpload> {
+): Promise<VerifiedUpload & { sha256?: string }> {
   const config = storage();
   const purpose = purposes.find((p) =>
     input.key.startsWith(namespace(config, workspaceId, p)),
@@ -229,6 +270,7 @@ export async function verifyUpload(
 
   const owner = randomUUID();
   const expiresAt = new Date(Date.now() + LEASE_MS);
+  const deadline = expiresAt.getTime() - SKEW_MS;
   await withStorageObject(input.key, async (tx) => {
     const current = await tx.query.jobLeaseTable.findFirst({
       where: eq(jobLeaseTable.name, leaseName(input.key)),
@@ -244,6 +286,22 @@ export async function verifyUpload(
         target: jobLeaseTable.name,
         set: { owner, expiresAt },
       });
+    // Committed uploads keep their lease row; remove Quills rows that expired an hour ago.
+    await tx.delete(jobLeaseTable).where(
+      inArray(
+        jobLeaseTable.name,
+        tx
+          .select({ name: jobLeaseTable.name })
+          .from(jobLeaseTable)
+          .where(
+            and(
+              like(jobLeaseTable.name, "storage-verification:%/quills/%"),
+              lt(jobLeaseTable.expiresAt, new Date(Date.now() - 3_600_000)),
+            ),
+          )
+          .limit(100),
+      ),
+    );
   });
   try {
     const stored = await verifyTaskAssetUpload(input.key, input).catch(
@@ -259,13 +317,22 @@ export async function verifyUpload(
         );
       },
     );
+    const sha256 = options.digest
+      ? await digest(config, input.key, deadline)
+      : undefined;
+    // A lease that was taken over or removed while the object was read protects nothing.
+    await withStorageObject(input.key, async (tx) => {
+      const lease = await tx.query.jobLeaseTable.findFirst({
+        where: eq(jobLeaseTable.name, leaseName(input.key)),
+      });
+      if (lease?.owner !== owner || Date.now() >= deadline) throw expired();
+    });
     return {
       key: input.key,
-      purpose,
       contentType: stored.contentType.toLowerCase(),
       size: stored.size,
-      sha256: options.digest ? await digest(input.key) : undefined,
-      expiresAt: expiresAt.getTime(),
+      sha256,
+      deadline,
     };
   } catch (error) {
     // A failed verification commits nothing, so the lease can go now.
@@ -283,13 +350,15 @@ export async function verifyUpload(
   }
 }
 
-// ponytail: getPrivateObject has no timeout; a stalled read holds the request but no connection,
-// and the lease check still refuses a late commit.
-async function digest(key: string) {
+/** Reads the object once, on its own client and with a time limit, so a stalled read ends. */
+async function digest(config: StorageConfig, key: string, deadline: number) {
   const hash = createHash("sha256");
   try {
-    const object = await getPrivateObject(key);
-    for await (const chunk of object.body as AsyncIterable<Uint8Array>)
+    const object = await client(config).send(
+      new GetObjectCommand({ Bucket: config.bucket, Key: key }),
+      { abortSignal: AbortSignal.timeout(Math.max(1, deadline - Date.now())) },
+    );
+    for await (const chunk of object.Body as AsyncIterable<Uint8Array>)
       hash.update(chunk);
   } catch (error) {
     console.error(
@@ -309,8 +378,5 @@ async function digest(key: string) {
  */
 export async function holdVerifiedUpload(db: Database, upload: VerifiedUpload) {
   await lockStorageObjects(db, [upload.key]);
-  if (Date.now() >= upload.expiresAt)
-    throw new HTTPException(503, {
-      message: "Upload verification expired; retry the upload.",
-    });
+  if (Date.now() >= upload.deadline) throw expired();
 }

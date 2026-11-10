@@ -10,7 +10,7 @@ import {
 
 // The settings columns that hold an object key. The quills_storage_changes trigger queues
 // a replaced or cleared key for cleanup in the same transaction.
-const fields = {
+export const fields = {
   logo: {
     path: "/settings/logo",
     label: "logo",

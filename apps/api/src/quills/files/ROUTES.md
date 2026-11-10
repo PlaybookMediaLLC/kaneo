@@ -26,7 +26,12 @@ Completion checks:             authenticated endpoint, tenant/object access, mut
 - The server derives every key: `<S3_KEY_PREFIX>/workspace/<workspaceId>/quills/<purpose>/<cuid>.<ext>`.
 - A key outside the caller's workspace namespace, a key of a different purpose, or a key with a path suffix returns 404.
 - Images only for every purpose except `file`. All sizes use Kaneo's `S3_MAX_IMAGE_UPLOAD_BYTES` limit.
-- A reference commits only while its verification lease is live. An expired lease returns 503 and writes nothing.
+- A reference commits only while its verification lease is live and still owned by the request, with 10 s left
+  for clock skew. An expired or lost lease returns 503 and writes nothing.
+- A registration retry for a key that is already registered returns that file with `created: false` and no event.
+  A key whose file was removed returns 409.
+- Known gap: an upload URL that is never registered leaves an object that nothing cleans up. Kaneo's direct
+  task-image upload has the same gap. Closing it needs a pending-upload record or an upload-window lease.
 - Replacing or clearing a settings key queues the old key through the existing trigger, in the same transaction.
 
 ## Files
@@ -36,7 +41,7 @@ Completion checks:             authenticated endpoint, tenant/object access, mut
 | `checkQuillsS3Configured` | `GET /storage` | read | - | - | contract |
 | `createQuillsUpload` | `POST /files/uploads` (purpose `file`, `post_image`, `changelog_image`) | create | - (signs a URL) | none | contract, storage-lifecycle |
 | `createQuillsSettingsUpload` | `POST /files/settings-uploads` (purpose `logo`, `favicon`, `header_logo`, `assistant_avatar`) | manage_settings | - (signs a URL) | none | contract, storage-lifecycle |
-| `createQuillsFiles` | `POST /files` (registers an upload of purpose `file`, `post_image`, `changelog_image`, `assistant_avatar`) | create | `files` | `file.created` | contract, rollback, storage-lifecycle |
+| `createQuillsFiles` | `POST /files` (registers an upload of purpose `file`, `post_image`, `changelog_image`, `assistant_avatar`; idempotent per key) | create | `files` | `file.created` (new file only) | contract, rollback, storage-lifecycle |
 | `getQuillsFile` | `GET /files/{fileId}` (metadata and a short-lived download URL) | read | `files` | - | contract, two-workspace |
 | `createQuillsFilesOpened` | `POST /files/{fileId}/opened` | read | `files` (`open_count`) | none (usage counter) | contract, two-workspace |
 
