@@ -1,3 +1,4 @@
+import feedback from "./feedback/core";
 import jobs from "./jobs/routes";
 import links from "./links";
 import sharedTeams from "./teams";
@@ -48,4 +49,5 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", jobs)
   .route("/", links)
   .route("/", sharedTeams)
+  .route("/", feedback)
   .openapi(...context);

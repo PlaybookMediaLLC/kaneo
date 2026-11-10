@@ -1,8 +1,14 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, not } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import platformDb from "../../database";
-import { projectTable, taskTable, teamTable } from "../../database/schema";
+import {
+  projectTable,
+  taskTable,
+  teamTable,
+  workspaceUserTable,
+} from "../../database/schema";
 import { findInaccessibleProjectIds } from "../../project-access/find-inaccessible-project-ids";
+import { projectAccessCondition } from "../../project-access/project-access-condition";
 
 // The only module that reads public tables for Quills routes. Every read filters on workspaceId.
 
@@ -30,6 +36,30 @@ export async function canonicalTeam(workspaceId: string, id: string) {
     .limit(1);
   if (!team) throw new HTTPException(404, { message: "Team not found" });
   return team;
+}
+
+/** Projects of this workspace that the user cannot open. Empty when the user can open every project. */
+export async function hiddenProjectIds(workspaceId: string, userId: string) {
+  const rows = await platformDb
+    .select({ id: projectTable.id })
+    .from(projectTable)
+    .where(
+      and(
+        eq(projectTable.workspaceId, workspaceId),
+        not(projectAccessCondition(userId, projectTable.id)),
+      ),
+    );
+  return rows.map((row) => row.id);
+}
+
+/** The Kaneo user IDs of this workspace's current members. */
+// ponytail: whole roster per call; switch to a per-user lookup if workspaces reach thousands of members.
+export async function memberUserIds(workspaceId: string) {
+  const rows = await platformDb
+    .select({ userId: workspaceUserTable.userId })
+    .from(workspaceUserTable)
+    .where(eq(workspaceUserTable.workspaceId, workspaceId));
+  return rows.map((row) => row.userId);
 }
 
 type Links = {
