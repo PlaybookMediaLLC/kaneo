@@ -193,6 +193,8 @@ describe.skipIf(!url)("Quills directory", () => {
        WHERE workspace_id = $1 AND email LIKE '%@bulk.test'`,
       [env.a],
     );
+    // Production tables have planner statistics; a fresh bulk insert has none until autovacuum runs.
+    await pool.query("ANALYZE quills.customer_identity, quills.principal");
     const rules = (operator: string, value: string) => ({
       rules: {
         match: "all",

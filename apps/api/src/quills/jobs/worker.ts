@@ -1,16 +1,33 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
+import { ZodError } from "zod";
 import db from "../../database";
 import { withQuillsSystemWorkspace } from "../../database/quills/client";
 import { events } from "../../database/quills/schema/events";
+import type { JobQueueRow } from "../../database/quills/schema/job-queue";
 import { workspaceUserTable, userTable } from "../../database/schema";
 import { roleHasWorkspacePermission } from "../../utils/require-workspace-permission";
 import { broadcastToUserAndWait } from "../../ws";
+import { fanOut } from "./fanout";
+import { runMailJob } from "./handlers/mail";
+import { runNotificationJob } from "./handlers/notification";
+import { runWebhookJob } from "./handlers/webhook";
 import {
   claimQuillsJob,
   enqueueQuillsEvent,
   finishQuillsJob,
   eventPayloadSchema,
+  type QuillsQueue,
 } from "./queue";
+
+/** Delivery handlers. Each validates its payload and finishes its own job. */
+const handlers: Record<
+  Exclude<QuillsQueue, "quills.event">,
+  (workspaceId: string, job: JobQueueRow) => Promise<unknown>
+> = {
+  "quills.webhook": runWebhookJob,
+  "quills.mail": runMailJob,
+  "quills.notification": runNotificationJob,
+};
 
 export async function deliverQuillsChange(
   workspaceId: string,
@@ -65,10 +82,16 @@ export async function drainQuillsWorkspace(
   let processed = 0,
     failed = 0;
   const deadline = Date.now() + 10000;
-  for (let i = 0; i < 10 && Date.now() < deadline; i++) {
+  // ponytail: up to 50 jobs per pass inside the 10-second budget; fan-out of large audiences drains over several passes.
+  for (let i = 0; i < 50 && Date.now() < deadline; i++) {
     const job = await withQuillsSystemWorkspace(workspaceId, claimQuillsJob);
     if (!job) break;
     try {
+      if (job.queue !== "quills.event") {
+        await handlers[job.queue as keyof typeof handlers](workspaceId, job);
+        processed++;
+        continue;
+      }
       const payload = eventPayloadSchema.parse(job.payload);
       const event = await withQuillsSystemWorkspace(
         workspaceId,
@@ -82,6 +105,9 @@ export async function drainQuillsWorkspace(
       );
       if (!event) throw new Error("Outbox event missing");
       if (!event.publishedAt) {
+        // Before the broadcast, so a websocket or Redis outage cannot lose deliveries.
+        // Enqueue is deduplicated, so a rerun after a failure below adds no second delivery.
+        await fanOut(workspaceId, payload.eventId);
         let timer: ReturnType<typeof setTimeout> | undefined;
         try {
           await Promise.race([
@@ -105,15 +131,21 @@ export async function drainQuillsWorkspace(
           .where(eq(events.id, event.id));
       });
       processed++;
-    } catch {
+    } catch (error) {
       failed++;
       try {
+        // A payload that fails validation never passes on a retry.
         await withQuillsSystemWorkspace(workspaceId, (tx) =>
           finishQuillsJob(
             tx,
             job.id,
             job.leaseToken!,
-            "Quills event delivery failed",
+            error instanceof ZodError
+              ? "Invalid job payload"
+              : job.queue === "quills.event"
+                ? "Quills event delivery failed"
+                : `${job.queue} failed`,
+            error instanceof ZodError,
           ),
         );
       } catch {

@@ -1,3 +1,4 @@
+import delivery from "./delivery";
 import directory from "./directory/index";
 import feedback from "./feedback/core";
 import files from "./files/routes";
@@ -56,4 +57,5 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", directory)
   .route("/", quillsSettings)
   .route("/", feedback)
+  .route("/", delivery)
   .openapi(...context);

@@ -26,6 +26,7 @@ import { auditLog } from "./schema/audit-log";
 import { events } from "./schema/events";
 import { jobQueue } from "./schema/job-queue";
 import { settings } from "./schema/auth";
+import { webhooks } from "./schema/webhooks";
 import { recordQuillsChange } from "../../quills/events";
 import {
   claimQuillsJob,
@@ -480,6 +481,19 @@ describe.skipIf(!url)("Quills completion", () => {
         content: "See /hc/en/articles/910-intro",
       },
     ];
+    // An active webhook in the archive must arrive disabled.
+    archive.tables.webhooks = [
+      {
+        id: randomUUID(),
+        created_by_id: archive.tables.principal!.find(
+          (p) => p.kaneo_user_id === user,
+        )!.id!,
+        url: "https://203.0.113.10/hook",
+        secret: "enc:v1:imported",
+        events: ["team.bound"],
+        status: "active",
+      },
+    ];
     let occurredAt = "";
     for (let age = 20; age < 90; age++) {
       const date = new Date(Date.now() - age * 86400000);
@@ -644,6 +658,12 @@ describe.skipIf(!url)("Quills completion", () => {
     );
     expect(imported.rows).toBeGreaterThan(0);
     expect(await scoped((tx) => tx.select().from(boards), c)).toHaveLength(1);
+    expect(
+      await scoped(
+        (tx) => tx.select({ status: webhooks.status }).from(webhooks),
+        c,
+      ),
+    ).toEqual([{ status: "disabled" }]);
     await scoped(async (tx, actor) => {
       expect((await tx.select().from(kbArticles))[0]).toMatchObject({
         urlId: 910,

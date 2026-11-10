@@ -5,6 +5,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as kaneo from "../../database/schema";
 import quillsRouter from "../index";
+import * as deliveryFixtures from "../delivery/index.fixture";
 import * as directoryFixtures from "../directory/index.fixture";
 import * as feedbackFixtures from "../feedback/core.fixture";
 import * as fileFixtures from "../files/routes.fixture";
@@ -61,6 +62,7 @@ const fixtures: Record<string, Fixture> = {
   ...contextFixtures,
   ...fileFixtures,
   ...feedbackFixtures,
+  ...deliveryFixtures,
   ...jobFixtures,
   ...linkFixtures,
   ...teamFixtures,

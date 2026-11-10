@@ -24,7 +24,7 @@ const routeModules = feature.filter(
     file.source.includes("apiRouter"),
 );
 const routePaths = new Set(
-  routeModules.map((file) => file.path.replace(/\.ts$/, "")),
+  routeModules.map((file) => file.path.replace(/(\/index)?\.ts$/, "")),
 );
 /** Route modules import packages, the helper, platform reads, Quills schema and other route modules only. */
 const allowedImport = (file: string, specifier: string) => {
@@ -34,7 +34,10 @@ const allowedImport = (file: string, specifier: string) => {
     )
   )
     return true;
-  const target = posix.join(posix.dirname(file), specifier);
+  // "./directory/index" and "./directory" name the same module.
+  const target = posix
+    .join(posix.dirname(file), specifier)
+    .replace(/\/index$/, "");
   return (
     specifier.startsWith(".") &&
     (routePaths.has(target) ||
@@ -42,6 +45,7 @@ const allowedImport = (file: string, specifier: string) => {
         "framework/define-route",
         "framework/files",
         "framework/platform-reads",
+        "framework/webhook-config",
         "../openapi",
       ].includes(target) ||
       target.startsWith("../database/quills/schema/"))

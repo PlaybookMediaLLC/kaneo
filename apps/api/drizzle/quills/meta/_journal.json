@@ -71,6 +71,13 @@
 			"when": 1794269224964,
 			"tag": "0009_full_index_manifest",
 			"breakpoints": true
+		},
+		{
+			"idx": 10,
+			"version": "7",
+			"when": 1794339022525,
+			"tag": "0010_delivery_queues",
+			"breakpoints": true
 		}
 	]
 }
