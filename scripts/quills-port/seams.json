@@ -1,0 +1,73 @@
+{
+	"upstream": "upstream/main",
+	"forkOwned": [
+		"apps/api/src/quills",
+		"apps/api/src/database/quills",
+		"apps/api/drizzle/quills",
+		"apps/api/drizzle.quills.config.ts",
+		"apps/api/scripts/generate-quills.ts",
+		"apps/api/scripts/migrate-quills.ts",
+		"apps/api/scripts/transfer-quills.ts",
+		"apps/api/AGENTS.md",
+		"packages/email/src/quills",
+		"packages/permissions/src/quills.test.ts",
+		"scripts/quills-port",
+		"docs/quills-port"
+	],
+	"seams": [
+		{
+			"file": "apps/api/src/index.ts",
+			"state": "existing",
+			"lines": "import + api.route(\"/quills\", quills) + 3 type-export entries + runQuillsMigrations at startup",
+			"plannedChange": "P3 only: one more mount, api.route(\"/quills-public\", quillsPublic), placed before the session middleware, plus its 3 type-export entries"
+		},
+		{
+			"file": "apps/api/src/scheduler/index.ts",
+			"state": "existing",
+			"lines": "3 imports + 3 withCheckIn registrations",
+			"plannedChange": "none. New job handlers register inside apps/api/src/quills/jobs/worker.ts"
+		},
+		{
+			"file": "apps/api/src/storage/cleanup-queue.ts",
+			"state": "existing",
+			"lines": "1 import + 1 reference probe",
+			"plannedChange": "none"
+		},
+		{
+			"file": "apps/api/src/workspace/lifecycle/list-workspace-object-keys.ts",
+			"state": "existing",
+			"lines": "1 import + 1 call",
+			"plannedChange": "none"
+		},
+		{
+			"file": "packages/permissions/src/index.ts",
+			"state": "existing",
+			"lines": "the quills resource and its 5 actions in 4 roles",
+			"plannedChange": "none (decision D2 keeps the 5 actions)"
+		},
+		{
+			"file": "packages/permissions/src/capabilities.ts",
+			"state": "existing",
+			"lines": "5 Quills capabilities",
+			"plannedChange": "none"
+		},
+		{
+			"file": "tests/api-integration/helpers/database.ts",
+			"state": "existing",
+			"lines": "runs the Quills migrations for integration tests",
+			"plannedChange": "none"
+		},
+		{
+			"file": "apps/api/package.json",
+			"state": "existing",
+			"lines": "db:generate:quills, db:migrate:quills, test:quills, db:transfer:quills",
+			"plannedChange": "none"
+		},
+		{
+			"file": "apps/docs/openapi.json",
+			"state": "generated",
+			"lines": "every Quills operation",
+			"plannedChange": "regenerate with pnpm openapi:check:fix in each phase; on an upstream conflict take upstream and regenerate"
+		}
+	]
+}
