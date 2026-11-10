@@ -99,27 +99,33 @@ const inboxSegments = defineQuillsRoute({
   responseDescription: "Segments",
   errors,
   handler: async ({ db }) => {
+    // Start from the open queue (small), not from every segment membership.
     const counted = db
       .select({
-        id: conversations.id,
-        visitor: conversations.visitorPrincipalId,
+        segmentId: userSegments.segmentId,
+        count: sql<number>`count(distinct ${conversations.id})::int`.as(
+          "count",
+        ),
       })
       .from(conversations)
       .innerJoin(principal, eq(principal.id, conversations.visitorPrincipalId))
+      .innerJoin(
+        userSegments,
+        eq(userSegments.principalId, conversations.visitorPrincipalId),
+      )
       .where(openQueue)
+      .groupBy(userSegments.segmentId)
       .as("counted");
     const rows = await db
       .select({
         id: segments.id,
         name: segments.name,
         color: segments.color,
-        count: sql<number>`count(distinct ${counted.id})::int`,
+        count: sql<number>`coalesce(${counted.count}, 0)::int`,
       })
       .from(segments)
-      .leftJoin(userSegments, eq(userSegments.segmentId, segments.id))
-      .leftJoin(counted, eq(counted.visitor, userSegments.principalId))
+      .leftJoin(counted, eq(counted.segmentId, segments.id))
       .where(isNull(segments.deletedAt))
-      .groupBy(segments.id, segments.name, segments.color)
       .orderBy(asc(segments.name))
       .limit(500);
     return { items: rows };

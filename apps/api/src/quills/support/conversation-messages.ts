@@ -16,7 +16,7 @@ import {
   conversationMessages,
   conversations,
 } from "../../database/quills/schema/conversation";
-import { defineQuillsRoute } from "../framework/define-route";
+import { defineQuillsRoute, type Database } from "../framework/define-route";
 import { memberUserIds } from "../framework/platform-reads";
 import {
   conflict,
@@ -30,6 +30,7 @@ import {
   messageText,
   notFound,
   preview,
+  type ConversationId,
 } from "./conversation-model";
 import { insertReply } from "./conversation-ops";
 import {
@@ -37,8 +38,10 @@ import {
   findMessage,
   loadMessage,
   messageSchema,
+  type MessageId,
   reactionEmojis,
   reactionsFor,
+  reactionsSchema,
   selectMessages,
   toMessages,
 } from "./message-model";
@@ -69,9 +72,18 @@ const listMessages = defineQuillsRoute({
   errors,
   handler: async ({ db, actor, params, query }) => {
     const conversation = await findConversation(db, params.conversationId);
+    // The cursor may have been deleted since the last page; it must still belong to this conversation.
     if (query.before) {
-      const cursor = await findMessage(db, query.before);
-      if (cursor.conversationId !== conversation.id) throw notFound("Message");
+      const [cursor] = await db
+        .select({ id: conversationMessages.id })
+        .from(conversationMessages)
+        .where(
+          and(
+            eq(conversationMessages.id, query.before),
+            eq(conversationMessages.conversationId, conversation.id),
+          ),
+        );
+      if (!cursor) throw notFound("Message");
     }
     const keys = sql`${conversationMessages.createdAt}, ${conversationMessages.id}`;
     const rows = await selectMessages(
@@ -253,20 +265,32 @@ const editMessage = defineQuillsRoute({
         updatedAt: now,
       })
       .where(eq(conversationMessages.id, message.id));
-    // The list preview follows an edit of the message that set it.
-    if (!message.isInternal)
-      await db
-        .update(conversations)
-        .set({ lastMessagePreview: preview(body.content) })
-        .where(
-          and(
-            eq(conversations.id, message.conversationId),
-            eq(conversations.lastMessageAt, message.createdAt),
-          ),
-        );
+    if (!message.isInternal) await refreshPreview(db, message);
     return loadMessage(db, actor, message.id);
   },
 });
+
+/**
+ * After an edit or a delete of the latest live customer-visible message, the list preview
+ * shows the latest one that is left, so deleted text does not stay in the inbox.
+ */
+async function refreshPreview(
+  db: Database,
+  message: { id: MessageId; conversationId: ConversationId },
+) {
+  const visible = sql`m.conversation_id = ${sql.param(message.conversationId, conversationMessages.conversationId)} and m.deleted_at is null and m.is_internal = false and m.sender_type <> 'system'`;
+  await db
+    .update(conversations)
+    .set({
+      lastMessagePreview: sql`(select case when length(m.content) > 140 then left(m.content, 139) || '…' else nullif(m.content, '') end from ${conversationMessages} m where ${visible} order by m.created_at desc, m.id desc limit 1)`,
+    })
+    .where(
+      and(
+        eq(conversations.id, message.conversationId),
+        sql`not exists (select 1 from ${conversationMessages} m, ${conversationMessages} changed where changed.id = ${sql.param(message.id, conversationMessages.id)} and ${visible} and (m.created_at, m.id) > (changed.created_at, changed.id))`,
+      ),
+    );
+}
 
 const deleteMessage = defineQuillsRoute({
   method: "delete",
@@ -310,6 +334,7 @@ const deleteMessage = defineQuillsRoute({
       )
       .returning({ deletedAt: conversationMessages.deletedAt });
     if (!row) throw notFound("Message");
+    if (!message.isInternal) await refreshPreview(db, message);
     return {
       id: message.id,
       conversationId: message.conversationId,
@@ -323,9 +348,7 @@ const reactionResult = z.object({
   messageId: z.string(),
   conversationId: z.string(),
   changed: z.boolean(),
-  reactions: z.array(
-    z.object({ emoji: z.string(), count: z.number(), reacted: z.boolean() }),
-  ),
+  reactions: reactionsSchema,
 });
 const reaction = <M extends "put" | "delete">(method: M) =>
   defineQuillsRoute({

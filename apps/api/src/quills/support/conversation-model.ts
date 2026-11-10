@@ -42,6 +42,15 @@ export const notFound = (what: string) =>
   new HTTPException(404, { message: `${what} not found` });
 export const conflict = (message: string) =>
   new HTTPException(409, { message });
+/** A unique value taken between the check and the write is the declared 409, not a 500. */
+export const uniqueConflict =
+  (message: string) =>
+  (error: unknown): never => {
+    const failure = error as { code?: string; cause?: { code?: string } };
+    if ((failure.cause?.code ?? failure.code) === "23505")
+      throw conflict(message);
+    throw error;
+  };
 export const errors = {
   404: "Conversation or related record not found",
   409: "The conversation is not in the required state",
@@ -58,6 +67,10 @@ export const endReasons = [
   "other",
 ] as const;
 export const messageText = z.string().trim().min(1).max(10000);
+/** `me` or a principal ID; null unassigns. */
+export const assigneeInput = z
+  .union([z.literal("me"), flexibleToTypeIdSchema("principal")])
+  .nullable();
 
 const tagRef = z.object({
   id: z.string(),

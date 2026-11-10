@@ -98,6 +98,10 @@ const afterCursor = (
 };
 
 const escapeLike = (value: string) => `%${value.replace(/[\\%_]/g, "\\$&")}%`;
+const notSpam = or(
+  isNull(conversations.endReason),
+  ne(conversations.endReason, "spam"),
+);
 
 function conditions(
   db: Database,
@@ -113,10 +117,7 @@ function conditions(
           eq(conversations.status, "closed"),
           eq(conversations.endReason, "spam"),
         )
-      : or(
-          isNull(conversations.endReason),
-          ne(conversations.endReason, "spam"),
-        ),
+      : notSpam,
     filters.status ? eq(conversations.status, filters.status) : undefined,
     filters.priority ? eq(conversations.priority, filters.priority) : undefined,
     filters.assignee === "mine"
@@ -169,8 +170,9 @@ function conditions(
             ),
         )
       : undefined,
+    // The first live message is an agent message by the caller. The ordered limit reads one row per conversation.
     filters.view === "created_by_me"
-      ? sql`exists (select 1 from ${conversationMessages} first_message where first_message.conversation_id = ${conversations.id} and first_message.deleted_at is null and first_message.sender_type = 'agent' and first_message.principal_id = ${principalParam(actor)} and first_message.created_at = (select min(m.created_at) from ${conversationMessages} m where m.conversation_id = ${conversations.id} and m.deleted_at is null))`
+      ? sql`(select (m.sender_type = 'agent' and m.principal_id = ${sql.param(actor.principalId, conversationMessages.principalId)}) from ${conversationMessages} m where m.conversation_id = ${conversations.id} and m.deleted_at is null order by m.created_at, m.id limit 1)`
       : undefined,
     search
       ? or(
@@ -192,10 +194,6 @@ function conditions(
       : undefined,
   )!;
 }
-
-/** The caller's principal as the column's driver value, for a raw SQL comparison. */
-const principalParam = (actor: QuillsActor) =>
-  sql.param(actor.principalId, conversationMessages.principalId);
 
 /** One page of conversations. A cursor is a conversation of this workspace; a missing one is 404. */
 export async function listConversations(
@@ -225,5 +223,5 @@ export async function listConversations(
 export const openQueue = and(
   realConversation,
   eq(conversations.status, "open"),
-  or(isNull(conversations.endReason), ne(conversations.endReason, "spam")),
+  notSpam,
 )!;

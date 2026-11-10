@@ -13,10 +13,12 @@ import {
 import { conversations } from "../../database/quills/schema/conversation";
 import { conversationAttributeDefinitions as definitions } from "../../database/quills/schema/conversation-attributes";
 import { defineQuillsRoute, type Database } from "../framework/define-route";
+import { someField } from "../feedback/schemas";
 import {
   attributeEntries,
   attributeEntry,
   conflict,
+  uniqueConflict,
   conversationParams,
   errors,
   findConversation,
@@ -91,11 +93,13 @@ const toOption = (input: z.output<typeof optionInput>, id?: string) => ({
 });
 const invalid = (message: string) => new HTTPException(400, { message });
 
-async function findAttribute(db: Database, id: AttributeId) {
-  const [row] = await db
+/** A definition of this workspace, or 404. `lock` holds the row so parallel option edits cannot drop an option. */
+async function findAttribute(db: Database, id: AttributeId, lock = false) {
+  const query = db
     .select(fields)
     .from(definitions)
     .where(eq(definitions.id, id));
+  const [row] = await (lock ? query.for("update") : query);
   if (!row) throw notFound("Attribute");
   return row;
 }
@@ -189,7 +193,8 @@ const createAttribute = defineQuillsRoute({
         aiDetect: body.aiDetect ?? body.fieldType === "select",
         detectOnClose: body.detectOnClose,
       })
-      .returning(fields);
+      .returning(fields)
+      .catch(uniqueConflict("An attribute with that key already exists"));
     return row!;
   },
 });
@@ -216,7 +221,7 @@ const updateAttribute = defineQuillsRoute({
       aiDetect: z.boolean().optional(),
       detectOnClose: z.boolean().optional(),
     })
-    .refine((b) => Object.values(b).some((v) => v !== undefined), {
+    .refine(someField, {
       message: "Provide at least one field",
     }),
   response: attribute,
@@ -229,7 +234,7 @@ const updateAttribute = defineQuillsRoute({
     payload: { key: result.key },
   }),
   handler: async ({ db, params, body }) => {
-    const current = await findAttribute(db, params.attributeId);
+    const current = await findAttribute(db, params.attributeId, true);
     checkAiDetect(current.fieldType, body);
     let options = current.options;
     if (body.options !== undefined) {
@@ -297,7 +302,7 @@ const archiving = <A extends "archive" | "restore">(action: A) =>
       payload: { key: result.key },
     }),
     handler: async ({ db, params }) => {
-      const current = await findAttribute(db, params.attributeId);
+      const current = await findAttribute(db, params.attributeId, true);
       if ((current.archivedAt !== null) === (action === "archive"))
         throw conflict(
           `The attribute is already ${action === "archive" ? "archived" : "active"}`,

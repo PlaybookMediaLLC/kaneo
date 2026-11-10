@@ -77,21 +77,26 @@ const createPost = defineQuillsRoute({
   }),
   responseDescription: "The tracked post",
   errors,
-  // One event per request: the post, else the vote, else the shared message.
-  event: ({ params }, result) =>
-    result.created || result.voted
-      ? {
-          type: result.created ? "post.created" : "post.voted",
-          entityType: "post",
-          entityId: result.postId,
-          payload: { conversationId: params.conversationId },
-        }
-      : {
-          type: "message.created",
-          entityType: "conversation_message",
-          entityId: result.messageId,
-          payload: { conversationId: params.conversationId },
-        },
+  // One event per request: the post, else the vote, else the shared message. The post
+  // and vote events carry `messageId`, so reply delivery must read it there too.
+  event: ({ params }, result) => {
+    const payload: Record<string, string> = {
+      conversationId: params.conversationId,
+    };
+    if (!result.created && !result.voted)
+      return {
+        type: "message.created",
+        entityType: "conversation_message",
+        entityId: result.messageId,
+        payload,
+      };
+    return {
+      type: result.created ? "post.created" : "post.voted",
+      entityType: "post",
+      entityId: result.postId,
+      payload: { ...payload, messageId: result.messageId },
+    };
+  },
   load: loadHidden,
   handler: async ({ db, actor, params, body, loaded: hidden }) => {
     const conversation = await findConversation(

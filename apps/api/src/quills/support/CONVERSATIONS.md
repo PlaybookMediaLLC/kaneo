@@ -91,7 +91,7 @@ Reply and note take plain text (≤ 10000). Rich content and attachments are not
 |---|---|---|---|---|---|
 | `setQuillsConversationStatus` | `POST /conversations/{conversationId}/status` (close checks required attributes: 409) | update | `conversations`, `conversation_messages`, attribute definitions | `conversation.status_changed` | contract, rollback |
 | `snoozeQuillsConversation` | `POST /conversations/{conversationId}/snooze` | update | same | `conversation.status_changed` | contract, rollback |
-| `endQuillsConversation` | `POST /conversations/{conversationId}/end` (reason, note ≤ 2000) | update | same | `conversation.status_changed` | contract, rollback |
+| `endQuillsConversation` | `POST /conversations/{conversationId}/end` (reason, note ≤ 2000; close checks required attributes unless the reason is spam: 409) | update | same | `conversation.status_changed` | contract, rollback |
 | `restoreQuillsConversationFromSpam` | `POST /conversations/{conversationId}/restore-spam` (409 unless spam) | update | same | `conversation.status_changed` | contract, rollback |
 | `setQuillsConversationPriority` | `POST /conversations/{conversationId}/priority` | update | same | `conversation.priority_changed` | contract, rollback |
 | `assignQuillsConversation` | `POST /conversations/{conversationId}/assign` (`assigneePrincipalId`: a current member, `me` or null) | update | `conversations`, `principal`, `conversation_messages`; reads `workspace_member` | `conversation.assigned` | contract, rollback |
@@ -106,7 +106,23 @@ Merged: 15. `createQuillsConversationsStatus` (v1) + `setQuillsConversationStatu
 `createQuillsConversationsPriority` (v1) + `setQuillsConversationPriority`;
 `createQuillsConversationsAssign` (v1) + `assignQuillsConversation`; `assignQuillsConversationTeam`;
 `captureQuillsVisitorContactEmail`; the two translation toggles; `setQuillsAgentAvailability`.
-Every state route returns the conversation with `changed`; a no-op records no event.
+Every state route returns the conversation with `changed`; a no-op records no event. A conversation
+that leaves `closed` (status, snooze, reply, bulk reopen or snooze) loses its end reason, end note and
+spam marker, so a reopened spam-ended thread is back in the lists and counts.
+
+Differences from the source, on purpose:
+
+- `/end` with a reason other than spam checks required attributes, like `/status` and the bulk close.
+  The source checks only `/status` and the bulk close.
+- Reopening clears the end reason. In the source a reopened spam-ended thread stays hidden from every
+  list.
+- Deleting (or editing) the latest customer-visible message moves the list preview to the latest one
+  left. In the source the deleted text stays in the preview.
+- A required-attribute close also applies to API-key callers: Kaneo serves session and API key through
+  one route.
+- `POST /conversations/{conversationId}/posts` records `post.created` or `post.voted` with
+  `messageId` in the payload (one event per request). A reply delivery handler must read that
+  `messageId` as well as `message.created`.
 
 ## Bulk
 
@@ -216,10 +232,26 @@ distributes to a member (round robin and balanced need presence); the list has n
 needs a sweep job to wake it; replies are not mailed or posted to a channel until a delivery handler
 consumes `message.created`.
 
+Known limits, as in the source: the list cursor is a conversation ID whose sort values are read again
+on the next page, so a conversation that moves between pages (a new message, a reply) can repeat or
+skip rows; the search `ILIKE` cannot use the trigram indexes under row security, so a search reads the
+workspace's messages; a bulk update runs its statements one conversation at a time.
+
 ## Required migrations
 
 None in this wave. Candidates, not generated:
 
 1. `conversation_tags (workspace_id, lower(name))` unique index: the find-or-create by name is not
    race-free without it (two different-case names can both insert).
-2. An index for the open inbox counts and the waiting sort, after measuring real inbox sizes.
+2. Indexes for the principal foreign keys that have none, for example
+   `conversation_participants (workspace_id, added_by_principal_id)`,
+   `conversation_views (workspace_id, created_by_principal_id)`,
+   `teams (workspace_id, rr_cursor_principal_id)` and `post_activity (workspace_id, principal_id)`.
+   Deleting a workspace with many principals checks each of these by a sequential scan. The
+   `directory.test.ts` teardown (10,001 principals) passes the 10-second hook limit when it runs right
+   after the contract suite, also without this slice.
+3. A search path that works under row security (the `ILIKE` operators are not leakproof), if the
+   message search proves slow on real workspaces.
+
+The waiting sort does not need an index: `conversations_waiting_since_id_idx` exists, but the sort's
+`coalesce` does not use it.

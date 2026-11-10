@@ -10,7 +10,7 @@ import {
 import { macros } from "../../database/quills/schema/macros";
 import { workflows } from "../../database/quills/schema/workflows";
 import { defineQuillsRoute, type Database } from "../framework/define-route";
-import { hexColor } from "../feedback/schemas";
+import { hexColor, someField } from "../feedback/schemas";
 import {
   conflict,
   conversationParams,
@@ -18,6 +18,7 @@ import {
   findConversation,
   notFound,
   notTestConversation,
+  uniqueConflict,
 } from "./conversation-model";
 import { attachTag, resolveLiveTag } from "./conversation-ops";
 
@@ -86,9 +87,36 @@ async function assertUnreferenced(db: Database, id: TagId) {
   if (user) throw conflict(`This tag is used by ${user}. Update it first.`);
 }
 
-/** Conversations that count: real (not test) ones. */
-const counted = (where?: ReturnType<typeof eq>) =>
-  sql<number>`count(${conversations.id}) filter (where ${and(notTestConversation, where)})::int`;
+/** Tags with the real (not test) conversations that carry them; `open` counts open ones only. */
+const withCounts = (db: Database, open: boolean) =>
+  db
+    .select({
+      ...tagFields,
+      count: sql<number>`count(${conversations.id})::int`,
+      archived: sql<boolean>`(${conversationTags.deletedAt} is not null)`,
+    })
+    .from(conversationTags)
+    .leftJoin(
+      conversationTagAssignments,
+      eq(conversationTagAssignments.conversationTagId, conversationTags.id),
+    )
+    .leftJoin(
+      conversations,
+      and(
+        eq(conversations.id, conversationTagAssignments.conversationId),
+        open ? eq(conversations.status, "open") : undefined,
+        notTestConversation,
+      ),
+    )
+    .groupBy(
+      conversationTags.id,
+      conversationTags.name,
+      conversationTags.color,
+      conversationTags.deletedAt,
+    )
+    .orderBy(asc(conversationTags.name))
+    .limit(1000)
+    .$dynamic();
 
 const listTags = defineQuillsRoute({
   method: "get",
@@ -105,35 +133,20 @@ const listTags = defineQuillsRoute({
   responseDescription: "Tags",
   errors,
   handler: async ({ db, query }) => {
-    const rows = await db
-      .select({
-        ...tagFields,
-        count: counted(eq(conversations.status, "open")),
-      })
-      .from(conversationTags)
-      .leftJoin(
-        conversationTagAssignments,
-        eq(conversationTagAssignments.conversationTagId, conversationTags.id),
-      )
-      .leftJoin(
-        conversations,
-        eq(conversations.id, conversationTagAssignments.conversationId),
-      )
-      .where(isNull(conversationTags.deletedAt))
-      .groupBy(
-        conversationTags.id,
-        conversationTags.name,
-        conversationTags.color,
-        conversationTags.deletedAt,
-      )
-      .orderBy(asc(conversationTags.name))
-      .limit(1000);
-    return {
-      items: rows.map((row) => ({
-        ...row,
-        count: query.counts === "true" ? row.count : null,
-      })),
-    };
+    const live = isNull(conversationTags.deletedAt);
+    // The picker asks without counts: no join at all.
+    if (query.counts !== "true")
+      return {
+        items: (
+          await db
+            .select(tagFields)
+            .from(conversationTags)
+            .where(live)
+            .orderBy(asc(conversationTags.name))
+            .limit(1000)
+        ).map((row) => ({ ...row, count: null })),
+      };
+    return { items: await withCounts(db, true).where(live) };
   },
 });
 
@@ -150,32 +163,7 @@ const tagUsage = defineQuillsRoute({
   }),
   responseDescription: "Tags",
   errors,
-  handler: async ({ db }) => {
-    const rows = await db
-      .select({
-        ...tagFields,
-        count: counted(),
-        archived: sql<boolean>`(${conversationTags.deletedAt} is not null)`,
-      })
-      .from(conversationTags)
-      .leftJoin(
-        conversationTagAssignments,
-        eq(conversationTagAssignments.conversationTagId, conversationTags.id),
-      )
-      .leftJoin(
-        conversations,
-        eq(conversations.id, conversationTagAssignments.conversationId),
-      )
-      .groupBy(
-        conversationTags.id,
-        conversationTags.name,
-        conversationTags.color,
-        conversationTags.deletedAt,
-      )
-      .orderBy(asc(conversationTags.name))
-      .limit(1000);
-    return { items: rows };
-  },
+  handler: async ({ db }) => ({ items: await withCounts(db, false) }),
 });
 
 const createTag = defineQuillsRoute({
@@ -214,7 +202,7 @@ const createTag = defineQuillsRoute({
       .values({ name: body.name, color: body.color })
       .onConflictDoUpdate({
         target: [conversationTags.workspaceId, conversationTags.name],
-        set: { deletedAt: null },
+        set: { deletedAt: null, color: body.color },
       })
       .returning(tagFields);
     return { ...row!, created: true };
@@ -232,9 +220,7 @@ const updateTag = defineQuillsRoute({
   params: tagParams,
   body: z
     .object({ name: name.optional(), color: hexColor.optional() })
-    .refine((b) => b.name !== undefined || b.color !== undefined, {
-      message: "Provide a name or color",
-    }),
+    .refine(someField, { message: "Provide a name or color" }),
   response: tag,
   responseDescription: "Tag",
   errors,
@@ -265,7 +251,8 @@ const updateTag = defineQuillsRoute({
       .update(conversationTags)
       .set({ name: body.name, color: body.color })
       .where(eq(conversationTags.id, current.id))
-      .returning(tagFields);
+      .returning(tagFields)
+      .catch(uniqueConflict("A tag with that name already exists"));
     return row!;
   },
 });
@@ -314,12 +301,26 @@ const restoreTag = defineQuillsRoute({
   errors,
   event: tagEvent("conversation_tag.restored"),
   handler: async ({ db, params }) => {
+    const current = await findTag(db, params.tagId);
+    if (!current.deletedAt) throw notFound("Archived tag");
+    // A live tag that differs only in case took the name while this one was archived.
+    const [taken] = await db
+      .select({ id: conversationTags.id })
+      .from(conversationTags)
+      .where(
+        and(
+          isNull(conversationTags.deletedAt),
+          sql`lower(${conversationTags.name}) = ${current.name.toLowerCase()}`,
+        ),
+      )
+      .limit(1);
+    if (taken) throw conflict("A live tag already uses this name");
     const [row] = await db
       .update(conversationTags)
       .set({ deletedAt: null })
       .where(
         and(
-          eq(conversationTags.id, params.tagId),
+          eq(conversationTags.id, current.id),
           isNotNull(conversationTags.deletedAt),
         ),
       )

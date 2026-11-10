@@ -9,6 +9,7 @@ import {
   or,
   sql,
 } from "drizzle-orm";
+import { HTTPException } from "hono/http-exception";
 import type { TypeId } from "@kaneo/ids";
 import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
 import { apiRouter, z, type BaseVariables } from "../../openapi";
@@ -19,6 +20,8 @@ import {
   conversationViews,
 } from "../../database/quills/schema/conversation-views";
 import { teams } from "../../database/quills/schema/teams";
+import { requireAll } from "../feedback/id-sets";
+import { someField } from "../feedback/schemas";
 import {
   defineQuillsRoute,
   type Database,
@@ -162,31 +165,41 @@ async function findView(
   return row;
 }
 
-/** Tag, team and assignee rule values must name records of this workspace. */
+type Rule = z.output<typeof rule>;
+const rulePrefix = (r: Rule) =>
+  r.field === "tag"
+    ? "conversation_tag"
+    : r.field === "team"
+      ? "team"
+      : r.field === "assignee" && r.value !== "me" && r.value !== "unassigned"
+        ? "principal"
+        : undefined;
+
+/**
+ * Tag, team and teammate rule values must name records of this workspace (404 otherwise).
+ * Returns the rules with each ID in its canonical TypeID form, the form the lists return.
+ */
 async function checkRules(db: Database, input: z.output<typeof filters>) {
-  const values = (field: string) =>
-    input.rules.flatMap((r) => (r.field === field ? [r.value as string] : []));
-  const parsed = <P extends "conversation_tag" | "team" | "principal">(
-    prefix: P,
-    list: string[],
-  ) =>
-    list.map((value) => {
-      const result = flexibleToTypeIdSchema(prefix).safeParse(value);
-      if (!result.success) throw notFound("Rule value");
-      return result.data;
-    });
-  const tagIds = parsed("conversation_tag", values("tag"));
-  const teamIds = parsed("team", values("team"));
-  const people = parsed(
-    "principal",
-    values("assignee").filter((v) => v !== "me" && v !== "unassigned"),
-  );
-  const count = async (found: { id: string }[], wanted: string[]) => {
-    if (new Set(found.map((row) => row.id)).size !== new Set(wanted).size)
-      throw notFound("Rule value");
-  };
+  const rules = input.rules.map((r): Rule => {
+    const prefix = rulePrefix(r);
+    if (!prefix) return r;
+    const id = flexibleToTypeIdSchema(prefix).safeParse(r.value);
+    if (!id.success) throw notFound("Rule value");
+    return { ...r, value: id.data } as Rule;
+  });
+  const ids = (prefix: string) => [
+    ...new Set(
+      rules.flatMap((r) =>
+        rulePrefix(r) === prefix ? [r.value as never] : [],
+      ),
+    ),
+  ];
+  const tagIds = ids("conversation_tag");
+  const teamIds = ids("team");
+  const people = ids("principal");
   if (tagIds.length)
-    await count(
+    requireAll(
+      tagIds,
       await db
         .select({ id: conversationTags.id })
         .from(conversationTags)
@@ -196,26 +209,29 @@ async function checkRules(db: Database, input: z.output<typeof filters>) {
             isNull(conversationTags.deletedAt),
           ),
         ),
-      tagIds,
+      "Rule value",
     );
   if (teamIds.length)
-    await count(
+    requireAll(
+      teamIds,
       await db
         .select({ id: teams.id })
         .from(teams)
         .where(and(inArray(teams.id, teamIds), isNull(teams.deletedAt))),
-      teamIds,
+      "Rule value",
     );
   if (people.length)
-    await count(
+    requireAll(
+      people,
       await db
         .select({ id: principal.id })
         .from(principal)
         .where(
           and(inArray(principal.id, people), isNotNull(principal.kaneoUserId)),
         ),
-      people,
+      "Rule value",
     );
+  return { rules };
 }
 
 const viewEvent =
@@ -263,12 +279,11 @@ const createView = defineQuillsRoute({
     entityId: result.id,
   }),
   handler: async ({ db, actor, body }) => {
-    await checkRules(db, body.filters);
     const [row] = await db
       .insert(conversationViews)
       .values({
         name: body.name,
-        filters: body.filters,
+        filters: await checkRules(db, body.filters),
         sort: body.sort,
         isShared: body.isShared,
         createdByPrincipalId: actor.principalId,
@@ -284,7 +299,7 @@ const updateView = defineQuillsRoute({
   operationId: "updateQuillsConversationView",
   summary: "Change a saved inbox view",
   description:
-    "A private view is visible to, and changed by, its creator only.",
+    "A private view is visible to, and changed by, its creator only. Only the creator can share or unshare a view (403 otherwise).",
   action: "update",
   params: viewParams,
   body: z
@@ -294,21 +309,26 @@ const updateView = defineQuillsRoute({
       sort: sort.nullable().optional(),
       isShared: z.boolean().optional(),
     })
-    .refine((b) => Object.values(b).some((v) => v !== undefined), {
-      message: "Provide at least one field",
-    }),
+    .refine(someField, { message: "Provide at least one field" }),
   response: view,
   responseDescription: "View",
   errors,
   event: viewEvent("conversation_view.updated"),
   handler: async ({ db, actor, params, body }) => {
     const current = await findView(db, actor, params.viewId);
-    if (body.filters) await checkRules(db, body.filters);
+    if (
+      body.isShared !== undefined &&
+      body.isShared !== current.isShared &&
+      current.createdByPrincipalId !== actor.principalId
+    )
+      throw new HTTPException(403, {
+        message: "Only the creator can share or unshare a view",
+      });
     await db
       .update(conversationViews)
       .set({
         name: body.name,
-        filters: body.filters,
+        filters: body.filters && (await checkRules(db, body.filters)),
         sort: body.sort,
         isShared: body.isShared,
       })

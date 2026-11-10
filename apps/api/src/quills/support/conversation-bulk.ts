@@ -1,4 +1,4 @@
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, inArray } from "drizzle-orm";
 import type { TypeId } from "@kaneo/ids";
 import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
 import { apiRouter, z, type BaseVariables } from "../../openapi";
@@ -6,6 +6,7 @@ import { conversations } from "../../database/quills/schema/conversation";
 import { defineQuillsRoute, type Database } from "../framework/define-route";
 import { memberUserIds } from "../framework/platform-reads";
 import {
+  assigneeInput,
   conflict,
   errors,
   notFound,
@@ -25,7 +26,6 @@ import {
   setStatus,
   snooze,
 } from "./conversation-ops";
-import { assigneeInput } from "./conversation-state";
 
 // All or nothing: the request is one transaction, so a missing ID, a blocked close or an
 // invalid target throws and rolls back every conversation of the batch.
@@ -181,8 +181,9 @@ const bulkDelete = defineQuillsRoute({
     const rows = await lockAll(db, body.conversationIds);
     if (rows.some((row) => row.endReason !== "spam" || row.status !== "closed"))
       throw conflict("Only conversations ended as spam can be deleted");
-    for (const row of rows)
-      await db.delete(conversations).where(eq(conversations.id, row.id));
+    await db
+      .delete(conversations)
+      .where(inArray(conversations.id, body.conversationIds));
     return {
       firstId: body.conversationIds[0]!,
       deletedIds: rows.map((row) => row.id),

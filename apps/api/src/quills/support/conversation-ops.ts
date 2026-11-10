@@ -36,6 +36,15 @@ const wakes = (conversation: Conversation, actor: QuillsActor) =>
   conversation.assignedAgentPrincipalId !== actor.principalId;
 const awake = { status: "open" as const, snoozedUntil: null };
 
+/**
+ * A conversation that leaves `closed` is no longer ended: its end reason, note and spam
+ * marker go. Otherwise a reopened spam-ended thread stays out of every list and count.
+ */
+export const reopened = (conversation: Conversation, status: Status) =>
+  conversation.status === "closed" && status !== "closed"
+    ? { endReason: null, endNote: null, spamReason: null }
+    : {};
+
 async function update(
   db: Database,
   conversation: Conversation,
@@ -43,7 +52,11 @@ async function update(
 ) {
   await db
     .update(conversations)
-    .set({ ...set, updatedAt: new Date() })
+    .set({
+      ...set,
+      ...(set.status && reopened(conversation, set.status)),
+      updatedAt: new Date(),
+    })
     .where(eq(conversations.id, conversation.id));
 }
 
@@ -305,6 +318,7 @@ export async function insertReply(
       assignedAgentPrincipalId:
         conversation.assignedAgentPrincipalId ?? actor.principalId,
       status,
+      ...reopened(conversation, status),
       waitingSince: null,
       resolvedAt: null,
       updatedAt: message!.createdAt,

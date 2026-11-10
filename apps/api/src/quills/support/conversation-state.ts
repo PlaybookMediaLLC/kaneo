@@ -6,6 +6,7 @@ import { conversations } from "../../database/quills/schema/conversation";
 import { defineQuillsRoute, type Database } from "../framework/define-route";
 import { memberUserIds } from "../framework/platform-reads";
 import {
+  assigneeInput,
   changedConversation,
   conversationParams,
   endReasons,
@@ -101,6 +102,8 @@ const endRoute = defineQuillsRoute({
   path: "/conversations/{conversationId}/end",
   operationId: "endQuillsConversation",
   summary: "End a conversation with a reason",
+  description:
+    "Closes the conversation. Unless the reason is spam, every required attribute must be filled (409 names the missing ones).",
   body: z.object({
     reason: z.enum(endReasons),
     note: z.string().trim().max(2000).optional(),
@@ -113,9 +116,12 @@ const endRoute = defineQuillsRoute({
       payload: { status: "closed", reason: body.reason },
     },
   handler: ({ db, params, body }) =>
-    apply(db, params.conversationId, (conversation) =>
-      endConversation(db, conversation, body.reason, body.note || null),
-    ),
+    apply(db, params.conversationId, async (conversation) => {
+      // Filing spam is never blocked by a required attribute; any other close is.
+      if (body.reason !== "spam" && conversation.status !== "closed")
+        await requireClosable(db, conversation);
+      return endConversation(db, conversation, body.reason, body.note || null);
+    }),
 });
 
 const restoreSpamRoute = defineQuillsRoute({
@@ -157,11 +163,6 @@ const priorityRoute = defineQuillsRoute({
       setPriority(db, actor, conversation, body.priority),
     ),
 });
-
-/** `me` or a principal ID; null unassigns. */
-export const assigneeInput = z
-  .union([z.literal("me"), flexibleToTypeIdSchema("principal")])
-  .nullable();
 
 const assignRoute = defineQuillsRoute({
   ...common,
