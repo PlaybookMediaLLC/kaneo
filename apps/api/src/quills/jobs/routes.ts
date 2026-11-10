@@ -23,7 +23,9 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
     createRoute({
       method: "get",
       path: "/{workspaceId}/jobs",
+      operationId: "listQuillsJobs",
       tags: ["Quills"],
+      summary: "List recent Quills jobs",
       middleware,
       request: {
         params,
@@ -96,7 +98,9 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
     createRoute({
       method: "post",
       path: "/{workspaceId}/jobs/{jobId}/retry",
+      operationId: "retryQuillsJob",
       tags: ["Quills"],
+      summary: "Retry a failed Quills job",
       middleware,
       request: { params: params.extend({ jobId: z.string().min(1).max(200) }) },
       responses: {

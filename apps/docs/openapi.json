@@ -1,14 +1,14 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "PRODUCT_NAME API",
+    "title": "quills API",
     "version": "1.0.0",
-    "description": "PRODUCT_NAME Project Management API - Manage projects, tasks, labels, and more"
+    "description": "quills Project Management API - Manage projects, tasks, labels, and more"
   },
   "servers": [
     {
       "url": "https://cloud.kaneo.app/api",
-      "description": "PRODUCT_NAME API Server"
+      "description": "quills API Server"
     }
   ],
   "security": [
@@ -610,7 +610,7 @@
           },
           "instanceName": {
             "type": "string",
-            "description": "Name shown in page titles and emails. Defaults to PRODUCT_NAME."
+            "description": "Name shown in page titles and emails. Defaults to quills."
           },
           "disableRegistration": {
             "type": "boolean"
@@ -2523,7 +2523,7 @@
                     ]
                   }
                 ],
-                "description": "PRODUCT_NAME workspace label IDs controlling task sync. Missing labels pause sync."
+                "description": "quills workspace label IDs controlling task sync. Missing labels pause sync."
               },
               "incoming": {
                 "oneOf": [
@@ -3104,7 +3104,7 @@
           },
           "commentTaskLinkOnGitHubIssue": {
             "type": "boolean",
-            "description": "When on, PRODUCT_NAME comments a link back to the task on the linked GitHub issue."
+            "description": "When on, quills comments a link back to the task on the linked GitHub issue."
           },
           "isActive": {
             "type": [
@@ -3195,7 +3195,7 @@
           },
           "commentTaskLinkOnGitHubIssue": {
             "type": "boolean",
-            "description": "When on, PRODUCT_NAME comments a link back to the task on the linked GitHub issue."
+            "description": "When on, quills comments a link back to the task on the linked GitHub issue."
           },
           "isActive": {
             "type": [
@@ -3380,7 +3380,7 @@
           },
           "commentTaskLinkOnGiteaIssue": {
             "type": "boolean",
-            "description": "When on, PRODUCT_NAME comments a link back to the task on the linked Gitea issue."
+            "description": "When on, quills comments a link back to the task on the linked Gitea issue."
           },
           "isActive": {
             "type": [
@@ -3592,7 +3592,7 @@
           },
           "commentTaskLinkOnGitlabIssue": {
             "type": "boolean",
-            "description": "When on, PRODUCT_NAME comments a link back to the task on each issue opened in GitLab. Issues PRODUCT_NAME creates from tasks are not commented on."
+            "description": "When on, quills comments a link back to the task on each issue opened in GitLab. Issues quills creates from tasks are not commented on."
           },
           "isActive": {
             "type": [
@@ -4325,7 +4325,7 @@
           },
           "eventType": {
             "type": "string",
-            "description": "The PRODUCT_NAME event that triggers the move: `branch_push`, `pr_opened`, `pr_merged`, `issue_opened`, `issue_closed` or `issue_reopened`."
+            "description": "The quills event that triggers the move: `branch_push`, `pr_opened`, `pr_merged`, `issue_opened`, `issue_closed` or `issue_reopened`."
           },
           "columnId": {
             "type": "string",
@@ -5110,7 +5110,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 4096,
-            "description": "A Trello token authorized for this PRODUCT_NAME instance. Used only for this import and never stored or logged."
+            "description": "A Trello token authorized for this quills instance. Used only for this import and never stored or logged."
           },
           "apiKey": {
             "type": "string",
@@ -5137,14 +5137,14 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 2048,
-            "description": "Address of the PRODUCT_NAME instance to import from.",
+            "description": "Address of the quills instance to import from.",
             "example": "https://planka.example.com"
           },
           "apiKey": {
             "type": "string",
             "minLength": 1,
             "maxLength": 4096,
-            "description": "An API key from that PRODUCT_NAME instance. Used only for this import and never stored or logged."
+            "description": "An API key from that quills instance. Used only for this import and never stored or logged."
           }
         },
         "required": [
@@ -5263,7 +5263,7 @@
               "string",
               "null"
             ],
-            "description": "The PRODUCT_NAME project created by the import, once completed."
+            "description": "The quills project created by the import, once completed."
           },
           "projectSlug": {
             "type": [
@@ -5352,7 +5352,7 @@
               "string",
               "null"
             ],
-            "description": "Trello page where the user approves read access for PRODUCT_NAME and copies a token. null when the server has no TRELLO_API_KEY; the user then sends their own Trello API key with the token."
+            "description": "Trello page where the user approves read access for quills and copies a token. null when the server has no TRELLO_API_KEY; the user then sends their own Trello API key with the token."
           }
         },
         "required": [
@@ -5393,7 +5393,7 @@
                 "locale"
               ]
             },
-            "description": "Profile fields the custom OAuth/OIDC provider manages for this user. PRODUCT_NAME updates them at sign-in and refuses changes to them."
+            "description": "Profile fields the custom OAuth/OIDC provider manages for this user. quills updates them at sign-in and refuses changes to them."
           }
         },
         "required": [
@@ -6062,7 +6062,7 @@
               "string",
               "null"
             ],
-            "description": "PRODUCT_NAME release version of this API instance."
+            "description": "quills release version of this API instance."
           },
           "api": {
             "type": "object",
@@ -6731,7 +6731,7 @@
               "string",
               "null"
             ],
-            "description": "The saved name, or null for the default PRODUCT_NAME."
+            "description": "The saved name, or null for the default quills."
           },
           "instanceUrl": {
             "type": [
@@ -10162,7 +10162,7 @@
           "MCP"
         ],
         "summary": "Start MCP authorization",
-        "description": "Begin an MCP OAuth authorization. Redirects the browser to the PRODUCT_NAME consent page, which then approves or denies the request.",
+        "description": "Begin an MCP OAuth authorization. Redirects the browser to the quills consent page, which then approves or denies the request.",
         "security": [],
         "parameters": [
           {
@@ -10230,7 +10230,7 @@
         ],
         "responses": {
           "302": {
-            "description": "Redirect to the PRODUCT_NAME consent page"
+            "description": "Redirect to the quills consent page"
           },
           "400": {
             "description": "Invalid authorization request",
@@ -18173,7 +18173,7 @@
                             ]
                           }
                         ],
-                        "description": "PRODUCT_NAME workspace label IDs controlling task sync. Missing labels pause sync."
+                        "description": "quills workspace label IDs controlling task sync. Missing labels pause sync."
                       },
                       "incoming": {
                         "oneOf": [
@@ -18406,7 +18406,7 @@
                             ]
                           }
                         ],
-                        "description": "PRODUCT_NAME workspace label IDs controlling task sync. Missing labels pause sync."
+                        "description": "quills workspace label IDs controlling task sync. Missing labels pause sync."
                       },
                       "incoming": {
                         "oneOf": [
@@ -18665,7 +18665,7 @@
           "Integration sync"
         ],
         "summary": "Resume a reviewed issue link",
-        "description": "Explicitly choose the current PRODUCT_NAME or repository title, description and open/closed state. Existing links are reused; historical comments are not replayed. The task must still match its outgoing rule. A changed comparison requires another review.",
+        "description": "Explicitly choose the current quills or repository title, description and open/closed state. Existing links are reused; historical comments are not replayed. The task must still match its outgoing rule. A changed comparison requires another review.",
         "parameters": [
           {
             "schema": {
@@ -18950,7 +18950,7 @@
           "GitHub"
         ],
         "summary": "Verify GitHub installation",
-        "description": "Check that the GitHub App is installed on a repository and holds the permissions PRODUCT_NAME needs. Always 200 -- problems are reported in the body so the client can guide the user.",
+        "description": "Check that the GitHub App is installed on a repository and holds the permissions quills needs. Always 200 -- problems are reported in the body so the client can guide the user.",
         "requestBody": {
           "required": true,
           "content": {
@@ -19605,7 +19605,7 @@
           "Gitea"
         ],
         "summary": "Verify Gitea access",
-        "description": "Check that the base URL is a Gitea instance and that the token can reach the repository with the permissions PRODUCT_NAME needs. Repository permission failures are reported in the body; invalid credentials and upstream errors return an error status. Omit accessToken to use the saved token for the unchanged base URL.",
+        "description": "Check that the base URL is a Gitea instance and that the token can reach the repository with the permissions quills needs. Repository permission failures are reported in the body; invalid credentials and upstream errors return an error status. Omit accessToken to use the saved token for the unchanged base URL.",
         "requestBody": {
           "required": true,
           "content": {
@@ -19667,7 +19667,7 @@
             }
           },
           "401": {
-            "description": "PRODUCT_NAME authentication required",
+            "description": "quills authentication required",
             "content": {
               "application/json": {
                 "schema": {
@@ -20239,7 +20239,7 @@
           "GitLab"
         ],
         "summary": "Verify GitLab access",
-        "description": "Check that the base URL is a GitLab instance and that the token can reach the project with the permissions PRODUCT_NAME needs. An unreachable instance, a missing project, or insufficient permissions are reported in a 200 body so the form can explain them; a token GitLab rejects outright is a 401.",
+        "description": "Check that the base URL is a GitLab instance and that the token can reach the project with the permissions quills needs. An unreachable instance, a missing project, or insufficient permissions are reported in a 200 body so the form can explain them; a token GitLab rejects outright is a 401.",
         "requestBody": {
           "required": true,
           "content": {
@@ -20410,7 +20410,7 @@
           "GitLab"
         ],
         "summary": "Create GitLab integration",
-        "description": "Link a project to a GitLab project. PRODUCT_NAME generates the secret GitLab must send with each webhook; add the webhook in GitLab afterwards. Use the verify route first to confirm the token really reaches the project.",
+        "description": "Link a project to a GitLab project. quills generates the secret GitLab must send with each webhook; add the webhook in GitLab afterwards. Use the verify route first to confirm the token really reaches the project.",
         "parameters": [
           {
             "schema": {
@@ -20509,7 +20509,7 @@
             }
           },
           "409": {
-            "description": "That GitLab project is already linked to another PRODUCT_NAME project",
+            "description": "That GitLab project is already linked to another quills project",
             "content": {
               "application/json": {
                 "schema": {
@@ -20841,7 +20841,7 @@
           "Generic Webhook"
         ],
         "summary": "Create webhook integration",
-        "description": "Create or replace the outgoing webhook for a project. PRODUCT_NAME POSTs the selected task events to this URL, signed with the secret when one is set.",
+        "description": "Create or replace the outgoing webhook for a project. quills POSTs the selected task events to this URL, signed with the secret when one is set.",
         "parameters": [
           {
             "schema": {
@@ -24185,9 +24185,11 @@
     },
     "/quills/{workspaceId}/jobs": {
       "get": {
+        "operationId": "listQuillsJobs",
         "tags": [
           "Quills"
         ],
+        "summary": "List recent Quills jobs",
         "parameters": [
           {
             "schema": {
@@ -24312,9 +24314,11 @@
     },
     "/quills/{workspaceId}/jobs/{jobId}/retry": {
       "post": {
+        "operationId": "retryQuillsJob",
         "tags": [
           "Quills"
         ],
+        "summary": "Retry a failed Quills job",
         "parameters": [
           {
             "schema": {
@@ -24393,9 +24397,11 @@
     },
     "/quills/{workspaceId}/boards/{boardId}/projects/{projectId}": {
       "put": {
+        "operationId": "linkQuillsBoardToProject",
         "tags": [
           "Quills"
         ],
+        "summary": "Link a Quills board to a project",
         "parameters": [
           {
             "schema": {
@@ -24479,9 +24485,11 @@
         }
       },
       "delete": {
+        "operationId": "unlinkQuillsBoardFromProject",
         "tags": [
           "Quills"
         ],
+        "summary": "Unlink a Quills board from a project",
         "parameters": [
           {
             "schema": {
@@ -24567,9 +24575,11 @@
     },
     "/quills/{workspaceId}/posts/{postId}/tasks/{taskId}": {
       "put": {
+        "operationId": "linkQuillsPostToTask",
         "tags": [
           "Quills"
         ],
+        "summary": "Link a Quills post to a task",
         "parameters": [
           {
             "schema": {
@@ -24653,9 +24663,11 @@
         }
       },
       "delete": {
+        "operationId": "unlinkQuillsPostFromTask",
         "tags": [
           "Quills"
         ],
+        "summary": "Unlink a Quills post from a task",
         "parameters": [
           {
             "schema": {
@@ -24741,9 +24753,11 @@
     },
     "/quills/{workspaceId}/links": {
       "get": {
+        "operationId": "listQuillsLinks",
         "tags": [
           "Quills"
         ],
+        "summary": "List visible Quills board and post links",
         "parameters": [
           {
             "schema": {
@@ -24878,9 +24892,11 @@
     },
     "/quills/{workspaceId}/teams": {
       "post": {
+        "operationId": "bindQuillsTeam",
         "tags": [
           "Quills"
         ],
+        "summary": "Bind a workspace team to Quills",
         "parameters": [
           {
             "schema": {
@@ -24984,9 +25000,11 @@
         }
       },
       "get": {
+        "operationId": "listQuillsTeams",
         "tags": [
           "Quills"
         ],
+        "summary": "List Quills teams and their rosters",
         "parameters": [
           {
             "schema": {
@@ -25100,9 +25118,11 @@
     },
     "/quills/{workspaceId}/teams/{teamId}/binding": {
       "put": {
+        "operationId": "updateQuillsTeamBinding",
         "tags": [
           "Quills"
         ],
+        "summary": "Change the team binding of a Quills team",
         "parameters": [
           {
             "schema": {
@@ -25223,7 +25243,7 @@
           "Quills"
         ],
         "summary": "Get the caller's Quills workspace context",
-        "description": "Uses the existing PRODUCT_NAME account, workspace membership, roles and API-key scope. Initializes Quills defaults and the caller's actor when needed. Requires workspace:read and quills:read.",
+        "description": "Uses the existing quills account, workspace membership, roles and API-key scope. Initializes Quills defaults and the caller's actor when needed. Requires workspace:read and quills:read.",
         "parameters": [
           {
             "schema": {
@@ -26063,7 +26083,7 @@
           "Import"
         ],
         "summary": "List projects in an import source",
-        "description": "Sign in to PLANKA, Plane, Linear, Jira, Trello or another PRODUCT_NAME instance and list the projects that can be imported. The credentials are used only for this request; they are never stored, logged, or returned.",
+        "description": "Sign in to PLANKA, Plane, Linear, Jira, Trello or another quills instance and list the projects that can be imported. The credentials are used only for this request; they are never stored, logged, or returned.",
         "requestBody": {
           "required": true,
           "content": {
@@ -26171,7 +26191,7 @@
           "Import"
         ],
         "summary": "Start an import",
-        "description": "Import the selected source projects into the workspace as new PRODUCT_NAME projects. The import runs in the background; poll getImportRun for progress. The credentials are held in memory only while the import runs; they are never stored, logged, or returned. Imported tasks do not send notifications or trigger integrations.",
+        "description": "Import the selected source projects into the workspace as new quills projects. The import runs in the background; poll getImportRun for progress. The credentials are held in memory only while the import runs; they are never stored, logged, or returned. Imported tasks do not send notifications or trigger integrations.",
         "requestBody": {
           "required": true,
           "content": {
@@ -28639,7 +28659,7 @@
           "Admin"
         ],
         "summary": "Remove a user's avatar",
-        "description": "Remove the user's profile picture. A picture managed by the identity provider can't be removed, but an earlier PRODUCT_NAME upload can. Requires the `users:update` instance permission; API keys are rejected.",
+        "description": "Remove the user's profile picture. A picture managed by the identity provider can't be removed, but an earlier quills upload can. Requires the `users:update` instance permission; API keys are rejected.",
         "parameters": [
           {
             "schema": {
@@ -29475,7 +29495,7 @@
                       "null"
                     ],
                     "maxLength": 60,
-                    "description": "Shown in page titles and email headers and subjects. Empty or null restores PRODUCT_NAME."
+                    "description": "Shown in page titles and email headers and subjects. Empty or null restores quills."
                   },
                   "registrationEnabled": {
                     "type": "boolean",
