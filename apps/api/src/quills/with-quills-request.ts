@@ -15,10 +15,16 @@ import { validateWorkspaceAccess } from "../utils/validate-workspace-access";
 
 export type QuillsAction = (typeof statement.quills)[number];
 
-/** Project IDs must come from the feature's persisted relationship, never a caller's substitute. */
+/**
+ * Project IDs must come from the feature's persisted relationship, never a caller's substitute.
+ * A function project ID runs after the permission checks, so a denied caller learns nothing from its lookup.
+ */
 export async function withQuillsRequest<T>(
   c: Context,
-  access: { action: QuillsAction; projectId?: string },
+  access: {
+    action: QuillsAction;
+    projectId?: string | (() => Promise<string | undefined>);
+  },
   work: (db: Database, actor: QuillsActor) => Promise<T>,
 ): Promise<T> {
   const userId = c.get("userId") as string | undefined;
@@ -31,13 +37,17 @@ export async function withQuillsRequest<T>(
     workspace: ["read"],
     quills: [access.action],
   })(c, async () => {});
-  if (access.projectId) {
+  const projectId =
+    typeof access.projectId === "function"
+      ? await access.projectId()
+      : access.projectId;
+  if (projectId) {
     const [project] = await db
       .select({ id: projectTable.id })
       .from(projectTable)
       .where(
         and(
-          eq(projectTable.id, access.projectId),
+          eq(projectTable.id, projectId),
           eq(projectTable.workspaceId, workspaceId),
         ),
       )

@@ -1,213 +1,141 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
-import {
-  apiRouter,
-  createRoute,
-  errorResponse,
-  jsonResponse,
-  z,
-  type BaseVariables,
-} from "../openapi";
-import platformDb from "../database";
-import { teamTable } from "../database/schema";
+import { apiRouter, z, type BaseVariables } from "../openapi";
 import { teams, teamMembers } from "../database/quills/schema/teams";
-import { withQuillsRequest } from "./with-quills-request";
-import { recordQuillsChange } from "./events";
-import { workspaceAccess } from "../utils/workspace-access-middleware";
-const params = z.object({ workspaceId: z.string().min(1) });
-const binding = z.object({
-  kaneoTeamId: z.string().min(1).nullable(),
-  isDefault: z.boolean().optional(),
+import { defineQuillsRoute } from "./framework/define-route";
+import { canonicalTeam } from "./framework/platform-reads";
+
+const team = z.object({
+  id: z.string(),
+  name: z.string(),
+  kaneoTeamId: z.string().nullable(),
+  isDefault: z.boolean(),
 });
-const responses = {
-  200: jsonResponse(
-    "Team",
-    z.object({
-      id: z.string(),
-      name: z.string(),
-      kaneoTeamId: z.string().nullable(),
-      isDefault: z.boolean(),
-    }),
-  ),
-  401: errorResponse("Authentication required"),
-  403: errorResponse("Insufficient access"),
-  404: errorResponse("Team not found"),
+const teamFields = {
+  id: teams.id,
+  name: teams.name,
+  kaneoTeamId: teams.kaneoTeamId,
+  isDefault: teams.isDefault,
 };
-const middleware = [workspaceAccess.fromParam("workspaceId")];
-async function canonicalTeam(workspaceId: string, id: string) {
-  const [team] = await platformDb
-    .select()
-    .from(teamTable)
-    .where(and(eq(teamTable.id, id), eq(teamTable.workspaceId, workspaceId)))
-    .limit(1);
-  if (!team) throw new HTTPException(404, { message: "Team not found" });
-  return team;
-}
+const errors = { 404: "Team not found" };
+
+const bindTeam = defineQuillsRoute({
+  method: "post",
+  path: "/teams",
+  operationId: "bindQuillsTeam",
+  summary: "Bind a workspace team to Quills",
+  action: "manage_settings",
+  body: z.object({
+    kaneoTeamId: z.string().min(1),
+    isDefault: z.boolean().default(false),
+  }),
+  response: team,
+  responseDescription: "Team",
+  errors,
+  load: ({ body, workspaceId }) => canonicalTeam(workspaceId, body.kaneoTeamId),
+  event: ({ body }, result) => ({
+    type: "team.bound",
+    entityType: "team",
+    entityId: result.id,
+    payload: { kaneoTeamId: body.kaneoTeamId },
+  }),
+  handler: async ({ db, body, loaded: canonical }) => {
+    await db.execute(sql`SELECT id FROM quills.settings FOR UPDATE`);
+    if (body.isDefault)
+      await db
+        .update(teams)
+        .set({ isDefault: false })
+        .where(eq(teams.isDefault, true));
+    const [row] = await db
+      .insert(teams)
+      .values({
+        name: canonical.name,
+        kaneoTeamId: canonical.id,
+        isDefault: body.isDefault,
+      })
+      .onConflictDoUpdate({
+        target: [teams.workspaceId, teams.kaneoTeamId],
+        set: { isDefault: body.isDefault, deletedAt: null },
+      })
+      .returning(teamFields);
+    return row!;
+  },
+});
+
+const updateBinding = defineQuillsRoute({
+  method: "put",
+  path: "/teams/{teamId}/binding",
+  operationId: "updateQuillsTeamBinding",
+  summary: "Change the team binding of a Quills team",
+  action: "manage_settings",
+  params: z.object({ teamId: flexibleToTypeIdSchema("team") }),
+  body: z.object({
+    kaneoTeamId: z.string().min(1).nullable(),
+    isDefault: z.boolean().optional(),
+  }),
+  response: team,
+  responseDescription: "Team",
+  errors,
+  load: async ({ body, workspaceId }) => {
+    if (body.kaneoTeamId) await canonicalTeam(workspaceId, body.kaneoTeamId);
+  },
+  event: ({ params, body: { kaneoTeamId } }) =>
+    kaneoTeamId
+      ? {
+          type: "team.bound",
+          entityType: "team",
+          entityId: params.teamId,
+          payload: { kaneoTeamId },
+        }
+      : { type: "team.unbound", entityType: "team", entityId: params.teamId },
+  handler: async ({ db, params, body }) => {
+    await db.execute(sql`SELECT id FROM quills.settings FOR UPDATE`);
+    if (body.isDefault)
+      await db
+        .update(teams)
+        .set({ isDefault: false })
+        .where(eq(teams.isDefault, true));
+    const [row] = await db
+      .update(teams)
+      .set({ kaneoTeamId: body.kaneoTeamId, isDefault: body.isDefault })
+      .where(and(eq(teams.id, params.teamId), isNull(teams.deletedAt)))
+      .returning(teamFields);
+    if (!row)
+      throw new HTTPException(404, { message: "Quills team not found" });
+    return row;
+  },
+});
+
+const listTeams = defineQuillsRoute({
+  method: "get",
+  path: "/teams",
+  operationId: "listQuillsTeams",
+  summary: "List Quills teams and their rosters",
+  action: "read",
+  response: z.object({
+    teams: z.array(team),
+    members: z.array(z.object({ teamId: z.string(), principalId: z.string() })),
+  }),
+  responseDescription: "Teams and their projected rosters",
+  errors,
+  handler: async ({ db }) => ({
+    teams: await db
+      .select(teamFields)
+      .from(teams)
+      .where(isNull(teams.deletedAt)),
+    members: await db
+      .select({
+        teamId: teamMembers.teamId,
+        principalId: teamMembers.principalId,
+      })
+      .from(teamMembers)
+      .innerJoin(teams, eq(teams.id, teamMembers.teamId))
+      .where(isNull(teams.deletedAt)),
+  }),
+});
+
 export default apiRouter<BaseVariables & { workspaceId: string }>()
-  .openapi(
-    createRoute({
-      method: "post",
-      path: "/{workspaceId}/teams",
-      operationId: "bindQuillsTeam",
-      tags: ["Quills"],
-      summary: "Bind a workspace team to Quills",
-      middleware,
-      request: {
-        params,
-        body: {
-          content: {
-            "application/json": {
-              schema: z.object({
-                kaneoTeamId: z.string().min(1),
-                isDefault: z.boolean().default(false),
-              }),
-            },
-          },
-        },
-      },
-      responses,
-    }),
-    async (c) => {
-      const input = c.req.valid("json");
-      const canonical = await canonicalTeam(
-        c.get("workspaceId"),
-        input.kaneoTeamId,
-      );
-      const team = await withQuillsRequest(
-        c,
-        { action: "manage_settings" },
-        async (db, actor) => {
-          await db.execute(sql`SELECT id FROM quills.settings FOR UPDATE`);
-          if (input.isDefault)
-            await db
-              .update(teams)
-              .set({ isDefault: false })
-              .where(eq(teams.isDefault, true));
-          const [row] = await db
-            .insert(teams)
-            .values({
-              name: canonical.name,
-              kaneoTeamId: canonical.id,
-              isDefault: input.isDefault,
-            })
-            .onConflictDoUpdate({
-              target: [teams.workspaceId, teams.kaneoTeamId],
-              set: { isDefault: input.isDefault, deletedAt: null },
-            })
-            .returning();
-          await recordQuillsChange(db, actor, {
-            type: "team.bound",
-            entityType: "team",
-            entityId: row!.id,
-            payload: { kaneoTeamId: canonical.id },
-          });
-          return row!;
-        },
-      );
-      return c.json(team, 200);
-    },
-  )
-  .openapi(
-    createRoute({
-      method: "put",
-      path: "/{workspaceId}/teams/{teamId}/binding",
-      operationId: "updateQuillsTeamBinding",
-      tags: ["Quills"],
-      summary: "Change the team binding of a Quills team",
-      middleware,
-      request: {
-        params: params.extend({ teamId: flexibleToTypeIdSchema("team") }),
-        body: { content: { "application/json": { schema: binding } } },
-      },
-      responses,
-    }),
-    async (c) => {
-      const input = c.req.valid("json"),
-        { teamId } = c.req.valid("param");
-      if (input.kaneoTeamId)
-        await canonicalTeam(c.get("workspaceId"), input.kaneoTeamId);
-      const team = await withQuillsRequest(
-        c,
-        { action: "manage_settings" },
-        async (db, actor) => {
-          await db.execute(sql`SELECT id FROM quills.settings FOR UPDATE`);
-          if (input.isDefault)
-            await db
-              .update(teams)
-              .set({ isDefault: false })
-              .where(eq(teams.isDefault, true));
-          const [row] = await db
-            .update(teams)
-            .set(input)
-            .where(and(eq(teams.id, teamId), isNull(teams.deletedAt)))
-            .returning();
-          if (!row)
-            throw new HTTPException(404, { message: "Quills team not found" });
-          await recordQuillsChange(db, actor, {
-            type: input.kaneoTeamId ? "team.bound" : "team.unbound",
-            entityType: "team",
-            entityId: teamId,
-            payload: input.kaneoTeamId
-              ? { kaneoTeamId: input.kaneoTeamId }
-              : {},
-          });
-          return row;
-        },
-      );
-      return c.json(team, 200);
-    },
-  )
-  .openapi(
-    createRoute({
-      method: "get",
-      path: "/{workspaceId}/teams",
-      operationId: "listQuillsTeams",
-      tags: ["Quills"],
-      summary: "List Quills teams and their rosters",
-      middleware,
-      request: { params },
-      responses: {
-        ...responses,
-        200: jsonResponse(
-          "Teams and their projected rosters",
-          z.object({
-            teams: z.array(
-              z.object({
-                id: z.string(),
-                name: z.string(),
-                kaneoTeamId: z.string().nullable(),
-                isDefault: z.boolean(),
-              }),
-            ),
-            members: z.array(
-              z.object({ teamId: z.string(), principalId: z.string() }),
-            ),
-          }),
-        ),
-      },
-    }),
-    async (c) =>
-      c.json(
-        await withQuillsRequest(c, { action: "read" }, async (db) => ({
-          teams: await db
-            .select({
-              id: teams.id,
-              name: teams.name,
-              kaneoTeamId: teams.kaneoTeamId,
-              isDefault: teams.isDefault,
-            })
-            .from(teams)
-            .where(isNull(teams.deletedAt)),
-          members: await db
-            .select({
-              teamId: teamMembers.teamId,
-              principalId: teamMembers.principalId,
-            })
-            .from(teamMembers)
-            .innerJoin(teams, eq(teams.id, teamMembers.teamId))
-            .where(isNull(teams.deletedAt)),
-        })),
-        200,
-      ),
-  );
+  .openapi(...bindTeam)
+  .openapi(...updateBinding)
+  .openapi(...listTeams);
