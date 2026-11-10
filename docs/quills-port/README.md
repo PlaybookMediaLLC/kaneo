@@ -79,7 +79,7 @@ The plan adds no auth, tenant or membership model. Customers and visitors stay Q
 
 Decided on 2026-11-10: **D1, D2, D3 and D6 are accepted as recommended.**
 **D5 is changed:** billing, telemetry and the onboarding wizard use Kaneo's own implementations. Custom domains, fleet wake and usage are ported in the new phase P10.
-D4 (the public mount line) is still open. It blocks P3.
+**D4 is accepted:** P3 adds one mount line in `apps/api/src/index.ts` for public Quills routes, before the session middleware.
 
 | # | Decision | Recommendation | Blocks |
 |---|---|---|---|
