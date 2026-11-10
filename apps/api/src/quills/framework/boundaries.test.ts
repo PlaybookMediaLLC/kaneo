@@ -17,11 +17,14 @@ const quills = sources("..").filter(
   (file) => !/\.(test|fixture)\.ts$/.test(file.path),
 );
 const feature = quills.filter((file) => !file.path.startsWith("framework/"));
-const routeModules = feature.filter((file) =>
-  file.source.includes("/framework/define-route"),
+// A module that builds a router, such as a feature folder's index, follows the same import rules.
+const routeModules = feature.filter(
+  (file) =>
+    file.source.includes("/framework/define-route") ||
+    file.source.includes("apiRouter"),
 );
 const routePaths = new Set(
-  routeModules.map((file) => file.path.replace(/\.ts$/, "")),
+  routeModules.map((file) => file.path.replace(/(\/index)?\.ts$/, "")),
 );
 /** Route modules import packages, the helper, platform reads, Quills schema and other route modules only. */
 const allowedImport = (file: string, specifier: string) => {
@@ -38,6 +41,7 @@ const allowedImport = (file: string, specifier: string) => {
       [
         "framework/define-route",
         "framework/platform-reads",
+        "framework/webhook-config",
         "../openapi",
       ].includes(target) ||
       target.startsWith("../database/quills/schema/"))

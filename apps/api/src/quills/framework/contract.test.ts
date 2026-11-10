@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as kaneo from "../../database/schema";
 import quillsRouter from "../index";
+import * as deliveryFixtures from "../delivery/index.fixture";
 import * as contextFixtures from "../index.fixture";
 import * as jobFixtures from "../jobs/routes.fixture";
 import * as linkFixtures from "../links.fixture";
@@ -37,6 +38,7 @@ vi.mock("../../database/index", () => ({
 const url = process.env.QUILLS_TEST_DATABASE_URL;
 const fixtures: Record<string, Fixture> = {
   ...contextFixtures,
+  ...deliveryFixtures,
   ...jobFixtures,
   ...linkFixtures,
   ...teamFixtures,

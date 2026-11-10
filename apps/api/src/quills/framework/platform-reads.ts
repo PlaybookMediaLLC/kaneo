@@ -1,8 +1,16 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import platformDb from "../../database";
-import { projectTable, taskTable, teamTable } from "../../database/schema";
+import {
+  projectTable,
+  taskTable,
+  teamTable,
+  userTable,
+  workspaceUserTable,
+} from "../../database/schema";
 import { findInaccessibleProjectIds } from "../../project-access/find-inaccessible-project-ids";
+import { projectAccessCondition } from "../../project-access/project-access-condition";
+import { roleHasWorkspacePermission } from "../../utils/require-workspace-permission";
 
 // The only module that reads public tables for Quills routes. Every read filters on workspaceId.
 
@@ -100,4 +108,59 @@ export async function visibleLinks(
     ),
     posts: page.posts.filter((p) => allowedTasks.has(p.taskId)),
   };
+}
+
+/**
+ * The projects of this workspace that the user can open. A board linked to projects is visible only
+ * when one of them is in this set (see `seesBoard`). Read before or after a Quills transaction, never inside one.
+ */
+export async function openProjectIds(workspaceId: string, userId: string) {
+  const rows = await platformDb
+    .select({ id: projectTable.id })
+    .from(projectTable)
+    .where(
+      and(
+        eq(projectTable.workspaceId, workspaceId),
+        projectAccessCondition(userId, projectTable.id),
+      ),
+    );
+  return new Set(rows.map((row) => row.id));
+}
+
+/** An unlinked board is visible to every teammate; a linked one needs one openable project. */
+export const seesBoard = (open: Set<string>, linked: readonly string[]) =>
+  !linked.length || linked.some((id) => open.has(id));
+
+/** Current, unbanned members of this workspace who may read Quills, with their address. */
+export async function quillsReaders(
+  workspaceId: string,
+  userIds: readonly string[],
+) {
+  const readers = new Map<string, { email: string }>();
+  const ids = [...new Set(userIds)];
+  if (!ids.length) return readers;
+  const rows = await platformDb
+    .select({
+      userId: workspaceUserTable.userId,
+      role: workspaceUserTable.role,
+      email: userTable.email,
+    })
+    .from(workspaceUserTable)
+    .innerJoin(userTable, eq(userTable.id, workspaceUserTable.userId))
+    .where(
+      and(
+        eq(workspaceUserTable.workspaceId, workspaceId),
+        inArray(workspaceUserTable.userId, ids),
+        sql`coalesce(${userTable.banned},false)=false`,
+      ),
+    );
+  for (const row of rows)
+    if (
+      await roleHasWorkspacePermission(workspaceId, row.role, {
+        workspace: ["read"],
+        quills: ["read"],
+      })
+    )
+      readers.set(row.userId, { email: row.email });
+  return readers;
 }

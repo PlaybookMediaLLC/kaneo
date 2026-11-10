@@ -20,6 +20,8 @@ export async function pruneQuillsWorkspace(
   const statements = [
     sql`DELETE FROM quills.events WHERE (workspace_id,id) IN (SELECT workspace_id,id FROM quills.events WHERE published_at IS NOT NULL AND published_at<now()-${policy.events}*interval '1 day' ORDER BY id LIMIT 1000)`,
     sql`DELETE FROM quills.job_queue WHERE (workspace_id,id) IN (SELECT workspace_id,id FROM quills.job_queue WHERE (status='succeeded' OR (status='failed' AND NOT EXISTS (SELECT 1 FROM quills.events e WHERE e.event_id=job_queue.dedupe_key AND e.published_at IS NULL))) AND finished_at<now()-${policy.jobs}*interval '1 day' ORDER BY id LIMIT 1000)`,
+    // Delivery ledger rows outlive their jobs, so a replayed job finds them. Kept while their event is unpublished.
+    sql`DELETE FROM quills.hook_deliveries WHERE (workspace_id,job_id) IN (SELECT workspace_id,job_id FROM quills.hook_deliveries h WHERE processed_at<now()-${policy.events}*interval '1 day' AND NOT EXISTS (SELECT 1 FROM quills.events e WHERE e.workspace_id=h.workspace_id AND e.event_id=split_part(h.job_id,':',2) AND e.published_at IS NULL) ORDER BY processed_at LIMIT 1000)`,
     sql`DELETE FROM quills.email_log WHERE (workspace_id,id) IN (SELECT workspace_id,id FROM quills.email_log WHERE created_at<least(now()-${policy.logs}*interval '1 day',date_trunc('month',now())) ORDER BY created_at LIMIT 1000)`,
     sql`DELETE FROM quills.ai_usage_log WHERE (workspace_id,id) IN (SELECT workspace_id,id FROM quills.ai_usage_log WHERE created_at<least(now()-${policy.logs}*interval '1 day',date_trunc('month',now())) ORDER BY created_at LIMIT 1000)`,
     sql`UPDATE quills.export_runs SET s3_key=NULL WHERE expires_at<=now() AND s3_key IS NOT NULL`,

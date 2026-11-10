@@ -93,6 +93,8 @@ export function prepareArchive(
         row.lease_expires_at = null;
         row.finished_at = new Date().toISOString();
       }
+      // An imported webhook must not send this workspace's events until an admin turns it on here.
+      if (name === "webhooks") row.status = "disabled";
       if (
         name === "workflow_runs" &&
         ["running", "waiting"].includes(String(row.state))

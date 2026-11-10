@@ -42,8 +42,8 @@ export type ContractEnv = {
   ) => Promise<T>;
 };
 export type Fixture<T = any> = {
-  /** Fresh rows for one request. Called once per stateful check. */
-  seed: (env: ContractEnv) => Promise<T>;
+  /** Fresh rows for one request. Called once per stateful check, with the user who sends that check's main request. */
+  seed: (env: ContractEnv, caller: string) => Promise<T>;
   /** A request in workspace A that succeeds for an authorized caller. */
   valid: (ids: T) => ContractInput;
   /** Workspace B values, keyed by the param, query or body field they replace. */
@@ -443,7 +443,7 @@ export async function checkRoute(
   )
     fail("registered", "the route is not mounted through defineQuillsRoute");
 
-  const ids = await f.seed(env);
+  const ids = await f.seed(env, users.owner);
   const input = f.valid(ids);
   await expectStatus("no-session", [401], "", input);
   await expectStatus("other-workspace", [403, 404], users.outsider, input);
@@ -528,7 +528,7 @@ export async function checkRoute(
     }
   }
 
-  const fresh = f.valid(await f.seed(env));
+  const fresh = f.valid(await f.seed(env, users.limited));
   const since: string = (
     await pool.query("SELECT clock_timestamp()::text AS t")
   ).rows[0].t;
@@ -556,11 +556,11 @@ export async function checkRoute(
     "instance-admin",
     [200],
     users.admin,
-    f.valid(await f.seed(env)),
+    f.valid(await f.seed(env, users.admin)),
   );
 
   if (d.body) {
-    const target = f.valid(await f.seed(env));
+    const target = f.valid(await f.seed(env, users.owner));
     const before = await fingerprint(env.b);
     await send(
       app,
@@ -598,7 +598,7 @@ export async function checkRoute(
         ...buildQuillsRoute({ ...d, ...failure }),
       ),
     );
-    const target = f.valid(await f.seed(env));
+    const target = f.valid(await f.seed(env, users.owner));
     const before = await fingerprint(env.a);
     const res = await send(failingApp, d, target, users.owner);
     if (res.status !== 500) fail("rollback", `expected 500, got ${res.status}`);
