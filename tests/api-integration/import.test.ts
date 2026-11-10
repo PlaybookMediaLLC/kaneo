@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { brandText } from "@kaneo/branding";
+import { brandText } from "../../branding/index.cjs";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type {
