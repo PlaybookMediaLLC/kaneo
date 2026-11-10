@@ -18,8 +18,8 @@
 		{
 			"file": "apps/api/src/index.ts",
 			"state": "existing",
-			"lines": "import + api.route(\"/quills\", quills) + 3 type-export entries + runQuillsMigrations at startup",
-			"plannedChange": "P3 only: one more mount, api.route(\"/quills-public\", quillsPublic), placed before the session middleware, plus its 3 type-export entries"
+			"lines": "import + api.route(\"/quills\", quills) + 3 type-export entries + runQuillsMigrations at startup; import + api.route(\"/quills-public\", quillsPublic) before the session middleware + 3 type-export entries",
+			"plannedChange": "P3 added the /quills-public mount (src/quills/public.ts) before the session middleware, after the public calendar feed, plus its import and 3 type-export entries. No further change planned"
 		},
 		{
 			"file": "apps/api/src/scheduler/index.ts",

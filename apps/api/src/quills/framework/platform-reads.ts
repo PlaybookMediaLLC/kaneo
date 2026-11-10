@@ -1,10 +1,11 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import platformDb from "../../database";
 import {
   projectTable,
   taskTable,
   teamTable,
+  workspaceTable,
   workspaceUserTable,
 } from "../../database/schema";
 import { findInaccessibleProjectIds } from "../../project-access/find-inaccessible-project-ids";
@@ -117,4 +118,41 @@ export async function visibleLinks(
     ),
     posts: page.posts.filter((p) => allowedTasks.has(p.taskId)),
   };
+}
+
+/**
+ * True when the Kaneo account is a member of the workspace that `workspace` (an ID or slug, an
+ * ID match winning) names. Read before the scoped transaction, so a request never holds two
+ * connections. Only the private-portal team grant reads it; it is not a Quills permission.
+ */
+export async function isMemberOfNamedWorkspace(
+  workspace: string,
+  userId: string,
+) {
+  const named = platformDb
+    .select({ id: workspaceTable.id })
+    .from(workspaceTable)
+    // The same choice as withQuillsAudience: an unarchived workspace, an ID match first.
+    .where(
+      and(
+        or(
+          eq(workspaceTable.id, workspace),
+          eq(workspaceTable.slug, workspace),
+        ),
+        isNull(workspaceTable.archivedAt),
+      ),
+    )
+    .orderBy(sql`${workspaceTable.id} = ${workspace} desc`)
+    .limit(1);
+  const [row] = await platformDb
+    .select({ userId: workspaceUserTable.userId })
+    .from(workspaceUserTable)
+    .where(
+      and(
+        eq(workspaceUserTable.workspaceId, sql`(${named})`),
+        eq(workspaceUserTable.userId, userId),
+      ),
+    )
+    .limit(1);
+  return Boolean(row);
 }

@@ -50,6 +50,11 @@ export const changeSchema = z.object({
     "settings.widget_install_code_minted",
     "settings.developer_updated",
     "settings.labs_updated",
+    "settings.portal_access_updated",
+    "settings.widget_install_code_redeemed",
+    "portal.access_denied",
+    "customer.profile_updated",
+    "customer.profile_unlinked",
   ]),
   entityType: z.enum([
     "board",
@@ -66,16 +71,23 @@ export const changeSchema = z.object({
   entityId: z.string().min(1).max(200),
   payload: z.record(z.string(), z.string().max(500)).default({}),
 });
+/** "user" is a teammate; portal and widget callers are customers or anonymous visitors. */
+export const actorTypeSchema = z.enum(["user", "customer", "anonymous"]);
+export type ChangeActor = {
+  principalId: QuillsActor["principalId"] | null;
+  actorType?: z.infer<typeof actorTypeSchema>;
+};
 export async function recordQuillsChange(
   db: Database,
-  actor: QuillsActor,
+  actor: ChangeActor,
   input: z.input<typeof changeSchema>,
 ) {
   const change = changeSchema.parse(input);
+  const actorType = actorTypeSchema.parse(actor.actorType ?? "user");
   const eventId = createId("event");
   await db.insert(auditLog).values({
     actorPrincipalId: actor.principalId,
-    actorType: "user",
+    actorType,
     eventType: change.type,
     targetType: change.entityType,
     targetId: change.entityId,
@@ -85,7 +97,7 @@ export async function recordQuillsChange(
   await db.insert(events).values({
     eventId,
     ...change,
-    actorType: "user",
+    actorType,
     actorId: actor.principalId,
   });
   await enqueueQuillsEvent(db, eventId);

@@ -1,6 +1,7 @@
 import directory from "./directory/index";
 import jobs from "./jobs/routes";
 import links from "./links";
+import portalAccessSettings from "./portal/access-settings";
 import quillsSettings from "./settings/index";
 import sharedTeams from "./teams";
 import { brandText } from "@kaneo/branding";
@@ -52,4 +53,5 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", sharedTeams)
   .route("/", directory)
   .route("/", quillsSettings)
+  .route("/", portalAccessSettings)
   .openapi(...context);
