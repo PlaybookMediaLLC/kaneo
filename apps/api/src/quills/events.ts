@@ -117,6 +117,13 @@ export const changeSchema = z.object({
     "post.unmerged",
     "post_view.created",
     "post_view.deleted",
+    "custom_domain.set",
+    "custom_domain.removed",
+    "custom_domain.verification_requested",
+    "settings.powered_by_updated",
+    "custom_domain.checked",
+    "workspace.wipe_requested",
+    "workspace.wiped",
   ]),
   entityType: z.enum([
     "board",
@@ -137,31 +144,33 @@ export const changeSchema = z.object({
     "roadmap",
     "changelog",
     "post_view",
+    "custom_domain",
   ]),
   entityId: z.string().min(1).max(200),
   payload: z.record(z.string(), z.string().max(500)).default({}),
 });
+/** `actor` null records a change that a worker made, with no teammate actor. */
 export async function recordQuillsChange(
   db: Database,
-  actor: QuillsActor,
+  actor: QuillsActor | null,
   input: z.input<typeof changeSchema>,
 ) {
   const change = changeSchema.parse(input);
   const eventId = createId("event");
   await db.insert(auditLog).values({
-    actorPrincipalId: actor.principalId,
-    actorType: "user",
+    actorPrincipalId: actor?.principalId ?? null,
+    actorType: actor ? "user" : "system",
     eventType: change.type,
     targetType: change.entityType,
     targetId: change.entityId,
     metadata: change.payload,
-    channel: "api",
+    channel: actor ? "api" : "system",
   });
   await db.insert(events).values({
     eventId,
     ...change,
-    actorType: "user",
-    actorId: actor.principalId,
+    actorType: actor ? "user" : "system",
+    actorId: actor?.principalId ?? null,
     // Marks events recorded after delivery was enabled, so the worker never replays an older backlog.
     context: { deliver: true },
   });

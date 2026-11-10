@@ -12,6 +12,7 @@ import { findInaccessibleProjectIds } from "../../project-access/find-inaccessib
 import { projectAccessCondition } from "../../project-access/project-access-condition";
 import { roleHasWorkspacePermission } from "../../utils/require-workspace-permission";
 import { listAccessibleProjectIds } from "../../project-access/list-accessible-project-ids";
+import { requireWorkspaceEntitlement } from "../../billing/controllers/require-entitlement";
 
 // The only module that reads public tables for Quills routes. Every read filters on workspaceId.
 
@@ -203,4 +204,21 @@ export async function accessibleProjectIds(
   userId: string,
 ): Promise<string[]> {
   return [...(await listAccessibleProjectIds(platformDb, workspaceId, userId))];
+}
+
+/**
+ * Kaneo's plan check for paid Quills features: 402 when the workspace's Kaneo Cloud plan is not active.
+ * A no-op when billing is off, so self-hosted installs are never gated. It can create the workspace's billing row.
+ */
+export { requireWorkspaceEntitlement };
+
+/** Whether Kaneo's plan check passes, for a read that shows an upgrade prompt. */
+export async function hasWorkspaceEntitlement(workspaceId: string) {
+  try {
+    await requireWorkspaceEntitlement(workspaceId);
+    return true;
+  } catch (error) {
+    if (error instanceof HTTPException && error.status === 402) return false;
+    throw error;
+  }
 }

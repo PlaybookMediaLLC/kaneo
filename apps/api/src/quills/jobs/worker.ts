@@ -8,9 +8,11 @@ import { workspaceUserTable, userTable } from "../../database/schema";
 import { roleHasWorkspacePermission } from "../../utils/require-workspace-permission";
 import { broadcastToUserAndWait } from "../../ws";
 import { fanOut } from "./fanout";
+import { runDomainCheckJob } from "./handlers/domain-check";
 import { runMailJob } from "./handlers/mail";
 import { runNotificationJob } from "./handlers/notification";
 import { runWebhookJob } from "./handlers/webhook";
+import { runWipeJob } from "./handlers/wipe";
 import {
   claimQuillsJob,
   enqueueQuillsEvent,
@@ -27,6 +29,8 @@ const handlers: Record<
   "quills.webhook": runWebhookJob,
   "quills.mail": runMailJob,
   "quills.notification": runNotificationJob,
+  "quills.domain_check": runDomainCheckJob,
+  "quills.wipe": runWipeJob,
 };
 
 export async function deliverQuillsChange(

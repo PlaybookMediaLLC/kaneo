@@ -5,11 +5,13 @@ Imported from `quackback/packages/db/src` at source commit `42ef2e01b2b48db87f1a
 ## Ownership and identity
 
 Kaneo owns authentication, user accounts, workspaces, membership and workspace
-access. All 147 feature tables live in PostgreSQL schema `quills`.
+access. All 148 feature tables live in PostgreSQL schema `quills`.
 Every table has a text `workspace_id` referencing Kaneo's workspace. Domain IDs
 retain their UUID-backed TypeID representation. Keys, unique constraints and
 feature foreign keys include workspace ownership. Nullable composite foreign
 keys clear only the optional reference, never the workspace discriminator.
+One unique index is global on purpose: `custom_domains_domain_unique` keeps a
+custom domain in one workspace. Row security does not filter a unique index.
 
 Teammate actors in `principal` link directly to Kaneo through `kaneo_user_id`.
 Membership creation and existing-member migration provision these actors atomically.
@@ -224,6 +226,15 @@ Clients must refetch current state after reconnecting. Other imported feature
 queues are not executed. Mail, webhooks and other feature dispatch need registered
 handlers when those features are connected.
 
+Two operations queues run requested work after commit. `quills.domain_check` looks up the
+TXT record of a stored custom domain (five-second cap) and activates the domain when the
+record holds its value. `quills.wipe` deletes a workspace's Quills feature data in one
+transaction; a failure, or a lease that another worker took, rolls the whole wipe back for
+the retry. The wipe keeps settings, the seeded catalogues, teammate actors, custom domains,
+the outbox, the delivery ledger and audit history; it deletes all other Quills data,
+configuration included. Storage triggers queue the removed object keys. A large wipe runs
+inline in the drain loop and delays this instance's other Quills jobs until it ends.
+
 `GET /quills/{workspaceId}/jobs` is paginated and omits payloads. The
 `POST /quills/{workspaceId}/jobs/{jobId}/retry` endpoint requeues a failed registered
 job and audits the operator. Both require `quills:manage_settings`. Link and team
@@ -347,6 +358,7 @@ All entries are workspace-owned, including per-workspace reference catalogues.
 | `connectors` | `connectors.ts` |
 | `conversation_attribute_definitions` | `conversation-attributes.ts` |
 | `conversation_summaries` | `conversation-summary.ts` |
+| `custom_domains` | `custom-domains.ts` |
 | `conversation_views` | `conversation-views.ts` |
 | `conversation_view_pins` | `conversation-views.ts` |
 | `conversations` | `conversation.ts` |
