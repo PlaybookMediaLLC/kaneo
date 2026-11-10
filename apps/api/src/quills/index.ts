@@ -1,4 +1,5 @@
 import directory from "./directory/index";
+import feedback from "./feedback/core";
 import files from "./files/routes";
 import jobs from "./jobs/routes";
 import links from "./links";
@@ -54,4 +55,5 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", sharedTeams)
   .route("/", directory)
   .route("/", quillsSettings)
+  .route("/", feedback)
   .openapi(...context);

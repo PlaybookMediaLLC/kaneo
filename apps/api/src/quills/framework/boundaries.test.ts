@@ -17,8 +17,11 @@ const quills = sources("..").filter(
   (file) => !/\.(test|fixture)\.ts$/.test(file.path),
 );
 const feature = quills.filter((file) => !file.path.startsWith("framework/"));
-const routeModules = feature.filter((file) =>
-  file.source.includes("/framework/define-route"),
+// A router that only composes route modules follows the same import rules.
+const routeModules = feature.filter(
+  (file) =>
+    file.source.includes("/framework/define-route") ||
+    file.source.includes("apiRouter"),
 );
 const routePaths = new Set(
   routeModules.map((file) => file.path.replace(/\.ts$/, "")),

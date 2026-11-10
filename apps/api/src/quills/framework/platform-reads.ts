@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, not } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import platformDb from "../../database";
 import {
@@ -8,6 +8,7 @@ import {
   workspaceUserTable,
 } from "../../database/schema";
 import { findInaccessibleProjectIds } from "../../project-access/find-inaccessible-project-ids";
+import { projectAccessCondition } from "../../project-access/project-access-condition";
 
 // The only module that reads public tables for Quills routes. Every read filters on workspaceId.
 
@@ -47,6 +48,25 @@ export async function workspaceMembers(workspaceId: string) {
     })
     .from(workspaceUserTable)
     .where(eq(workspaceUserTable.workspaceId, workspaceId));
+}
+
+/** Projects of this workspace that the user cannot open. Empty when the user can open every project. */
+export async function hiddenProjectIds(workspaceId: string, userId: string) {
+  const rows = await platformDb
+    .select({ id: projectTable.id })
+    .from(projectTable)
+    .where(
+      and(
+        eq(projectTable.workspaceId, workspaceId),
+        not(projectAccessCondition(userId, projectTable.id)),
+      ),
+    );
+  return rows.map((row) => row.id);
+}
+
+/** The Kaneo user IDs of this workspace's current members. */
+export async function memberUserIds(workspaceId: string) {
+  return (await workspaceMembers(workspaceId)).map((row) => row.userId);
 }
 
 type Links = {

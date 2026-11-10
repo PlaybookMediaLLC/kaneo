@@ -6,6 +6,7 @@ import { Pool } from "pg";
 import * as kaneo from "../../database/schema";
 import quillsRouter from "../index";
 import * as directoryFixtures from "../directory/index.fixture";
+import * as feedbackFixtures from "../feedback/core.fixture";
 import * as fileFixtures from "../files/routes.fixture";
 import * as contextFixtures from "../index.fixture";
 import * as jobFixtures from "../jobs/routes.fixture";
@@ -59,6 +60,7 @@ const url = process.env.QUILLS_TEST_DATABASE_URL;
 const fixtures: Record<string, Fixture> = {
   ...contextFixtures,
   ...fileFixtures,
+  ...feedbackFixtures,
   ...jobFixtures,
   ...linkFixtures,
   ...teamFixtures,
