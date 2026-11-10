@@ -64,6 +64,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Require approved public branding
+        run: pnpm branding:release
+
       - name: Resolve next version
         id: plan
         env:
@@ -177,6 +180,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Require approved public branding
+        run: pnpm branding:release
 
       # A release created with GITHUB_TOKEN does not trigger other workflows,
       # which would silence release-notify.yml.
