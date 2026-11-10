@@ -1,4 +1,5 @@
 import directory from "./directory/index";
+import files from "./files/routes";
 import jobs from "./jobs/routes";
 import links from "./links";
 import quillsSettings from "./settings/index";
@@ -47,6 +48,7 @@ const context = defineQuillsRoute({
 });
 
 export default apiRouter<BaseVariables & { workspaceId: string }>()
+  .route("/", files)
   .route("/", jobs)
   .route("/", links)
   .route("/", sharedTeams)

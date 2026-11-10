@@ -173,6 +173,7 @@ export async function startContract(testPool: Pool, url: string) {
         work,
       ),
   };
+  return env;
 }
 
 export async function stopContract() {

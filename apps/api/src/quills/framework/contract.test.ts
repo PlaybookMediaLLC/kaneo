@@ -1,9 +1,12 @@
+import { Readable } from "node:stream";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as kaneo from "../../database/schema";
 import quillsRouter from "../index";
 import * as directoryFixtures from "../directory/index.fixture";
+import * as fileFixtures from "../files/routes.fixture";
 import * as contextFixtures from "../index.fixture";
 import * as jobFixtures from "../jobs/routes.fixture";
 import * as linkFixtures from "../links.fixture";
@@ -36,9 +39,26 @@ vi.mock("../../database/index", () => ({
     },
   ),
 }));
+// Object-store network calls only: an upload exists with its declared size and type.
+vi.mock("../../storage/s3", async (original) => ({
+  ...(await original<typeof import("../../storage/s3")>()),
+  verifyTaskAssetUpload: vi.fn(
+    async (_key: string, expected: { size: number; contentType: string }) =>
+      expected,
+  ),
+}));
+// The upload digest reads through its own client: answer that GET with the stored bytes.
+vi.spyOn(S3Client.prototype, "send").mockImplementation((async (
+  command: unknown,
+) => {
+  if (!(command instanceof GetObjectCommand))
+    throw new Error("Unexpected storage call");
+  return { Body: Readable.from([Buffer.from("image")]) };
+}) as never);
 const url = process.env.QUILLS_TEST_DATABASE_URL;
 const fixtures: Record<string, Fixture> = {
   ...contextFixtures,
+  ...fileFixtures,
   ...jobFixtures,
   ...linkFixtures,
   ...teamFixtures,
@@ -49,10 +69,19 @@ const app = contractApp(quillsRouter);
 
 describe.skipIf(!url)("Quills route contract", () => {
   beforeAll(async () => {
+    // Presigning is local; these values never reach a network.
+    vi.stubEnv("S3_ENDPOINT", "http://127.0.0.1:9");
+    vi.stubEnv("S3_BUCKET", "quills-contract");
+    vi.stubEnv("S3_ACCESS_KEY_ID", "contract");
+    vi.stubEnv("S3_SECRET_ACCESS_KEY", "contract-secret");
+    vi.stubEnv("S3_KEY_PREFIX", "");
     pool = new Pool({ connectionString: url, max: 5 });
     await startContract(pool, url!);
   }, 120000);
-  afterAll(() => stopContract());
+  afterAll(async () => {
+    vi.unstubAllEnvs();
+    await stopContract();
+  });
 
   it("mounts every Quills route through defineQuillsRoute", () => {
     expect(registry.size).toBeGreaterThan(0);
