@@ -9,8 +9,18 @@ const nextConfig = {
   output: "export",
   transpilePackages: ["@kaneo/branding"],
   turbopack: {
+    // Turbopack ignores loader output unless `as` is set; "*" keeps the file's own type.
     rules: {
-      "*.{ts,tsx,js,jsx}": { loaders: [brandLoader] },
+      "*.{ts,tsx,js,jsx}": {
+        condition: { path: /^(?:apps\/site\/)?(?:app|components|lib)\// },
+        loaders: [brandLoader],
+        as: "*",
+      },
+      "*.json": {
+        condition: { path: /(?:^|\/)i18n\/[^/]+\.json$/ },
+        loaders: [brandLoader],
+        as: "*",
+      },
     },
   },
   webpack(config) {
@@ -21,6 +31,11 @@ const nextConfig = {
         fileURLToPath(new URL("./components", import.meta.url)),
         fileURLToPath(new URL("./lib", import.meta.url)),
       ],
+      use: [brandLoader],
+    });
+    config.module.rules.unshift({
+      test: /\.json$/,
+      include: [fileURLToPath(new URL("../../i18n", import.meta.url))],
       use: [brandLoader],
     });
     return config;
