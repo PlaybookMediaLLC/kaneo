@@ -269,7 +269,10 @@ customer audience), `getEmailChannelStatusFn`, `attributeBreakdownFn`.
 
 - Presence: the heartbeat writes `support:presence:{principalId}` with a 90-second expiry, one row for
   each teammate. `agentsOnline` is true while one live row names a teammate whose chat availability is
-  `online`. A heartbeat in workspace B never counts in A (RLS on `kv_store`).
+  `online`. A heartbeat in workspace B never counts in A (RLS on `kv_store`). The widget polls the
+  read, so it uses two index reads: the teammates by `(workspace_id, kaneo_user_id)`, then their
+  exact keys by the `kv_store` primary key. A `LIKE` on the key prefix cannot use that index under
+  the database's default collation, and it would read every widget session.
 - Embed preview: `kind` is `post`, `changelog`, `article` or `ticket`; `id` is the record ID, or the
   article slug as in the source. The portal and widget switches and the private-portal gate answer
   404 or 403 first, as on every customer route. Then each kind applies its own customer rule:
@@ -296,8 +299,10 @@ customer audience), `getEmailChannelStatusFn`, `attributeBreakdownFn`.
   sign-off route; add one if the inbox needs an immediate offline.
 - Presence: the portal route is closed while the portal or its support switch is off (404). The
   source answers every caller.
-- Embed preview: a closed portal or widget is 404 and a denied private portal is 403, as on every
-  customer route. The source answers `{ unavailable: true }` for both.
+- Embed preview: a closed portal or widget is 404 and a denied private portal is 403, as on the
+  customer feedback routes. The source answers `{ unavailable: true }` for both. On a private portal
+  this also refuses an anonymous widget visitor's own ticket card (403), which the widget ticket
+  routes still show: stricter, not a leak.
 - Embed preview: no teammate route. A teammate reads posts, entries, articles and tickets through
   the teammate routes; on a customer route a teammate is a customer (the contract checks it).
 - Embed preview: the post card has no tags, author or avatar, and the ticket card has the public
@@ -307,7 +312,9 @@ customer audience), `getEmailChannelStatusFn`, `attributeBreakdownFn`.
   `provider` is null when more than one provider is configured; the source throws.
 - Attribute breakdown: SQL counts instead of reading every row into memory, at most 100 values with
   `truncated`, and a key that matches the attribute key pattern (`^[a-z0-9_.-]+$`, at most 64).
-  A conversation counts once for a value that its multi-select repeats.
+  A conversation counts once for a value that its multi-select repeats. A conversation with no
+  counted value (`null`, `""`, `[]`, or an array of only those) is unset, so `unset` and the values
+  cover every conversation of the window. The source counts `[null]` as the value "null".
 
 ### Blocked: needs a framework seam
 
@@ -340,6 +347,7 @@ Smallest seams that would unblock them (lane X1 or lane Z decides):
 - `support/customer/index.fixture.ts`: the embed fixtures and the presence fixture export, so the
   contract suite and the portal-off test find them.
 - `support/customer/customer.test.ts`: imports `withinOfficeHours` from its new module.
+- `support/customer/tickets.ts`: exports `mine`, the requester rule, so the ticket card reuses it.
 - `support/customer/ROUTES.md`, `support/TICKETS.md`: rows that pointed at these entry points.
 
 ## Not ported in this slice
