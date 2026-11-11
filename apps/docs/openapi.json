@@ -84543,6 +84543,127 @@
         }
       }
     },
+    "/quills/{workspaceId}/integrations/azure-devops/connection": {
+      "put": {
+        "operationId": "saveQuillsAzureDevopsKey",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Connect Azure DevOps with a personal access token",
+        "description": "Checks the token with one request that lists the organization's projects on dev.azure.com. The token is stored encrypted and never returned. A rejected token or organization returns 400; an unreachable provider returns 502.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "pattern": "^[\\x21-\\x7e]+$"
+                  },
+                  "organization": {
+                    "type": "string",
+                    "maxLength": 50,
+                    "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,48}[A-Za-z0-9])?$"
+                  }
+                },
+                "required": [
+                  "token",
+                  "organization"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The connection without its token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "integration": {
+                      "$ref": "#/components/schemas/QuillsIntegrationSummary"
+                    }
+                  },
+                  "required": [
+                    "integration"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Azure DevOps rejected the token or the organization",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient permission",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Set NOTIFICATION_SECRET_ENCRYPTION_KEY first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          },
+          "502": {
+            "description": "The provider could not be reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/quills/{workspaceId}/integrations/shortcut/connection": {
       "put": {
         "operationId": "saveQuillsShortcutToken",

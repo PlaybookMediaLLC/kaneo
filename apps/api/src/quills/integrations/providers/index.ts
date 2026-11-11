@@ -1,6 +1,7 @@
 // Route-module helper: framework/boundaries.test.ts checks its imports like a module that uses ../framework/define-route.
 import { ProviderCallError } from "../../framework/integration-config";
 import type { OAuthConnect, OAuthProvider } from "../oauth-providers";
+import { azureDevops } from "./azure-devops";
 import { discord } from "./discord";
 import { github } from "./github";
 import { gitlab } from "./gitlab";
@@ -21,6 +22,7 @@ export const oauthProviders = {
   discord,
   jira,
   linear,
+  azure_devops: azureDevops,
 } satisfies Record<string, OAuthProvider>;
 type Registry = typeof oauthProviders;
 export const oauthProvider = (type: string): OAuthProvider | undefined =>

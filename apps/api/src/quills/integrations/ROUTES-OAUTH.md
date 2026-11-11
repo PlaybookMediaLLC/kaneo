@@ -189,7 +189,43 @@ External effects:          token exchange and refresh (api.linear.app/oauth/toke
 
 ### Azure DevOps
 
-Filled by lane P1.
+```
+Tables and owning schema:  quills: integrations, events, job_queue, audit_log. public: none.
+Actor and workspace:       authenticated context.
+Permissions:               workspace:read + quills:manage_settings.
+Transactions:              connect: `load` checks the token with no transaction open, then one scoped
+                           transaction writes the connection and its `integration.connected` event.
+                           Destinations: read, call Azure DevOps, then a handler transaction that
+                           writes nothing (a personal access token has no refresh).
+External effects:          project and work item type lists (dev.azure.com). No work item is created.
+```
+
+| Source function | operationId | Route | Action | Tests |
+|---|---|---|---|---|
+| `connectAzureDevOpsFn` | `saveQuillsAzureDevopsKey` | `PUT /integrations/azure-devops/connection` (`token` ≤ 500, `organization` ≤ 50) | manage_settings | contract, rollback; `providers/azure-devops.test.ts` |
+| `fetchAzureDevOpsProjectsFn` | `listQuillsIntegrationDestinations` | `GET /integrations/{integrationId}/destinations?kind=project` (or no `kind`) | manage_settings | contract (GitHub); `providers/azure-devops.test.ts` |
+| `fetchAzureDevOpsWorkItemTypesFn` | `listQuillsIntegrationDestinations` | `GET /integrations/{integrationId}/destinations?kind=work-item-type&parent=<project name>` | manage_settings | `providers/azure-devops.test.ts` |
+
+- A key provider: no OAuth connect route, no callback and no OAuth app credentials. The token is a
+  personal access token, sent as `Basic base64(":" + token)`. It is sealed before the check and never
+  returned.
+- The organization is letters, digits and inner hyphens (at most 50). The route refuses any other value
+  (400) before a call. Each list checks the stored value again; a bad value answers 409 with no call.
+- The destination ID is the project or work item type name, as in the source. The project name is
+  encoded in the path. A work item type list needs a project that the project list contains (404
+  otherwise).
+- On connect, Azure DevOps 401 or 403 answers 400. An answer without a list (for example a sign-in
+  page) is 502.
+- Tests against the local provider server: connect, ten bad organization names with no call, a rejected
+  token, both kinds, a foreign project, a bad stored organization, malformed answers (502).
+
+| Difference from the source | Reason |
+|---|---|
+| The body takes the organization name, not `organizationUrl` | The name enters the URL; a strict pattern checks it. The host is always `dev.azure.com`. |
+| No `*.visualstudio.com` organization URLs | The host is fixed. The same organization is on `dev.azure.com`. |
+| `config` holds `organization` only, not `organizationUrl` and `organizationName` | One value builds every URL. |
+| No `events` and no status sync | Out of scope for #131. |
+| A rejected token is 400 with a fixed message; the source returned the provider error | Provider text never reaches a response. |
 
 ### Asana
 

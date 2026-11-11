@@ -1,6 +1,7 @@
 export * from "./channels.fixture";
 export * from "./external-links.fixture";
 export * from "./freshdesk.fixture";
+export * from "./providers/azure-devops.fixture";
 export * from "./integrations.fixture";
 export * from "./make.fixture";
 export * from "./n8n.fixture";
