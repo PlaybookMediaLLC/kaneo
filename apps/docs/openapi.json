@@ -84736,7 +84736,7 @@
           "Quills"
         ],
         "summary": "Save the OAuth app credentials for a provider",
-        "description": "Discord also needs the bot token. Secrets are stored encrypted and never returned. Register the returned redirect URI in the provider app.",
+        "description": "A provider whose bot posts messages (Discord) also needs the bot token. Secrets are stored encrypted and never returned. Register the returned redirect URI in the provider app.",
         "parameters": [
           {
             "schema": {
@@ -85486,7 +85486,7 @@
           "Quills"
         ],
         "summary": "Search issues in a repository or project of an OAuth connection",
-        "description": "At most 20 results, only in a repository or project that is one of the integration's channels. Search qualifiers are ignored. Calls the provider. GitHub and GitLab only.",
+        "description": "At most 20 results, only in a repository or project that is one of the integration's channels. Search qualifiers are ignored. Calls the provider. Only for a provider with item search; 409 otherwise.",
         "parameters": [
           {
             "schema": {

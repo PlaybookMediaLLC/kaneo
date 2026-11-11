@@ -22,7 +22,7 @@ export type Provider = {
   events: DeliveredEvent[];
   /** True when the provider sends to targets inside the account (channels), not to the connection. */
   channels: boolean;
-  /** The webhook hosts, when the provider accepts only its own. */
+  /** The provider's own hosts: a webhook URL must use one (Make, Zapier), and an OAuth provider calls only these. */
   hosts?: RegExp;
 };
 

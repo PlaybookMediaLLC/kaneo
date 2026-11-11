@@ -12,6 +12,7 @@ import {
 
 export const discord = {
   name: "Discord",
+  hosts: /^discord\.com$/,
   category: "notifications",
   description: "Post feedback events to Discord channels.",
   events: ["post.created", "post.status_changed", "comment.created"],

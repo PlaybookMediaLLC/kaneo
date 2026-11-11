@@ -15,6 +15,7 @@ import {
 
 export const slack = {
   name: "Slack",
+  hosts: /^slack\.com$/,
   category: "notifications",
   description: "Post feedback events to Slack channels.",
   events: ["post.created", "post.status_changed", "comment.created"],

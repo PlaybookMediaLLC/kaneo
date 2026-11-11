@@ -17,6 +17,7 @@ import {
 
 export const gitlab = {
   name: "GitLab",
+  hosts: /^gitlab\.com$/,
   category: "issue_tracking",
   description: "Create GitLab issues from new feedback and sync their status.",
   events: ["post.created"],

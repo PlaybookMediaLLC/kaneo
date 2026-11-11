@@ -76,7 +76,7 @@ const saveCredentials = defineQuillsRoute({
   operationId: "saveQuillsPlatformCredentials",
   summary: "Save the OAuth app credentials for a provider",
   description:
-    "Discord also needs the bot token. Secrets are stored encrypted and never returned. Register the returned redirect URI in the provider app.",
+    "A provider whose bot posts messages (Discord) also needs the bot token. Secrets are stored encrypted and never returned. Register the returned redirect URI in the provider app.",
   action: "manage_settings",
   body: typeQuery.extend({
     // Nested: the OAuth client ID is a provider value, not an ID in this workspace.
@@ -324,8 +324,11 @@ const callback = defineQuillsRoute({
   },
 });
 
-/** A connection of this provider family with its secrets, for a provider call. 404 otherwise. */
-async function oauthConnection(
+/**
+ * A connection of this provider family with its secrets, for a provider call. 404 otherwise. A route
+ * module of a provider capability (for example contact lookup) uses this, withToken and keepRefreshed.
+ */
+export async function oauthConnection(
   db: Database,
   id: z.output<typeof integrationParams>["integrationId"],
 ) {
@@ -388,7 +391,7 @@ type Connection = {
  * A provider call with a fresh token. A failure after a refresh keeps the refreshed tokens: the
  * handler stores them and the route answers the failure after commit (GitLab rotates the refresh token).
  */
-async function withToken<T>(
+export async function withToken<T>(
   prepared: {
     type: string;
     secrets: Record<string, string>;
@@ -528,7 +531,7 @@ const searchItems = defineQuillsRoute({
   operationId: "searchQuillsExternalItems",
   summary: "Search issues in a repository or project of an OAuth connection",
   description:
-    "At most 20 results, only in a repository or project that is one of the integration's channels. Search qualifiers are ignored. Calls the provider. GitHub and GitLab only.",
+    "At most 20 results, only in a repository or project that is one of the integration's channels. Search qualifiers are ignored. Calls the provider. Only for a provider with item search; 409 otherwise.",
   // Linking a post to an issue is an update; viewers do not search the connected account.
   action: "update",
   params: integrationParams,

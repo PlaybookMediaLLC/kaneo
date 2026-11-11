@@ -78,6 +78,8 @@ type KeyConnect = {
 };
 /** A provider's catalog entry (catalog.ts), how it connects and its API calls. */
 export type OAuthProvider = Provider & {
+  /** Every host that the provider's calls reach. Tests send these hosts to a local provider server. */
+  hosts: RegExp;
   /** Platform credential fields. `clientSecret` and `botToken` are secret. */
   credentials: readonly string[];
   /** Targets for channels: repositories, projects or chat channels. */

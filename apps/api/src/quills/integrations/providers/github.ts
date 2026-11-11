@@ -21,6 +21,7 @@ const githubHeaders = (token: string) => ({
 
 export const github = {
   name: "GitHub",
+  hosts: /^(api\.)?github\.com$/,
   category: "issue_tracking",
   description: "Create GitHub issues from new feedback and sync their status.",
   events: ["post.created"],
