@@ -47,7 +47,8 @@ export function parseWebsiteInput(site: string): URL | null {
     const url = new URL(
       /^[a-z][a-z\d+.-]*:(?!\d)/i.test(value) ? value : `https://${value}`,
     );
-    return isStandardWebsiteUrl(url) ? url : null;
+    // A longer name is no DNS name; it cannot be stored as the lookup domain either.
+    return isStandardWebsiteUrl(url) && url.hostname.length <= 253 ? url : null;
   } catch {
     return null;
   }
@@ -198,7 +199,8 @@ function iconRank(url: string, size: number | null, type: string | null) {
 
 /**
  * The logo candidates of a page's head, in fetch order and at most MAX_IMAGES, and its theme color.
- * Linear patterns over at most PAGE_BYTES: a hostile page must not hold the event loop.
+ * Linear patterns over at most PAGE_BYTES: a hostile page must not hold the event loop. A tag pattern
+ * stops at the next `<`, so a tag with no `>` cannot make every later start scan to the end.
  */
 export function readHead(html: string, base: string) {
   const end = html.search(/<\/head\s*>/i);
@@ -208,7 +210,7 @@ export function readHead(html: string, base: string) {
   let twitter: string | null = null;
   let color: string | null = null;
   let colorPriority = 0;
-  for (const [tag] of head.matchAll(/<meta\s[^>]*>/gi)) {
+  for (const [tag] of head.matchAll(/<meta\s[^<>]*>/gi)) {
     const property = attribute(tag, "property")?.toLowerCase();
     const name = attribute(tag, "name")?.toLowerCase();
     const content = attribute(tag, "content");
@@ -231,7 +233,7 @@ export function readHead(html: string, base: string) {
     }
   }
   let icons = 0;
-  for (const [tag] of head.matchAll(/<link\s[^>]*>/gi)) {
+  for (const [tag] of head.matchAll(/<link\s[^<>]*>/gi)) {
     if (icons >= MAX_ICONS) break;
     const rel = (attribute(tag, "rel") ?? "").toLowerCase().split(/\s+/);
     const touch =
@@ -427,7 +429,8 @@ export async function fetchWebsiteBranding(
 /**
  * Writes the logo under a new key of this workspace's logo namespace, then verifies it under the
  * shared verification lease. The route's handler must call holdVerifiedUpload before it writes the
- * reference.
+ * reference. `verified` false: the write or the check failed after the key was made, so the object
+ * may exist with no lease. The route must queue the key.
  */
 export async function storeLogo(workspaceId: string, logo: WebsiteLogo) {
   const size = logo.bytes.length;
@@ -437,24 +440,36 @@ export async function storeLogo(workspaceId: string, logo: WebsiteLogo) {
     contentType: logo.contentType,
     size,
   });
-  // The URL carries a signature: keep it out of HTTP telemetry.
-  const put = await withoutOutboundTelemetry(() =>
-    fetch(upload.uploadUrl, {
-      method: "PUT",
-      headers: upload.headers,
-      body: new Uint8Array(logo.bytes),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    }),
-  );
-  void put.body?.cancel().catch(() => {});
-  if (!put.ok) throw new Error(`Object storage answered ${put.status}`);
-  const verified = await verifyUpload(workspaceId, ["logo"], {
+  const stored = {
     key: upload.key,
     contentType: logo.contentType,
     size,
-  });
-  return {
-    ...verified,
     sha256: createHash("sha256").update(logo.bytes).digest("hex"),
   };
+  try {
+    // The URL carries a signature: keep it out of HTTP telemetry.
+    const put = await withoutOutboundTelemetry(() =>
+      fetch(upload.uploadUrl, {
+        method: "PUT",
+        headers: upload.headers,
+        body: new Uint8Array(logo.bytes),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      }),
+    );
+    void put.body?.cancel().catch(() => {});
+    if (!put.ok) throw new Error(`Object storage answered ${put.status}`);
+    const { deadline } = await verifyUpload(workspaceId, ["logo"], {
+      key: upload.key,
+      contentType: logo.contentType,
+      size,
+    });
+    return { ...stored, deadline, verified: true };
+  } catch (error) {
+    // The message names no URL and no key.
+    console.warn(
+      "Website branding: the logo was not stored:",
+      (error as Error).message,
+    );
+    return { ...stored, deadline: 0, verified: false };
+  }
 }
