@@ -101,7 +101,7 @@ export function uptimeDays(
 }
 
 /** Uptime for the live components among `ids`, from the events in the window and the status at its start. */
-async function uptimeSeriesFor(
+export async function uptimeSeriesFor(
   db: Db,
   ids: StatusComponentId[],
   windowDays: number,
