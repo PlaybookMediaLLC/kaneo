@@ -136,15 +136,9 @@ async function sendingIdentity(
 /**
  * The event's message (or `target`, a copy the entry names) when it is a live, customer-visible
  * agent message with text on an email conversation, with that conversation. A message with only
- * an embed (a shared post) has no text to mail. `anyChannel`: the first message of a conversation
- * that a teammate started, which the source mails on every channel.
+ * an embed (a shared post) has no text to mail.
  */
-async function emailReply(
-  db: Database,
-  event: DeliveryEvent,
-  target?: string,
-  anyChannel = false,
-) {
+async function emailReply(db: Database, event: DeliveryEvent, target?: string) {
   const messageId = (target ??
     (event.entityType === "conversation_message"
       ? event.entityId
@@ -178,7 +172,7 @@ async function emailReply(
     .select()
     .from(conversations)
     .where(eq(conversations.id, message.conversationId));
-  return conversation && (anyChannel || conversation.channel === "email")
+  return conversation?.channel === "email"
     ? { message, conversation }
     : undefined;
 }
@@ -266,51 +260,47 @@ async function threading(
 
 /**
  * The customer's mail copy of a teammate reply on an email conversation (or of a reply-all copy,
- * `target`), or of the first message of a conversation that a teammate started. Read at send time:
- * the message must still be a live, customer-visible agent message, and the address is the
- * conversation's captured address, else the customer's contact or profile address.
+ * `target`). Read at send time: the message must still be a live, customer-visible agent message,
+ * and the address is the conversation's captured address, else the customer's contact or profile
+ * address.
  */
-const messageMail =
-  (
-    direction: "agent_reply" | "agent_started",
-  ): NonNullable<Subscribers["mail"]> =>
-  async (db, event, _principalId, target) => {
-    const started = direction === "agent_started";
-    const reply = await emailReply(db, event, target, started);
-    if (!reply) return undefined;
-    const { message, conversation } = reply;
-    const to = await visitorAddress(db, conversation);
-    const workspace = await workspaceOf(db);
-    if (!to || !workspace) return undefined;
-    const from = await sendingIdentity(db, conversation);
-    const thread = await threading(db, workspace, conversation.id, message);
-    return {
-      type: "conversation_reply",
-      emailType: started
-        ? "ConversationStartedEmail"
-        : "ConversationReplyEmail",
-      to,
-      conversationId: conversation.id,
-      send: (address) =>
-        sendConversationMessageEmail({
-          // Sealed: the address read from the conversation and its visitor at send time.
-          to: address as SealedEmail,
-          direction,
-          senderName: message.author ?? workspace.name,
-          messagePreview: clip(message.content, 500),
-          ctaUrl: customerConversationUrl(workspace.id, conversation.id),
-          workspaceName: workspace.name,
-          // A reply is always on an email conversation; a started one keeps the messenger card.
-          channel: conversation.channel,
-          correspondence: conversation.channel === "email",
-          conversationSubject: conversation.subject,
-          conversationId: conversation.id,
-          from,
-          ...thread,
-        }),
-    };
+const replyMail: NonNullable<Subscribers["mail"]> = async (
+  db,
+  event,
+  _principalId,
+  target,
+) => {
+  const reply = await emailReply(db, event, target);
+  if (!reply) return undefined;
+  const { message, conversation } = reply;
+  const to = await visitorAddress(db, conversation);
+  const workspace = await workspaceOf(db);
+  if (!to || !workspace) return undefined;
+  const from = await sendingIdentity(db, conversation);
+  const thread = await threading(db, workspace, conversation.id, message);
+  return {
+    type: "conversation_reply",
+    emailType: "ConversationReplyEmail",
+    to,
+    conversationId: conversation.id,
+    send: (address) =>
+      sendConversationMessageEmail({
+        // Sealed: the address read from the conversation and its visitor at send time.
+        to: address as SealedEmail,
+        direction: "agent_reply",
+        senderName: message.author ?? workspace.name,
+        messagePreview: clip(message.content, 500),
+        ctaUrl: customerConversationUrl(workspace.id, conversation.id),
+        workspaceName: workspace.name,
+        channel: "email",
+        correspondence: true,
+        conversationSubject: conversation.subject,
+        conversationId: conversation.id,
+        from,
+        ...thread,
+      }),
   };
-const replyMail = messageMail("agent_reply");
+};
 
 /** The live note's mentioned principals; fan-out keeps current teammates and drops the author. */
 const mentioned: Subscribers["recipients"] = async (db, event) => {
@@ -555,13 +545,6 @@ export const supportSubscribers: Partial<Record<string, Subscribers>> = {
     // Decided at fan-out, so a messenger message or a visitor message queues no mail job.
     direct: async (db, event) => Boolean(await emailReply(db, event)),
     mail: replyMail,
-  },
-  // The first message of a conversation that a teammate started (startQuillsAgentConversation).
-  "conversation.agent_started": {
-    recipients: noRecipients,
-    direct: async (db, event) =>
-      Boolean(await emailReply(db, event, undefined, true)),
-    mail: messageMail("agent_started"),
   },
   "message.note_created": {
     recipients: mentioned,
