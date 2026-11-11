@@ -17,7 +17,10 @@ import { auditLog } from "../../database/quills/schema/audit-log";
 import { connectors } from "../../database/quills/schema/connectors";
 import type { BaseVariables } from "../../openapi";
 import router from "..";
-import { openCredentials } from "../framework/integration-config";
+import {
+  openCredentials,
+  sealCredentials,
+} from "../framework/integration-config";
 import { mintOAuthState } from "../framework/signed";
 import { harness } from "../jobs/handlers/harness.fixture";
 import publicRouter from "../public";
@@ -549,6 +552,33 @@ describe.skipIf(!url)("assistant connectors", () => {
         url: `${PUBLIC_ORIGIN}/open/mcp`,
         secrets: null,
       });
+    });
+
+    it("registers again when the stored client has another callback URL", async () => {
+      const created = await add("Docs moved api", "/oauth/mcp", {
+        authMode: "oauth",
+      });
+      const id = created.body.id as string;
+      await h.system(h.a, (db) =>
+        db
+          .update(connectors)
+          .set({
+            secrets: sealCredentials({
+              client: JSON.stringify({
+                client_id: "old-client",
+                redirect_uris: ["https://old.example.test/callback"],
+              }),
+            }),
+          })
+          .where(eq(connectors.id, id as never)),
+      );
+      edge.requests = [];
+      const res = await call(`/assistant/connectors/${id}/oauth`, "POST");
+      expect(res.status).toBe(200);
+      expect(
+        new URL(res.body.authorizationUrl).searchParams.get("client_id"),
+      ).toBe("contract-client");
+      expect(edge.requests.some((r) => r.path === "/register")).toBe(true);
     });
 
     it("refuses an authorization endpoint that is not HTTPS", async () => {
