@@ -182,9 +182,9 @@ const server = createServer((request, response) => {
     if (edge.gate && raw.includes('"tools/list"')) await edge.gate;
     // Headers, then nothing: the client's deadline must end the request.
     if (path === "/stall/mcp" && request.method === "POST")
-      return void response.writeHead(200, {
-        "content-type": "text/event-stream",
-      });
+      return void response
+        .writeHead(200, { "content-type": "text/event-stream" })
+        .flushHeaders();
     const result = answer(request.method ?? "GET", path, raw, authorization);
     response.writeHead(result.status, {
       ...(result.body !== undefined && { "content-type": "application/json" }),
