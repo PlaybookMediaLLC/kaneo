@@ -2,7 +2,9 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 import { inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
+import { eq } from "drizzle-orm";
 import { settings } from "../../database/quills/schema/auth";
+import { tickets } from "../../database/quills/schema/tickets";
 import { changelogEntries } from "../../database/quills/schema/changelog";
 import { posts } from "../../database/quills/schema/posts";
 import * as kaneo from "../../database/schema";
@@ -72,6 +74,14 @@ const unavailable = {
   changelog: null,
   article: null,
   ticket: null,
+};
+
+/** Writes A's portal settings. */
+const setPortal = (config: object) => {
+  const env = contractEnv();
+  return env.scoped(env.a, (db) =>
+    db.update(settings).set({ portalConfig: JSON.stringify(config) }),
+  );
 };
 
 /** IDs of the rows in A whose titles a customer must never read. */
@@ -179,6 +189,73 @@ describe.skipIf(!url)("Quills embed previews", () => {
       [rows.foreignTicket.ticketId, env.customerA],
     ])
       expect((await embed("ticket", id!, { user })).body).toEqual(unavailable);
+
+    // The caller's own ticket that is internal, or deleted, is not a requester ticket.
+    for (const change of [
+      { type: "back_office" as const },
+      { deletedAt: new Date() },
+    ]) {
+      const other = await conversationOf(env, env.a, caller.principalId);
+      const hidden = await ticketOf(
+        env,
+        env.a,
+        caller.principalId,
+        other.conversationId,
+      );
+      await env.scoped(env.a, (db) =>
+        db.update(tickets).set(change).where(eq(tickets.id, hidden.ticketId)),
+      );
+      const res = await embed("ticket", hidden.ticketId, {
+        user: env.customerA,
+      });
+      expect(res.body).toEqual(unavailable);
+      expect(JSON.stringify(res.body)).not.toContain(hidden.title);
+    }
+
+    // The portal's support switch off: the ticket card is unavailable, the route still answers.
+    await setPortal({ enabled: true, support: { enabled: false } });
+    try {
+      expect(
+        (await embed("ticket", ticket.ticketId, { user: env.customerA })).body,
+      ).toEqual(unavailable);
+    } finally {
+      await setPortal({ enabled: true });
+    }
+  });
+
+  it("shows a widget visitor's own ticket, and nothing to another visitor", async () => {
+    const env = contractEnv();
+    const caller = await callerOf(env, "widget");
+    const mine = await conversationOf(env, env.a, caller.principalId);
+    const ticket = await ticketOf(
+      env,
+      env.a,
+      caller.principalId,
+      mine.conversationId,
+    );
+    const own = await embed("ticket", ticket.ticketId, {
+      token: caller.bearer,
+      surface: "widget",
+    });
+    expect(own.body).toMatchObject({
+      unavailable: false,
+      ticket: { ticketId: ticket.ticketId, title: ticket.title },
+    });
+    const other = await env.widgetVisitor(env.a);
+    const res = await embed("ticket", ticket.ticketId, {
+      token: other.token,
+      surface: "widget",
+    });
+    expect(res.body).toEqual(unavailable);
+    expect(JSON.stringify(res.body)).not.toContain(ticket.title);
+  });
+
+  it("refuses an ID with a control character before any query", async () => {
+    const env = contractEnv();
+    for (const kind of ["article", "post"])
+      expect(
+        (await embed(kind, "x\u0000y", { user: env.customerA })).status,
+      ).toBe(400);
   });
 
   it("shows a published article and hides the others", async () => {
@@ -197,6 +274,22 @@ describe.skipIf(!url)("Quills embed previews", () => {
       help.b.published.slug,
     ])
       expect((await embed("article", slug)).body).toEqual(unavailable);
+
+    // The help center off: the article card is unavailable, the portal route still answers.
+    await env.scoped(env.a, async (db) => {
+      const [row] = await db
+        .select({ flags: settings.featureFlags })
+        .from(settings);
+      await db.update(settings).set({
+        featureFlags: JSON.stringify({
+          ...JSON.parse(row?.flags ?? "{}"),
+          helpCenter: false,
+        }),
+      });
+    });
+    expect((await embed("article", help.a.published.slug)).body).toEqual(
+      unavailable,
+    );
   });
 
   it("serves the widget with a widget session", async () => {

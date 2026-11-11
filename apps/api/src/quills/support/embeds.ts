@@ -1,11 +1,6 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
-import {
-  isValidTypeId,
-  type ChangelogId,
-  type PostId,
-  type TicketId,
-} from "@kaneo/ids";
+import { isTypeId } from "@kaneo/ids";
 import { apiRouter, nullableResponseTimestamp, z } from "../../openapi";
 import { boards } from "../../database/quills/schema/boards";
 import { changelogEntries } from "../../database/quills/schema/changelog";
@@ -34,15 +29,13 @@ import {
 } from "../portal/feedback/viewer";
 import { preview } from "./conversation-model";
 import { requireSurface, type Customer } from "./customer/model";
+import { mine } from "./customer/tickets";
 import { stageLabels } from "./ticket-view";
 
 // Embed previews for customers: a card for a post, a changelog entry, a help-center article or a
 // ticket that rich text or a message embeds. Each kind reuses the customer read rule of its own
 // routes, so a card never shows what the caller could not open. A record the caller may not see,
 // or that does not exist, answers { unavailable: true } and names nothing.
-
-const KINDS = ["post", "changelog", "article", "ticket"] as const;
-type Kind = (typeof KINDS)[number];
 
 const card = z.object({
   title: z.string(),
@@ -84,10 +77,21 @@ const response = z.object({
     .nullable(),
 });
 type Preview = z.input<typeof response>;
-const none = { post: null, changelog: null, article: null, ticket: null };
+type Cards = Omit<Preview, "unavailable">;
+type Link = (path: string) => string;
+const none: Cards = {
+  post: null,
+  changelog: null,
+  article: null,
+  ticket: null,
+};
 const unavailable: Preview = { unavailable: true, ...none };
 const excerpt = (text: string | null | undefined) =>
   text?.trim() ? preview(text.trim().replace(/\s+/g, " ")) : null;
+
+/** The answer with one kind's card, or unavailable. */
+const answer = <K extends keyof Cards>(kind: K, found: Cards[K]): Preview =>
+  found ? { unavailable: false, ...none, [kind]: found } : unavailable;
 
 /** A kind's own switch that is off (the help center, the tickets tab) reads as unavailable. */
 async function unlessClosed<T>(work: () => Promise<T>) {
@@ -100,8 +104,13 @@ async function unlessClosed<T>(work: () => Promise<T>) {
   }
 }
 
-async function postCard(db: Database, viewer: Viewer, id: string) {
-  if (!isValidTypeId(id, "post")) return null;
+async function postCard(
+  db: Database,
+  viewer: Viewer,
+  id: string,
+  link: Link,
+): Promise<Cards["post"]> {
+  if (!isTypeId(id, "post")) return null;
   const visible = await visibleBoards(db, viewer);
   const [row] = await db
     .select({
@@ -123,7 +132,7 @@ async function postCard(db: Database, viewer: Viewer, id: string) {
     )
     .where(
       and(
-        eq(posts.id, id as PostId),
+        eq(posts.id, id),
         postVisible(
           viewer,
           visible.map((board) => board.id),
@@ -132,16 +141,21 @@ async function postCard(db: Database, viewer: Viewer, id: string) {
     )
     .limit(1);
   if (!row) return null;
-  const { content, ...rest } = row;
+  const { content, ...fields } = row;
   return {
-    ...rest,
+    ...fields,
     excerpt: excerpt(content),
-    path: `/b/${row.boardSlug}/posts/${row.postId}`,
+    url: link(`/b/${row.boardSlug}/posts/${row.postId}`),
   };
 }
 
-async function changelogCard(db: Database, viewer: Viewer, id: string) {
-  if (!isValidTypeId(id, "changelog")) return null;
+async function changelogCard(
+  db: Database,
+  viewer: Viewer,
+  id: string,
+  link: Link,
+): Promise<Cards["changelog"]> {
+  if (!isTypeId(id, "changelog")) return null;
   const [row] = await db
     .select({
       entryId: changelogEntries.id,
@@ -149,11 +163,9 @@ async function changelogCard(db: Database, viewer: Viewer, id: string) {
       publishedAt: shownAt,
     })
     .from(changelogEntries)
-    .where(
-      and(eq(changelogEntries.id, id as ChangelogId), entryVisible(viewer)),
-    )
+    .where(and(eq(changelogEntries.id, id), entryVisible(viewer)))
     .limit(1);
-  return row ? { ...row, path: `/changelog/${row.entryId}` } : null;
+  return row ? { ...row, url: link(`/changelog/${row.entryId}`) } : null;
 }
 
 async function articleCard(
@@ -161,7 +173,8 @@ async function articleCard(
   audience: Customer,
   caller: QuillsCaller,
   slug: string,
-) {
+  link: Link,
+): Promise<Cards["article"]> {
   return unlessClosed(async () => {
     const viewer = await openHelpCenter(db, caller, audience, undefined, {
       fallback: true,
@@ -178,7 +191,7 @@ async function articleCard(
       title: found.title,
       excerpt: excerpt(found.description) ?? excerpt(found.content),
       categorySlug: found.category.slug,
-      path: found.path,
+      url: link(found.path),
     };
   });
 }
@@ -188,12 +201,13 @@ async function ticketCard(
   audience: Customer,
   caller: QuillsCaller,
   id: string,
-) {
+  link: Link,
+): Promise<Cards["ticket"]> {
   const me = caller.principalId;
-  if (!me || !isValidTypeId(id, "ticket")) return null;
+  if (!me || !isTypeId(id, "ticket")) return null;
   return unlessClosed(async () => {
     await requireSurface(db, audience, caller, "tickets");
-    // The requester's own live customer ticket, as the requester ticket routes read it.
+    // The requester's own live customer ticket: the rule of the requester ticket routes.
     const [row] = await db
       .select({
         ticketId: tickets.id,
@@ -212,22 +226,15 @@ async function ticketCard(
           eq(ticketConversations.ticketType, "customer"),
         ),
       )
-      .where(
-        and(
-          eq(tickets.id, id as TicketId),
-          eq(tickets.requesterPrincipalId, me),
-          eq(tickets.type, "customer"),
-          isNull(tickets.deletedAt),
-        ),
-      )
+      .where(and(eq(tickets.id, id), mine(me)))
       .limit(1);
     if (!row) return null;
-    const { number, stage, ...rest } = row;
+    const { number, stage, ...fields } = row;
     return {
-      ...rest,
+      ...fields,
       reference: `#${number}`,
       stageLabel: stage ? (await stageLabels(db))[stage] : null,
-      path: row.conversationId ? `/support/${row.conversationId}` : null,
+      url: row.conversationId ? link(`/support/${row.conversationId}`) : null,
     };
   });
 }
@@ -247,11 +254,16 @@ export const embedRoutes = (audience: Customer) =>
           : "getQuillsEmbedPreview",
       summary: `Get an embed preview card for the ${title(audience).toLowerCase()}`,
       description:
-        "`id` is the post, changelog entry or ticket ID, or the article slug. A record the caller may not see, or that does not exist, answers unavailable: true. A ticket shows only to its requester.",
+        "`id` is the post, changelog entry or ticket ID, or the article slug (visible ASCII). A record the caller may not see, or that does not exist, answers unavailable: true. A ticket shows only to its requester.",
       action: "read",
       query: z.object({
-        kind: z.enum(KINDS),
-        id: z.string().min(1).max(200),
+        kind: z.enum(["post", "changelog", "article", "ticket"]),
+        // IDs and slugs are visible ASCII; a NUL byte would fail as a PostgreSQL text parameter.
+        id: z
+          .string()
+          .min(1)
+          .max(200)
+          .regex(/^[\x21-\x7e]+$/),
       }),
       response,
       responseDescription: "The card, or unavailable",
@@ -262,22 +274,21 @@ export const embedRoutes = (audience: Customer) =>
       handler: async ({ db, caller, query, workspaceId }) => {
         // The surface gates first: the portal or widget switch and the private portal answer 404 or 403.
         const viewer = await viewerFor(db, audience, caller);
-        const kind: Kind = query.kind;
-        const found =
-          kind === "post"
-            ? await postCard(db, viewer, query.id)
-            : kind === "changelog"
-              ? await changelogCard(db, viewer, query.id)
-              : kind === "article"
-                ? await articleCard(db, audience, caller, query.id)
-                : await ticketCard(db, audience, caller, query.id);
-        if (!found) return unavailable;
-        const { path, ...fields } = found;
-        return {
-          unavailable: false,
-          ...none,
-          [kind]: { ...fields, url: path && portalUrl(workspaceId, path) },
-        };
+        const link: Link = (path) => portalUrl(workspaceId, path);
+        const { kind, id } = query;
+        if (kind === "post")
+          return answer("post", await postCard(db, viewer, id, link));
+        if (kind === "changelog")
+          return answer("changelog", await changelogCard(db, viewer, id, link));
+        if (kind === "article")
+          return answer(
+            "article",
+            await articleCard(db, audience, caller, id, link),
+          );
+        return answer(
+          "ticket",
+          await ticketCard(db, audience, caller, id, link),
+        );
       },
     }),
   );
