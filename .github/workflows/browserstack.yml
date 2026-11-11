@@ -38,32 +38,43 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/ci/browserstack-change-classification.mjs
 
-      - name: Check BrowserStack credentials
-        if: steps.classify.outputs.skip_browserstack != 'true'
+      # One gate for both reasons to skip. Missing secrets skip the job instead of
+      # failing it, because a red main hides real breakage. A fork and a fresh
+      # checkout have no BrowserStack account.
+      - name: Decide whether to run BrowserStack
+        id: gate
         env:
           BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
           BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+          SKIP_BROWSERSTACK: ${{ steps.classify.outputs.skip_browserstack }}
         run: |
-          if [ -z "$BROWSERSTACK_USERNAME" ] || [ -z "$BROWSERSTACK_ACCESS_KEY" ]; then
-            echo '::error::Set BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY in repository Actions secrets.'
-            exit 1
+          if [ "$SKIP_BROWSERSTACK" = 'true' ]; then
+            echo '::notice::This change does not affect the browser smoke tests. Skipping BrowserStack.'
+            echo 'run=false' >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          if [ -z "$BROWSERSTACK_USERNAME" ] || [ -z "$BROWSERSTACK_ACCESS_KEY" ]; then
+            echo '::notice::Set BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY to run the browser smoke tests. Skipping BrowserStack.'
+            echo 'run=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo 'run=true' >> "$GITHUB_OUTPUT"
 
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-        if: steps.classify.outputs.skip_browserstack != 'true'
+        if: steps.gate.outputs.run == 'true'
         with:
           version: 12.18.0
       - run: pnpm --dir tests/e2e install --frozen-lockfile --ignore-scripts
-        if: steps.classify.outputs.skip_browserstack != 'true'
+        if: steps.gate.outputs.run == 'true'
 
       - name: Check browser-test dependency security regressions
-        if: steps.classify.outputs.skip_browserstack != 'true'
+        if: steps.gate.outputs.run == 'true'
         run: pnpm --dir tests/e2e test:security
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
-        if: steps.classify.outputs.skip_browserstack != 'true'
+        if: steps.gate.outputs.run == 'true'
       - name: Build this revision of Kaneo
-        if: steps.classify.outputs.skip_browserstack != 'true'
+        if: steps.gate.outputs.run == 'true'
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
@@ -74,34 +85,34 @@ jobs:
           cache-to: type=gha,mode=max,scope=browserstack
 
       - name: Create disposable test certificate
-        if: steps.classify.outputs.skip_browserstack != 'true'
+        if: steps.gate.outputs.run == 'true'
         run: |
           mkdir -p .cache/e2e-tls
           openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
             -keyout .cache/e2e-tls/key.pem -out .cache/e2e-tls/cert.pem \
             -subj '/CN=bs-local.com' -addext 'subjectAltName=DNS:bs-local.com'
       - name: Start disposable test instance
-        if: steps.classify.outputs.skip_browserstack != 'true'
+        if: steps.gate.outputs.run == 'true'
         run: docker compose up --no-build --wait --wait-timeout 180
       - name: Run browser smoke tests
-        if: steps.classify.outputs.skip_browserstack != 'true'
+        if: steps.gate.outputs.run == 'true'
         env:
           BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
           BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
         run: pnpm test:browserstack
 
       - name: Collect instance logs
-        if: failure() && steps.classify.outputs.skip_browserstack != 'true'
+        if: failure() && steps.gate.outputs.run == 'true'
         run: |
           mkdir -p .cache/e2e
           docker compose logs --no-color > .cache/e2e/instance.log
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        if: always() && steps.classify.outputs.skip_browserstack != 'true'
+        if: always() && steps.gate.outputs.run == 'true'
         with:
           name: browserstack-results
           path: .cache/e2e/
           if-no-files-found: ignore
           retention-days: 7
       - name: Stop disposable test instance
-        if: always() && steps.classify.outputs.skip_browserstack != 'true'
+        if: always() && steps.gate.outputs.run == 'true'
         run: docker compose down --volumes
