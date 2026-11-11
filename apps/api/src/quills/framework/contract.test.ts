@@ -22,6 +22,7 @@ import * as teamFixtures from "../teams.fixture";
 import * as taxonomyFixtures from "../feedback/taxonomy.fixture";
 import * as widgetFixtures from "../widget/index.fixture";
 import * as ticketFixtures from "../support/tickets-router.fixture";
+import * as supportFixtures from "../support/index.fixture";
 import {
   checkRoute,
   contractApp,
@@ -88,6 +89,7 @@ const fixtures: Record<string, Fixture> = {
   ...integrationFixtures,
   ...operationsFixtures,
   ...ticketFixtures,
+  ...supportFixtures,
 };
 const app = contractApp(quillsRouter, publicRouter);
 
