@@ -18,6 +18,7 @@ import { connectors } from "../../database/quills/schema/connectors";
 import type { BaseVariables } from "../../openapi";
 import router from "..";
 import { openCredentials } from "../framework/integration-config";
+import { mintOAuthState } from "../framework/signed";
 import { harness } from "../jobs/handlers/harness.fixture";
 import publicRouter from "../public";
 import {
@@ -306,6 +307,16 @@ describe.skipIf(!url)("assistant connectors", () => {
       bearerToken: BEARER,
     });
     expect(back.body.hasSecret).toBe(true);
+    // The same URL again (a settings form sends every field) keeps the token.
+    const same = await call(`/assistant/connectors/${id}`, "PATCH", {
+      url: `${PUBLIC_ORIGIN}/bearer/mcp`,
+      enabled: true,
+    });
+    expect(same.body).toMatchObject({ hasSecret: true });
+    const cleared = await call(`/assistant/connectors/${id}`, "PATCH", {
+      clearBearerToken: true,
+    });
+    expect(cleared.body.hasSecret).toBe(false);
   });
 
   it("does not store a result for a URL that changed during the refresh", async () => {
@@ -380,5 +391,180 @@ describe.skipIf(!url)("assistant connectors", () => {
           .status,
       ).toBe(404);
     expect(edge.requests).toEqual([]);
+  });
+
+  it("answers the create errors before it stores anything", async () => {
+    const refused = await add("Wrong bearer", "/bearer/mcp", {
+      authMode: "bearer",
+      bearerToken: "wrong-token",
+    });
+    expect(refused).toEqual({
+      status: 400,
+      body: { message: "The MCP server refused the bearer token." },
+    });
+    edge.requests = [];
+    const oauth = await add("Docs later", "/oauth/mcp", { authMode: "oauth" });
+    expect(oauth.body).toMatchObject({ status: "error", authMode: "oauth" });
+    expect(edge.requests).toEqual([]);
+    expect((await add("DOCS LATER", "/open/mcp")).status).toBe(409);
+    const names = await h.system(h.a, (db) =>
+      db
+        .select({ id: connectors.id })
+        .from(connectors)
+        .where(eq(connectors.name, "Wrong bearer")),
+    );
+    expect(names).toEqual([]);
+  });
+
+  it("stores tools whose names or texts jsonb would refuse", async () => {
+    const plain = { type: "object" };
+    edge.tools = [
+      { name: "constructor", inputSchema: plain },
+      {
+        name: "toString",
+        inputSchema: plain,
+        annotations: { readOnlyHint: true },
+      },
+      { name: "bad\u0000name", inputSchema: plain },
+      {
+        name: "cut",
+        title: "nul\u0000title",
+        description: `${"a".repeat(1999)}\u{1f600}tail`,
+        inputSchema: plain,
+      },
+      { name: "lone", inputSchema: { type: "object", description: "\ud800" } },
+    ];
+    const res = await add("Odd tools", "/open/mcp");
+    expect(res.status).toBe(200);
+    expect(
+      res.body.tools.map((tool: { name: string; policy: string }) => [
+        tool.name,
+        tool.policy,
+      ]),
+    ).toEqual([
+      ["constructor", "approval"],
+      ["toString", "always"],
+      ["cut", "approval"],
+      ["lone", "approval"],
+    ]);
+    const cut = res.body.tools[2];
+    expect(cut.title).toBe("nul�title");
+    expect(cut.description).toBe(`${"a".repeat(1999)}�`);
+    const [row] = await h.system(h.a, (db) =>
+      db
+        .select({ tools: connectors.tools })
+        .from(connectors)
+        .where(eq(connectors.id, res.body.id)),
+    );
+    expect(row!.tools[3]).not.toHaveProperty("inputSchema");
+  });
+
+  it("ends a stalled server at the 10-second deadline", async () => {
+    const started = Date.now();
+    const res = await add("Stalled", "/stall/mcp");
+    expect(res.status).toBe(502);
+    expect(Date.now() - started).toBeLessThan(15_000);
+  }, 20_000);
+
+  describe("OAuth failures", () => {
+    /** A new OAuth connector with a started authorization, and its callback. */
+    const started = async (name: string) => {
+      const created = await add(name, "/oauth/mcp", { authMode: "oauth" });
+      const id = created.body.id as string;
+      const start = await call(`/assistant/connectors/${id}/oauth`, "POST");
+      const authorize = new URL(start.body.authorizationUrl);
+      const callback = (query: Record<string, string> = { code: CODE }) =>
+        app.request(
+          `/quills-public/signed/oauth/connectors/${id}/callback?${new URLSearchParams(
+            { state: authorize.searchParams.get("state")!, ...query },
+          )}`,
+          { headers: { "x-test-user": h.owner } },
+        );
+      return { id, authorize, callback };
+    };
+
+    it("keeps a pending verifier through a refresh, so the PKCE check passes", async () => {
+      const { id, authorize, callback } = await started("Docs pkce");
+      edge.challenge = authorize.searchParams.get("code_challenge");
+      const refreshed = await call(
+        `/assistant/connectors/${id}/refresh`,
+        "POST",
+      );
+      expect(refreshed.body.lastError).toBe("Authorization required");
+      const done = await callback();
+      expect(done.status).toBe(200);
+      expect(((await done.json()) as any).connector.status).toBe("connected");
+    });
+
+    it("refuses a rejected code, a denied access and an unstarted authorization", async () => {
+      const { id, callback } = await started("Docs denied");
+      const before = await stored(id);
+      const rejected = await callback({ code: "wrong-code" });
+      expect(rejected.status).toBe(400);
+      expect(await rejected.json()).toEqual({
+        message: "The authorization server rejected the request.",
+      });
+      const denied = await callback({ error: "access_denied" });
+      expect(denied.status).toBe(400);
+      expect(await stored(id)).toEqual(before);
+      // A connector whose authorization never started.
+      const fresh = await add("Docs unstarted", "/oauth/mcp", {
+        authMode: "oauth",
+      });
+      const res = await app.request(
+        `/quills-public/signed/oauth/connectors/${fresh.body.id}/callback?${new URLSearchParams(
+          {
+            state: mintOAuthState({
+              workspaceId: h.a,
+              userId: h.owner,
+              type: `connector:${fresh.body.id}`,
+            }),
+            code: CODE,
+          },
+        )}`,
+        { headers: { "x-test-user": h.owner } },
+      );
+      expect(res.status).toBe(409);
+    });
+
+    it("does not store tokens for a URL that changed during the callback", async () => {
+      const { id, callback } = await started("Docs swapped");
+      edge.requests = [];
+      let release!: () => void;
+      edge.gate = new Promise((resolve) => (release = resolve));
+      const done = callback();
+      await vi.waitFor(() =>
+        expect(
+          edge.requests.filter(
+            (r) => r.method === "POST" && r.path === "/oauth/mcp",
+          ).length,
+        ).toBe(3),
+      );
+      await call(`/assistant/connectors/${id}`, "PATCH", {
+        url: `${PUBLIC_ORIGIN}/open/mcp`,
+      });
+      release();
+      expect((await done).status).toBe(409);
+      expect(await stored(id)).toEqual({
+        url: `${PUBLIC_ORIGIN}/open/mcp`,
+        secrets: null,
+      });
+    });
+
+    it("refuses an authorization endpoint that is not HTTPS", async () => {
+      edge.authorize = "http://203.0.113.10/authorize";
+      const created = await add("Docs plain", "/oauth/mcp", {
+        authMode: "oauth",
+      });
+      const res = await call(
+        `/assistant/connectors/${created.body.id}/oauth`,
+        "POST",
+      );
+      expect(res).toEqual({
+        status: 400,
+        body: { message: "The authorization server rejected the request." },
+      });
+      expect((await stored(created.body.id)).secrets).toBeNull();
+    });
   });
 });

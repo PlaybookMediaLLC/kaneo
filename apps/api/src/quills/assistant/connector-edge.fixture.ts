@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { connectors } from "../../database/quills/schema/connectors";
@@ -11,7 +12,8 @@ process.env.NOTIFICATION_SECRET_ENCRYPTION_KEY ||= "quills-contract-test-key";
  * The connector's HTTP edge for tests: a local MCP server with an OAuth authorization server. A URL
  * on PUBLIC_ORIGIN (a documentation address, so it passes the destination guard) reaches this server
  * at the socket; any other address gets no network. The guard still checks every URL first.
- * Paths: /open/mcp (no auth), /bearer/mcp (BEARER), /oauth/mcp (an access token from /token).
+ * Paths: /open/mcp (no auth), /bearer/mcp (BEARER), /oauth/mcp (an access token from /token),
+ * /stall/mcp (an event stream that never sends a result).
  */
 export const PUBLIC_ORIGIN = "https://203.0.113.10";
 export const BEARER = "contract-bearer-token";
@@ -34,10 +36,16 @@ export const edge = {
   requests: [] as { method: string; path: string; authorization: string }[],
   /** While set, tools/list waits for it: a test changes the connector during a call. */
   gate: null as Promise<void> | null,
+  /** While set, a code exchange must send the verifier of this S256 challenge. */
+  challenge: null as string | null,
+  /** The advertised authorization endpoint. */
+  authorize: `${PUBLIC_ORIGIN}/authorize`,
   reset() {
     this.tools = DEFAULT_TOOLS;
     this.requests = [];
     this.gate = null;
+    this.challenge = null;
+    this.authorize = `${PUBLIC_ORIGIN}/authorize`;
   },
 };
 
@@ -127,7 +135,7 @@ function answer(
       status: 200,
       body: {
         issuer: PUBLIC_ORIGIN,
-        authorization_endpoint: `${PUBLIC_ORIGIN}/authorize`,
+        authorization_endpoint: edge.authorize,
         token_endpoint: `${PUBLIC_ORIGIN}/token`,
         registration_endpoint: `${PUBLIC_ORIGIN}/register`,
         response_types_supported: ["code"],
@@ -144,8 +152,15 @@ function answer(
   if (path === "/token" && method === "POST") {
     const form = new URLSearchParams(raw);
     const grant = form.get("grant_type");
-    if (grant === "authorization_code" && form.get("code") === CODE)
-      return form.get("code_verifier") ? tokens() : { status: 400 };
+    const verifier = form.get("code_verifier") ?? "";
+    const s256 = createHash("sha256").update(verifier).digest("base64url");
+    if (
+      grant === "authorization_code" &&
+      form.get("code") === CODE &&
+      verifier &&
+      (!edge.challenge || s256 === edge.challenge)
+    )
+      return tokens();
     if (grant === "refresh_token" && form.get("refresh_token") === REFRESH)
       return tokens();
     return { status: 400, body: { error: "invalid_grant" } };
@@ -165,6 +180,11 @@ const server = createServer((request, response) => {
       authorization,
     });
     if (edge.gate && raw.includes('"tools/list"')) await edge.gate;
+    // Headers, then nothing: the client's deadline must end the request.
+    if (path === "/stall/mcp" && request.method === "POST")
+      return void response.writeHead(200, {
+        "content-type": "text/event-stream",
+      });
     const result = answer(request.method ?? "GET", path, raw, authorization);
     response.writeHead(result.status, {
       ...(result.body !== undefined && { "content-type": "application/json" }),

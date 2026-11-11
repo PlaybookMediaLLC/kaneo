@@ -1,4 +1,4 @@
-import { and, asc, eq, ne, or, sql } from "drizzle-orm";
+import { asc, eq, or, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
 import {
@@ -28,6 +28,7 @@ import {
   oauthState,
   type SignedVerifier,
 } from "../framework/signed";
+import { slugify } from "../content/help-center/shared";
 import { signedUrl } from "../integrations/oauth-providers";
 import { uniqueConflict } from "../support/conversation-model";
 import {
@@ -141,7 +142,10 @@ function view(row: Awaited<ReturnType<typeof selectDetail>>[number]) {
         description: tool.description ?? null,
         group,
         destructive: tool.annotations?.destructiveHint === true,
-        policy: overrides[tool.name] ?? groupDefaults[group],
+        // Own keys only: a tool named `constructor` must not read Object.prototype.
+        policy: Object.hasOwn(overrides, tool.name)
+          ? overrides[tool.name]!
+          : groupDefaults[group],
       } as const;
     }),
   };
@@ -152,23 +156,12 @@ const notFound = () =>
 const duplicate = uniqueConflict(
   "Another connector already uses a similar name",
 );
-/** The tool namespace: at most 20 characters, as the source's slugifyConnectorName. */
-const slugify = (name: string) =>
-  name
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 20) || "connector";
+/** The tool namespace: at most 20 characters, as in the source. */
+const slugOf = (name: string) => slugify(name, "connector").slice(0, 20);
 
 /** 409 when the limit is reached or another connector has this name or slug (ignoring case). */
-async function available(
-  db: Database,
-  name: string,
-  slug: string,
-  except?: ConnectorId,
-) {
-  if (!except && (await db.$count(connectors)) >= MAX_CONNECTORS)
+async function available(db: Database, name: string, slug: string) {
+  if ((await db.$count(connectors)) >= MAX_CONNECTORS)
     throw new HTTPException(409, {
       message: `A workspace has at most ${MAX_CONNECTORS} connectors`,
     });
@@ -176,12 +169,9 @@ async function available(
     .select({ id: connectors.id })
     .from(connectors)
     .where(
-      and(
-        or(
-          sql`lower(${connectors.slug}) = ${slug}`,
-          sql`lower(${connectors.name}) = lower(${name})`,
-        ),
-        except ? ne(connectors.id, except) : undefined,
+      or(
+        sql`lower(${connectors.slug}) = ${slug}`,
+        sql`lower(${connectors.name}) = lower(${name})`,
       ),
     )
     .limit(1);
@@ -194,10 +184,6 @@ async function available(
 /** Sealed secrets, or null for none. 409 when the instance key is missing. */
 const seal = (secrets: Secrets) =>
   Object.keys(secrets).length ? sealCredentials(secrets) : null;
-
-/** The connector's signed OAuth callback, which its OAuth client registers. */
-const callbackUrl = (id: string) =>
-  signedUrl(`/oauth/connectors/${id}/callback`);
 
 /** What `call` needs, read in `prepare`. `sealed` lets the handler see whether the secrets changed. */
 async function stored(db: Database, id: ConnectorId) {
@@ -218,7 +204,8 @@ async function stored(db: Database, id: ConnectorId) {
       url: row.url,
       authMode: row.authMode,
       secrets,
-      redirectUrl: callbackUrl(id),
+      // The connector's signed callback, which its OAuth client registers.
+      redirectUrl: signedUrl(`/oauth/connectors/${id}/callback`),
     },
   };
 }
@@ -389,7 +376,7 @@ const createConnector = defineQuillsRoute({
     entityId: connector.id,
   }),
   prepare: async ({ db, body }) => {
-    const slug = slugify(body.name);
+    const slug = slugOf(body.name);
     await available(db, body.name, slug);
     const secrets: Secrets = body.bearerToken
       ? { bearerToken: body.bearerToken }
@@ -481,18 +468,11 @@ const updateConnector = defineQuillsRoute({
   }),
   handler: async ({ db, params, body }) => {
     const [existing] = await db
-      .select({
-        name: connectors.name,
-        slug: connectors.slug,
-        url: connectors.url,
-        sealed: connectors.secrets,
-      })
+      .select({ url: connectors.url, sealed: connectors.secrets })
       .from(connectors)
       .where(eq(connectors.id, params.connectorId))
       .for("update");
     if (!existing) throw notFound();
-    const slug = body.name ? slugify(body.name) : existing.slug;
-    if (body.name) await available(db, body.name, slug, params.connectorId);
     const moved = body.url !== undefined && body.url !== existing.url;
     let secrets: string | null | undefined;
     if (moved || body.bearerToken || body.clearBearerToken) {
@@ -508,7 +488,8 @@ const updateConnector = defineQuillsRoute({
       .update(connectors)
       .set({
         name: body.name,
-        slug,
+        // The unique indexes on the name and the slug answer 409 (duplicate).
+        slug: body.name && slugOf(body.name),
         url: body.url,
         authMode: body.authMode,
         secrets,
@@ -560,8 +541,11 @@ const refreshConnector = defineQuillsRoute({
   handler: async ({ db, params, called }) => {
     const { prepared, found } = called;
     const current = await unchanged(db, params.connectorId, prepared);
+    // Tokens that a failed step dropped are not stored: a parallel refresh may hold the rotated ones.
     const changed =
-      JSON.stringify(found.secrets) !== JSON.stringify(prepared.target.secrets);
+      JSON.stringify(found.secrets) !==
+        JSON.stringify(prepared.target.secrets) &&
+      !(prepared.target.secrets.tokens && !found.secrets.tokens);
     const [row] = await db
       .update(connectors)
       .set({
@@ -656,7 +640,7 @@ const completeOAuth = defineQuillsRoute({
   operationId: "completeQuillsConnectorOAuth",
   summary: "Complete a connector's OAuth authorization",
   description:
-    "The authorization server redirects the browser here. The signed state must be unexpired, unused, for this connector and for the signed-in account, which must still hold quills:manage_settings in the state's workspace. Exchanges the code, then refreshes the connector's tools.",
+    "The authorization server redirects the browser here. The signed state must be unexpired, unused, for this connector and for the signed-in account, which must still hold quills:manage_settings in the state's workspace. Exchanges the code, then refreshes the connector's tools. `connected` means that the authorization is complete; the connector's own status tells whether its tools were read.",
   action: "manage_settings",
   params,
   query: z.object({
@@ -682,7 +666,7 @@ const completeOAuth = defineQuillsRoute({
     if (!query.code)
       throw new HTTPException(400, { message: "Access was not granted." });
     const prepared = await stored(db, params.connectorId);
-    if (!prepared.target.secrets.codeVerifier)
+    if (prepared.authMode !== "oauth" || !prepared.target.secrets.codeVerifier)
       throw new HTTPException(409, {
         message: "No authorization is in progress. Start it again.",
       });

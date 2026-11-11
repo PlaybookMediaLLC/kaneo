@@ -91,7 +91,7 @@ function edge() {
         : error instanceof OAuthError
           ? "rejected"
           : "unreachable";
-  return { fetch, failure };
+  return { fetch, failure, deadline };
 }
 
 const json = (value: string | undefined) => {
@@ -118,7 +118,13 @@ function oauthClient(secrets: Secrets, redirectUrl: string, state?: string) {
       token_endpoint_auth_method: "none",
     },
     ...(state && { state: () => state }),
-    clientInformation: () => json(secrets.client),
+    // A client registered for another callback URL (the API origin changed) registers again.
+    clientInformation: () => {
+      const info = json(secrets.client);
+      return info?.redirect_uris && !info.redirect_uris.includes(redirectUrl)
+        ? undefined
+        : info;
+    },
     saveClientInformation: (info) => {
       secrets.client = JSON.stringify(info);
     },
@@ -146,32 +152,47 @@ function oauthClient(secrets: Secrets, redirectUrl: string, state?: string) {
   return { provider, authorizationUrl: () => authorizationUrl };
 }
 
+/** A NUL or a lone surrogate (also one that a cut makes): jsonb refuses both. */
+const unstorable =
+  /\0|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g;
+const text = (value: string | undefined, max: number) =>
+  value?.slice(0, max).replace(unstorable, "�");
+
 type ListedTool = Awaited<ReturnType<Client["listTools"]>>["tools"][number];
 /** The stored part of a tool, bounded: the server is not trusted. */
 const bounded = (tools: ListedTool[]): DiscoveredTool[] =>
   tools
-    .filter((tool) => tool.name.length >= 1 && tool.name.length <= 128)
+    .filter(
+      (tool) =>
+        tool.name.length >= 1 &&
+        tool.name.length <= 128 &&
+        !tool.name.match(unstorable),
+    )
     .slice(0, MAX_TOOLS)
-    .map((tool) => ({
-      name: tool.name,
-      title: tool.title?.slice(0, 200),
-      description: tool.description?.slice(0, 2000),
-      annotations: {
-        readOnlyHint: tool.annotations?.readOnlyHint === true,
-        destructiveHint: tool.annotations?.destructiveHint === true,
-      },
-      inputSchema:
-        JSON.stringify(tool.inputSchema).length <= MAX_SCHEMA
-          ? tool.inputSchema
-          : undefined,
-    }));
+    .map((tool) => {
+      const schema = JSON.stringify(tool.inputSchema);
+      return {
+        name: tool.name,
+        title: text(tool.title, 200),
+        description: text(tool.description, 2000),
+        annotations: {
+          readOnlyHint: tool.annotations?.readOnlyHint === true,
+          destructiveHint: tool.annotations?.destructiveHint === true,
+        },
+        // JSON escapes a NUL or a lone surrogate as \u0000 or \udXXX.
+        inputSchema:
+          schema.length <= MAX_SCHEMA && !/\\u(0000|d[89a-f])/i.test(schema)
+            ? tool.inputSchema
+            : undefined,
+      };
+    });
 
 /**
  * Connects and lists the server's tools (the first page). `secrets` is the state after the step:
  * the SDK may have refreshed the OAuth tokens, or dropped tokens that the server refused.
  */
 export async function discover(target: Target) {
-  const { fetch, failure } = edge();
+  const { fetch, failure, deadline } = edge();
   const secrets = { ...target.secrets };
   const oauth =
     target.authMode === "oauth"
@@ -188,8 +209,10 @@ export async function discover(target: Target) {
           requestInit: { headers: { authorization: `Bearer ${bearer}` } },
         }),
       }),
+      // A stalled event stream does not fail the request: the deadline must end it too.
+      { signal: deadline },
     );
-    const listed = await client.listTools(undefined, { timeout: TIMEOUT_MS });
+    const listed = await client.listTools(undefined, { signal: deadline });
     return { secrets, tools: bounded(listed.tools) };
   } catch (error) {
     return { secrets, failure: failure(error) };
