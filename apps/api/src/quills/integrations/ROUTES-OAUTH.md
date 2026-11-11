@@ -169,7 +169,76 @@ Filled by lane P3.
 
 ### Microsoft Teams
 
-Filled by lane P4.
+Lane P4. Key `teams`, file `providers/teams.ts`. Connect and list only: delivery to a channel is out
+of scope for #131, so `events` and `statuses` stay empty.
+
+```
+Tables and owning schema:  quills: integration_platform_credentials (the OAuth app), integrations
+                           (sealed tokens), and the callback's kv_store, events, job_queue, audit_log.
+                           public: none.
+Actor and workspace:       the generic routes above: authenticated context; the callback uses the
+                           signed state.
+Permissions:               quills:manage_settings (connect, callback, destinations).
+Transactions:              no provider call in a transaction (prepare, call, handler).
+External effects:          requests to login.microsoftonline.com (token) and graph.microsoft.com
+                           (lists). Nothing is written in Microsoft.
+```
+
+Consent flow:
+
+1. Register the Microsoft Entra app as multitenant ("accounts in any organizational directory"). Add
+   the redirect URI of the credentials route as a Web redirect URI. Save the client ID and a client
+   secret with `saveQuillsPlatformCredentials`.
+2. The connect route returns
+   `https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize` with the delegated scopes
+   `Team.ReadBasic.All Channel.ReadBasic.All offline_access`. The `organizations` endpoint accepts work
+   and school accounts of any tenant. It refuses personal Microsoft accounts, which cannot use the
+   Teams Graph APIs.
+3. Microsoft marks none of these delegated scopes "admin consent required". A user can consent for
+   themselves when the tenant's user consent policy allows it.
+4. Many tenants restrict user consent (for example to verified publishers only, or to no apps). Then
+   Microsoft shows "Need admin approval" and sends no code. A tenant admin grants consent one time for
+   the organization: through the same connect, with "Consent on behalf of your organization", or in
+   the Microsoft Entra admin center (Enterprise applications, Permissions). Then any teammate can
+   connect.
+5. Failures, each with a fixed error. Microsoft's error text never reaches a response.
+   - The redirect has `error` (for example `access_denied` or `consent_required`) and no `code`: the
+     callback answers 400 "The provider did not grant access." It calls nothing.
+   - The token endpoint refuses the code (400, for example `invalid_grant` with AADSTS65001 when
+     consent was removed): 400 "The provider rejected the request."
+   - A refused refresh (400 or 401): 409 "The provider rejected the saved credentials. Reconnect."
+   - Graph refuses a list (403): 409 "The connected account may not do this in the provider."
+6. No application (app-only) permission and no bot registration. The lists use the signed-in user's
+   delegated token. Sending to a channel (`ChannelMessage.Send` or a bot) is delivery.
+7. A single-tenant app registration fails at the `organizations` endpoint (AADSTS50194). A tenant ID
+   option needs a connect field or a credential field. That is a follow-up.
+
+| operationId | Route | Action | Source | Tests |
+|---|---|---|---|---|
+| `startQuillsTeamsOAuthConnect` | `GET /oauth/teams/connect` | manage_settings | `getTeamsConnectUrl` | contract |
+| `listQuillsIntegrationDestinations` | `GET /integrations/{integrationId}/destinations` (or `?kind=team`) | manage_settings | `fetchTeamsTeamsFn` | contract, `providers/teams.test.ts` |
+| `listQuillsIntegrationDestinations` | `…/destinations?kind=channel&parent=<team ID>` | manage_settings | `fetchTeamsChannelsFn` | `providers/teams.test.ts` |
+
+- Teams: `GET https://graph.microsoft.com/v1.0/me/joinedTeams`. A team ID that is not a GUID is
+  dropped.
+- Channels: the route first lists the teams and refuses a team that is not in that list (404). The
+  provider checks the GUID again before it builds
+  `GET https://graph.microsoft.com/v1.0/teams/<team ID>/channels?$select=id,displayName`. A channel
+  ID that is not `19:…@thread.…` is dropped.
+- Paging follows `@odata.nextLink` only on `https://graph.microsoft.com`, for at most 10 pages and
+  200 items. A link to another host ends the list. An answer without a `value` list is 502.
+- The access token expires after about one hour. `refresh` uses the same `organizations` token
+  endpoint and keeps the new refresh token.
+
+| Source | Kaneo |
+|---|---|
+| `common` endpoint | `organizations` endpoint (work and school accounts only) |
+| Scope `ChannelMessage.Send` | Not requested: it is for delivery |
+| `/organization` read for the tenant name and ID | Not read: it needs `User.Read`, which is not requested. The name is "Microsoft Teams", with no account |
+| Two list functions; any `teamId` | The destinations route with kinds; the team must be one the connection lists |
+| Channels carry `isPrivate` | ID and name only |
+| First page only | `@odata.nextLink` on the Graph host, up to 200 items |
+| Provider error text in thrown errors | Fixed errors |
 
 ## Deferred or not implemented
 
