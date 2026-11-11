@@ -106,6 +106,13 @@
 			"when": 1794357064537,
 			"tag": "0014_posts_vote_sort_index",
 			"breakpoints": true
+		},
+		{
+			"idx": 15,
+			"version": "7",
+			"when": 1794361836677,
+			"tag": "0015_foreign_key_indexes",
+			"breakpoints": true
 		}
 	]
 }

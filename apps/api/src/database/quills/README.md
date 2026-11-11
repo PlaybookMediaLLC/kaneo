@@ -276,6 +276,16 @@ days, and email/AI logs after 90 days, in batches of 1,000 per table/workspace.
 It retains audit history, pending work, failed jobs with unpublished events, and
 current-month billing logs. Expired export keys enter the existing storage-cleanup
 flow. Archived workspaces receive retention but do not execute feature jobs.
+With the log retention (90 days by default) it also removes help-center search
+queries, finished integration sync attempts, and portal invites that are not
+accepted and expired before that time. The sync operation row, its operation key and
+its result stay: the key stops a second external create. Unsubscribe tokens go 30
+days after they expired or were used. Anonymous widget visitors (a principal and its
+customer profile) go eight days after creation when no widget session is live, they
+hold only what the session route wrote (no name, email, contact email, company,
+block, external ID or attributes), and no foreign key references them. Every foreign
+key to `principal` and `customer_identity` is read from the catalog. A cursor in
+`kv_store` moves past the visitors that stay. Audit rows and events keep their text IDs.
 Configure days (1–3650) with `QUILLS_EVENT_RETENTION_DAYS`,
 `QUILLS_JOB_RETENTION_DAYS` and `QUILLS_LOG_RETENTION_DAYS`.
 

@@ -79,6 +79,9 @@ export const workflows = quillsSchema
         table.sortOrder,
       ),
       primaryKey({ columns: [table.workspaceId, table.id] }),
+      index("workflows_created_by_fk_idx")
+        .on(table.workspaceId, table.createdBy)
+        .where(sql`${table.createdBy} IS NOT NULL`),
       workspacePolicy(table.workspaceId),
     ],
   )
@@ -252,6 +255,9 @@ export const workflowVersions = quillsSchema
         table.createdAt.desc().nullsFirst(),
       ),
       primaryKey({ columns: [table.workspaceId, table.id] }),
+      index("workflow_versions_created_by_fk_idx")
+        .on(table.workspaceId, table.createdBy)
+        .where(sql`${table.createdBy} IS NOT NULL`),
       workspacePolicy(table.workspaceId),
     ],
   )

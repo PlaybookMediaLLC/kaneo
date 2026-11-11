@@ -87,6 +87,12 @@ export const integrations = quillsSchema
         columns: [table.workspaceId, table.principalId],
         foreignColumns: [principal.workspaceId, principal.id],
       }).onDelete("set null"),
+      index("integrations_connected_by_principal_id_fk_idx")
+        .on(table.workspaceId, table.connectedByPrincipalId)
+        .where(sql`${table.connectedByPrincipalId} IS NOT NULL`),
+      index("integrations_principal_id_fk_idx")
+        .on(table.workspaceId, table.principalId)
+        .where(sql`${table.principalId} IS NOT NULL`),
       workspacePolicy(table.workspaceId),
     ],
   )
@@ -127,6 +133,9 @@ export const integrationPlatformCredentials = quillsSchema
         table.integrationType,
       ),
       primaryKey({ columns: [table.workspaceId, table.id] }),
+      index("integration_platform_credentials_configured_by_fk_idx")
+        .on(table.workspaceId, table.configuredByPrincipalId)
+        .where(sql`${table.configuredByPrincipalId} IS NOT NULL`),
       workspacePolicy(table.workspaceId),
     ],
   )

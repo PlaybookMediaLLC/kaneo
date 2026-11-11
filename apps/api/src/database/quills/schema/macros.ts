@@ -12,7 +12,8 @@ import { foreignKey, primaryKey } from "drizzle-orm/pg-core";
  * `created_by_principal_id` is a team actor (macros are authored by staff), so
  * it is exempt from the anonymous-to-identified principal re-point.
  */
-import { text, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { text, timestamp, jsonb, index } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { typeIdWithDefault, typeIdColumnNullable } from "@kaneo/ids/drizzle";
 import { principal } from "./auth";
 
@@ -80,6 +81,9 @@ export const macros = quillsSchema
         columns: [table.workspaceId, table.createdByPrincipalId],
         foreignColumns: [principal.workspaceId, principal.id],
       }).onDelete("set null"),
+      index("macros_created_by_principal_id_fk_idx")
+        .on(table.workspaceId, table.createdByPrincipalId)
+        .where(sql`${table.createdByPrincipalId} IS NOT NULL`),
       workspacePolicy(table.workspaceId),
     ],
   )

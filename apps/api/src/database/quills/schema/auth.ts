@@ -901,6 +901,9 @@ export const oauthClient = quillsSchema
         columns: [table.workspaceId, table.userId],
         foreignColumns: [user.workspaceId, user.id],
       }).onDelete("cascade"),
+      index("oauth_client_user_id_fk_idx")
+        .on(table.workspaceId, table.userId)
+        .where(sql`${table.userId} IS NOT NULL`),
       workspacePolicy(table.workspaceId),
     ],
   )
