@@ -106,7 +106,7 @@ const config = z.object({
   }),
 });
 
-function readConfig(row: SettingsRow) {
+export function readConfig(row: SettingsRow) {
   const stored = parseJson(row.widgetConfig);
   // An empty blob takes today's defaults; an older stored blob keeps the older tab defaults.
   const fresh = Object.keys(stored).length === 0;

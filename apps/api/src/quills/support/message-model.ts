@@ -112,7 +112,7 @@ export async function reactionsFor(
 }
 
 /** Top-level embed nodes of a rich message, for example a shared post. */
-const embedsOf = (json: Row["contentJson"]) =>
+export const embedsOf = (json: Row["contentJson"]) =>
   (json?.content ?? []).flatMap((node) =>
     node.type === "quackbackEmbed" &&
     typeof node.attrs?.kind === "string" &&

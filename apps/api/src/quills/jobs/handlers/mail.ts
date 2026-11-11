@@ -11,6 +11,7 @@ import { loadEvent, subscribers } from "../fanout";
 import { claimDelivery, settleDelivery } from "../ledger";
 import { wants } from "../preferences";
 import { finishQuillsJob } from "../queue";
+import { customerPostAddress } from "./support-mail";
 
 export const mailPayloadSchema = z
   .object({
@@ -68,22 +69,38 @@ export async function runMailJob(workspaceId: string, job: JobQueueRow) {
     const content = await entry.mail?.(db, event, principalId ?? null);
     if (!content) return undefined;
     if (!principalId)
-      return content.to ? { content, to: content.to, userId: null } : undefined;
+      return content.to
+        ? { content, to: content.to, userId: null, customer: null }
+        : undefined;
     if (!(await wants(db, principalId, content.type, "email")))
       return undefined;
     const [recipient] = await db
       .select({ userId: principal.kaneoUserId })
       .from(principal)
       .where(eq(principal.id, principalId));
-    return recipient?.userId
-      ? { content, to: null, userId: recipient.userId }
+    if (recipient?.userId)
+      return { content, to: null, userId: recipient.userId, customer: null };
+    // A customer recipient only for an entry that mails customers.
+    return recipient && entry.customers
+      ? { content, to: null, userId: null, customer: principalId }
       : undefined;
   });
   if (!prepared) return finish();
-  // Membership and address are read at send time: a teammate who left or lost access gets nothing.
+  // Membership and address are read at send time: a teammate who left or lost access gets nothing,
+  // and a customer gets mail only while the portal or widget still shows them the post.
+  const customerEmail = prepared.customer
+    ? await customerPostAddress(
+        workspaceId,
+        prepared.customer,
+        prepared.content.postId,
+        prepared.content.commentId,
+      )
+    : undefined;
   const reader = prepared.userId
     ? (await quillsReaders(workspaceId, [prepared.userId])).get(prepared.userId)
-    : prepared.to && { email: prepared.to };
+    : prepared.customer
+      ? customerEmail && { email: customerEmail }
+      : prepared.to && { email: prepared.to };
   if (!reader) return finish();
   const claim = await withQuillsSystemWorkspace(workspaceId, (db) =>
     claimDelivery(db, key, "mail"),

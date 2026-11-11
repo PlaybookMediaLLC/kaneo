@@ -21,7 +21,7 @@ const validZone = (tz: string) => {
     return false;
   }
 };
-const officeHoursSchema = z.object({
+export const officeHoursSchema = z.object({
   enabled: z.boolean(),
   timezone: z
     .string()

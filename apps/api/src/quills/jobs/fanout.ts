@@ -40,6 +40,7 @@ import {
   mintUnsubscribeToken,
   unsubscribeUrl,
 } from "../portal/unsubscribe-token";
+import { supportSubscribers } from "./handlers/support-mail";
 import { enqueueQuillsJob, type QuillsQueue } from "./queue";
 
 /** Event type → the queue whose handler does the requested work after commit. */
@@ -79,19 +80,32 @@ export type MailContent = {
   type: string;
   emailType: string;
   postId?: PostId;
+  /** A comment mail: a customer recipient gets it only while the comment is one they may read. */
+  commentId?: PostCommentId;
   /** Direct mail only: the one address the event concerns, for example an invitee. */
   to?: string;
   /** Uses only values read before it is returned, never the transaction. */
   send: (to: string) => Promise<EmailResult>;
 };
 export type Subscribers = {
-  /** Principals to tell and the post they hear about. Delivery keeps only current teammates who can see the post, never the actor. */
+  /**
+   * Principals to tell and the post they hear about. Delivery keeps current teammates who can see the post
+   * (and customers, by mail, when `customers` is set), never the actor.
+   */
   recipients: (
     db: Database,
     event: DeliveryEvent,
   ) => Promise<{ principalIds: PrincipalId[]; postId?: PostId }>;
-  /** Mail goes to the one address that `mail` returns in `to`, not to principals. */
-  direct?: true;
+  /**
+   * Mail goes to the one address that `mail` returns in `to`, not to principals. A function
+   * decides at fan-out whether this event has such mail at all.
+   */
+  direct?: true | ((db: Database, event: DeliveryEvent) => Promise<boolean>);
+  /**
+   * Customers among the recipients are mailed too (no in-app notice). The mail handler decides at
+   * send time whether the customer may still see the post (handlers/support-mail.ts).
+   */
+  customers?: true;
   notification?: (
     db: Database,
     event: DeliveryEvent,
@@ -215,6 +229,7 @@ const noRecipients = async () => ({ principalIds: [] as PrincipalId[] });
 export const subscribers: Partial<Record<string, Subscribers>> = {
   "post.status_changed": {
     recipients: postSubscribers("notifyStatusChanges"),
+    customers: true,
     notification: async (db, event) => {
       const post = await livePost(db, postIdOf(event));
       if (!post?.statusId) return undefined;
@@ -266,6 +281,7 @@ export const subscribers: Partial<Record<string, Subscribers>> = {
   },
   "comment.created": {
     recipients: postSubscribers("notifyComments"),
+    customers: true,
     notification: async (db, event) => {
       const comment = await liveComment(db, event);
       if (!comment || !(await livePost(db, comment.postId))) return undefined;
@@ -292,6 +308,7 @@ export const subscribers: Partial<Record<string, Subscribers>> = {
         type: "comment_created",
         emailType: "NewCommentEmail",
         postId: post.id,
+        commentId: comment.id,
         send: (to) =>
           sendNewCommentEmail({
             to,
@@ -316,6 +333,7 @@ export const subscribers: Partial<Record<string, Subscribers>> = {
     direct: true,
     mail: inviteMail(false),
   },
+  ...supportSubscribers,
 };
 
 export async function loadEvent(db: Database, eventId: string) {
@@ -401,7 +419,7 @@ export async function fanOut(workspaceId: string, eventId: string) {
     const { principalIds, postId } = wanted
       ? await entry.recipients(db, event)
       : { principalIds: [] };
-    // Customers wait for the portal audience; only teammates are told today.
+    // Teammates; customers follow below, by mail only, for entries that set `customers`.
     const teammates = principalIds.length
       ? await db
           .select({ id: principal.id, userId: principal.kaneoUserId })
@@ -416,6 +434,23 @@ export async function fanOut(workspaceId: string, eventId: string) {
             ),
           )
       : [];
+    // Customer subscribers; the mail handler decides at send time whether each may still see the post.
+    const customers =
+      entry?.customers && entry.mail && principalIds.length
+        ? await db
+            .select({ id: principal.id })
+            .from(principal)
+            .where(
+              and(
+                inArray(principal.id, principalIds),
+                isNull(principal.kaneoUserId),
+                isNull(principal.blockedAt),
+                ...(event.actorId
+                  ? [ne(principal.id, event.actorId as PrincipalId)]
+                  : []),
+              ),
+            )
+        : [];
     const post = postId
       ? (
           await db
@@ -440,8 +475,13 @@ export async function fanOut(workspaceId: string, eventId: string) {
     return {
       hooks: hooks.map((hook) => hook.id),
       teammates: postId && !post ? [] : teammates,
+      customers: post ? customers.map((row) => row.id) : [],
       links: links.map((link) => link.projectId),
       entry,
+      direct:
+        typeof entry?.direct === "function"
+          ? await entry.direct(db, event)
+          : Boolean(entry?.direct),
     };
   });
   if (!plan) return;
@@ -462,8 +502,14 @@ export async function fanOut(workspaceId: string, eventId: string) {
       )
     )
       recipients.push(teammate.id);
-  const direct = Boolean(plan.entry?.direct && plan.entry.mail);
-  if (!plan.hooks.length && !recipients.length && !direct) return;
+  const direct = Boolean(plan.direct && plan.entry?.mail);
+  if (
+    !plan.hooks.length &&
+    !recipients.length &&
+    !plan.customers.length &&
+    !direct
+  )
+    return;
   await withQuillsSystemWorkspace(workspaceId, async (db) => {
     // The address is read at send time from the event's own record (for example the invite).
     if (direct)
@@ -491,7 +537,8 @@ export async function fanOut(workspaceId: string, eventId: string) {
           `${eventId}:${principalId}`,
           3,
         );
-      if (plan.entry?.mail)
+      // A direct entry mails its one address only; the mail handler refuses per-principal mail for it.
+      if (plan.entry?.mail && !plan.entry.direct)
         await enqueueQuillsJob(
           db,
           "quills.mail",
@@ -500,5 +547,13 @@ export async function fanOut(workspaceId: string, eventId: string) {
           5,
         );
     }
+    for (const principalId of plan.customers)
+      await enqueueQuillsJob(
+        db,
+        "quills.mail",
+        { eventId, principalId },
+        `${eventId}:${principalId}`,
+        5,
+      );
   });
 }

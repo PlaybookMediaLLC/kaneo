@@ -312,6 +312,8 @@ export const changeSchema = z.object({
     "ticket.summary_requested",
     "ticket.summarized",
     "help_center.article_translation_requested",
+    "conversation.created",
+    "conversation.csat_submitted",
   ]),
   entityType: z.enum([
     "board",

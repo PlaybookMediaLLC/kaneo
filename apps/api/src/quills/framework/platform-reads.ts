@@ -253,6 +253,31 @@ export async function isMemberOfNamedWorkspace(
 }
 
 /**
+ * The Kaneo account behind a portal customer, for a delivery decision at send time: the shape of
+ * framework/audience.ts#PortalAccount. Undefined for a missing or banned account. Workers only.
+ */
+export async function portalAccount(workspaceId: string, userId: string) {
+  const [row] = await platformDb
+    .select({
+      id: userTable.id,
+      name: userTable.name,
+      email: userTable.email,
+      emailVerified: userTable.emailVerified,
+      image: userTable.image,
+      member: sql<boolean>`exists (select 1 from ${workspaceUserTable} where ${workspaceUserTable.workspaceId} = ${workspaceId} and ${workspaceUserTable.userId} = ${userTable.id})`,
+    })
+    .from(userTable)
+    .where(
+      and(
+        eq(userTable.id, userId),
+        sql`coalesce(${userTable.banned},false)=false`,
+      ),
+    )
+    .limit(1);
+  return row && { ...row, name: row.name || row.email.split("@")[0]! };
+}
+
+/**
  * Kaneo's plan check for paid Quills features: 402 when the workspace's Kaneo Cloud plan is not active.
  * A no-op when billing is off, so self-hosted installs are never gated. It can create the workspace's billing row.
  */

@@ -129,10 +129,14 @@ describe.skipIf(!url)("Quills customer feedback", () => {
     // sent mail must keep working while the portal is off (teammates get the same mail), so the
     // three unsubscribe routes answer without the portal; portal/customer.test.ts covers them.
     // The status page has its own switch, not the portal's; content/public/public.test.ts covers it.
+    // A CSAT link in a support mail must work too: an email-only workspace may keep its portal off.
+    // support/customer/customer.test.ts covers both routes with the portal off.
     const alwaysOn = new Set([
       "previewQuillsUnsubscribeToken",
       "createQuillsUnsubscribe",
       "processQuillsUnsubscribeToken",
+      "validateQuillsCsatEmailToken",
+      "recordQuillsCsatViaToken",
     ]);
     const routes = [...registry.keys()].filter(
       (d: AnyQuillsRoute) =>
