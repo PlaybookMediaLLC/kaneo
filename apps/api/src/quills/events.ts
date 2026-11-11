@@ -338,6 +338,8 @@ export const changeSchema = z.object({
     "app.post_linked",
     "app.post_unlinked",
     "app.post_created",
+    "app.registered",
+    "app.updated",
     "branding.auto_started",
     "branding.offer_accepted",
     "branding.offer_declined",
