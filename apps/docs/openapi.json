@@ -5111,6 +5111,53 @@
         ],
         "description": "Whether the caller's roles (and API key scope, if any) allow each named action in the workspace. Mirrors the checks the API enforces."
       },
+      "QuillsWebsiteBranding": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "domain": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "eligible",
+              "offered",
+              "applied",
+              "declined",
+              "undone",
+              "skipped",
+              "failed"
+            ]
+          },
+          "logoUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A short-lived URL of the logo, while it is offered or applied"
+          },
+          "colorApplied": {
+            "type": "boolean"
+          },
+          "canUndo": {
+            "type": "boolean"
+          },
+          "canUse": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "domain",
+          "status",
+          "logoUrl",
+          "colorApplied",
+          "canUndo",
+          "canUse"
+        ]
+      },
       "QuillsWebhook": {
         "type": "object",
         "properties": {
@@ -60049,6 +60096,472 @@
           },
           "403": {
             "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/settings/website-branding": {
+      "get": {
+        "operationId": "getQuillsAutomaticWebsiteBrandingStatus",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get the website branding status",
+        "description": "`eligible` when no lookup has run and `start` would run for the caller.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The website branding status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "branding": {
+                      "$ref": "#/components/schemas/QuillsWebsiteBranding"
+                    }
+                  },
+                  "required": [
+                    "branding"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/settings/website-branding/lookup": {
+      "post": {
+        "operationId": "lookupQuillsWebsiteBranding",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Look up the branding of a website",
+        "description": "Reads the home page of the website through the public-destination guard and keeps its logo as an offer. Nothing is applied. Replaces an earlier lookup while the workspace has no logo.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "site": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048,
+                    "description": "A domain or a URL",
+                    "example": "acme.com"
+                  }
+                },
+                "required": [
+                  "site"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The recorded lookup",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "branding": {
+                      "$ref": "#/components/schemas/QuillsWebsiteBranding"
+                    }
+                  },
+                  "required": [
+                    "branding"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not a website address",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The workspace has a logo, or file storage is not configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/settings/website-branding/start": {
+      "post": {
+        "operationId": "startQuillsAutomaticWebsiteBranding",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Look up the caller's company website once",
+        "description": "Uses the domain of the caller's work email. Runs once for each workspace, in the first 14 days after Quills was set up, and only while file storage is configured. A workspace with a logo records the lookup as skipped.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The recorded lookup",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "branding": {
+                      "$ref": "#/components/schemas/QuillsWebsiteBranding"
+                    },
+                    "started": {
+                      "type": "boolean",
+                      "description": "Whether this request recorded the lookup"
+                    }
+                  },
+                  "required": [
+                    "branding",
+                    "started"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/settings/website-branding/accept": {
+      "post": {
+        "operationId": "acceptQuillsWebsiteBrandingOffer",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Use the offered website logo",
+        "description": "Sets the offered logo. Its color also becomes the primary color when the theme is still the default. Undo restores the previous values.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The applied branding",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "branding": {
+                      "$ref": "#/components/schemas/QuillsWebsiteBranding"
+                    }
+                  },
+                  "required": [
+                    "branding"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No offer is waiting, or the workspace has a logo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/settings/website-branding/decline": {
+      "post": {
+        "operationId": "declineQuillsWebsiteBrandingOffer",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Decline the offered website logo",
+        "description": "Drops the offer. The stored logo is queued for cleanup.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The declined lookup",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "branding": {
+                      "$ref": "#/components/schemas/QuillsWebsiteBranding"
+                    }
+                  },
+                  "required": [
+                    "branding"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No offer is waiting",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/settings/website-branding/undo": {
+      "post": {
+        "operationId": "undoQuillsAutomaticWebsiteBranding",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Undo the applied website branding",
+        "description": "Restores the logo and theme values from before accept, when neither changed since. The website logo is queued for cleanup.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The undone lookup",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "branding": {
+                      "$ref": "#/components/schemas/QuillsWebsiteBranding"
+                    }
+                  },
+                  "required": [
+                    "branding"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Nothing to undo, or the branding changed since it was applied",
             "content": {
               "application/json": {
                 "schema": {

@@ -92,11 +92,8 @@ const branding = z
   })
   .openapi("QuillsWebsiteBranding");
 type Branding = z.input<typeof branding>;
-const response = z.object({
-  branding: branding.nullable().openapi({
-    description: "Null when there is nothing to show",
-  }),
-});
+/** `branding` is null when there is nothing to show. */
+const response = z.object({ branding: branding.nullable() });
 
 const unavailable = () =>
   new HTTPException(409, {
