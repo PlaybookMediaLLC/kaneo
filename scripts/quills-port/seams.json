@@ -12,7 +12,9 @@
 		"packages/email/src/quills",
 		"packages/permissions/src/quills.test.ts",
 		"scripts/quills-port",
-		"docs/quills-port"
+		"docs/quills-port",
+		"charts/kaneo/values-production.yaml",
+		"scripts/security/check-helm-production-values.rb"
 	],
 	"seams": [
 		{
@@ -98,6 +100,18 @@
 			"state": "existing",
 			"lines": "the @kaneo/email mock alias matches the exact name only (array form with a regex)",
 			"plannedChange": "none. The Quills subpaths @kaneo/email/quills... must resolve to the real package"
+		},
+		{
+			"file": "charts/kaneo/values.yaml",
+			"state": "existing",
+			"lines": "2 lines: the bundled postgresql image is pgvector/pgvector:0.8.7-pg16-bookworm instead of postgres:16-alpine",
+			"plannedChange": "none. Quills needs the vector and pg_trgm extensions with HNSW support (apps/api/src/database/quills/migrate.ts). On an upstream conflict take upstream and re-apply the image and tag"
+		},
+		{
+			"file": ".github/workflows/helm-validate.yml",
+			"state": "existing",
+			"lines": "the production-values matrix case and its check step, which render charts/kaneo/values-production.yaml and run scripts/security/check-helm-production-values.rb. Both reached staging in pull request 138, so this branch receives them from staging rather than adding them",
+			"plannedChange": "none. New assertions belong in the Ruby check, not in the workflow"
 		}
 	]
 }
