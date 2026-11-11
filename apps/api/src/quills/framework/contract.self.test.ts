@@ -129,6 +129,19 @@ const brokenAppHiddenTarget = defineQuillsRoute({
     return { changed: true };
   },
 });
+// Broken on purpose: an app read that hides everything, so the leak checks pass for no reason.
+const brokenAppEmptyRead = defineQuillsRoute({
+  audience: "app",
+  capability: "read:feedback",
+  method: "get",
+  path: "/broken/empty",
+  operationId: "brokenAppEmptyRead",
+  summary: "Broken app read that returns nothing",
+  action: "read",
+  response: z.object({ items: z.array(z.string()) }),
+  responseDescription: "Nothing",
+  handler: async () => ({ items: [] }),
+});
 // Broken on purpose: complete rows behind a loose response schema.
 const rawRow = defineQuillsRoute({
   method: "get",
@@ -559,7 +572,8 @@ const app = contractApp(
         return c.json({ changed: true }, 200);
       },
     )
-    .openapi(...brokenAppHiddenTarget),
+    .openapi(...brokenAppHiddenTarget)
+    .openapi(...brokenAppEmptyRead),
   apiRouter()
     .openapi(...publicLeak)
     .openapi(...noOwnership)
@@ -640,6 +654,11 @@ describe.skipIf(!url)("Quills route contract self-test", () => {
       expect.stringMatching(/^app-key-confined: got 200/),
     );
   });
+  it("reports a session-only route that serves an API key", async () => {
+    expect(await checks({ ...noPermission, sessionOnly: true })).toContainEqual(
+      expect.stringMatching(/^session-required: got 200/),
+    );
+  });
   it("reports an app route without the app gate", async () => {
     const found = await checks(brokenAppNoGate);
     for (const check of [
@@ -653,6 +672,22 @@ describe.skipIf(!url)("Quills route contract self-test", () => {
       "app-actor",
     ])
       expect(found).toContainEqual(expect.stringMatching(`^${check}: `));
+    // The viewer role cannot write, but the hand-made route lets it.
+    expect(found).toContainEqual(
+      expect.stringMatching(/^app-member-key: viewer role: got 200/),
+    );
+  });
+  it("reports an app read that hides the rows its fixture marks visible", async () => {
+    expect(
+      await checks(
+        declared("brokenAppEmptyRead"),
+        fixture({
+          seed: async () => ({}),
+          valid: () => ({}),
+          visible: () => ["must-be-listed"],
+        }),
+      ),
+    ).toContain("app-actor: the response does not contain must-be-listed");
   });
   it("reports an app route that links a post on a board the caller cannot see", async () => {
     const found = await checks(
@@ -692,6 +727,10 @@ describe.skipIf(!url)("Quills route contract self-test", () => {
       expect.stringMatching(/^private-project: expected 403 or 404, got 200/),
     );
     expect(found).toContain("private-project: rows changed");
+    // With the app key, workspace B's post reaches the insert: the composite foreign key fails it.
+    expect(found).toContainEqual(
+      expect.stringMatching(/^foreign-ids: postId: got 500/),
+    );
   });
   it("reports complete rows behind a loose response schema", async () => {
     const seeded = fixture({
@@ -1156,7 +1195,7 @@ describe("raw, textBody and prepare declaration rules", () => {
       /prepare and call/,
     );
   });
-  it("takes a capability on an app route only, and revert only with call", () => {
+  it("takes a capability on an app route only, revert only with call, sessionOnly only on a teammate route", () => {
     const route = {
       ...base,
       response: z.object({}),
@@ -1178,6 +1217,14 @@ describe("raw, textBody and prepare declaration rules", () => {
     expect(() =>
       buildQuillsRoute({ ...route, revert: async () => {} }),
     ).toThrow(/revert/);
+    expect(() =>
+      buildQuillsRoute({
+        ...route,
+        audience: "app",
+        capability: "read:feedback",
+        sessionOnly: true,
+      }),
+    ).toThrow(/sessionOnly/);
   });
 });
 

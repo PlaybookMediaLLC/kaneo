@@ -8,6 +8,7 @@ import {
   type Database,
   type QuillsActor,
 } from "../../database/quills/client";
+import { ApiError } from "../../errors/api-error";
 import { validationError } from "../../errors/validation-error";
 import { boundedRequestBody } from "../../utils/bounded-request-body";
 import {
@@ -26,14 +27,7 @@ import {
   withQuillsRequest,
   type QuillsAction,
 } from "../with-quills-request";
-import {
-  appKey,
-  boundApp,
-  confineKey,
-  withApp,
-  type AppCaller,
-  type AppCapability,
-} from "./app";
+import { appKey, boundApp, confineKey, type AppCapability } from "./app";
 import {
   callerActor,
   enforceRateLimit,
@@ -122,6 +116,11 @@ export type QuillsRouteDeclaration<
   audience?: A;
   /** App only: the capability that the bound app must hold. */
   capability?: AppCapability;
+  /**
+   * Teammate only: refuse a request made with an API key (403 SESSION_REQUIRED), as Kaneo's own API
+   * key management does. For a route that creates or changes a credential.
+   */
+  sessionOnly?: true;
   /** Signed: checks the machine caller and names the credential's workspace (framework/signed.ts). */
   verifier?: SignedVerifier<V>;
   /** Signed: the teammate principal that the verified credential names, for the audit row. */
@@ -146,7 +145,7 @@ export type QuillsRouteDeclaration<
             actor: QuillsActor;
             loaded: L;
             actions: ReadonlySet<QuillsAction>;
-          } & ([A] extends ["app"] ? { app: AppCaller } : {})
+          }
         : [A] extends ["signed"]
           ? { credential: V; located: Located }
           : { caller: QuillsCaller }),
@@ -234,7 +233,7 @@ export type QuillsRouteDeclaration<
             loaded: L;
             actions: ReadonlySet<QuillsAction>;
             called: C;
-          } & ([A] extends ["app"] ? { app: AppCaller } : {})
+          }
         : [A] extends ["signed"]
           ? {
               db: Database;
@@ -449,6 +448,8 @@ export function buildQuillsRoute<
     throw new Error(
       `${d.operationId}: an app route, and only one, names its capability`,
     );
+  if (d.sessionOnly && audience !== "teammate")
+    throw new Error(`${d.operationId}: sessionOnly is for a teammate route`);
   if (d.actor && audience !== "signed")
     throw new Error(`${d.operationId}: only a signed route names its actor`);
   if ((audience === "signed") !== Boolean(d.verifier))
@@ -898,37 +899,35 @@ export function buildQuillsRoute<
         }),
     };
     // An app route needs a scoped API key; a teammate route may come with any key or none.
-    const keyId = app
-      ? appKey(c)
-      : (c.get("apiKey") as { id: string } | undefined)?.id;
-    // The first statement of each scoped transaction. App routes: the active app that holds the
-    // key and the capability. Teammate routes with a key: refuse a key that an app holds.
-    const gate = async (db: Database): Promise<{ app?: AppCaller }> => {
-      if (app) return { app: await boundApp(db, keyId!, d.capability!) };
-      if (keyId) await confineKey(db, keyId);
-      return {};
+    const keyId = app ? appKey(c.get("apiKey")) : c.get("apiKey")?.id;
+    // The first statement of each scoped transaction, before `prepare` and its `call`. App routes:
+    // the active app that holds the key and the capability (its ID). Teammate routes with a key:
+    // refuse a key that an app holds, then a key on a session-only route.
+    const gate = async (db: Database) => {
+      if (app) return boundApp(db, keyId!, d.capability!);
+      if (!keyId) return undefined;
+      await confineKey(db, keyId);
+      if (d.sessionOnly)
+        throw new ApiError(403, {
+          message: "A user session is required",
+          code: "SESSION_REQUIRED",
+        });
+      return undefined;
     };
     // Read, release the connection, call the provider, then write in a new scoped transaction.
     // The second transaction checks the permissions again.
     let called = undefined as C;
     if (prepare) {
-      const prepared = await withQuillsRequest(c, access, async (db, actor) =>
-        prepare({ ...input, db, actor, loaded, actions, ...(await gate(db)) }),
-      );
+      const prepared = await withQuillsRequest(c, access, async (db, actor) => {
+        await gate(db);
+        return prepare({ ...input, db, actor, loaded, actions });
+      });
       called = await d.call!(prepared, input);
     }
     const result = await withQuillsRequest(c, access, async (db, actor) => {
-      const caller = await gate(db);
+      const appId = await gate(db);
       const result = d.response.parse(
-        await handle({
-          ...input,
-          db,
-          actor,
-          loaded,
-          actions,
-          called,
-          ...caller,
-        }),
+        await handle({ ...input, db, actor, loaded, actions, called }),
       ) as z.output<R>;
       const change = typeof d.event === "function" && d.event(input, result);
       // Every change that an app request records names the app.
@@ -936,7 +935,7 @@ export function buildQuillsRoute<
         await recordQuillsChange(
           db,
           actor,
-          caller.app ? withApp(one, caller.app.id) : one,
+          appId ? { ...one, payload: { ...one.payload, appId } } : one,
         );
       return result;
     }).catch(async (error) => {

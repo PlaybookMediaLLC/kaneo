@@ -52,6 +52,9 @@ Differences between this design and the P0 code:
   check `app-key-confined` covers every teammate route.
 - `prepare` also gets `actions`. The field `revert` undoes a `call`'s effect outside the database when the
   handler's transaction fails (the app registration deletes the key it minted).
+- The field `sessionOnly` (teammate) refuses a request made with an API key (403 `SESSION_REQUIRED`), for a
+  route that creates or changes a credential. The contract check `session-required` sends a key that holds every
+  permission; the `authorized` check of such a route uses the session.
   `framework/app-keys.ts` is the only Quills module that writes `public.apikey`.
 
 The framework is one helper and one test suite. Both use the code that exists today:

@@ -1,10 +1,9 @@
 import { and, eq } from "drizzle-orm";
-import type { Context } from "hono";
-import type { z } from "zod";
 import type { Database } from "../../database/quills/client";
 import { apps } from "../../database/quills/schema/apps";
 import { ApiError } from "../../errors/api-error";
-import type { changeSchema } from "../events";
+import type { BaseVariables } from "../../openapi";
+import type { PermissionMap } from "../../utils/role-permissions";
 import type { QuillsAction } from "../with-quills-request";
 
 // The app audience (RFC 0001, D9 and D12 to D15). A sidebar app calls with a Kaneo API key that has
@@ -13,22 +12,21 @@ import type { QuillsAction } from "../with-quills-request";
 
 export const appCapabilities = ["read:feedback", "write:feedback"] as const;
 export type AppCapability = (typeof appCapabilities)[number];
-export type AppCaller = { id: string; name: string };
 
 /** The Quills actions that an app's API key needs for each capability. */
-export const capabilityActions: Record<AppCapability, QuillsAction[]> = {
+const capabilityActions: Record<AppCapability, QuillsAction[]> = {
   "read:feedback": ["read"],
   "write:feedback": ["create", "update"],
 };
 
 /**
- * The Quills actions that an app with `scopes` needs on its key. The caller who grants the scopes
- * must hold each one (`actions`, the role within the caller's own key scope); otherwise 403.
+ * The scope of the API key of an app with `scopes`: workspace:read and the Quills actions of the
+ * scopes. The caller who grants them must hold each action (`actions`); otherwise 403.
  */
-export function grantedActions(
+export function appKeyScope(
   actions: ReadonlySet<QuillsAction>,
   scopes: readonly AppCapability[],
-) {
+): PermissionMap {
   const needed = [
     ...new Set(scopes.flatMap((scope) => capabilityActions[scope])),
   ];
@@ -39,7 +37,7 @@ export function grantedActions(
       code: "MISSING_PERMISSION",
       missingPermissions: missing.map((action) => `quills:${action}`),
     });
-  return needed;
+  return { workspace: ["read"], quills: needed };
 }
 
 const notBound = () =>
@@ -52,10 +50,7 @@ const notBound = () =>
  * App routes, before the permission checks: the caller's API key ID. A session (no key) is
  * APP_NOT_BOUND; an unscoped key is API_KEY_SCOPE, because it carries the owner's whole authority.
  */
-export function appKey(c: Context): string {
-  const key = c.get("apiKey") as
-    | { id: string; permissions: Record<string, string[]> | null }
-    | undefined;
+export function appKey(key: BaseVariables["apiKey"]): string {
   if (!key) throw notBound();
   if (!key.permissions)
     throw new ApiError(403, {
@@ -66,16 +61,17 @@ export function appKey(c: Context): string {
 }
 
 /**
- * App routes: the first statement of each scoped transaction. RLS limits the read to the path
- * workspace, so a key bound only in another workspace, a disabled app and no binding look the same.
+ * App routes: the first statement of each scoped transaction; returns the app's ID. RLS limits the
+ * read to the path workspace, so a key bound only in another workspace, a disabled app and no
+ * binding look the same.
  */
 export async function boundApp(
   db: Database,
   apiKeyId: string,
   capability: AppCapability,
-): Promise<AppCaller> {
+): Promise<string> {
   const [app] = await db
-    .select({ id: apps.id, name: apps.name, scopes: apps.grantedScopes })
+    .select({ id: apps.id, scopes: apps.grantedScopes })
     .from(apps)
     .where(and(eq(apps.apiKeyId, apiKeyId), eq(apps.status, "active")))
     .limit(1);
@@ -85,7 +81,7 @@ export async function boundApp(
       message: `The app does not hold the ${capability} capability`,
       code: "APP_SCOPE",
     });
-  return { id: app.id, name: app.name };
+  return app.id;
 }
 
 /**
@@ -106,12 +102,3 @@ export async function confineKey(db: Database, apiKeyId: string) {
       code: "APP_KEY_CONFINED",
     });
 }
-
-/** Adds the app to the metadata of a change that an app request records. */
-export const withApp = (
-  change: z.input<typeof changeSchema>,
-  appId: string,
-): z.input<typeof changeSchema> => ({
-  ...change,
-  payload: { ...change.payload, appId },
-});

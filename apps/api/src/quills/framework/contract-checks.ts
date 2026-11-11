@@ -124,7 +124,7 @@ export async function checkRoute(
   // before the transaction's check and may take a lease on its input (an upload verification).
   if (!appGrant) {
     const target = f.valid(await f.seed(env, users.owner));
-    const before = `${await fingerprint(env.a)}${await fingerprint(env.b)}`;
+    const before = await fingerprint(env.a);
     const confined = await send(
       app,
       d,
@@ -137,8 +137,21 @@ export async function checkRoute(
         "app-key-confined",
         `got ${confined.status} ${JSON.stringify(confined.body)}`,
       );
-    if (before !== `${await fingerprint(env.a)}${await fingerprint(env.b)}`)
+    if (before !== (await fingerprint(env.a)))
       fail("app-key-confined", "rows changed");
+  }
+  // A session-only route refuses a key that holds every permission it needs.
+  if (d.sessionOnly) {
+    const target = f.valid(await f.seed(env, users.owner));
+    const before = await fingerprint(env.a);
+    const keyed = await send(app, d, target, users.owner, grant(d, true));
+    if (keyed.status !== 403 || keyed.body?.code !== "SESSION_REQUIRED")
+      fail(
+        "session-required",
+        `got ${keyed.status} ${JSON.stringify(keyed.body)}`,
+      );
+    if (before !== (await fingerprint(env.a)))
+      fail("session-required", "rows changed");
   }
   // Each extra required action alone: a role or key that lacks it is denied.
   for (const extra of d.alsoRequires ?? []) {
@@ -230,7 +243,14 @@ export async function checkRoute(
     await pool.query("SELECT clock_timestamp()::text AS t")
   ).rows[0].t;
   const domain = await fingerprint(env.a, "domain");
-  const ok = await send(app, d, fresh, users.limited, grant(d, true));
+  // The role grants exactly the action; a session-only route takes the session, not the key.
+  const ok = await send(
+    app,
+    d,
+    fresh,
+    users.limited,
+    d.sessionOnly ? undefined : grant(d, true),
+  );
   if (ok.status !== 200)
     fail("authorized", `got ${ok.status} ${JSON.stringify(ok.body)}`);
   else {

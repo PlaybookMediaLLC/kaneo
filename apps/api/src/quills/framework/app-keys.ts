@@ -2,20 +2,10 @@ import { eq } from "drizzle-orm";
 import db from "../../database";
 import { apikeyTable } from "../../database/schema";
 import type { PermissionMap } from "../../utils/role-permissions";
-import type { QuillsAction } from "../with-quills-request";
 
 // The only Quills module that writes public.apikey: the API key of an app (RFC 0001, D14). The key
-// and the app row live in two stores and never share a transaction. The app routes therefore need
-// both: the key's scope and an active app row. Each write here only ever narrows what works, or
-// is undone when the app row does not commit (see apps/ROUTES.md).
-
-/** The scope of an app's API key: workspace:read and the Quills actions of its capabilities. */
-export const appKeyScope = (
-  actions: readonly QuillsAction[],
-): PermissionMap => ({
-  workspace: ["read"],
-  quills: [...new Set(actions)],
-});
+// and the app row live in two stores and never share a transaction. The app routes of the path
+// workspace therefore need both: the key's scope and an active app row (see apps/ROUTES.md).
 
 /**
  * Mints the API key of a new app for `userId` through the better-auth API-key plugin, as the API
