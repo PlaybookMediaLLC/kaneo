@@ -97,6 +97,11 @@ export function prepareArchive(
       if (name === "webhooks") row.status = "disabled";
       // The same for an imported integration: it delivers nothing until an admin enables it here.
       if (name === "integrations") row.status = "paused";
+      // An invite link of the source workspace must not open this one: no token survives the import.
+      if (name === "portal_invites") {
+        row.token_hashes = [];
+        if (row.status === "pending") row.status = "expired";
+      }
       if (
         name === "workflow_runs" &&
         ["running", "waiting"].includes(String(row.state))

@@ -13,6 +13,7 @@ const decision = z.object({
     "team",
     "domain",
     "segment",
+    "invite",
     "unauthenticated",
     "unauthorized",
   ]),

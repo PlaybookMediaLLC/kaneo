@@ -7,7 +7,7 @@ const tables = Object.values(schema).filter((value) => is(value, PgTable));
 const globalUnique = { custom_domains_domain_unique: "domain" };
 describe("Quills schema ownership", () => {
   it("keeps every feature table tenant-scoped and outside Kaneo's namespace", () => {
-    expect(tables.length).toBe(148);
+    expect(tables.length).toBe(149);
     for (const table of tables) {
       const config = getTableConfig(table);
       expect(config.schema, config.name).toBe("quills");

@@ -91,6 +91,29 @@ describe("Workspace archive validation", () => {
     const result = prepareArchive(archive, {}, "target", []);
     expect(result.tables.integrations![0]).toMatchObject({ status: "paused" });
   });
+
+  it("imports portal invites without a usable token and keeps the hero image key", () => {
+    const archive = base();
+    archive.tables.portal_invites = [
+      { id: "pending", status: "pending", token_hashes: ["hash"] },
+      { id: "accepted", status: "accepted", token_hashes: [] },
+    ];
+    archive.tables.settings = [{ widget_hero_key: "old/hero" }];
+    const result = prepareArchive(
+      archive,
+      { storage: { "old/hero": "new/hero" } },
+      "target",
+      [],
+    );
+    expect(result.tables.portal_invites).toMatchObject([
+      { id: "pending", status: "expired", token_hashes: [] },
+      { id: "accepted", status: "accepted", token_hashes: [] },
+    ]);
+    expect(result.tables.settings![0]).toMatchObject({
+      widget_hero_key: "new/hero",
+    });
+    expect(result.storageKeys).toEqual(["new/hero"]);
+  });
   it("rejects public numbers that cannot be allocated safely", () => {
     for (const number of [0, -1, "9007199254740991", "9223372036854775807"]) {
       const archive = base();

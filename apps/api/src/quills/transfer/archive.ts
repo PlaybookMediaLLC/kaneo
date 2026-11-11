@@ -109,6 +109,7 @@ export const STORAGE_FIELDS: Record<string, string[]> = {
     "favicon_key",
     "header_logo_key",
     "portal_og_image_key",
+    "widget_hero_key",
   ],
   customer_identity: ["image_key"],
   principal: ["avatar_key"],

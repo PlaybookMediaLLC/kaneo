@@ -8,13 +8,19 @@ import {
   lte,
   ne,
 } from "drizzle-orm";
-import type { EmailResult } from "@kaneo/email/quills";
-import type { PostCommentId, PostId, PrincipalId } from "@kaneo/ids";
+import {
+  sendNewCommentEmail,
+  sendPortalInviteEmail,
+  sendStatusChangeEmail,
+  type EmailResult,
+  type SealedEmail,
+} from "@kaneo/email/quills";
+import type { InviteId, PostCommentId, PostId, PrincipalId } from "@kaneo/ids";
 import {
   withQuillsSystemWorkspace,
   type Database,
 } from "../../database/quills/client";
-import { principal } from "../../database/quills/schema/auth";
+import { principal, settings } from "../../database/quills/schema/auth";
 import { boards } from "../../database/quills/schema/boards";
 import { events, type EventRow } from "../../database/quills/schema/events";
 import { postSubscriptions } from "../../database/quills/schema/notifications";
@@ -27,6 +33,11 @@ import {
   accessibleProjectIds,
   quillsReaders,
 } from "../framework/platform-reads";
+import { inviteUrl, mintInviteToken } from "../portal/invite-token";
+import {
+  mintUnsubscribeToken,
+  unsubscribeUrl,
+} from "../portal/unsubscribe-token";
 import { enqueueQuillsJob, type QuillsQueue } from "./queue";
 
 /** Event type → the queue whose handler does the requested work after commit. */
@@ -59,6 +70,8 @@ export type MailContent = {
   type: string;
   emailType: string;
   postId?: PostId;
+  /** Direct mail only: the one address the event concerns, for example an invitee. */
+  to?: string;
   /** Uses only values read before it is returned, never the transaction. */
   send: (to: string) => Promise<EmailResult>;
 };
@@ -68,13 +81,17 @@ export type Subscribers = {
     db: Database,
     event: DeliveryEvent,
   ) => Promise<{ principalIds: PrincipalId[]; postId?: PostId }>;
+  /** Mail goes to the one address that `mail` returns in `to`, not to principals. */
+  direct?: true;
   notification?: (
     db: Database,
     event: DeliveryEvent,
   ) => Promise<NotificationContent | undefined>;
+  /** Called once per recipient, with its principal, or once with null for a direct entry. */
   mail?: (
     db: Database,
     event: DeliveryEvent,
+    principalId: PrincipalId | null,
   ) => Promise<MailContent | undefined>;
 };
 
@@ -108,6 +125,7 @@ async function liveComment(db: Database, event: DeliveryEvent) {
       content: postComments.content,
       isPrivate: postComments.isPrivate,
       author: principal.displayName,
+      authorKaneoUserId: principal.kaneoUserId,
     })
     .from(postComments)
     .innerJoin(principal, eq(principal.id, postComments.principalId))
@@ -138,6 +156,48 @@ const postSubscribers =
 const clip = (text: string, length: number) =>
   text.length > length ? `${text.slice(0, length - 1)}…` : text;
 
+/** The workspace's Kaneo ID and display name. */
+async function workspaceOf(db: Database) {
+  const [row] = await db
+    .select({ id: settings.workspaceId, name: settings.name })
+    .from(settings)
+    .limit(1);
+  return row;
+}
+
+// ponytail: apps/web has no Quills post page yet; this is the portal path the invite link also uses.
+// Point it at the real route when the portal UI lands.
+const postUrl = (workspaceId: string, postId: string) =>
+  `${(process.env.KANEO_CLIENT_URL || "http://localhost:5173").replace(/\/+$/, "")}/portal/${encodeURIComponent(workspaceId)}/posts/${postId}`;
+
+/** An invite mail with a new link. `withMessage`: the sender's note goes with the first send only. */
+const inviteMail =
+  (withMessage: boolean): NonNullable<Subscribers["mail"]> =>
+  async (db, event) => {
+    // ponytail: a replay of a finished delivery also mints a token it never sends; at most 20 stay valid.
+    const minted = await mintInviteToken(db, event.entityId as InviteId);
+    const workspace = minted && (await workspaceOf(db));
+    if (!minted || !workspace) return undefined;
+    const inviteLink = inviteUrl(workspace.id, event.entityId, minted.token);
+    return {
+      type: "portal_invite",
+      emailType: "PortalInviteEmail",
+      to: minted.email,
+      send: (to) =>
+        sendPortalInviteEmail({
+          // Sealed: the exact address the token was minted for, read from the invite row.
+          to: to as SealedEmail,
+          workspaceName: workspace.name,
+          inviteLink,
+          personalMessage: withMessage
+            ? (minted.message ?? undefined)
+            : undefined,
+        }),
+    };
+  };
+
+const noRecipients = async () => ({ principalIds: [] as PrincipalId[] });
+
 /**
  * Event type → who hears about it in-app and by mail. Webhooks need no entry: each webhook lists its event types.
  * The post entries read the post from `entityId` (entity `post`) or `payload.postId`, and the comment from
@@ -161,6 +221,39 @@ export const subscribers: Partial<Record<string, Subscribers>> = {
         postId: post.id,
       };
     },
+    mail: async (db, event, principalId) => {
+      const post = await livePost(db, postIdOf(event));
+      const [status] = post?.statusId
+        ? await db
+            .select({ name: postStatuses.name })
+            .from(postStatuses)
+            .where(eq(postStatuses.id, post.statusId))
+        : [];
+      const workspace = await workspaceOf(db);
+      if (!post || !status || !workspace || !principalId) return undefined;
+      const token = await mintUnsubscribeToken(
+        db,
+        principalId,
+        "unsubscribe_post",
+        post.id,
+      );
+      return {
+        type: "post_status_changed",
+        emailType: "StatusChangeEmail",
+        postId: post.id,
+        send: (to) =>
+          sendStatusChangeEmail({
+            to,
+            postTitle: post.title,
+            postUrl: postUrl(workspace.id, post.id),
+            // The event records only the new status.
+            previousStatus: "",
+            newStatus: status.name,
+            workspaceName: workspace.name,
+            unsubscribeUrl: unsubscribeUrl(workspace.id, token),
+          }),
+      };
+    },
   },
   "comment.created": {
     recipients: postSubscribers("notifyComments"),
@@ -175,6 +268,44 @@ export const subscribers: Partial<Record<string, Subscribers>> = {
         commentId: comment.id,
       };
     },
+    mail: async (db, event, principalId) => {
+      const comment = await liveComment(db, event);
+      const post = comment && (await livePost(db, comment.postId));
+      const workspace = await workspaceOf(db);
+      if (!comment || !post || !workspace || !principalId) return undefined;
+      const token = await mintUnsubscribeToken(
+        db,
+        principalId,
+        "unsubscribe_post",
+        post.id,
+      );
+      return {
+        type: "comment_created",
+        emailType: "NewCommentEmail",
+        postId: post.id,
+        send: (to) =>
+          sendNewCommentEmail({
+            to,
+            postTitle: post.title,
+            postUrl: postUrl(workspace.id, post.id),
+            commenterName: comment.author ?? "Someone",
+            commentPreview: clip(comment.content, 150),
+            isTeamMember: comment.authorKaneoUserId !== null,
+            workspaceName: workspace.name,
+            unsubscribeUrl: unsubscribeUrl(workspace.id, token),
+          }),
+      };
+    },
+  },
+  "portal.invite_sent": {
+    recipients: noRecipients,
+    direct: true,
+    mail: inviteMail(true),
+  },
+  "portal.invite_resent": {
+    recipients: noRecipients,
+    direct: true,
+    mail: inviteMail(false),
   },
 };
 
@@ -320,8 +451,18 @@ export async function fanOut(workspaceId: string, eventId: string) {
       )
     )
       recipients.push(teammate.id);
-  if (!plan.hooks.length && !recipients.length) return;
+  const direct = Boolean(plan.entry?.direct && plan.entry.mail);
+  if (!plan.hooks.length && !recipients.length && !direct) return;
   await withQuillsSystemWorkspace(workspaceId, async (db) => {
+    // The address is read at send time from the event's own record (for example the invite).
+    if (direct)
+      await enqueueQuillsJob(
+        db,
+        "quills.mail",
+        { eventId },
+        `${eventId}:direct`,
+        5,
+      );
     for (const webhookId of plan.hooks)
       await enqueueQuillsJob(
         db,

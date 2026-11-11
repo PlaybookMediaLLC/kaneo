@@ -321,6 +321,50 @@ describe.skipIf(!url)("Quills mail delivery", () => {
     expect((await job(left))!.status).toBe("succeeded");
     expect(await outcome(left)).toBeUndefined();
   });
+
+  it("mails a direct entry's own address once, and never its principals", async () => {
+    // A direct entry (an invite) names one address; the recipients it also lists get no mail.
+    subscribers["test.direct"] = {
+      recipients: async () => ({ principalIds: [mate] }),
+      direct: true,
+      mail: async (_db, _event, principalId) => ({
+        type: "portal_invite",
+        emailType: "StatusChangeEmail",
+        to: principalId ? `${h.mate}@example.test` : "invitee@example.test",
+        send: (to) =>
+          sendStatusChangeEmail({
+            to,
+            postTitle: "Invite",
+            postUrl: "https://example.test/invite",
+            previousStatus: "",
+            newStatus: "invited",
+            workspaceName: "Acme",
+            unsubscribeUrl: "https://example.test/unsubscribe",
+          }),
+      }),
+    };
+    const eventId = await h.emit(h.a, {
+      type: "test.direct",
+      entityType: "team",
+      entityId: "direct",
+    });
+    await h.drain(h.a);
+    expect(recipients).toEqual(["RCPT TO:<invitee@example.test>"]);
+    const direct = (
+      await h.system(h.a, (db) =>
+        db
+          .select()
+          .from(jobQueue)
+          .where(eq(jobQueue.dedupeKey, `${eventId}:direct`)),
+      )
+    )[0]!;
+    expect(direct).toMatchObject({ status: "succeeded" });
+    expect(direct.payload).toEqual({ eventId });
+    await replay(direct.id);
+    await h.drain(h.a);
+    expect(messages).toBe(1);
+    delete subscribers["test.direct"];
+  });
 });
 
 describe("Quills mail error classes", () => {

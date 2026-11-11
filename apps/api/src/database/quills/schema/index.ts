@@ -79,3 +79,4 @@ export * from "./onboarding-emails";
 
 export * from "./platform-links";
 export * from "./custom-domains";
+export * from "./portal-invites";

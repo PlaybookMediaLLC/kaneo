@@ -21,6 +21,7 @@ import {
   user as customer,
 } from "../../database/quills/schema/auth";
 import { rateBucket, kvStore } from "../../database/quills/schema/kv";
+import { portalInvites } from "../../database/quills/schema/portal-invites";
 import { segments, userSegments } from "../../database/quills/schema/segments";
 import { readClientIp } from "../../utils/client-ip";
 import type { ChangeActor } from "../events";
@@ -375,7 +376,7 @@ export async function enforceRateLimit(
 export type PortalAccessDecision =
   | {
       granted: true;
-      reason: "public" | "team" | "domain" | "segment";
+      reason: "public" | "team" | "domain" | "segment" | "invite";
     }
   | { granted: false; reason: "unauthenticated" | "unauthorized" };
 
@@ -386,7 +387,8 @@ const strings = (value: unknown) =>
 
 /**
  * What a portal caller may see: the private-portal gate. Fails closed on a malformed config.
- * The invite and widget grants of the source wait for portal invites and the widget handoff.
+ * A verified address with an accepted invite to this workspace is let in. The widget grant of
+ * the source waits for the widget handoff decision.
  */
 export async function evaluatePortalAccess(
   db: Database,
@@ -431,6 +433,17 @@ export async function evaluatePortalAccess(
         .limit(1);
       if (member) return { granted: true, reason: "segment" };
     }
+    const [invite] = await db
+      .select({ id: portalInvites.id })
+      .from(portalInvites)
+      .where(
+        and(
+          eq(portalInvites.email, account.email.toLowerCase()),
+          eq(portalInvites.status, "accepted"),
+        ),
+      )
+      .limit(1);
+    if (invite) return { granted: true, reason: "invite" };
   }
   return { granted: false, reason: "unauthorized" };
 }

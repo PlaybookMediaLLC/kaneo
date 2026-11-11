@@ -38,6 +38,15 @@ export const fields = {
     updated: "settings.header_logo_updated",
     removed: "settings.header_logo_removed",
   },
+  widget_hero: {
+    path: "/settings/widget/hero-image",
+    label: "widget hero image",
+    property: "widgetHeroKey",
+    save: "saveQuillsWidgetHeroImageKey",
+    remove: "deleteQuillsWidgetHeroImage",
+    updated: "settings.widget_hero_image_updated",
+    removed: "settings.widget_hero_image_removed",
+  },
 } as const;
 type Purpose = keyof typeof fields;
 const changed = z.object({ changed: z.boolean() });
@@ -114,4 +123,6 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .openapi(...saveKey("favicon"))
   .openapi(...removeKey("favicon"))
   .openapi(...saveKey("header_logo"))
-  .openapi(...removeKey("header_logo"));
+  .openapi(...removeKey("header_logo"))
+  .openapi(...saveKey("widget_hero"))
+  .openapi(...removeKey("widget_hero"));

@@ -8,7 +8,14 @@ import {
 } from "../../database/quills/schema/auth";
 import { defineQuillsRoute } from "../framework/define-route";
 import { mintWidgetSession, verifyIdentityToken } from "../framework/audience";
+import { mergeMetadata } from "../directory/customer";
 import { parseJson } from "../settings/area";
+import {
+  autoSubscribeChangelog,
+  claimedAttributes,
+  reconcileClaimedSegments,
+  votedPostIds,
+} from "./identify-claims";
 
 // Verified-only identify: the host app's backend signs an HS256 JWT with the widget secret,
 // and only that token can name a customer. There is no unverified email path.
@@ -37,7 +44,7 @@ const identify = defineQuillsRoute({
   operationId: "identifyQuillsWidgetVisitor",
   summary: "Identify a widget visitor with a signed token",
   description:
-    "Creates or updates the customer that the host app's signed ssoToken names and returns a widget session token for the Authorization header. The token needs sub (or id), email and exp.",
+    "Creates or updates the customer that the host app's signed ssoToken names and returns a widget session token for the Authorization header. The token needs sub (or id), email and exp. Optional claims: custom attributes that match a user attribute definition (at most 50; others are dropped), segments (at most 50 manual segment slugs; it replaces the widget-sourced memberships, and a missing claim removes them). Identify also subscribes the person to the changelog when the workspace auto-subscribes.",
   action: "create",
   rateLimit: { limit: 60, windowSeconds: 15 * 60 },
   body: z.object({ ssoToken: z.string().min(1).max(8192) }),
@@ -51,6 +58,8 @@ const identify = defineQuillsRoute({
       avatarUrl: z.string().nullable(),
     }),
     canPortalHandoff: z.boolean(),
+    /** The live posts the person voted on, newest first, at most 500. */
+    votedPostIds: z.array(z.string()),
   }),
   responseDescription: "The widget session and the identified customer",
   errors: {
@@ -173,6 +182,20 @@ const identify = defineQuillsRoute({
       .update(principal)
       .set({ displayName: identity!.name, avatarUrl: identity!.image })
       .where(eq(principal.id, person!.id));
+    // The row is locked (FOR UPDATE above) or new, so this merge cannot lose a concurrent write.
+    const attributes = await claimedAttributes(db, raw);
+    if (Object.keys(attributes).length)
+      await db
+        .update(customer)
+        .set({
+          metadata: mergeMetadata(identity!.metadata, {
+            set: attributes,
+            remove: [],
+          }),
+        })
+        .where(eq(customer.id, identity!.id));
+    await reconcileClaimedSegments(db, person!.id, raw.segments);
+    await autoSubscribeChangelog(db, person!.id);
     const session = await mintWidgetSession(
       db,
       { principalId: person!.id, customerId: identity!.id },
@@ -189,6 +212,7 @@ const identify = defineQuillsRoute({
       },
       // The widget-to-portal handoff is not built (decision D1 has no portal session for a visitor).
       canPortalHandoff: false,
+      votedPostIds: await votedPostIds(db, person!.id),
     };
   },
 });

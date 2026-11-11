@@ -92,6 +92,13 @@
 			"when": 1794352433336,
 			"tag": "0012_ops_domains_wipe",
 			"breakpoints": true
+		},
+		{
+			"idx": 13,
+			"version": "7",
+			"when": 1794355813511,
+			"tag": "0013_portal_invites_hero_image",
+			"breakpoints": true
 		}
 	]
 }

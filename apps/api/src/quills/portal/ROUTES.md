@@ -93,9 +93,9 @@ Merged: `portal-access.ts#updatePortalAccessFn`.
 | `routes/auth.widget-handoff.tsx`, `routes/widget.tsx#getPortalSessionToken` | A handoff mints a portal browser session for a widget visitor. Under D1 a portal session is a Kaneo session, and a widget visitor has no Kaneo account. Needs an owner decision. |
 | `routes/api/widget/sdk[.]js.ts#GET` | `packages/widget/dist/browser.js` is not built, and the SDK calls Quackback paths. |
 | `routes/api/widget-sso.ts#GET` | Quackback Cloud dogfood: a token signed with an environment secret for the vendor's own dashboard. |
-| Portal invites (`portal-invites.ts`, `portal-invite.$inviteId.tsx`) | No Quills invite table, no mail handler (P4) and no invite magic link. |
+| Portal invites (`portal-invites.ts`, `portal-invite.$inviteId.tsx`) | Built in P3c; see `CUSTOMER-ROUTES.md`. |
 | `portal-permissions.ts#getMyPortalPermissionsFn` | A portal caller is always a customer, so the list is always empty. |
-| Identify: `previousToken` merge, custom attribute claims, `segments` claim, changelog auto-subscribe, voted post IDs | Need the feedback and segment write paths (P3b). |
+| Identify: `previousToken` merge | Needs the anonymous widget session of the public-feedback slice. The attribute and `segments` claims, changelog auto-subscribe and voted post IDs are built in P3c (`CUSTOMER-ROUTES.md`). |
 | Identify: `widget_identified_session` provenance | Only the handoff reads it; it lands with the handoff. |
 | Anonymous widget sessions (Better Auth anonymous sign-in in the source) | No P3a route needs one; P3b adds the mint with anonymous votes and comments. |
 | P3b rows: public boards, posts, roadmaps, changelog, RSS, sitemap, customer posts, comments, votes, reactions, widget feedback, help-center and support widget routes, uploads | Out of scope for P3a. |

@@ -54,7 +54,7 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
       path: "/files/settings-uploads",
       operationId: "createQuillsSettingsUpload",
       summary:
-        "Request an upload URL for a workspace logo, favicon, header logo or assistant avatar",
+        "Request an upload URL for a workspace logo, favicon, header logo, assistant avatar or widget hero image",
       action: "manage_settings",
       purposes: settingsPurposes,
     }),

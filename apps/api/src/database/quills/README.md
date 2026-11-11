@@ -5,7 +5,7 @@ Imported from `quackback/packages/db/src` at source commit `42ef2e01b2b48db87f1a
 ## Ownership and identity
 
 Kaneo owns authentication, user accounts, workspaces, membership and workspace
-access. All 148 feature tables live in PostgreSQL schema `quills`.
+access. All 149 feature tables live in PostgreSQL schema `quills`.
 Every table has a text `workspace_id` referencing Kaneo's workspace. Domain IDs
 retain their UUID-backed TypeID representation. Keys, unique constraints and
 feature foreign keys include workspace ownership. Nullable composite foreign
