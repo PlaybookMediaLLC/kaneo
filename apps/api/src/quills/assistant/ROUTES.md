@@ -33,7 +33,8 @@ Transaction:               one scoped transaction per request. A provider call n
                            data is a run or an event that the quills.ai worker answers (read,
                            release, call, then write with the job's completion).
 External effects:          provider calls (OpenAI-compatible, 60-second timeout, fixed error text);
-                           web-source fetches through the public-destination guard. No mail.
+                           web-source fetches through the public-destination guard; connector
+                           requests (see "Connectors"). No mail.
 ```
 
 ## Provider
