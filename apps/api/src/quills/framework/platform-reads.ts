@@ -322,3 +322,36 @@ export async function hasWorkspaceEntitlement(workspaceId: string) {
     throw error;
   }
 }
+
+/**
+ * Whether the account may take a Quills action in an unarchived workspace: a member whose role holds
+ * `workspace:read` and the action, or an instance administrator (Kaneo's existing override). There is
+ * no API key on this path: a signed OAuth redirect carries the session cookie only.
+ */
+export async function memberHoldsQuillsAction(
+  workspaceId: string,
+  userId: string,
+  action: string,
+) {
+  const [row] = await platformDb
+    .select({ role: workspaceUserTable.role, userRole: userTable.role })
+    .from(userTable)
+    .innerJoin(workspaceTable, eq(workspaceTable.id, workspaceId))
+    .leftJoin(
+      workspaceUserTable,
+      and(
+        eq(workspaceUserTable.workspaceId, workspaceId),
+        eq(workspaceUserTable.userId, userId),
+      ),
+    )
+    .where(and(eq(userTable.id, userId), isNull(workspaceTable.archivedAt)))
+    .limit(1);
+  if (!row) return false;
+  if (hasInstanceAdminRole(row.userRole)) return true;
+  return row.role
+    ? roleHasWorkspacePermission(workspaceId, row.role, {
+        workspace: ["read"],
+        quills: [action],
+      })
+    : false;
+}

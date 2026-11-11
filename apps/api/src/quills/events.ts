@@ -314,6 +314,13 @@ export const changeSchema = z.object({
     "help_center.article_translation_requested",
     "conversation.created",
     "conversation.csat_submitted",
+    // P7b: OAuth integrations, status sync and inbound mail.
+    "integration.platform_credentials_saved",
+    "integration.platform_credentials_deleted",
+    "integration.status_sync_enabled",
+    "integration.status_sync_disabled",
+    "integration.status_mappings_updated",
+    "conversation.email_received",
   ]),
   entityType: z.enum([
     "board",

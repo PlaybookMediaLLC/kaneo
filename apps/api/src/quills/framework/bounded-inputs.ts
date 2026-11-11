@@ -111,11 +111,11 @@ export function boundedInputIssues(d: AnyQuillsRoute): string[] {
       body?: { content: { "application/json": { schema: z.ZodType } } };
     };
   };
+  // A signed route parses its body from the verified raw bytes, so the served route declares none.
+  const body = request.body?.content["application/json"].schema ?? d.body;
   return [
-    ...unbounded(request.params, "params"),
+    ...(request.params ? unbounded(request.params, "params") : []),
     ...(request.query ? unbounded(request.query, "query") : []),
-    ...(request.body
-      ? unbounded(request.body.content["application/json"].schema, "body")
-      : []),
+    ...(body ? unbounded(body, "body") : []),
   ];
 }

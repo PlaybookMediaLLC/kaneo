@@ -184,7 +184,7 @@ export async function runQuillsMigrations(
       await client.query("GRANT quills_runtime TO CURRENT_USER");
     await client.query(`GRANT USAGE ON SCHEMA quills TO ${grantee}`);
     await client.query(
-      `GRANT EXECUTE ON FUNCTION quills.storage_references(), quills.storage_keys_for_workspace(text), quills.storage_object_is_referenced(text), quills.runnable_workspaces(text) TO ${grantee}`,
+      `GRANT EXECUTE ON FUNCTION quills.storage_references(), quills.storage_keys_for_workspace(text), quills.storage_object_is_referenced(text), quills.runnable_workspaces(text), quills.integration_workspace(uuid) TO ${grantee}`,
     );
     await client.query("GRANT USAGE ON SCHEMA quills TO quills_runtime");
     await client.query(

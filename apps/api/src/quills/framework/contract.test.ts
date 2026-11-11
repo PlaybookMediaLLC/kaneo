@@ -14,8 +14,10 @@ import * as directoryFixtures from "../directory/index.fixture";
 import * as feedbackFixtures from "../feedback/core.fixture";
 import * as fileFixtures from "../files/routes.fixture";
 import * as contextFixtures from "../index.fixture";
+import * as inboundFixtures from "../inbound/email.fixture";
 import * as integrationFixtures from "../integrations/index.fixture";
 import * as jobFixtures from "../jobs/routes.fixture";
+import * as wakeFixtures from "../jobs/wake.fixture";
 import * as linkFixtures from "../links.fixture";
 import * as portalFixtures from "../portal/index.fixture";
 import * as operationsFixtures from "../operations/index.fixture";
@@ -96,6 +98,8 @@ const fixtures: Record<string, Fixture> = {
   ...reportingFixtures,
   ...automationFixtures,
   ...assistantFixtures,
+  ...inboundFixtures,
+  ...wakeFixtures,
 };
 const app = contractApp(quillsRouter, publicRouter);
 

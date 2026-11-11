@@ -127,6 +127,20 @@
 			"when": 1794363409253,
 			"tag": "0017_assistant_queue",
 			"breakpoints": true
+		},
+		{
+			"idx": 18,
+			"version": "7",
+			"when": 1794366359164,
+			"tag": "0018_signed_integration_workspace",
+			"breakpoints": true
+		},
+		{
+			"idx": 19,
+			"version": "7",
+			"when": 1794366360803,
+			"tag": "0019_integrations_id_index",
+			"breakpoints": true
 		}
 	]
 }

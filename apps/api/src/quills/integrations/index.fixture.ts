@@ -9,3 +9,6 @@ export * from "./shortcut.fixture";
 export * from "./stripe.fixture";
 export * from "./syncs.fixture";
 export * from "./zapier.fixture";
+export * from "./inbound.fixture";
+export * from "./oauth.fixture";
+export * from "./status-sync.fixture";

@@ -48,6 +48,8 @@ const allowedImport = (file: string, specifier: string) => {
         "framework/platform-reads",
         "framework/webhook-config",
         "framework/audience",
+        "framework/signed",
+        "framework/internal",
         "../openapi",
       ].includes(target) ||
       target.startsWith("../database/quills/schema/"))
@@ -58,7 +60,7 @@ const allowedImport = (file: string, specifier: string) => {
  * (inside defineQuillsRoute). Each finding names a teammate or wider path they use.
  */
 const audienceViolations = (file: { path: string; source: string }) =>
-  /audience:\s*"(portal|widget|public)"/.test(file.source)
+  /audience:\s*"(portal|widget|public|signed|internal)"/.test(file.source)
     ? [
         ...file.source.matchAll(
           /(?:from |import\()"([^"]*(with-quills-request|platform-reads|database\/quills\/client|\/database(\/index)?))"|\b(withQuillsRequest|withQuillsWorkspace|withQuillsSystemWorkspace|getDatabasePool)\b/g,
@@ -90,7 +92,7 @@ describe("Quills module boundaries", () => {
 
   it("keeps portal, widget and public routes off teammate and platform database paths", () => {
     const audienceModules = routeModules.filter((file) =>
-      /audience:\s*"(portal|widget|public)"/.test(file.source),
+      /audience:\s*"(portal|widget|public|signed|internal)"/.test(file.source),
     );
     expect(audienceModules.length).toBeGreaterThan(0);
     expect(routeModules.flatMap(audienceViolations)).toEqual([]);
@@ -113,6 +115,18 @@ describe("Quills module boundaries", () => {
       "broken.ts: ../framework/platform-reads",
       "broken.ts: withQuillsSystemWorkspace",
     ]);
+  });
+
+  it("lets only internal routes run the job loop", () => {
+    const wakers = routeModules.filter((file) =>
+      file.source.includes("/framework/internal"),
+    );
+    expect(wakers.length).toBeGreaterThan(0);
+    expect(
+      wakers
+        .filter((file) => !/audience:\s*"internal"/.test(file.source))
+        .map((file) => file.path),
+    ).toEqual([]);
   });
 
   it("does not spread request bodies into writes", () => {

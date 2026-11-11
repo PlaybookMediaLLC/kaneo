@@ -29,8 +29,14 @@ export async function send(
   scope?: PermissionMap,
   workspace = env.a,
 ): Promise<Sent> {
-  const teammate = (d.audience ?? "teammate") === "teammate";
-  let path = `${teammate ? "/quills" : "/quills-public"}/${workspace}${d.path}`;
+  const audience = d.audience ?? "teammate";
+  // Signed and internal routes name no workspace: their credential decides it.
+  let path =
+    audience === "teammate"
+      ? `/quills/${workspace}${d.path}`
+      : audience === "signed" || audience === "internal"
+        ? `/quills-public/${audience}${d.path}`
+        : `/quills-public/${workspace}${d.path}`;
   for (const [key, value] of Object.entries(input.params ?? {}))
     path = path.replace(`{${key}}`, encodeURIComponent(value));
   const query = new URLSearchParams(input.query).toString();
@@ -38,13 +44,18 @@ export async function send(
     method: d.method.toUpperCase(),
     headers: {
       "x-test-user": user,
-      ...(input.body !== undefined && { "content-type": "application/json" }),
+      ...((input.body !== undefined || input.raw !== undefined) && {
+        "content-type": "application/json",
+      }),
       ...(scope && { "x-test-scope": JSON.stringify(scope) }),
       ...(input.bearer && { authorization: `Bearer ${input.bearer}` }),
       // A fresh client per request keeps the checks under the rate limits; rate-limit.test.ts covers them.
       "x-kaneo-client-ip": `198.51.100.${++clientCount % 250}`,
+      ...input.headers,
     },
-    body: input.body === undefined ? undefined : JSON.stringify(input.body),
+    body:
+      input.raw ??
+      (input.body === undefined ? undefined : JSON.stringify(input.body)),
   });
   return { status: res.status, body: await res.json().catch(() => null) };
 }
@@ -94,7 +105,8 @@ export function badInputs(d: AnyQuillsRoute, input: ContractInput) {
       bad.push(replace(input, key, "!"));
   if (d.query?.shape.limit)
     bad.push({ ...input, query: { ...input.query, limit: "1000000000" } });
-  if (d.body)
+  // A signed body is checked against its signature before its schema: a changed body is a forgery (401).
+  if (d.body && d.audience !== "signed")
     bad.push(
       { ...input, body: "not an object" },
       { ...input, body: undefined },
@@ -158,18 +170,25 @@ export async function outboxIssues(
     kaneoUserId: users.limited,
   },
 ): Promise<string[]> {
-  const change =
+  const declared =
     typeof d.event === "function" &&
     d.event(
       {
         params: d.params?.parse(input.params),
         query: d.query?.parse(input.query ?? {}),
-        body: d.body?.parse(input.body),
+        // A signed route's body is the raw bytes it was sent.
+        body: d.body?.parse(
+          input.raw === undefined ? input.body : JSON.parse(input.raw),
+        ),
         workspaceId: env.a,
       },
       // The JSON body, not a parse with the server schema: dates arrive as strings.
       body,
     );
+  // A route may record several changes; the first is checked by type, entity and actor.
+  const changes = [declared || []].flat();
+  const change = changes[0];
+  const expected = changes.length;
   const byTeammate = "kaneoUserId" in actor;
   const {
     rows: [n],
@@ -192,7 +211,7 @@ export async function outboxIssues(
       !byTeammate && actor.principalId ? toUuid(actor.principalId) : null,
     ],
   );
-  if (d.method === "get")
+  if (d.method === "get" && d.audience !== "signed")
     return n.events ||
       n.audit ||
       n.jobs ||
@@ -205,17 +224,19 @@ export async function outboxIssues(
       : [];
   if (!change) return ["the authorized mutation recorded no change event"];
   return [
-    ...(n.events === 1 && n.matchingEvents === 1
+    ...(n.events === expected && n.matchingEvents >= 1
       ? []
       : [
-          `expected one ${change.type} event for ${change.entityId}, found ${n.events} events`,
+          `expected ${expected} events with ${change.type} for ${change.entityId}, found ${n.events} events`,
         ]),
-    ...(n.audit === 1 && n.matchingAudit === 1
+    ...(n.audit === expected && n.matchingAudit >= 1
       ? []
       : [
-          `expected one ${change.type} audit row by the caller, found ${n.audit}`,
+          `expected ${expected} audit rows with ${change.type} by the caller, found ${n.audit}`,
         ]),
-    ...(n.jobs === 1 ? [] : [`expected one job, found ${n.jobs}`]),
+    ...(n.jobs === expected
+      ? []
+      : [`expected ${expected} jobs, found ${n.jobs}`]),
   ];
 }
 
@@ -239,13 +260,17 @@ export async function rollbackIssues(
           {
             event: (input: any, result: any) => {
               const change = event(input, result);
-              return change && { ...change, entityId: "" };
+              return (
+                change &&
+                [change].flat().map((one) => ({ ...one, entityId: "" }))
+              );
             },
           },
         ]
       : []),
   ];
-  for (const failure of d.method === "get" ? [] : failures) {
+  const reads = d.method === "get" && d.audience !== "signed";
+  for (const failure of reads ? [] : failures) {
     const failing = apiRouter<
       BaseVariables & { workspaceId: string }
     >().openapi(...buildQuillsRoute({ ...d, ...failure }));

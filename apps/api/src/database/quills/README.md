@@ -73,6 +73,36 @@ at `/quills-public/{workspace}`), through the resolvers in `src/quills/framework
 Never call `withQuillsSystemWorkspace` for these callers, and never pass it a
 workspace from a request.
 
+### Signed machine callers
+
+`withQuillsSigned(scope, callback)` in `client.ts` is the trusted entry point for
+machine callers: provider webhooks, the mail provider and OAuth redirects. Its only
+caller is `defineQuillsRoute` (routes with `audience: "signed"`, mounted at
+`/quills-public/signed/...`), after a verifier in `src/quills/framework/signed.ts`.
+
+1. There is no session, no customer principal and no teammate principal. The audit
+   row of a change records a system actor.
+2. The workspace comes from the credential, never from a body, query or path copy:
+   - `{ integration }`: the workspace of that `integrations` row, read by the
+     security-definer function `quills.integration_workspace(uuid)` (migration
+     `0015_signed_integration_workspace`). Only the application credential may
+     execute it; `PUBLIC` and `quills_runtime` may not. Migration
+     `0016_integrations_id_index` indexes `integrations (id)` for this lookup. The verifier
+     then reads the row's sealed secret under the workspace's RLS and checks the signature.
+   - `{ workspace }`: an ID or slug that an instance credential named before any
+     database access: the instance-signed OAuth state, or the mail provider
+     signature over the receiving address.
+3. Like `withQuillsAudience`, it rejects a missing, archived or uninitialized workspace,
+   never reads `workspace_member` and authorizes nothing else. It locks the workspace row.
+4. The route reads the raw body (at most 1 MiB) before any parser, checks the
+   signature in constant time and only then parses the body.
+5. A delivery receipt (`kv_store`, key `signed:<verifier>:<sha256 of the delivery ID>`,
+   kept 30 days) commits with the handler's writes, so a replay is a 200 no-op and a
+   failed handler leaves no receipt. Handlers ignore signed events older than 30 days.
+
+`audience: "internal"` (the job waker) opens no transaction. `QUILLS_INTERNAL_TOKEN`
+authorizes it with a constant-time comparison; without the variable the route is 404.
+
 ## Shared API and client foundation
 
 `GET /quills/{workspaceId}/context` returns the existing Kaneo workspace and the

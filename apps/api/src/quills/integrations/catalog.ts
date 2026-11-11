@@ -25,7 +25,7 @@ type Provider = {
   hosts?: RegExp;
 };
 
-/** The providers this build connects: an API key or a webhook URL, no OAuth. */
+/** The providers this build connects: an API key, a webhook URL or OAuth (oauth-providers.ts). */
 export const providers = {
   make: {
     name: "Make",
@@ -78,19 +78,48 @@ export const providers = {
     events: [],
     channels: false,
   },
+  // OAuth providers (oauth-providers.ts). A channel is a repository, project or chat channel.
+  // Issue trackers deliver creates only, so an inbound status change never echoes back.
+  github: {
+    name: "GitHub",
+    category: "issue_tracking",
+    description:
+      "Create GitHub issues from new feedback and sync their status.",
+    events: ["post.created"],
+    channels: true,
+  },
+  gitlab: {
+    name: "GitLab",
+    category: "issue_tracking",
+    description:
+      "Create GitLab issues from new feedback and sync their status.",
+    events: ["post.created"],
+    channels: true,
+  },
+  slack: {
+    name: "Slack",
+    category: "notifications",
+    description: "Post feedback events to Slack channels.",
+    events: webhookEvents,
+    channels: true,
+  },
+  discord: {
+    name: "Discord",
+    category: "notifications",
+    description: "Post feedback events to Discord channels.",
+    events: webhookEvents,
+    channels: true,
+  },
 } satisfies Record<string, Provider>;
 export type ProviderType = keyof typeof providers;
 export const provider = (type: string): Provider | undefined =>
   (providers as Record<string, Provider>)[type];
 
-/** Source providers that need OAuth, inbound webhooks or other work that this build does not have. */
+/** Source providers that this build does not connect yet (decision D6: they come by demand). */
 const later = [
   ["asana", "Asana", "issue_tracking"],
   ["azure_devops", "Azure DevOps", "issue_tracking"],
   ["clickup", "ClickUp", "issue_tracking"],
-  ["discord", "Discord", "notifications"],
-  ["github", "GitHub", "issue_tracking"],
-  ["gitlab", "GitLab", "issue_tracking"],
   ["hubspot", "HubSpot", "support_crm"],
   ["intercom", "Intercom", "support_crm"],
   ["jira", "Jira", "issue_tracking"],
@@ -99,7 +128,6 @@ const later = [
   ["notion", "Notion", "issue_tracking"],
   ["salesforce", "Salesforce", "support_crm"],
   ["segment", "Segment", "user_data"],
-  ["slack", "Slack", "notifications"],
   ["teams", "Microsoft Teams", "notifications"],
   ["trello", "Trello", "issue_tracking"],
   ["zendesk", "Zendesk", "support_crm"],
