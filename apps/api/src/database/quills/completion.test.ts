@@ -580,6 +580,23 @@ describe.skipIf(!url)("Quills completion", () => {
     });
     expect(archive.tables.events).toBeUndefined();
     expect(archive.tables.job_queue).toBeUndefined();
+    // Live tags that differ only in case, as an archive from before migration 0020 may hold.
+    const [caseTag, caseTwin] = [randomUUID(), randomUUID()];
+    archive.tables.conversation_tags = [
+      ...(archive.tables.conversation_tags ?? []),
+      {
+        id: caseTag,
+        name: "Case",
+        color: "#000000",
+        created_at: "2026-01-01T00:00:00Z",
+      },
+      {
+        id: caseTwin,
+        name: "case",
+        color: "#000000",
+        created_at: "2026-01-02T00:00:00Z",
+      },
+    ];
     const members = [
       { id: user, name: user, image: null },
       { id: peer, name: peer, image: null },
@@ -689,6 +706,14 @@ describe.skipIf(!url)("Quills completion", () => {
     );
     expect(imported.rows).toBeGreaterThan(0);
     expect(await scoped((tx) => tx.select().from(boards), c)).toHaveLength(1);
+    expect(
+      (
+        await pool.query(
+          "SELECT name FROM quills.conversation_tags WHERE workspace_id=$1 AND id = ANY($2::uuid[]) ORDER BY created_at",
+          [c, [caseTag, caseTwin]],
+        )
+      ).rows.map((row) => row.name),
+    ).toEqual(["Case", `case (${caseTwin.slice(-12)})`]);
     expect(
       await scoped(
         (tx) => tx.select({ status: webhooks.status }).from(webhooks),

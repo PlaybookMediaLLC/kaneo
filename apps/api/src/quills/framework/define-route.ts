@@ -69,6 +69,10 @@ type MachinePath<A, Path extends string> = [A] extends ["signed"]
 type Output<S> = S extends z.ZodType ? z.output<S> : undefined;
 /** Signed routes read at most this much body: the bytes are kept for the signature check. */
 const SIGNED_BODY_BYTES = 1_048_576;
+/** A `textBody` route reads at most this much body. */
+const TEXT_BODY_BYTES = 8192;
+/** Content types of a raw (non-JSON) response. */
+export type RawType = "application/rss+xml" | "application/xml";
 
 export type QuillsRouteInput<P, Q, B> = {
   params: Output<P>;
@@ -90,6 +94,7 @@ export type QuillsRouteDeclaration<
   V = unknown,
   H = undefined,
   C = undefined,
+  X extends RawType | undefined = undefined,
 > = {
   /**
    * Who calls the route. "teammate" (default) runs through withQuillsRequest under /quills.
@@ -109,17 +114,22 @@ export type QuillsRouteDeclaration<
   /** Signed: the response to a delivery that was already processed. Nothing else runs. */
   replay?: z.input<NoInfer<R>>;
   /**
-   * Teammate and signed: a read in its own scoped transaction, before `call`. It must not write.
-   * The handler then runs in a new scoped transaction with the call's result as `called`.
+   * Teammate, signed, portal and widget: a read in its own scoped transaction, before `call`. It must
+   * not write. The handler then runs in a new scoped transaction with the call's result as `called`.
+   * Portal and widget: `prepare` gets the caller and runs the route's read gates; the handler's
+   * transaction resolves the caller again and answers 409 when it changed. Use it for work that must
+   * hold no pooled connection, for example an upload verification (framework/files.ts).
    */
   prepare?: (
     input: QuillsRouteInput<P, Q, B> & { db: Database } & ([A] extends [
         "teammate",
       ]
         ? { actor: QuillsActor; loaded: L }
-        : { credential: V; located: Located }),
+        : [A] extends ["signed"]
+          ? { credential: V; located: Located }
+          : { caller: QuillsCaller }),
   ) => Promise<H>;
-  /** The provider call, with no database transaction open. Required with `prepare`. */
+  /** The provider or object-store call, with no database transaction open. Required with `prepare`. */
   call?: (prepared: H, input: QuillsRouteInput<P, Q, B>) => Promise<C>;
   /**
    * Teammate: the provider failure to answer after the handler's transaction commits, for example
@@ -132,6 +142,17 @@ export type QuillsRouteDeclaration<
   ensureCustomer?: boolean;
   /** Non-teammate writes: attempts per client IP and workspace, counted even when the request fails. */
   rateLimit?: { limit: number; windowSeconds: number };
+  /**
+   * Portal, widget and public reads: the handler returns the document as a string (the response
+   * schema is a string), sent with this content type instead of JSON.
+   */
+  raw?: X;
+  /**
+   * Public routes with a body: also read a text/plain body as JSON, so a browser can send it with
+   * sendBeacon and no CORS preflight. Never on a portal or widget route: a simple cross-site request
+   * must not carry a session. Other routes answer text/plain with 415. The body is at most 8 KiB (413).
+   */
+  textBody?: true;
   method: M;
   /** Relative to /quills/{workspaceId}. */
   path: Path;
@@ -200,6 +221,7 @@ export type QuillsRouteDeclaration<
             : {
                 db: Database;
                 caller: QuillsCaller;
+                called: C;
                 request: RequestMeta;
                 acceptLanguage: string | null;
               }),
@@ -213,6 +235,7 @@ export type QuillsRouteDeclaration<
 
 export type AnyQuillsRoute = Omit<
   QuillsRouteDeclaration<
+    any,
     any,
     any,
     any,
@@ -246,6 +269,7 @@ type QuillsRoute<
   R,
   E,
   A,
+  X,
 > = {
   method: M;
   path: MachinePath<A, Path>;
@@ -269,7 +293,9 @@ type QuillsRoute<
   responses: {
     200: {
       description: string;
-      content: { "application/json": { schema: R } };
+      content: {
+        [K in X extends RawType ? X : "application/json"]: { schema: R };
+      };
     };
   } & Record<
     // Non-teammate routes may also return 401 (sign-in), 403 (blocked) and 429 (rate limit).
@@ -305,6 +331,23 @@ function parseRawBody(schema: z.ZodType, raw: string) {
   return result.data;
 }
 
+/**
+ * A non-teammate route's body: the validated JSON body, an empty body's defaults, or the text/plain
+ * body of a `textBody` route read as JSON. @hono/zod-openapi answers an undeclared type with 415.
+ */
+async function readBody(
+  c: Context<any, string, any>,
+  schema: z.ZodType,
+  text?: boolean,
+) {
+  const type = c.req.header("content-type");
+  if (!type) return emptyBody(schema);
+  // The media-type gate lets only the declared JSON and text/plain types through.
+  if (text && /^text\/plain\b/i.test(type))
+    return parseRawBody(schema, await c.req.text());
+  return c.req.valid("json");
+}
+
 /** Builds the route and its handler without registering them. Use defineQuillsRoute. */
 export function buildQuillsRoute<
   M extends Method,
@@ -319,7 +362,8 @@ export function buildQuillsRoute<
   V = unknown,
   H = undefined,
   C = undefined,
->(d: QuillsRouteDeclaration<M, Path, P, Q, B, R, E, L, A, V, H, C>) {
+  X extends RawType | undefined = undefined,
+>(d: QuillsRouteDeclaration<M, Path, P, Q, B, R, E, L, A, V, H, C, X>) {
   // A signed route always writes (at least its delivery receipt), even an OAuth redirect's GET.
   if (
     d.audience === "signed"
@@ -337,16 +381,37 @@ export function buildQuillsRoute<
     throw new Error(
       `${d.operationId}: path parameter refinements are not kept`,
     );
-  type Route = QuillsRoute<M, Path, P, Q, B, R, E, A>;
+  type Route = QuillsRoute<M, Path, P, Q, B, R, E, A, X>;
   // The handler's input type depends on the audience; each branch below passes its own shape.
   const handle = d.handler as (input: object) => Promise<z.input<R>>;
   const prepare = d.prepare as ((input: object) => Promise<H>) | undefined;
   const audience: Audience = d.audience ?? "teammate";
+  const customer = audience === "portal" || audience === "widget";
+  if (
+    d.raw &&
+    (!(customer || audience === "public") ||
+      d.method !== "get" ||
+      !(d.response instanceof z.ZodString))
+  )
+    throw new Error(
+      `${d.operationId}: a raw response is for a portal, widget or public read with a string response`,
+    );
+  if (d.textBody && (audience !== "public" || !d.body))
+    throw new Error(
+      `${d.operationId}: textBody is for a public route with a body`,
+    );
   if (Boolean(d.prepare) !== Boolean(d.call))
     throw new Error(`${d.operationId}: prepare and call come together`);
-  if (d.prepare && !["teammate", "signed"].includes(audience))
+  // ensureCustomer would create the caller in the second transaction, so it never matches the first.
+  if (
+    d.prepare &&
+    !(
+      ["teammate", "signed"].includes(audience) ||
+      (customer && !d.ensureCustomer)
+    )
+  )
     throw new Error(
-      `${d.operationId}: prepare and call are for teammate and signed routes`,
+      `${d.operationId}: prepare and call are for teammate, signed, portal and widget routes, without ensureCustomer`,
     );
   if (d.actor && audience !== "signed")
     throw new Error(`${d.operationId}: only a signed route names its actor`);
@@ -547,6 +612,14 @@ export function buildQuillsRoute<
         `${d.operationId}: ensureCustomer is portal-only and signIn does not apply to public routes`,
       );
     const signIn = audience !== "public" && d.signIn !== false;
+    const errors: Errors = {
+      ...d.errors,
+      ...(d.prepare && {
+        409: [d.errors?.[409], "The caller changed during the request; retry"]
+          .filter(Boolean)
+          .join("; "),
+      }),
+    };
     const route = createRoute({
       method: d.method,
       path: `/{workspace}${d.path}`,
@@ -556,6 +629,9 @@ export function buildQuillsRoute<
       description: d.description,
       // Portal callers use their Kaneo session; widget callers use a widget session Bearer token.
       security: [],
+      ...(d.textBody && {
+        middleware: [boundedRequestBody(TEXT_BODY_BYTES)],
+      }),
       request: {
         params: z.object({
           workspace: z
@@ -567,11 +643,26 @@ export function buildQuillsRoute<
         }),
         query: d.query,
         body: d.body && {
-          content: { "application/json": { schema: d.body } },
+          content: {
+            "application/json": { schema: d.body },
+            ...(d.textBody && {
+              "text/plain": {
+                schema: z.string().max(TEXT_BODY_BYTES).openapi({
+                  description:
+                    "The same JSON document as text/plain, as sendBeacon sends it",
+                }),
+              },
+            }),
+          },
         },
       },
       responses: {
-        200: jsonResponse(d.responseDescription, d.response),
+        200: d.raw
+          ? {
+              description: d.responseDescription,
+              content: { [d.raw]: { schema: d.response } },
+            }
+          : jsonResponse(d.responseDescription, d.response),
         ...(signIn && {
           401: errorResponse(
             audience === "portal"
@@ -583,8 +674,9 @@ export function buildQuillsRoute<
           403: errorResponse("This account is blocked"),
         }),
         ...(d.rateLimit && { 429: errorResponse("Too many attempts") }),
+        ...(d.textBody && { 413: errorResponse("Request body is too large") }),
         ...Object.fromEntries(
-          Object.entries(d.errors ?? {}).map(([status, text]) => [
+          Object.entries(errors).map(([status, text]) => [
             status,
             errorResponse(text),
           ]),
@@ -596,6 +688,11 @@ export function buildQuillsRoute<
         ),
       },
     } as unknown as Route);
+    const unavailable = (error: unknown): never => {
+      if (error instanceof QuillsWorkspaceUnavailable)
+        throw new HTTPException(404, { message: "Workspace not found" });
+      throw error;
+    };
     const handler = (async (
       c: Context<{ Variables: BaseVariables }, string, any>,
     ) => {
@@ -603,15 +700,37 @@ export function buildQuillsRoute<
       const input = {
         params,
         query: d.query && c.req.valid("query"),
-        body:
-          d.body &&
-          (c.req.header("content-type")
-            ? c.req.valid("json")
-            : emptyBody(d.body)),
+        body: d.body && (await readBody(c, d.body, d.textBody)),
       };
       if (d.rateLimit)
         await enforceRateLimit(c, params.workspace, d.operationId, d.rateLimit);
       const credentials = await readCredentials(c, audience, params.workspace);
+      // `call` may wait on a provider or object storage, so it holds no pooled connection: `prepare`
+      // reads with the caller first, and the handler's transaction must find the same caller again.
+      let seen: { workspaceId: string; caller: QuillsCaller } | undefined;
+      let called = undefined as C;
+      if (prepare) {
+        const first = await withQuillsAudience(
+          { workspace: params.workspace, kaneoUserId: credentials.account?.id },
+          async (db, workspace) => {
+            const scoped = {
+              ...input,
+              workspaceId: workspace.id,
+            } as QuillsRouteInput<P, Q, B>;
+            const caller = await resolveCaller(db, audience, credentials, {
+              signIn,
+              ensureCustomer: false,
+            });
+            return {
+              scoped,
+              caller,
+              prepared: await prepare({ ...scoped, db, caller }),
+            };
+          },
+        ).catch(unavailable);
+        seen = { workspaceId: first.scoped.workspaceId, caller: first.caller };
+        called = await d.call!(first.prepared, first.scoped);
+      }
       const result = await withQuillsAudience(
         {
           workspace: params.workspace,
@@ -627,11 +746,21 @@ export function buildQuillsRoute<
             signIn,
             ensureCustomer: d.ensureCustomer === true,
           });
+          if (
+            seen &&
+            (seen.workspaceId !== workspace.id ||
+              seen.caller.principalId !== caller.principalId ||
+              seen.caller.customerId !== caller.customerId)
+          )
+            throw new HTTPException(409, {
+              message: "The caller changed during the request; retry",
+            });
           const result = d.response.parse(
             await handle({
               ...scoped,
               db,
               caller,
+              called,
               acceptLanguage: c.req.header("accept-language") ?? null,
               request: requestMeta(c.req.raw.headers),
             }),
@@ -642,11 +771,11 @@ export function buildQuillsRoute<
             await recordQuillsChange(db, callerActor(caller), one);
           return result;
         },
-      ).catch((error) => {
-        if (error instanceof QuillsWorkspaceUnavailable)
-          throw new HTTPException(404, { message: "Workspace not found" });
-        throw error;
-      });
+      ).catch(unavailable);
+      if (d.raw)
+        return c.body(result as string, 200, {
+          "content-type": `${d.raw}; charset=utf-8`,
+        });
       return c.json(result, 200);
     }) as unknown as RouteHandler<typeof route, RouteEnv<A>>;
     return [route, handler] as const;

@@ -4,7 +4,14 @@ import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
 import { apiRouter, z } from "../../openapi";
 import { principal, user as customer } from "../../database/quills/schema/auth";
 import { defineQuillsRoute } from "../framework/define-route";
+import { imageUrl } from "../framework/files";
 import { httpUrl, requirePortal } from "./feedback/viewer";
+
+/** An uploaded avatar (files/customer.ts) as a short-lived URL wins; else an http(s) image URL. */
+const avatarUrl = async (row: {
+  image: string | null;
+  imageKey: string | null;
+}) => (row.imageKey && (await imageUrl(row.imageKey))) || httpUrl(row.image);
 
 // The calling Kaneo account's customer profile in this workspace (decision D1). Every route
 // acts on the caller's own link; no route takes another person's ID except the public avatar.
@@ -35,7 +42,11 @@ const getProfile = defineQuillsRoute({
     const account = caller.account!;
     const [row] = caller.customerId
       ? await db
-          .select({ name: customer.name, image: customer.image })
+          .select({
+            name: customer.name,
+            image: customer.image,
+            imageKey: customer.imageKey,
+          })
           .from(customer)
           .where(eq(customer.id, caller.customerId))
           .limit(1)
@@ -46,7 +57,7 @@ const getProfile = defineQuillsRoute({
       customerId: caller.customerId,
       name: row?.name ?? account.name,
       email: account.email,
-      avatarUrl: httpUrl(row ? row.image : account.image),
+      avatarUrl: row ? await avatarUrl(row) : httpUrl(account.image),
     };
   },
 });
@@ -77,7 +88,7 @@ const updateProfile = defineQuillsRoute({
       .update(customer)
       .set({ name: body.name })
       .where(eq(customer.id, caller.customerId!))
-      .returning({ image: customer.image });
+      .returning({ image: customer.image, imageKey: customer.imageKey });
     await db
       .update(principal)
       .set({ displayName: body.name })
@@ -88,7 +99,7 @@ const updateProfile = defineQuillsRoute({
       customerId: caller.customerId,
       name: body.name,
       email: caller.account!.email,
-      avatarUrl: httpUrl(row?.image ?? null),
+      avatarUrl: row ? await avatarUrl(row) : null,
     };
   },
 });
@@ -142,14 +153,14 @@ const avatar = defineQuillsRoute({
   handler: async ({ db, params }) => {
     await requirePortal(db);
     const [row] = await db
-      .select({ image: customer.image })
+      .select({ image: customer.image, imageKey: customer.imageKey })
       .from(customer)
       // Only a customer with a principal is a person of this workspace's portal.
       .innerJoin(principal, eq(principal.userId, customer.id))
       .where(eq(customer.id, params.customerId))
       .limit(1);
     if (!row) throw new HTTPException(404, { message: "Customer not found" });
-    return { url: httpUrl(row.image) };
+    return { url: await avatarUrl(row) };
   },
 });
 

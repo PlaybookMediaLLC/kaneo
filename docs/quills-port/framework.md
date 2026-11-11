@@ -28,6 +28,21 @@ Differences between this design and the P0 code:
 - `links.ts` is 175 lines after the formatter's line wrap, not about 135.
 - Team bind and update now return 403 before the team lookup, return only declared fields,
   and return 400 for a body with no Content-Type.
+- The declaration has the field `raw` (portal, widget and public reads): `application/rss+xml` or
+  `application/xml`. The response schema is a string, and the handler returns the document. The
+  contract skips `strict-response` only for these routes. It checks `raw-response` instead (the
+  declared content type and a text body) and still runs the leak checks on the text. Every other
+  route must answer `application/json`.
+- The declaration has the field `textBody` (public routes with a body): a `text/plain` body is read
+  as JSON, so `sendBeacon` needs no CORS preflight. The body is at most 8 KiB. Another route answers
+  `text/plain` with 415.
+- `prepare` and `call` are also for portal and widget routes, as the non-teammate step that `load`
+  is for teammates. `prepare` reads with the caller in its own transaction (for example the portal
+  gate), `call` runs with no transaction open (for example an upload verification), and the
+  handler gets `called`. The handler's transaction resolves the caller again and answers 409 when it
+  changed. They do not combine with `ensureCustomer`.
+- A widget fixture with `own` or `probe` gets the `customer-ownership` check: another visitor of A
+  sends the same input with its own session and must not change or read the visitor's records.
 
 The framework is one helper and one test suite. Both use the code that exists today:
 `withQuillsRequest`, `workspaceAccess`, `requireWorkspacePermission`, `createRoute`,

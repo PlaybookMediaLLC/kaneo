@@ -166,6 +166,23 @@ export function prepareArchive(
         );
     }
   }
+  // Live conversation tags that differ only in case would break the unique index on lower(name).
+  // As migration 0020 does: the oldest keeps its name, the others get the end of their ID added.
+  const live = (archive.tables.conversation_tags ?? [])
+    .filter((tag) => tag.deleted_at == null)
+    .sort(
+      (x, y) =>
+        (Date.parse(String(x.created_at)) || 0) -
+          (Date.parse(String(y.created_at)) || 0) ||
+        (String(x.id) < String(y.id) ? -1 : 1),
+    );
+  const names = new Set<string>();
+  for (const tag of live) {
+    const name = String(tag.name);
+    if (!names.has(name.toLowerCase())) names.add(name.toLowerCase());
+    else
+      tag.name = `${[...name].slice(0, 35).join("")} (${String(tag.id).slice(-12)})`;
+  }
   const boundTeams = new Set(
     (archive.tables.teams ?? [])
       .filter((t) => t.kaneo_team_id)

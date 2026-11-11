@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { settings } from "../../../database/quills/schema/auth";
+import { changelogEntries } from "../../../database/quills/schema/changelog";
 import { postComments, posts } from "../../../database/quills/schema/posts";
 import * as kaneo from "../../../database/schema";
 import quillsRouter from "../../index";
@@ -21,6 +22,7 @@ import { registry } from "../../framework/registry";
 import * as portalFixtures from "../index.fixture";
 import * as contentPublicFixtures from "../../content/public/index.fixture";
 import { enableWidget } from "../../widget/seed.fixture";
+import { portalUrl, publicUrl } from "./feeds";
 import { scene, world } from "./seed.fixture";
 
 // Feature checks for customer feedback that the per-route contract cannot express: the opt-in
@@ -76,7 +78,13 @@ async function call(
         options.body === undefined ? undefined : JSON.stringify(options.body),
     },
   );
-  return { status: res.status, body: await res.json().catch(() => null) };
+  const text = await res.text();
+  try {
+    return { status: res.status, body: JSON.parse(text) };
+  } catch {
+    // An XML document: the text.
+    return { status: res.status, body: text || null };
+  }
 }
 
 /** Changes one key of workspace A's portal settings and keeps the others. */
@@ -114,10 +122,18 @@ async function fingerprint() {
 
 describe.skipIf(!url)("Quills customer feedback", () => {
   beforeAll(async () => {
+    // The upload fixtures sign their keys locally; these values never reach a network.
+    vi.stubEnv("S3_ENDPOINT", "http://127.0.0.1:9");
+    vi.stubEnv("S3_BUCKET", "quills-feedback");
+    vi.stubEnv("S3_ACCESS_KEY_ID", "feedback");
+    vi.stubEnv("S3_SECRET_ACCESS_KEY", "feedback-secret");
     pool = new Pool({ connectionString: url, max: 5 });
     await startContract(pool, url!);
   }, 120000);
-  afterAll(() => stopContract());
+  afterAll(async () => {
+    vi.unstubAllEnvs();
+    await stopContract();
+  });
 
   it("answers 404 and leaks nothing on every portal and public route while the portal is off", async () => {
     const env = contractEnv();
@@ -211,10 +227,12 @@ describe.skipIf(!url)("Quills customer feedback", () => {
           path,
           (await call("GET", path, { user: env.customerB })).status,
         ]).toEqual([path, 403]);
-      const feed = await call("GET", "/changelog/feed");
-      const sitemap = await call("GET", "/sitemap");
-      expect(feed.body.items).toEqual([]);
-      expect(sitemap.body).toEqual({ boards: [], posts: [], changelog: [] });
+      const feed = await call("GET", "/changelog/rss.xml");
+      const sitemap = await call("GET", "/sitemap.xml");
+      expect(feed.body).toContain("<channel>");
+      expect(feed.body).not.toContain("<item>");
+      expect(sitemap.body).toContain("<urlset");
+      expect(sitemap.body).not.toContain("<url>");
       // An anonymous widget session is anyone: 403. A visitor the host app identified reads.
       const anonymous = await call("POST", "/widget/anonymous-session");
       const asAnonymous = await call("GET", "/widget/posts", {
@@ -229,6 +247,48 @@ describe.skipIf(!url)("Quills customer feedback", () => {
       expect(identified.status).toBe(200);
     } finally {
       await portal({ access: { visibility: "public" } });
+    }
+  });
+
+  it("serves the changelog RSS and the sitemap as XML with absolute portal links", async () => {
+    const env = contractEnv();
+    const a = await world(env, env.a);
+    await env.scoped(env.a, (db) =>
+      db
+        .update(changelogEntries)
+        .set({ title: `Fixes & <improvements> "${a.entryId}"` })
+        .where(eq(changelogEntries.id, a.entryId)),
+    );
+    const portalBase = portalUrl(env.a);
+    expect(portalBase).toMatch(
+      new RegExp(`^https?://[^/]+.*/portal/${env.a}$`),
+    );
+    const res = await app.request(`/quills-public/${env.a}/changelog/rss.xml`, {
+      headers: { "x-kaneo-client-ip": "203.0.113.251" },
+    });
+    expect(res.headers.get("content-type")).toBe(
+      "application/rss+xml; charset=utf-8",
+    );
+    const feed = await res.text();
+    expect(feed).toMatch(/^<\?xml version="1.0" encoding="UTF-8"\?>\n<rss /);
+    expect(feed).toContain(
+      `<title>Fixes &amp; &lt;improvements&gt; &quot;${a.entryId}&quot;</title>`,
+    );
+    expect(feed).toContain(`<link>${portalBase}/changelog/${a.entryId}</link>`);
+    expect(feed).toContain(
+      `<atom:link href="${publicUrl(env.a, "/changelog/rss.xml")}" rel="self"`,
+    );
+    const sitemap = await call("GET", "/sitemap.xml");
+    expect(sitemap.body).toContain(`<loc>${portalBase}</loc>`);
+    expect(sitemap.body).toMatch(
+      new RegExp(`<loc>${portalBase}/b/[^<]+/posts/${a.postId}</loc>`),
+    );
+    expect(sitemap.body).toContain(
+      `<loc>${portalBase}/changelog/${a.entryId}</loc>`,
+    );
+    for (const value of a.hidden) {
+      expect(feed).not.toContain(value);
+      expect(sitemap.body).not.toContain(value);
     }
   });
 

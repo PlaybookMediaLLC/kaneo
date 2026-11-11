@@ -18,12 +18,11 @@ import {
 import {
   badInputs,
   fingerprint,
-  forbiddenKey,
   grant,
-  keyNames,
-  looseness,
   outboxIssues,
   replace,
+  responseIssues,
+  responseText,
   rollbackIssues,
   send,
   setRole,
@@ -181,17 +180,7 @@ export async function checkRoute(
   if (ok.status !== 200)
     fail("authorized", `got ${ok.status} ${JSON.stringify(ok.body)}`);
   else {
-    const issues = [
-      ...looseness(d.response, ok.body),
-      ...new Set(
-        keyNames(ok.body)
-          .filter(
-            (key) => forbiddenKey.test(key) && !d.allowKeys?.includes(key),
-          )
-          .map((key) => `the response has a key named ${key}`),
-      ),
-    ];
-    for (const issue of issues) fail("strict-response", issue);
+    findings.push(...responseIssues(d, ok));
     for (const issue of await outboxIssues(d, fresh, ok.body, since, domain))
       fail("outbox", issue);
   }
@@ -314,7 +303,7 @@ async function checkAudienceRoute(
     fail("hidden", "a public fixture declares no hidden values");
   const hidden = f.hidden?.(ids) ?? [];
   const leaks = (check: string, res: Sent, values = hidden) => {
-    const text = JSON.stringify(res.body);
+    const text = responseText(res);
     const leaked = values.filter((value) => text.includes(value));
     if (leaked.length)
       fail(check, `the response contains ${leaked.join(", ")}`);
@@ -372,7 +361,7 @@ async function checkAudienceRoute(
     const asTeammate = await call(input, users.owner);
     if (
       teammate &&
-      JSON.stringify(asTeammate.body).includes(fromUuid("principal", teammate))
+      responseText(asTeammate).includes(fromUuid("principal", teammate))
     )
       fail("teammate-as-customer", "the response names the teammate principal");
     leaks("teammate-as-customer", asTeammate, own);
@@ -417,6 +406,19 @@ async function checkAudienceRoute(
       if (prior !== (await both()))
         fail("widget-credential", "a forged credential changed rows");
     }
+    // With `own` or `probe`: another visitor of A sends the same input with its own session.
+    if (f.own || f.probe) {
+      const snapshot = async () => JSON.stringify(await f.probe?.(env, ids));
+      const before = await snapshot();
+      const other = await env.widgetVisitor(env.a);
+      const res = await call({ ...input, bearer: other.token });
+      leaks("customer-ownership", res, f.own?.(ids) ?? []);
+      if (before !== (await snapshot()))
+        fail(
+          "customer-ownership",
+          "another widget visitor changed the visitor's records",
+        );
+    }
   }
 
   for (const bad of badInputs(d, input))
@@ -450,17 +452,7 @@ async function checkAudienceRoute(
   if (ok.status !== 200)
     fail("authorized", `got ${ok.status} ${JSON.stringify(ok.body)}`);
   else {
-    const issues = [
-      ...looseness(d.response, ok.body),
-      ...new Set(
-        keyNames(ok.body)
-          .filter(
-            (key) => forbiddenKey.test(key) && !d.allowKeys?.includes(key),
-          )
-          .map((key) => `the response has a key named ${key}`),
-      ),
-    ];
-    for (const issue of issues) fail("strict-response", issue);
+    findings.push(...responseIssues(d, ok));
     leaks("hidden", ok, f.hidden?.(freshIds) ?? []);
     const principalId = f.actor
       ? await f.actor(env, freshIds, ok.body)
@@ -521,7 +513,7 @@ async function checkSignedRoute(
   const input = f.valid(ids);
   if (!f.hidden) fail("hidden", "a signed fixture declares no secret values");
   const leaks = (check: string, res: Sent, values: string[]) => {
-    const text = JSON.stringify(res.body);
+    const text = responseText(res);
     const leaked = values.filter((value) => text.includes(value));
     if (leaked.length)
       fail(check, `the response contains ${leaked.join(", ")}`);
@@ -574,17 +566,7 @@ async function checkSignedRoute(
   if (ok.status !== 200)
     fail("authorized", `got ${ok.status} ${JSON.stringify(ok.body)}`);
   else {
-    const issues = [
-      ...looseness(d.response, ok.body),
-      ...new Set(
-        keyNames(ok.body)
-          .filter(
-            (key) => forbiddenKey.test(key) && !d.allowKeys?.includes(key),
-          )
-          .map((key) => `the response has a key named ${key}`),
-      ),
-    ];
-    for (const issue of issues) fail("strict-response", issue);
+    findings.push(...responseIssues(d, ok));
     leaks("hidden", ok, f.hidden?.(freshIds) ?? []);
     // A machine caller records a system change: no principal.
     for (const issue of await outboxIssues(d, fresh, ok.body, since, domain, {
@@ -716,9 +698,8 @@ async function checkInternalRoute(
   if (ok.status !== 200)
     fail("authorized", `got ${ok.status} ${JSON.stringify(ok.body)}`);
   else {
-    for (const issue of looseness(d.response, ok.body))
-      fail("strict-response", issue);
-    if (token && JSON.stringify(ok.body).includes(token))
+    findings.push(...responseIssues(d, ok));
+    if (token && responseText(ok).includes(token))
       fail("hidden", "the response contains the internal token");
   }
   return findings;

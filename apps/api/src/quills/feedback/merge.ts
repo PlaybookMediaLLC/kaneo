@@ -1,6 +1,14 @@
-import { and, asc, eq, inArray, isNull, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  type SQL,
+} from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
-import type { PostId, TypeId } from "@kaneo/ids";
+import type { BoardId, PostId, TypeId } from "@kaneo/ids";
 import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
 import {
   apiRouter,
@@ -23,6 +31,7 @@ import {
   loadProjects,
   notTest,
   onVisibleBoard,
+  visibleBoard,
   visiblePost,
 } from "./visibility";
 
@@ -174,6 +183,108 @@ export async function mergePosts(
   };
 }
 
+/** Clears the merge links of `pairs` and records the activity on both sides. The callers recount. */
+async function unlink(
+  db: Db,
+  actor: { principalId: TypeId<"principal"> },
+  pairs: { id: PostId; canonicalPostId: PostId }[],
+  titles: Map<PostId, string>,
+) {
+  await db
+    .update(posts)
+    .set({
+      canonicalPostId: null,
+      mergedAt: null,
+      mergedByPrincipalId: null,
+      mergeCheckedAt: null,
+    })
+    .where(
+      inArray(
+        posts.id,
+        pairs.map((pair) => pair.id),
+      ),
+    );
+  await db.insert(postActivity).values(
+    pairs.flatMap(({ id, canonicalPostId }) => [
+      {
+        postId: id,
+        principalId: actor.principalId,
+        type: "post.unmerged",
+        metadata: {
+          otherPostId: canonicalPostId,
+          otherPostTitle: titles.get(canonicalPostId),
+        },
+      },
+      {
+        postId: canonicalPostId,
+        principalId: actor.principalId,
+        type: "post.unmerged",
+        metadata: { otherPostId: id, otherPostTitle: titles.get(id) },
+      },
+    ]),
+  );
+}
+
+/**
+ * A board delete (boards.ts): unmerges every live post that is merged into a post on the board, a
+ * deleted post included, in the delete's transaction, so those posts can be voted on and merged
+ * again. Locks the posts in ID order, recounts both sides and records the activity, as an unmerge
+ * does. Returns the pairs whose merged post is on a board that the caller can see (`projects`): the
+ * response and the outbox name no other post.
+ *
+ * ponytail: one event per unmerged post, unbounded; page the unmerge if a board ever carries
+ * thousands of merged posts.
+ */
+export async function unmergeFromBoard(
+  db: Db,
+  actor: { principalId: TypeId<"principal"> },
+  boardId: BoardId,
+  projects: string[],
+) {
+  const merged = async () =>
+    (
+      await db
+        .select({
+          id: posts.id,
+          canonicalPostId: posts.canonicalPostId,
+          visible: visibleBoard(posts.boardId, projects).mapWith(Boolean),
+        })
+        .from(posts)
+        .where(
+          and(
+            isNull(posts.deletedAt),
+            inArray(
+              posts.canonicalPostId,
+              db
+                .select({ id: posts.id })
+                .from(posts)
+                .where(eq(posts.boardId, boardId)),
+            ),
+          ),
+        )
+    ).map((row) => ({ ...row, canonicalPostId: row.canonicalPostId! }));
+  const found = await merged();
+  if (!found.length) return [];
+  const ids = [
+    ...new Set(found.flatMap((row) => [row.id, row.canonicalPostId])),
+  ];
+  const locked = await lockPosts(db, ids, isNotNull(posts.id));
+  const titles = new Map(locked.map((row) => [row.id, row.title]));
+  // A concurrent unmerge or merge may have changed a pair before the lock: read the pairs again.
+  const pairs = (await merged()).filter(
+    (row) => titles.has(row.id) && titles.has(row.canonicalPostId),
+  );
+  if (!pairs.length) return [];
+  await unlink(db, actor, pairs, titles);
+  for (const id of new Set(
+    pairs.flatMap((row) => [row.id, row.canonicalPostId]),
+  ))
+    await recount(db, id);
+  return pairs
+    .filter((row) => row.visible)
+    .map((row) => ({ postId: row.id, canonicalPostId: row.canonicalPostId }));
+}
+
 const mergePost = defineQuillsRoute({
   method: "post",
   path: "/posts/{postId}/merge",
@@ -245,34 +356,17 @@ const unmergePost = defineQuillsRoute({
     if (!post || !canonical) throw notFound();
     if (post.canonicalPostId !== canonicalPostId)
       throw conflict("The post changed; reload it and try again");
-    await db
-      .update(posts)
-      .set({
-        canonicalPostId: null,
-        mergedAt: null,
-        mergedByPrincipalId: null,
-        mergeCheckedAt: null,
-      })
-      .where(eq(posts.id, postId));
+    await unlink(
+      db,
+      actor,
+      [{ id: postId, canonicalPostId }],
+      new Map([
+        [postId, post.title],
+        [canonicalPostId, canonical.title],
+      ]),
+    );
     const voteCount = await recount(db, canonicalPostId);
     await recount(db, postId);
-    await db.insert(postActivity).values([
-      {
-        postId,
-        principalId: actor.principalId,
-        type: "post.unmerged",
-        metadata: {
-          otherPostId: canonicalPostId,
-          otherPostTitle: canonical.title,
-        },
-      },
-      {
-        postId: canonicalPostId,
-        principalId: actor.principalId,
-        type: "post.unmerged",
-        metadata: { otherPostId: postId, otherPostTitle: post.title },
-      },
-    ]);
     return {
       post: { id: postId },
       canonicalPost: { id: canonicalPostId, voteCount },

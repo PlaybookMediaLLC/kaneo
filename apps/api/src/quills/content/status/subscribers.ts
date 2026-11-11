@@ -5,12 +5,11 @@ import {
   ilike,
   inArray,
   isNull,
-  lt,
   or,
   sql,
   type SQL,
 } from "drizzle-orm";
-import type { PrincipalId } from "@kaneo/ids";
+import type { PrincipalId, TypeId } from "@kaneo/ids";
 import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
 import {
   apiRouter,
@@ -55,6 +54,11 @@ const joined = (db: Db) =>
     .from(statusSubscriptions)
     .innerJoin(principal, eq(principal.id, statusSubscriptions.principalId))
     .leftJoin(user, eq(user.id, principal.userId));
+
+const keys = sql`${statusSubscriptions.createdAt}, ${statusSubscriptions.id}`;
+/** The rows after the cursor's row in the newest-first order. An unknown cursor matches nothing. */
+export const afterCursor = (cursor: TypeId<"status_sub">) =>
+  sql`(${keys}) < (select ${keys} from ${statusSubscriptions} where ${eq(statusSubscriptions.id, cursor)})`;
 
 /** Subscribes each person to the whole page. A person who opted out stays out. Returns who is now subscribed. */
 async function subscribeAll(
@@ -129,21 +133,8 @@ const listSubscribers = defineQuillsRoute({
         or(ilike(user.email, pattern), ilike(principal.displayName, pattern)),
       );
     }
-    if (query.cursor) {
-      const anchor = db
-        .select({ createdAt: statusSubscriptions.createdAt })
-        .from(statusSubscriptions)
-        .where(eq(statusSubscriptions.id, query.cursor));
-      conditions.push(
-        or(
-          lt(statusSubscriptions.createdAt, anchor),
-          and(
-            eq(statusSubscriptions.createdAt, anchor),
-            lt(statusSubscriptions.id, query.cursor),
-          ),
-        ),
-      );
-    }
+    // A row comparison, so every page reads status_subscriptions_workspace_created_idx.
+    if (query.cursor) conditions.push(afterCursor(query.cursor));
     const rows = await joined(db)
       .where(and(...conditions))
       .orderBy(

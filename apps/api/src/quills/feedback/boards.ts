@@ -14,6 +14,7 @@ import { boardProjects } from "../../database/quills/schema/platform-links";
 import { posts } from "../../database/quills/schema/posts";
 import { segments } from "../../database/quills/schema/segments";
 import { defineQuillsRoute, type Database } from "../framework/define-route";
+import { unmergeFromBoard } from "./merge";
 import { recountMergeTargets } from "./thread-counts";
 import { boardVisible, findBoard, loadProjects, notTest } from "./visibility";
 
@@ -377,19 +378,29 @@ const deleteBoard = defineQuillsRoute({
   operationId: "deleteQuillsBoard",
   summary: "Delete a feedback board",
   description:
-    "Soft delete. Its posts leave every list. Its project links are removed, because no route can read or unlink a deleted board.",
+    "Soft delete. Its posts leave every list. Its project links are removed, because no route can read or unlink a deleted board. Every live post merged into a post on the board is unmerged, so it can be voted on and merged again. `unmerged` and the outbox events name only the posts that the caller can see.",
   action: "manage_settings",
   params: boardParams,
-  response: z.object({ id: z.string(), deletedAt: responseTimestamp }),
+  response: z.object({
+    id: z.string(),
+    deletedAt: responseTimestamp,
+    unmerged: z.array(
+      z.object({ postId: z.string(), canonicalPostId: z.string() }),
+    ),
+  }),
   responseDescription: "Deleted board",
   errors,
-  event: ({ params }) => ({
-    type: "board.deleted",
-    entityType: "board",
-    entityId: params.boardId,
-  }),
+  event: ({ params }, result) => [
+    { type: "board.deleted", entityType: "board", entityId: params.boardId },
+    ...result.unmerged.map(({ postId, canonicalPostId }) => ({
+      type: "post.unmerged" as const,
+      entityType: "post" as const,
+      entityId: postId,
+      payload: { canonicalPostId },
+    })),
+  ],
   load: loadProjects,
-  handler: async ({ db, params, loaded: projects }) => {
+  handler: async ({ db, actor, params, loaded: projects }) => {
     await findBoard(db, params.boardId, projects);
     const [row] = await db
       .update(boards)
@@ -398,9 +409,10 @@ const deleteBoard = defineQuillsRoute({
       .returning({ id: boards.id, deletedAt: boards.deletedAt });
     if (!row) throw new HTTPException(404, { message: "Board not found" });
     await db.delete(boardProjects).where(eq(boardProjects.boardId, row.id));
+    const unmerged = await unmergeFromBoard(db, actor, row.id, projects);
     // Merged posts on a deleted board no longer count on their canonical posts.
     await recountMergeTargets(db, eq(posts.boardId, row.id));
-    return { id: row.id, deletedAt: row.deletedAt! };
+    return { id: row.id, deletedAt: row.deletedAt!, unmerged };
   },
 });
 

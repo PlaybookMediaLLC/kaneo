@@ -23,6 +23,7 @@ import {
   startContract,
   stopContract,
 } from "../../framework/contract";
+import { portalUrl } from "../../portal/feedback/feeds";
 import { helpContentIn, openPublic, statusContentIn } from "./seed.fixture";
 import { likePattern } from "./help-center/search";
 import { mintStatusUnsubscribeToken } from "./status/subscriptions";
@@ -66,7 +67,13 @@ async function call(
     },
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
   });
-  return { status: res.status, body: await res.json().catch(() => null) };
+  const raw = await res.text();
+  try {
+    return { status: res.status, body: JSON.parse(raw) };
+  } catch {
+    // An XML document: the text.
+    return { status: res.status, body: raw || null };
+  }
 }
 const text = (value: unknown) => JSON.stringify(value);
 const setSettings = (values: Partial<typeof settings.$inferInsert>) => {
@@ -108,7 +115,7 @@ describe.skipIf(!url)(
 
       await setSettings({ portalConfig: JSON.stringify({ enabled: false }) });
       expect((await call("GET", "/hc")).status).toBe(404);
-      expect((await call("GET", "/hc/sitemap")).status).toBe(404);
+      expect((await call("GET", "/hc/sitemap.xml")).status).toBe(404);
       await setSettings({ portalConfig: JSON.stringify({ enabled: true }) });
 
       await setSettings({
@@ -238,21 +245,28 @@ describe.skipIf(!url)(
       const env = contractEnv();
       await openPublic(env);
       const ids = await helpContentIn(env, env.a);
-      const sitemap = await call("GET", "/hc/sitemap");
+      const sitemap = await call("GET", "/hc/sitemap.xml");
       const idSlug = `${ids.published.urlId}-${ids.published.slug}`;
-      const entry = sitemap.body.entries.find(
-        (e: { path: string }) => e.path === `/hc/en/articles/${idSlug}`,
+      const page = (path: string) => portalUrl(env.a, path);
+      const entry = (sitemap.body as string)
+        .split("<url>")
+        .find((block) =>
+          block.includes(`<loc>${page(`/hc/en/articles/${idSlug}`)}</loc>`),
+        );
+      expect(entry).toContain(
+        `<xhtml:link rel="alternate" hreflang="en" href="${page(`/hc/en/articles/${idSlug}`)}" />`,
       );
-      expect(entry.alternates).toEqual([
-        { locale: "en", path: `/hc/en/articles/${idSlug}` },
-        { locale: "de", path: `/hc/de/articles/${idSlug}` },
-      ]);
+      expect(entry).toContain(
+        `<xhtml:link rel="alternate" hreflang="de" href="${page(`/hc/de/articles/${idSlug}`)}" />`,
+      );
+      // Exactly these two alternates, as the JSON entries had before.
+      expect(entry!.split("<xhtml:link").length - 1).toBe(2);
       for (const hidden of ids.hiddenPaths)
-        expect(text(sitemap.body)).not.toContain(hidden);
+        expect(sitemap.body).not.toContain(hidden);
       await setSettings({
         helpCenterConfig: JSON.stringify({ seo: { indexable: false } }),
       });
-      expect((await call("GET", "/hc/sitemap")).status).toBe(404);
+      expect((await call("GET", "/hc/sitemap.xml")).status).toBe(404);
     });
 
     it("resolves redirects only to public targets", async () => {
@@ -480,9 +494,26 @@ describe.skipIf(!url)(
       const anonymous = await call("GET", "/status/history?limit=50");
       for (const hidden of ids.hidden)
         expect(text(anonymous.body)).not.toContain(hidden);
-      const feed = await call("GET", "/status/feed");
+      const feed = await call("GET", "/status/rss.xml");
+      expect(feed.body).toContain(
+        `<link>${portalUrl(env.a, `/status/${ids.incidentId}`)}</link>`,
+      );
       for (const hidden of ids.hidden)
         expect(text(feed.body)).not.toContain(hidden);
+      // One item per update, open incidents first: with limit=1 only the newest open incident's
+      // item stays (the second seed above opened a newer one), and no resolved item.
+      const items = (body: string) =>
+        [...body.matchAll(/<link>[^<]*\/status\/([^<#]+)<\/link>/g)].map(
+          (match) => match[1],
+        );
+      expect(items(feed.body)).toEqual(
+        expect.arrayContaining([ids.incidentId, ids.resolvedId]),
+      );
+      const limited = items(
+        (await call("GET", "/status/rss.xml?limit=1")).body,
+      );
+      expect(limited).toHaveLength(1);
+      expect(limited).not.toContain(ids.resolvedId);
 
       const metadata = (statusSettings: object) =>
         setSettings({ metadata: JSON.stringify({ statusSettings }) });
@@ -496,7 +527,7 @@ describe.skipIf(!url)(
         }),
       });
       expect((await call("GET", "/status")).status).toBe(404);
-      expect((await call("GET", "/status/feed")).status).toBe(404);
+      expect((await call("GET", "/status/rss.xml")).status).toBe(404);
       await openPublic(env);
       await metadata({ enabled: true, audience: "authenticated" });
       expect((await call("GET", "/status")).status).toBe(404);

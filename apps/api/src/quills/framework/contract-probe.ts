@@ -11,14 +11,16 @@ import {
   users,
   type App,
   type ContractInput,
+  type Finding,
   type Fixture,
 } from "./contract-world";
 import { buildQuillsRoute, type AnyQuillsRoute } from "./define-route";
 
 // Requests, row fingerprints and response probes that the contract checks share.
 
-export type Sent = { status: number; body: any };
-export const forbiddenKey = /secret|token|password|hash|workspaceId/i;
+/** `body` is the parsed JSON, or the text when the response is not JSON. */
+export type Sent = { status: number; body: any; type: string | null };
+const forbiddenKey = /secret|token|password|hash|workspaceId/i;
 
 let clientCount = 0;
 export async function send(
@@ -57,7 +59,52 @@ export async function send(
       input.raw ??
       (input.body === undefined ? undefined : JSON.stringify(input.body)),
   });
-  return { status: res.status, body: await res.json().catch(() => null) };
+  const type = res.headers.get("content-type");
+  const text = await res.text();
+  let body: unknown = text || null;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    // Not JSON: the checks read the text.
+  }
+  return { status: res.status, body, type };
+}
+
+/** The response as text, for the leak checks: JSON as serialized, a raw document as sent. */
+export const responseText = (res: Sent) =>
+  typeof res.body === "string" ? res.body : JSON.stringify(res.body);
+
+/**
+ * The response checks of an authorized request. Only a raw route skips `strict-response`: it must
+ * answer its declared content type with a text body (`raw-response`). Every other route must answer
+ * JSON that matches a closed copy of its schema, with no forbidden key names. The callers run the
+ * leak checks on both.
+ */
+export function responseIssues(d: AnyQuillsRoute, res: Sent): Finding[] {
+  const type = res.type?.split(";")[0]?.trim();
+  if (d.raw)
+    return type === d.raw && typeof res.body === "string"
+      ? []
+      : [
+          {
+            check: "raw-response",
+            detail: `expected a ${d.raw} document, got ${res.type}`,
+          },
+        ];
+  const issues =
+    type === "application/json"
+      ? [
+          ...looseness(d.response, res.body),
+          ...new Set(
+            keyNames(res.body)
+              .filter(
+                (key) => forbiddenKey.test(key) && !d.allowKeys?.includes(key),
+              )
+              .map((key) => `the response has a key named ${key}`),
+          ),
+        ]
+      : [`expected application/json, got ${res.type}`];
+  return issues.map((detail) => ({ check: "strict-response", detail }));
 }
 
 /** The declared Quills action, or every other action, with or without the native permissions. */
@@ -115,11 +162,7 @@ export function badInputs(d: AnyQuillsRoute, input: ContractInput) {
 }
 
 /** Response values that a closed object schema does not declare. */
-export function looseness(
-  schema: z.ZodType,
-  value: unknown,
-  path = "$",
-): string[] {
+function looseness(schema: z.ZodType, value: unknown, path = "$"): string[] {
   if (value === null || typeof value !== "object") return [];
   if (
     schema instanceof z.ZodOptional ||
@@ -153,7 +196,7 @@ export const strings = (value: unknown): string[] =>
       ? Object.values(value).flatMap(strings)
       : [];
 
-export const keyNames = (value: unknown): string[] =>
+const keyNames = (value: unknown): string[] =>
   value !== null && typeof value === "object"
     ? Object.entries(value).flatMap(([key, item]) => [key, ...keyNames(item)])
     : [];

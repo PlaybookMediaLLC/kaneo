@@ -1,4 +1,5 @@
 import { apiRouter } from "../openapi";
+import customerFiles from "./files/customer";
 import inboundEmail from "./inbound/email";
 import integrationWebhooks from "./integrations/inbound";
 import { oauthCallback } from "./integrations/oauth";
@@ -6,6 +7,7 @@ import jobWake from "./jobs/wake";
 import portalFeedback from "./portal/feedback/index";
 import contentPublic from "./content/public/index";
 import portal from "./portal/index";
+import track from "./reporting/track";
 import portalSupport from "./support/customer/portal";
 import widgetFeedback from "./widget/feedback/index";
 import widgetHost from "./widget/host";
@@ -35,4 +37,6 @@ export default apiRouter()
   .route("/", contentPublic)
   .route("/", widgetKbAsk)
   .route("/", portalSupport)
-  .route("/", widgetSupport);
+  .route("/", widgetSupport)
+  .route("/", customerFiles)
+  .route("/", track);

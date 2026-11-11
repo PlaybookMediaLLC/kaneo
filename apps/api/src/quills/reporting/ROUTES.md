@@ -44,6 +44,28 @@ Completion checks:         authenticated endpoint, tenant/object access, read/ex
   about 90 days.
 - Post activity (`activity.ts#fetchActivityForPost`) is already `listQuillsPostActivity` in `feedback/posts.ts`.
 
+## Visitor tracking beacon (`track.ts`, public)
+
+| operationId | Route | Audience | Action | Tables | Event | Tests |
+|---|---|---|---|---|---|---|
+| `createQuillsTrack` | `POST /quills-public/{workspace}/track` (JSON or text/plain; 120 per minute per client) | public | create | page_views, visitor_devices, kv_store (daily salt), settings (read) | none (analytics) | contract, `track.test.ts` |
+
+- Body: `url`, `referrer`, `surface` (`portal` or `widget`), `device` (the source's `deviceId`, named as in
+  `POST /widget/device`: a caller-chosen value). 404 while the surface is off. Always `{}` otherwise.
+- Stored: the page's origin and path (no query string), the campaign source or the external referrer's host,
+  the CDN country, coarse device, browser and OS names, and `sha256(salt, origin, ip, user agent)`. The salt is
+  per workspace and UTC day and expires after 48 hours (kv_store), so a hash cannot be linked across days or
+  workspaces. No raw IP or User-Agent is stored with a view, as in the source. Like the source's rate bucket,
+  the rate limit keeps the client IP in `rate_bucket` until retention removes the expired window (now 10,000
+  rows per workspace and run).
+- Nothing is stored for Do Not Track or Global Privacy Control, a bot, a URL that is not http(s), a widget with
+  visitor analytics off, or a day with no page-view partition. The route never creates a partition, and the
+  server clock sets `occurred_at`. With device tracking off, the device ID is dropped.
+- Deviations: schema errors answer 400 and an exceeded rate limit 429 (the source drops both and answers 204).
+  `isbot` and Bowser are not installed: a short pattern list classifies bots and devices. The `page.visited`
+  workflow trigger is not dispatched. The beacon only touches a `visitor_devices` row that a widget session
+  linked; it never creates one, because nothing removes device rows and the caller chooses the ID.
+
 ## Transfer runs
 
 | operationId | Route | Action | Tables | Event | Tests |
@@ -98,7 +120,6 @@ replaces `listQuillsExportRunsRuns` (`routes/api/export/runs.ts`), and `listQuil
 
 | Source | Reason |
 |---|---|
-| `routes/api/track.ts#POST` (`createQuillsTrack`) | Needs a framework change: a non-teammate handler gets no request headers, and the visitor hash needs the client IP, User-Agent, CDN country and DNT/GPC headers. |
 | Workspace archive export and import runs | The archive holds integration credentials and rows on boards the caller cannot see. `db:transfer:quills` stays the operator path. |
 | Analytics support metrics (CSAT, first response, time to close, teammate performance, conversation volume) and contributors, followers, leads, verified rate, signups by source | Not ported. SLA reporting is `getQuillsSupportReporting`. |
 | Import dry run, auto-created boards, statuses and tags, vote counts and voters, update on reimport | Not ported. Unknown values are row errors; a reimport skips rows by `source_id`. |

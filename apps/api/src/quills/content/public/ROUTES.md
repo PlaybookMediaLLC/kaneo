@@ -85,7 +85,7 @@ Completion checks:             tenant/object access, mutation, read/search (evid
 | `searchQuillsPublicHelpCenter` | `POST /hc/search` (60 per minute per client) | portal | read | `kb_*`, `kb_search_queries` | none (analytics row) | contract, feature |
 | `recordQuillsPublicArticleFeedback` | `POST /hc/articles/{articleId}/feedback` (30 per 10 min) | portal | create | `kb_article_feedback`, `kb_articles` | `help_center.article_feedback_recorded` | contract, rollback, feature |
 | `submitQuillsPublicArticleFeedbackReason` | `POST /hc/feedback/{feedbackId}/reason` (10 per 10 min) | portal | create | `kb_article_feedback` | `help_center.article_feedback_reason_added` | contract, rollback, feature |
-| `getQuillsPublicHelpCenterSitemap` | `GET /hc/sitemap` (JSON entries, relative paths, ≤ 50,000) | portal (anonymous view) | read | `settings`, `kb_*` | - | contract, feature |
+| `getQuillsPublicHelpCenterSitemap` | `GET /hc/sitemap.xml` (sitemap XML with hreflang alternates, ≤ 50,000 URLs) | portal (anonymous view) | read | `settings`, `kb_*` | - | contract, feature |
 
 Merged: `listPublicCategoriesFn`, `listPopularPublicArticlesFn` and the config into `GET /hc`;
 `getPublicCategoryBySlugFn` and `getPublicCategoryPageFn` into the slug route;
@@ -118,7 +118,7 @@ Merged: `widgetListPublicCategoriesFn`; `widgetListPublicArticlesFn` and
 | `getQuillsPublicStatusIncident` | `GET /status/incidents/{incidentId}` | portal | read | `status_incidents`, updates, links, components | - | contract, feature |
 | `getQuillsPublicStatusUptime` | `GET /status/uptime?componentIds=` (≤ 50, `windowDays` ≤ 365) | portal | read | `status_components`, `status_component_events` | - | contract |
 | `listQuillsPublicStatusHistory` | `GET /status/history` (`cursor`, `limit` ≤ 50, `before`) | portal | read | incidents, updates, links, components | - | contract, feature |
-| `listQuillsPublicStatusFeed` | `GET /status/feed` (`limit` ≤ 100; JSON items) | portal | read | incidents, updates, links, components | - | contract, feature |
+| `listQuillsPublicStatusFeed` | `GET /status/rss.xml` (RSS 2.0, one item per update; `limit` ≤ 100) | portal | read | incidents, updates, links, components | - | contract, feature |
 | `getQuillsMyStatusSubscription` | `GET /status/subscription` | portal | read | `status_subscriptions` | - | contract, feature |
 | `subscribeQuillsStatus` | `PUT /status/subscription` (`page`, or visible `components`; 20 per 10 min) | portal | update | `status_subscriptions`, `status_components` | `status.subscribed` | contract, rollback, feature |
 | `unsubscribeQuillsStatus` | `DELETE /status/subscription` (keeps the row as the opt-out) | portal | update | `status_subscriptions` | `status.unsubscribed` | contract, rollback, feature |
@@ -137,7 +137,6 @@ use. The route answers 200 for every token; `changed` says whether it unsubscrib
 
 | Item | Reason |
 |---|---|
-| XML output for `hc/sitemap.xml` and the status RSS feed | `defineQuillsRoute` answers JSON only, and the framework files are owned by another agent. The routes return the entries; the site or web app renders XML and adds its origin. A raw-response option in the framework would let the API serve XML directly. |
 | Email-only (double opt-in) status subscription and its confirm step | The source keeps no raw-email subscribers: a subscriber is always a principal. A signed-in portal customer needs no confirmation. A confirm mail also needs customer mail delivery (below). |
 | Status subscriber mail and its unsubscribe links | P4's fan-out and mail handler deliver to current teammates only (`fanout.ts`: "Customers wait for the portal audience"). No status mail is sent, so no production code mints a token yet; the token route and the minting helper are ready for the sender. |
 | `getRelatedPublicArticlesFn` and semantic search | Related articles and the hybrid ranking need article embeddings (AI, P8). The article page lists the other public articles of its category. |

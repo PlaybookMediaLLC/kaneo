@@ -210,19 +210,29 @@ const listPerformance = defineQuillsRoute({
   },
 });
 
+/**
+ * The days of search log that retention keeps: QUILLS_LOG_RETENTION_DAYS, as jobs/retention.ts
+ * reads it (default 90). A longer window would read nothing more.
+ */
+function retainedDays() {
+  const days = Number(process.env.QUILLS_LOG_RETENTION_DAYS ?? 90);
+  return Number.isInteger(days) && days >= 1 && days <= 3650 ? days : 90;
+}
+
 const listSearchTerms = defineQuillsRoute({
   method: "get",
   path: "/help-center/analytics/search-terms",
   operationId: "listQuillsHelpCenterSearchTerms",
   summary: "Rank visitor search terms in a trailing window",
   description:
-    "Terms are grouped after trimming, collapsing spaces and lower-casing. `zeroResultSearches` shows the content gaps.",
+    "Terms are grouped after trimming, collapsing spaces and lower-casing. `zeroResultSearches` shows the content gaps. The window is `days`, at most the search log retention (QUILLS_LOG_RETENTION_DAYS, 90 by default); the response's `days` is the window used.",
   action: "read",
   query: z.object({
     days: z.coerce.number().int().min(1).max(365).default(30),
     limit: limit(50),
   }),
   response: z.object({
+    days: z.number(),
     terms: z.array(
       z.object({
         term: z.string(),
@@ -236,6 +246,7 @@ const listSearchTerms = defineQuillsRoute({
   responseDescription: "Terms by search count",
   handler: async ({ db, query }) => {
     const q = helpCenterSearchQueries;
+    const days = Math.min(query.days, retainedDays());
     const rows = await db
       .select({
         term: sql<string>`(array_agg(${q.query} order by ${q.createdAt} desc))[1]`,
@@ -246,10 +257,7 @@ const listSearchTerms = defineQuillsRoute({
       })
       .from(q)
       .where(
-        gte(
-          q.createdAt,
-          new Date(Date.now() - query.days * 24 * 60 * 60 * 1000),
-        ),
+        gte(q.createdAt, new Date(Date.now() - days * 24 * 60 * 60 * 1000)),
       )
       .groupBy(q.normalizedQuery)
       .orderBy(
@@ -257,6 +265,7 @@ const listSearchTerms = defineQuillsRoute({
       )
       .limit(query.limit);
     return {
+      days,
       terms: rows.map((row) => ({
         ...row,
         lastSearchedAt: new Date(row.lastSearchedAt),

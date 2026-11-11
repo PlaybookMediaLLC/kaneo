@@ -1,5 +1,6 @@
-import { apiRouter, nullableResponseTimestamp, z } from "../../../../openapi";
+import { apiRouter, z } from "../../../../openapi";
 import { defineQuillsRoute } from "../../../framework/define-route";
+import { portalUrl, sitemapDocument } from "../../../portal/feedback/feeds";
 import { DEFAULT_LOCALE } from "../../help-center/shared";
 import {
   notFound,
@@ -8,9 +9,8 @@ import {
   visibleCategories,
 } from "./visibility";
 
-// The help-center sitemap as data. The framework answers JSON only, so the site or web app
-// renders the XML and prefixes its own origin: paths here are relative, which keeps bundled and
-// separately hosted deployments correct. Crawlers are anonymous: gated content never appears.
+// The help-center sitemap XML. Page URLs are under the portal's absolute URL
+// (KANEO_CLIENT_URL/portal/{workspaceId}). Crawlers are anonymous: gated content never appears.
 
 /** The sitemap protocol's limit for one file. */
 const MAX_ENTRIES = 50000;
@@ -19,24 +19,17 @@ const sitemap = defineQuillsRoute({
   audience: "portal",
   signIn: false,
   method: "get",
-  path: "/hc/sitemap",
+  path: "/hc/sitemap.xml",
   operationId: "getQuillsPublicHelpCenterSitemap",
-  summary: "Get the public help-center sitemap entries",
+  summary: "Get the public help-center sitemap",
   description:
-    "Home pages, collections and articles in every enabled locale, with the other locales of each page as alternates. 404 when indexing or the sitemap is off. At most 50,000 entries.",
+    "Sitemap XML of the home pages, collections and articles in every enabled locale, with the other locales of each page as hreflang alternates. 404 when indexing or the sitemap is off. At most 50,000 URLs.",
   action: "read",
-  response: z.object({
-    entries: z.array(
-      z.object({
-        path: z.string(),
-        lastModified: nullableResponseTimestamp,
-        alternates: z.array(z.object({ locale: z.string(), path: z.string() })),
-      }),
-    ),
-  }),
-  responseDescription: "Sitemap entries",
+  raw: "application/xml",
+  response: z.string(),
+  responseDescription: "The sitemap document",
   errors: { 404: "Help center or sitemap not found" },
-  handler: async ({ db, caller }) => {
+  handler: async ({ db, caller, workspaceId }) => {
     const base = await openHelpCenter(db, caller, "portal", undefined, {
       anonymous: true,
     });
@@ -66,20 +59,24 @@ const sitemap = defineQuillsRoute({
       }))
         add(article.id, code, article.path, article.updatedAt);
     }
-    return {
-      entries: [...pages.values()]
+    const url = (path: string) => portalUrl(workspaceId, path);
+    return sitemapDocument(
+      [...pages.values()]
         .flatMap((versions) =>
           versions.map(({ path, lastModified }) => ({
-            path,
+            loc: url(path),
             lastModified,
             alternates:
               versions.length > 1
-                ? versions.map(({ locale, path }) => ({ locale, path }))
+                ? versions.map(({ locale, path }) => ({
+                    hreflang: locale,
+                    href: url(path),
+                  }))
                 : [],
           })),
         )
         .slice(0, MAX_ENTRIES),
-    };
+    );
   },
 });
 
