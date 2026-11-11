@@ -1,11 +1,17 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { createId } from "@kaneo/ids";
 import { typeIdSchema } from "@kaneo/ids/zod";
-import { withEmailIdempotencyKey, type EmailResult } from "@kaneo/email/quills";
+import {
+  withEmailIdempotencyKey,
+  withEmailTags,
+  type EmailResult,
+} from "@kaneo/email/quills";
 import { withQuillsSystemWorkspace } from "../../../database/quills/client";
 import { principal } from "../../../database/quills/schema/auth";
 import { emailLog } from "../../../database/quills/schema/email-log";
 import type { JobQueueRow } from "../../../database/quills/schema/job-queue";
+import { mailTags } from "../../framework/signed";
 import { quillsReaders } from "../../framework/platform-reads";
 import { loadEvent, subscribers } from "../fanout";
 import { claimDelivery, settleDelivery } from "../ledger";
@@ -13,11 +19,15 @@ import { wants } from "../preferences";
 import { finishQuillsJob } from "../queue";
 import { customerPostAddress } from "./support-mail";
 
+type EmailLogRow = typeof emailLog.$inferInsert;
+
 export const mailPayloadSchema = z
   .object({
     eventId: z.string().min(1).max(200),
     /** Absent for direct mail: the event's content names the one address (an invite). */
     principalId: typeIdSchema("principal").optional(),
+    /** A copy job: the message whose customer this mail reaches (a tracker's reply-all copy). */
+    messageId: typeIdSchema("conversation_msg").optional(),
   })
   .strict();
 
@@ -54,8 +64,9 @@ export function rejection(error: unknown) {
 }
 
 export async function runMailJob(workspaceId: string, job: JobQueueRow) {
-  const { eventId, principalId } = mailPayloadSchema.parse(job.payload);
-  const key = `mail:${eventId}:${principalId ?? "direct"}`;
+  const { eventId, principalId, messageId } = mailPayloadSchema.parse(
+    job.payload,
+  );
   const finish = (error?: string, permanent?: boolean) =>
     withQuillsSystemWorkspace(workspaceId, (db) =>
       finishQuillsJob(db, job.id, job.leaseToken!, error, permanent),
@@ -63,9 +74,21 @@ export async function runMailJob(workspaceId: string, job: JobQueueRow) {
   const prepared = await withQuillsSystemWorkspace(workspaceId, async (db) => {
     const event = await loadEvent(db, eventId);
     const entry = event && subscribers[event.type];
+    if (!entry) return undefined;
+    // A copy job mails a message that the entry still names as this event's copy.
+    if (messageId) {
+      if (
+        principalId ||
+        !(await entry.copies?.(db, event, messageId))?.includes(messageId)
+      )
+        return undefined;
+      const content = await entry.mail?.(db, event, null, messageId);
+      return content?.to
+        ? { content, to: content.to, userId: null, customer: null }
+        : undefined;
+    }
     // A direct entry mails only the address its content names; a principal entry never does.
-    if (!entry || Boolean(entry.direct) === Boolean(principalId))
-      return undefined;
+    if (Boolean(entry.direct) === Boolean(principalId)) return undefined;
     const content = await entry.mail?.(db, event, principalId ?? null);
     if (!content) return undefined;
     if (!principalId)
@@ -89,12 +112,14 @@ export async function runMailJob(workspaceId: string, job: JobQueueRow) {
   // Membership and address are read at send time: a teammate who left or lost access gets nothing,
   // and a customer gets mail only while the portal or widget still shows them the post.
   const customerEmail = prepared.customer
-    ? await customerPostAddress(
-        workspaceId,
-        prepared.customer,
-        prepared.content.postId,
-        prepared.content.commentId,
-      )
+    ? prepared.content.customerAddress
+      ? await prepared.content.customerAddress(workspaceId, prepared.customer)
+      : await customerPostAddress(
+          workspaceId,
+          prepared.customer,
+          prepared.content.postId,
+          prepared.content.commentId,
+        )
     : undefined;
   const reader = prepared.userId
     ? (await quillsReaders(workspaceId, [prepared.userId])).get(prepared.userId)
@@ -102,6 +127,9 @@ export async function runMailJob(workspaceId: string, job: JobQueueRow) {
       ? customerEmail && { email: customerEmail }
       : prepared.to && { email: prepared.to };
   if (!reader) return finish();
+  const key =
+    prepared.content.ledgerKey ??
+    `mail:${eventId}:${messageId ?? principalId ?? "direct"}`;
   const claim = await withQuillsSystemWorkspace(workspaceId, (db) =>
     claimDelivery(db, key, "mail"),
   );
@@ -111,10 +139,15 @@ export async function runMailJob(workspaceId: string, job: JobQueueRow) {
   let result: EmailResult | undefined;
   let failure: { error: string; permanent: boolean } | undefined;
   let uncertain = false;
+  // The provider returns these tags with its delivery events (inbound/events.ts): the workspace
+  // and the log row come from our own signed send, never from the event's caller.
+  const logId = createId("email_log");
   try {
     // The provider also sees one idempotency key for every attempt of this send.
     result = await withEmailIdempotencyKey(key, () =>
-      prepared.content.send(reader.email),
+      withEmailTags(mailTags(workspaceId, logId), () =>
+        prepared.content.send(reader.email),
+      ),
     );
   } catch (error) {
     failure = rejection(error);
@@ -125,11 +158,15 @@ export async function runMailJob(workspaceId: string, job: JobQueueRow) {
   await withQuillsSystemWorkspace(workspaceId, async (db) => {
     await settleDelivery(db, key, outcome);
     await db.insert(emailLog).values({
+      id: logId,
       direction: "outbound",
       emailType: prepared.content.emailType,
       principalId: principalId ?? null,
       address: reader.email,
       postId: prepared.content.postId ?? null,
+      conversationId:
+        (prepared.content.conversationId as EmailLogRow["conversationId"]) ??
+        null,
       status:
         outcome === "completed" ? (result?.sent ? "sent" : "skipped") : outcome,
       error: uncertain ? UNCERTAIN : (failure?.error ?? null),

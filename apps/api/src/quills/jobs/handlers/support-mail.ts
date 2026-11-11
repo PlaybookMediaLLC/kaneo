@@ -1,7 +1,9 @@
-import { and, eq, isNull, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { HTTPException } from "hono/http-exception";
 import {
   sendConversationMessageEmail,
+  sendCsatRequestEmail,
   sendNoteMentionEmail,
   type SealedEmail,
   type SendingIdentity,
@@ -20,6 +22,7 @@ import {
   channelAccounts,
   emailSendingDomains,
 } from "../../../database/quills/schema/channel-accounts";
+import { emailLog } from "../../../database/quills/schema/email-log";
 import {
   conversationMessageMentions,
   conversationMessages,
@@ -27,9 +30,18 @@ import {
 } from "../../../database/quills/schema/conversation";
 import { postComments, posts } from "../../../database/quills/schema/posts";
 import { ticketSubscriptions } from "../../../database/quills/schema/ticket-subscriptions";
-import { tickets } from "../../../database/quills/schema/tickets";
+import {
+  ticketConversations,
+  ticketLinks,
+  tickets,
+} from "../../../database/quills/schema/tickets";
 import { realEmail } from "../../directory/customer";
 import { portalAccount } from "../../framework/platform-reads";
+import { outboundMessageId, replyAddress } from "../../framework/signed";
+import {
+  csatRatingUrls,
+  mintCsatToken,
+} from "../../support/customer/csat-email";
 import {
   commentVisible,
   postVisible,
@@ -44,6 +56,7 @@ import type { DeliveryEvent, Subscribers } from "../fanout";
 
 type MessageId = (typeof conversationMessages.$inferSelect)["id"];
 type TicketId = (typeof tickets.$inferSelect)["id"];
+type TicketRow = typeof tickets.$inferSelect;
 
 const clip = (text: string, length: number) =>
   text.length > length ? `${text.slice(0, length - 1)}…` : text;
@@ -57,7 +70,11 @@ const teammateConversationUrl = (workspaceId: string, conversationId: string) =>
 
 async function workspaceOf(db: Database) {
   const [row] = await db
-    .select({ id: settings.workspaceId, name: settings.name })
+    .select({
+      id: settings.workspaceId,
+      name: settings.name,
+      slug: settings.slug,
+    })
     .from(settings)
     .limit(1);
   return row;
@@ -117,19 +134,19 @@ async function sendingIdentity(
 }
 
 /**
- * The event's message when it is a live, customer-visible agent message with text on an email
- * conversation, with that conversation. A message with only an embed (a shared post) has no text
- * to mail.
+ * The event's message (or `target`, a copy the entry names) when it is a live, customer-visible
+ * agent message with text on an email conversation, with that conversation. A message with only
+ * an embed (a shared post) has no text to mail.
  */
-async function emailReply(db: Database, event: DeliveryEvent) {
-  const messageId = (
-    event.entityType === "conversation_message"
+async function emailReply(db: Database, event: DeliveryEvent, target?: string) {
+  const messageId = (target ??
+    (event.entityType === "conversation_message"
       ? event.entityId
-      : payloadOf(event).messageId
-  ) as MessageId | undefined;
+      : payloadOf(event).messageId)) as MessageId | undefined;
   if (!messageId) return undefined;
   const [message] = await db
     .select({
+      id: conversationMessages.id,
       conversationId: conversationMessages.conversationId,
       senderType: conversationMessages.senderType,
       isInternal: conversationMessages.isInternal,
@@ -160,15 +177,11 @@ async function emailReply(db: Database, event: DeliveryEvent) {
     : undefined;
 }
 
-/**
- * The customer's mail copy of a teammate reply on an email conversation. Read at send time:
- * the message must still be a live, customer-visible agent message, and the address is the
- * conversation's captured address, else the customer's contact or profile address.
- */
-const replyMail: NonNullable<Subscribers["mail"]> = async (db, event) => {
-  const reply = await emailReply(db, event);
-  if (!reply) return undefined;
-  const { message, conversation } = reply;
+/** The conversation's customer address: the captured one, else the contact or profile address. */
+async function visitorAddress(
+  db: Database,
+  conversation: typeof conversations.$inferSelect,
+) {
   const [visitor] = await db
     .select({
       contactEmail: principal.contactEmail,
@@ -178,17 +191,98 @@ const replyMail: NonNullable<Subscribers["mail"]> = async (db, event) => {
     .from(principal)
     .leftJoin(customer, eq(customer.id, principal.userId))
     .where(eq(principal.id, conversation.visitorPrincipalId));
-  const to =
+  if (visitor?.blockedAt) return undefined;
+  return (
     realEmail(conversation.visitorEmail) ??
     realEmail(visitor?.contactEmail ?? null) ??
-    realEmail(visitor?.email ?? null);
+    realEmail(visitor?.email ?? null) ??
+    undefined
+  );
+}
+
+/**
+ * RFC 5322 threading and the Reply-To of a mail about `messageId` (or about the conversation, for
+ * a mail with no message): the earlier customer-visible messages' Message-IDs, oldest first (at
+ * most 20): a customer mail's own, our deterministic one for a teammate reply. The Reply-To is the
+ * conversation's signed reply address, so a reply routes back even without the headers.
+ */
+async function threading(
+  db: Database,
+  workspace: { id: string; slug: string },
+  conversationId: string,
+  message?: { id: string },
+) {
+  const keys = sql`${conversationMessages.createdAt}, ${conversationMessages.id}`;
+  const rows = await db
+    .select({
+      id: conversationMessages.id,
+      senderType: conversationMessages.senderType,
+      emailMessageId: sql<
+        string | null
+      >`${conversationMessages.metadata} ->> 'emailMessageId'`,
+    })
+    .from(conversationMessages)
+    .where(
+      and(
+        eq(
+          conversationMessages.conversationId,
+          conversationId as typeof conversations.$inferSelect.id,
+        ),
+        eq(conversationMessages.isInternal, false),
+        isNull(conversationMessages.deletedAt),
+        // Compared in PostgreSQL, so microsecond timestamps keep their order.
+        message
+          ? sql`(${keys}) < (select ${keys} from ${conversationMessages} where ${eq(conversationMessages.id, message.id as MessageId)})`
+          : undefined,
+      ),
+    )
+    .orderBy(
+      desc(conversationMessages.createdAt),
+      desc(conversationMessages.id),
+    )
+    .limit(20);
+  const references = rows
+    .reverse()
+    .flatMap((row) =>
+      row.emailMessageId
+        ? [row.emailMessageId]
+        : row.senderType === "agent"
+          ? [outboundMessageId(row.id) ?? []].flat()
+          : [],
+    );
+  return {
+    replyTo: replyAddress(workspace, conversationId) ?? undefined,
+    messageId: message ? outboundMessageId(message.id) : undefined,
+    inReplyTo: references.at(-1),
+    references: references.length ? references : undefined,
+  };
+}
+
+/**
+ * The customer's mail copy of a teammate reply on an email conversation (or of a reply-all copy,
+ * `target`). Read at send time: the message must still be a live, customer-visible agent message,
+ * and the address is the conversation's captured address, else the customer's contact or profile
+ * address.
+ */
+const replyMail: NonNullable<Subscribers["mail"]> = async (
+  db,
+  event,
+  _principalId,
+  target,
+) => {
+  const reply = await emailReply(db, event, target);
+  if (!reply) return undefined;
+  const { message, conversation } = reply;
+  const to = await visitorAddress(db, conversation);
   const workspace = await workspaceOf(db);
-  if (!to || visitor?.blockedAt || !workspace) return undefined;
+  if (!to || !workspace) return undefined;
   const from = await sendingIdentity(db, conversation);
+  const thread = await threading(db, workspace, conversation.id, message);
   return {
     type: "conversation_reply",
     emailType: "ConversationReplyEmail",
     to,
+    conversationId: conversation.id,
     send: (address) =>
       sendConversationMessageEmail({
         // Sealed: the address read from the conversation and its visitor at send time.
@@ -203,6 +297,7 @@ const replyMail: NonNullable<Subscribers["mail"]> = async (db, event) => {
         conversationSubject: conversation.subject,
         conversationId: conversation.id,
         from,
+        ...thread,
       }),
   };
 };
@@ -293,6 +388,156 @@ const watcherNotice =
 
 const noRecipients = async () => ({ principalIds: [] as PrincipalId[] });
 
+/**
+ * The copies that a tracker's reply-all wrote on its linked tickets: live, customer-visible
+ * messages that repeat the event's tracker message. The request wrote every copy in the tracker
+ * message's transaction, and created_at defaults to the transaction time, so each copy has the
+ * tracker message's created_at exactly: the created_at index finds them. `only` checks one copy
+ * by its primary key (a copy mail job).
+ */
+async function replyAllCopies(
+  db: Database,
+  event: DeliveryEvent,
+  only?: string,
+) {
+  const { messageId, replyAll } = payloadOf(event);
+  if (event.type !== "ticket.replied" || replyAll !== "true" || !messageId)
+    return [];
+  const [source] = await db
+    .select({ id: conversationMessages.id })
+    .from(conversationMessages)
+    .innerJoin(tickets, eq(tickets.id, conversationMessages.ticketId))
+    .where(
+      and(
+        eq(conversationMessages.id, messageId as MessageId),
+        eq(tickets.id, event.entityId as TicketId),
+        eq(tickets.type, "tracker"),
+      ),
+    );
+  if (!source) return [];
+  const tracker = alias(conversationMessages, "tracker_message");
+  const sourceTime = db
+    .select({ at: tracker.createdAt })
+    .from(tracker)
+    .where(eq(tracker.id, source.id));
+  // ponytail: at most 1,000 linked tickets per reply-all are mailed; page if trackers grow past it.
+  return db
+    .select({
+      id: conversationMessages.id,
+      conversationId: conversationMessages.conversationId,
+      ticketId: conversationMessages.ticketId,
+    })
+    .from(conversationMessages)
+    .where(
+      and(
+        only
+          ? eq(conversationMessages.id, only as MessageId)
+          : sql`${conversationMessages.createdAt} = (${sourceTime})`,
+        sql`${conversationMessages.metadata} ->> 'repliedAllFromMessageId' = ${messageId}`,
+        eq(conversationMessages.isInternal, false),
+        isNull(conversationMessages.deletedAt),
+      ),
+    )
+    .orderBy(conversationMessages.id)
+    .limit(1000);
+}
+
+/**
+ * The linked customer tickets that a tracker's event reaches: the tickets of its reply-all copies,
+ * or, for a status move, the linked tickets that are now in the status it set (the cascade moved
+ * them in the same transaction). Empty for any other event.
+ */
+export async function trackerTargets(
+  db: Database,
+  event: DeliveryEvent,
+): Promise<TicketId[]> {
+  if (event.entityType !== "ticket") return [];
+  if (event.type === "ticket.replied") {
+    const copies = await replyAllCopies(db, event);
+    const pairs = copies.flatMap((copy) =>
+      copy.conversationId ? [copy.conversationId] : [],
+    );
+    const paired = pairs.length
+      ? await db
+          .select({ id: ticketConversations.ticketId })
+          .from(ticketConversations)
+          .where(
+            and(
+              inArray(ticketConversations.conversationId, pairs),
+              eq(ticketConversations.ticketType, "customer"),
+            ),
+          )
+      : [];
+    return [
+      ...new Set([
+        ...copies.flatMap((copy) => (copy.ticketId ? [copy.ticketId] : [])),
+        ...paired.map((row) => row.id),
+      ]),
+    ];
+  }
+  const statusId = payloadOf(event).statusId;
+  if (event.type !== "ticket.status_changed" || !statusId) return [];
+  const linked = alias(tickets, "linked");
+  const rows = await db
+    .select({ id: linked.id })
+    .from(ticketLinks)
+    .innerJoin(tickets, eq(tickets.id, ticketLinks.trackerTicketId))
+    .innerJoin(linked, eq(linked.id, ticketLinks.linkedTicketId))
+    .where(
+      and(
+        eq(ticketLinks.trackerTicketId, event.entityId as TicketId),
+        eq(ticketLinks.relation, "tracks"),
+        eq(tickets.type, "tracker"),
+        eq(linked.type, "customer"),
+        eq(linked.statusId, statusId as TicketRow["statusId"]),
+        isNull(linked.deletedAt),
+      ),
+    )
+    .limit(1000);
+  return rows.map((row) => row.id);
+}
+
+/**
+ * The email conversation that a `conversation.status_changed` event closed, while its customer may
+ * still be asked for a rating: closed, not spam, not rated, and not closed by the customer.
+ */
+async function csatConversation(db: Database, event: DeliveryEvent) {
+  if (
+    event.entityType !== "conversation" ||
+    payloadOf(event).status !== "closed"
+  )
+    return undefined;
+  const [conversation] = await db
+    .select()
+    .from(conversations)
+    .where(
+      eq(
+        conversations.id,
+        event.entityId as typeof conversations.$inferSelect.id,
+      ),
+    );
+  if (
+    conversation?.channel !== "email" ||
+    conversation.status !== "closed" ||
+    conversation.endReason === "spam" ||
+    conversation.csatRating !== null ||
+    event.actorId === conversation.visitorPrincipalId
+  )
+    return undefined;
+  // As in the source: a conversation asked once (in the mail log) is not asked again.
+  const [asked] = await db
+    .select({ id: emailLog.id })
+    .from(emailLog)
+    .where(
+      and(
+        eq(emailLog.conversationId, conversation.id),
+        eq(emailLog.emailType, "CsatRequestEmail"),
+      ),
+    )
+    .limit(1);
+  return asked ? undefined : conversation;
+}
+
 /** Support entries for jobs/fanout.ts#subscribers. */
 export const supportSubscribers: Partial<Record<string, Subscribers>> = {
   "message.created": {
@@ -342,8 +587,50 @@ export const supportSubscribers: Partial<Record<string, Subscribers>> = {
     recipients: watchers,
     // A reply on a customer pair is a conversation message (`payload.messageId`).
     direct: async (db, event) => Boolean(await emailReply(db, event)),
+    // A tracker's reply-all: one mail per copy on an email pair, keyed by the copy.
+    copies: async (db, event, only) => {
+      const mailed: string[] = [];
+      for (const copy of await replyAllCopies(db, event, only))
+        if (await emailReply(db, event, copy.id)) mailed.push(copy.id);
+      return mailed;
+    },
     notification: watcherNotice((ref) => `New reply on ticket ${ref}`),
     mail: replyMail,
+  },
+  // The CSAT rating request when an email conversation closes (the source's close mail carries
+  // the rating links). One per conversation: its ledger key names the conversation, not the event.
+  "conversation.status_changed": {
+    recipients: noRecipients,
+    direct: async (db, event) => Boolean(await csatConversation(db, event)),
+    mail: async (db, event) => {
+      const conversation = await csatConversation(db, event);
+      const workspace = conversation && (await workspaceOf(db));
+      const to = conversation && (await visitorAddress(db, conversation));
+      if (!conversation || !workspace || !to) return undefined;
+      // ponytail: a replay of a finished delivery mints a token it never sends; it expires in 30 days.
+      const token = await mintCsatToken(
+        db,
+        conversation.id,
+        conversation.visitorPrincipalId,
+      );
+      const from = await sendingIdentity(db, conversation);
+      return {
+        type: "csat_request",
+        emailType: "CsatRequestEmail",
+        to,
+        conversationId: conversation.id,
+        ledgerKey: `mail:csat:${conversation.id}`,
+        send: (address) =>
+          sendCsatRequestEmail({
+            to: address,
+            promptText: "How would you rate the help you received?",
+            ratingUrls: csatRatingUrls(workspace.id, token),
+            workspaceName: workspace.name,
+            from,
+            conversationId: conversation.id,
+          }),
+      };
+    },
   },
   "ticket.status_changed": {
     recipients: watchers,

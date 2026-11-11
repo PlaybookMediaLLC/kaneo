@@ -182,17 +182,23 @@ Merged: 7. The ticket target of `setQuillsConversationAttributeValue` belongs to
 | `updateQuillsConversationView` | `PATCH /conversation-views/{viewId}` | update | `conversation_views` | `conversation_view.updated` |
 | `deleteQuillsConversationView` | `DELETE /conversation-views/{viewId}` (soft delete, drops pins) | delete | views, pins | `conversation_view.deleted` |
 | `pinQuillsConversationView`, `unpinQuillsConversationView` | `PUT` and `DELETE /conversation-views/{viewId}/pin` | update | pins | none (a personal marker) |
-| `listQuillsInboxItems` | `GET /inbox` (facet `open`/`waiting`/`closed`/`all` and the list filters; `limit` ≤ 100) | read | as the list | - |
-| `fetchQuillsInboxCounts` | `GET /inbox/counts` (mine, unassigned: open real conversations) | read | `conversations` | - |
+| `listQuillsInboxItems` | `GET /inbox` (facet `open`/`waiting`/`closed`/`all`, `kind`, the list filters, sorts `recent`/`oldest`/`created`/`priority`, opaque `cursor`; `limit` ≤ 100) | read | as the list, `tickets` | - |
+| `fetchQuillsInboxCounts` | `GET /inbox/counts` (mine, unassigned: open real conversations; open tickets by type, a pair once; test conversations) | read | `conversations`, `tickets`, `ticket_conversations` | - |
 | `fetchQuillsInboxSegmentsWithCounts` | `GET /inbox/segments` | read | `segments`, `user_segments`, `conversations` | - |
 | `createQuillsPostFromConversation` | `POST /conversations/{conversationId}/posts` (new post by the visitor, or the visitor's vote on `asUpvoteOfPostId`) | create | `posts`, `post_votes`, `post_subscriptions`, `post_activity`, `post_comments`, `post_external_links`, `conversation_messages`, `conversations` | `post.created` or `post.voted` |
 | `shareQuillsPost` | `POST /conversations/{conversationId}/share-post` | update | `conversation_messages`, `conversations`, `posts` | `message.created` |
 | `getQuillsLinkedPostsForConversation` | `GET /conversations/{conversationId}/posts` | read | `post_external_links`, `posts`, `boards` | - |
 | `getQuillsLinkedConversationsForPost` | `GET /posts/{postId}/conversations` | read | `post_external_links`, `conversations` | - |
 
-Merged: 18. The inbox list serves the conversation branch only; the ticket branch joins when the
-tickets slice lands (it owns ticket visibility). Post routes use `feedback/visibility.ts`: a board
-linked to projects the caller cannot open hides its posts.
+Merged: 18. The inbox is the source's unified inbox: the conversation branch and the ticket branch
+(`support/ticket-list.ts`, shared with `listQuillsTickets`), each paged by its own keyset cursor and
+merged in order; the opaque cursor carries both. A customer ticket with a linked conversation lists as
+that conversation, and test customers' tickets stay out, as their conversations do. `waiting` maps to
+the ticket category `pending`. A conversation-only filter (visitor, tag, channel, source, waitingOnly,
+a view) lists conversations only. Items are one closed object (`kind`, then `conversation` or `ticket`),
+because the contract's strict-response check reads no unions. The `waiting` sort is not offered: tickets
+have no wait clock. Post routes use `feedback/visibility.ts`: a board linked to projects the caller
+cannot open hides its posts.
 
 ## Event catalogue additions
 

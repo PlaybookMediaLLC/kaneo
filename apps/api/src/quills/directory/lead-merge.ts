@@ -74,7 +74,8 @@ const fillIfEmpty = [
   "blocked_by_principal_id",
 ];
 
-async function repoint(db: Db, lead: string, target: string) {
+/** Moves every activity row of `lead` to `target` (widget/anonymous-merge.ts reuses it). */
+export async function repoint(db: Db, lead: string, target: string) {
   const from = toUuid(lead),
     to = toUuid(target);
   for (const { table, column, unique } of steps) {
@@ -82,8 +83,12 @@ async function repoint(db: Db, lead: string, target: string) {
       col = sql.raw(`"${column}"`);
     if (unique) {
       const same = unique.map((u) => sql.raw(` AND t."${u}" = s."${u}"`));
+      const drop = sql`DELETE FROM ${name} s WHERE s.${col} = ${from}::uuid AND EXISTS (SELECT 1 FROM ${name} t WHERE t.${col} = ${to}::uuid${sql.join(same, sql``)})`;
+      // A dropped duplicate vote leaves the post's count: each vote row counted once.
       await db.execute(
-        sql`DELETE FROM ${name} s WHERE s.${col} = ${from}::uuid AND EXISTS (SELECT 1 FROM ${name} t WHERE t.${col} = ${to}::uuid${sql.join(same, sql``)})`,
+        table === "post_votes"
+          ? sql`WITH dropped AS (${drop} RETURNING s.post_id) UPDATE quills.posts p SET vote_count = greatest(0, p.vote_count - 1) FROM dropped WHERE p.id = dropped.post_id`
+          : drop,
       );
     }
     await db.execute(

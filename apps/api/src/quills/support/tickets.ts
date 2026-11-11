@@ -1,14 +1,4 @@
-import {
-  and,
-  asc,
-  desc,
-  eq,
-  ilike,
-  inArray,
-  isNull,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
 import { apiRouter, pagingNumber, z, type BaseVariables } from "../../openapi";
@@ -37,6 +27,7 @@ import {
   changeStatus,
   lockTickets,
 } from "./ticket-lifecycle";
+import { listTicketPage } from "./ticket-list";
 import {
   CATEGORIES,
   findStatus,
@@ -61,14 +52,6 @@ const errors = {
 const loadMembers = ({ workspaceId }: { workspaceId: string }) =>
   memberUserIds(workspaceId);
 const me = z.literal("me");
-
-const rank = sql<number>`case ${tickets.priority} when 'urgent' then 4 when 'high' then 3 when 'medium' then 2 when 'low' then 1 else 0 end`;
-const sorts = {
-  recent: { key: tickets.updatedAt, dir: "desc" },
-  oldest: { key: tickets.updatedAt, dir: "asc" },
-  created: { key: tickets.createdAt, dir: "desc" },
-  priority: { key: rank, dir: "desc" },
-} as const;
 
 const listTickets = defineQuillsRoute({
   method: "get",
@@ -102,72 +85,7 @@ const listTickets = defineQuillsRoute({
   }),
   responseDescription: "One page of tickets",
   errors,
-  handler: async ({ db, actor, query }) => {
-    const sort = sorts[query.sort];
-    const before = sort.dir === "desc" ? sql.raw("<") : sql.raw(">");
-    let after;
-    if (query.cursor) {
-      // Compared in PostgreSQL so microsecond timestamps keep their order.
-      const [cursor] = await db
-        .select({
-          key: sql<string>`${sort.key}::text`,
-          id: sql<string>`${tickets.id}::text`,
-        })
-        .from(tickets)
-        .where(and(eq(tickets.id, query.cursor), isNull(tickets.deletedAt)));
-      if (!cursor) throw notFound("Ticket");
-      const cast = sort.key === rank ? sql.raw("int") : sql.raw("timestamptz");
-      after = sql`(${sort.key}, ${tickets.id}) ${before} (${cursor.key}::${cast}, ${cursor.id}::uuid)`;
-    }
-    const statusIn = (column: "category" | "publicStage", value: string) =>
-      inArray(
-        tickets.statusId,
-        db
-          .select({ id: ticketStatuses.id })
-          .from(ticketStatuses)
-          .where(eq(ticketStatuses[column], value as never)),
-      );
-    const search = query.search;
-    const number = search && /^#?(\d{1,15})$/.exec(search)?.[1];
-    const rows = await db
-      .select()
-      .from(tickets)
-      .where(
-        and(
-          isNull(tickets.deletedAt),
-          query.type && eq(tickets.type, query.type),
-          query.ticketTypeId && eq(tickets.ticketTypeId, query.ticketTypeId),
-          query.priority && eq(tickets.priority, query.priority),
-          query.statusCategory && statusIn("category", query.statusCategory),
-          query.stage && statusIn("publicStage", query.stage),
-          query.assignee === "me"
-            ? eq(tickets.assigneePrincipalId, actor.principalId)
-            : query.assignee === "unassigned"
-              ? isNull(tickets.assigneePrincipalId)
-              : query.assignee &&
-                eq(tickets.assigneePrincipalId, query.assignee),
-          query.teamId && eq(tickets.assigneeTeamId, query.teamId),
-          query.requesterPrincipalId &&
-            eq(tickets.requesterPrincipalId, query.requesterPrincipalId),
-          query.companyId && eq(tickets.companyId, query.companyId),
-          search
-            ? or(
-                ilike(tickets.title, `%${search.replace(/[\\%_]/g, "\\$&")}%`),
-                number ? eq(tickets.number, Number(number)) : undefined,
-              )
-            : undefined,
-          after,
-        ),
-      )
-      .orderBy(
-        sort.dir === "desc" ? desc(sort.key) : asc(sort.key),
-        sort.dir === "desc" ? desc(tickets.id) : asc(tickets.id),
-      )
-      .limit(query.limit + 1);
-    const hasMore = rows.length > query.limit;
-    const items = await ticketViews(db, rows.slice(0, query.limit));
-    return { items, nextCursor: hasMore ? items.at(-1)!.id : null, hasMore };
-  },
+  handler: ({ db, actor, query }) => listTicketPage(db, actor, query),
 });
 
 const getTicket = defineQuillsRoute({

@@ -32,7 +32,8 @@ Persisted relationships:       principal -> user_segments (segment gates),
                                status_subscriptions.principal_id, unsubscribe_tokens.principal_id.
 Transaction:                   one scoped transaction per request; a rate limit runs first in
                                its own committed transaction.
-External effects:              none. Mutations record outbox events only. No mail is sent.
+External effects:              none in a request. Mutations record outbox events only; the mail
+                               worker sends status subscriber mail after commit.
 Completion checks:             tenant/object access, mutation, read/search (evidence table,
                                apps/api/AGENTS.md). Authenticated-endpoint rows apply to the
                                portal and widget session paths.
@@ -129,9 +130,19 @@ Merged: `getStatusPageFn`; `getStatusIncidentPublicFn`; `getStatusUptimeFn`; `li
 `unsubscribeStatusFn` (P4 ledger rows `getQuillsMyStatusSubscription`, `subscribeQuillsStatus`,
 `unsubscribeQuillsStatus`); the status part of `processUnsubscribeToken`.
 
-Unsubscribe tokens: `mintStatusUnsubscribeToken` (in `status/subscriptions.ts`) stores the SHA-256
-hash in `unsubscribe_tokens.token` with action `unsubscribe_status`, a 30-day expiry and single
-use. The route answers 200 for every token; `changed` says whether it unsubscribed someone.
+Unsubscribe tokens: one mint, `portal/unsubscribe-token.ts#mintUnsubscribeToken` with action
+`unsubscribe_status`. It stores the SHA-256 hash in `unsubscribe_tokens.token`, a 30-day expiry and single
+use. Both `POST /status/unsubscribe` and the generic `/unsubscribe` routes accept the token. The status
+route answers 200 for every token; `changed` says whether it unsubscribed someone.
+
+Subscriber mail (`jobs/handlers/status-mail.ts`): an incident published (`status.incident_published`) or
+updated (`status.incident_update_posted`, `status.incident_resolved`), and a maintenance window that starts
+(`status.maintenance_started`, a timeline update from scheduled to running, or a window published running).
+Only incidents with `notify_subscribers` and not backfilled. Recipients are the live subscriptions (at most
+10,000 jobs). The mail shows only the components the subscriber may see (component segment gates); a
+components subscription hears only about an incident on one of its components. At send time the module
+flag, the page switch, the private-portal gate and the page audience must admit the subscriber, and a
+Kaneo account's address must be verified. One mail per event and subscriber (`mail:{eventId}:{principalId}`).
 
 ## Not built, or built in part
 
@@ -139,7 +150,7 @@ use. The route answers 200 for every token; `changed` says whether it unsubscrib
 |---|---|
 | XML output for `hc/sitemap.xml` and the status RSS feed | `defineQuillsRoute` answers JSON only, and the framework files are owned by another agent. The routes return the entries; the site or web app renders XML and adds its origin. A raw-response option in the framework would let the API serve XML directly. |
 | Email-only (double opt-in) status subscription and its confirm step | The source keeps no raw-email subscribers: a subscriber is always a principal. A signed-in portal customer needs no confirmation. A confirm mail also needs customer mail delivery (below). |
-| Status subscriber mail and its unsubscribe links | P4's fan-out and mail handler deliver to current teammates only (`fanout.ts`: "Customers wait for the portal audience"). No status mail is sent, so no production code mints a token yet; the token route and the minting helper are ready for the sender. |
+| Status mail for a scheduled (not started) maintenance window | The mail goes when the window starts, not when it is scheduled. |
 | `getRelatedPublicArticlesFn` and semantic search | Related articles and the hybrid ranking need article embeddings (AI, P8). The article page lists the other public articles of its category. |
 | `getPublicArticleBySlugFn` (legacy `/hc/articles/{category}/{slug}` URLs) | The portal pages use the stable `{urlId}-{slug}` form; redirect rules cover moved paths. The widget route resolves slugs. |
 | Popular articles by views | Nothing increments `view_count` yet, so the six "popular" articles are the newest published ones until it does. |

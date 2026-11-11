@@ -604,10 +604,14 @@ describe.skipIf(!url)("Support tickets", () => {
         .from(conversationMessages)
         .where(eq(conversationMessages.conversationId, origin)),
     }));
+    // The copy names the tracker message too: delivery finds a reply-all's copies by it.
     expect(copies.reply).toEqual([
       {
         content: "Fixed in 2.1",
-        metadata: { repliedAllFromTicketId: tracker.id },
+        metadata: {
+          repliedAllFromTicketId: tracker.id,
+          repliedAllFromMessageId: replied.body.id,
+        },
       },
     ]);
     expect(copies.note).toEqual([
@@ -617,6 +621,150 @@ describe.skipIf(!url)("Support tickets", () => {
         metadata: { crossPostedFromTicketId: backOffice.id },
       },
     ]);
+  });
+
+  it("merges tickets into the inbox once, without test customers, and pages both kinds without gaps", async () => {
+    const real = await customerIn(world.a);
+    const tester = await customerIn(world.a, true);
+    const backOffice = await ticketIn(world.a, {
+      type: "back_office",
+      title: "Inbox back office",
+    });
+    const tracker = await ticketIn(world.a, {
+      type: "tracker",
+      title: "Inbox tracker",
+    });
+    const standalone = await ticketIn(world.a, {
+      requesterPrincipalId: real,
+      title: "Inbox standalone",
+    });
+    const testTicket = await ticketIn(world.a, {
+      requesterPrincipalId: tester,
+      title: "Inbox test",
+    });
+    const paired = await ticketIn(world.a, {
+      requesterPrincipalId: real,
+      title: "Inbox paired",
+    });
+    const pair = await inA(async (db) => {
+      const [row] = await db
+        .insert(conversations)
+        .values({
+          visitorPrincipalId: real,
+          channel: "messenger",
+          status: "open",
+        })
+        .returning({ id: conversations.id });
+      await db.insert(ticketConversations).values({
+        ticketId: paired.id,
+        conversationId: row!.id,
+        ticketType: "customer",
+      });
+      return row!.id;
+    });
+    const foreign = await ticketIn(world.b, { type: "back_office" });
+    type Item = {
+      kind: string;
+      ticket?: { id: string };
+      conversation?: { id: string };
+    };
+    const idOf = (item: Item) => item.ticket?.id ?? item.conversation!.id;
+    const page = (query: string) =>
+      world.request(world.users.owner, "GET", `/inbox?${query}`);
+
+    const open = await page("facet=open&limit=100");
+    expect(open.status).toBe(200);
+    const listed = open.body.items.map(idOf);
+    expect(listed).toEqual(
+      expect.arrayContaining([backOffice.id, tracker.id, standalone.id, pair]),
+    );
+    // The paired ticket lists as its conversation; test customers and workspace B never list.
+    expect(listed).not.toContain(paired.id);
+    expect(listed).not.toContain(testTicket.id);
+    expect(listed).not.toContain(foreign.id);
+    expect(new Set(listed).size).toBe(listed.length);
+
+    // The shared filters reach the ticket branch: `mine` is the caller's tickets too.
+    const me = await inA(async (_db, actor) => actor.principalId);
+    const assigned = await ticketIn(world.a, {
+      type: "back_office",
+      title: "Inbox mine",
+      assigneePrincipalId: me,
+    });
+    const mine = (
+      await page("facet=open&assignee=mine&limit=100")
+    ).body.items.map(idOf);
+    expect(mine).toContain(assigned.id);
+    expect(mine).not.toContain(backOffice.id);
+
+    const onlyTickets = await page("facet=open&kind=ticket&limit=100");
+    expect(
+      onlyTickets.body.items.every((item: Item) => item.kind === "ticket"),
+    ).toBe(true);
+    // A conversation-only filter lists conversations only.
+    const messenger = await page("facet=open&channel=messenger&limit=100");
+    expect(
+      messenger.body.items.every((item: Item) => item.kind === "conversation"),
+    ).toBe(true);
+
+    // Small pages follow both branch cursors: the same items in the same order, once each.
+    for (const sort of ["recent", "oldest", "created", "priority"]) {
+      const whole = await page(`facet=all&sort=${sort}&limit=100`);
+      const seen: string[] = [];
+      let cursor: string | null = null;
+      for (let i = 0; i < 60 && seen.length < whole.body.items.length; i++) {
+        const next: { body: { items: Item[]; nextCursor: string | null } } =
+          await page(
+            `facet=all&sort=${sort}&limit=3${cursor ? `&cursor=${cursor}` : ""}`,
+          );
+        seen.push(...next.body.items.map(idOf));
+        cursor = next.body.nextCursor;
+        if (!cursor) break;
+      }
+      expect(seen.slice(0, whole.body.items.length)).toEqual(
+        whole.body.items.map(idOf),
+      );
+    }
+    // A forged cursor is refused, never read as another position.
+    expect((await page("cursor=not-a-cursor")).status).toBe(400);
+    const crossed = Buffer.from(
+      JSON.stringify({ c: null, t: "conversation_01h455vb4pex5vsknk084sn02q" }),
+    ).toString("base64url");
+    expect((await page(`cursor=${crossed}`)).status).toBe(400);
+
+    // Counts: open tickets by type; a pair counts once, a test customer's ticket never.
+    const counts = await world.request(
+      world.users.owner,
+      "GET",
+      "/inbox/counts",
+    );
+    expect(counts.status).toBe(200);
+    await ticketIn(world.a, { type: "tracker" });
+    await ticketIn(world.a, { requesterPrincipalId: tester });
+    await ticketIn(world.a, { requesterPrincipalId: real });
+    const second = await ticketIn(world.a, { requesterPrincipalId: real });
+    await inA(async (db) => {
+      const [row] = await db
+        .insert(conversations)
+        .values({ visitorPrincipalId: real, channel: "messenger" })
+        .returning({ id: conversations.id });
+      await db.insert(ticketConversations).values({
+        ticketId: second.id,
+        conversationId: row!.id,
+        ticketType: "customer",
+      });
+    });
+    const after = await world.request(
+      world.users.owner,
+      "GET",
+      "/inbox/counts",
+    );
+    expect(after.body.ticketsByType).toEqual({
+      customer: counts.body.ticketsByType.customer + 2,
+      back_office: counts.body.ticketsByType.back_office,
+      tracker: counts.body.ticketsByType.tracker + 1,
+    });
+    expect(after.body.unassigned).toBe(counts.body.unassigned + 1);
   });
 
   it("pages tickets and messages with keyset cursors, without gaps or repeats", async () => {

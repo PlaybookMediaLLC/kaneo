@@ -1,5 +1,6 @@
 import { apiRouter } from "../openapi";
 import inboundEmail from "./inbound/email";
+import emailEvents from "./inbound/events";
 import integrationWebhooks from "./integrations/inbound";
 import { oauthCallback } from "./integrations/oauth";
 import jobWake from "./jobs/wake";
@@ -22,6 +23,7 @@ export default apiRouter()
   .route("/", integrationWebhooks)
   .route("/", oauthCallback)
   .route("/", inboundEmail)
+  .route("/", emailEvents)
   .route("/", jobWake)
   .route("/", portal)
   .route("/", widget)

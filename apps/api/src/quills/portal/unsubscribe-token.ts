@@ -38,12 +38,17 @@ const apiBase = () => {
 export const unsubscribeUrl = (workspaceId: string, token: string) =>
   `${apiBase()}/quills-public/${encodeURIComponent(workspaceId)}/unsubscribe?token=${token}`;
 
-/** Stores the hash of a new token for one recipient and action, and returns the token. */
+/**
+ * Stores the hash of a new token for one recipient and action, and returns the token. The only
+ * mint for every unsubscribe link, the status page's included: `/unsubscribe` and
+ * `/status/unsubscribe` both accept an `unsubscribe_status` token.
+ */
 export async function mintUnsubscribeToken(
   db: Database,
   principalId: PrincipalId,
   action: UnsubscribeAction,
   postId: PostId | null = null,
+  expiresAt = new Date(Date.now() + TTL_MS),
 ) {
   const token = Buffer.from(
     crypto.getRandomValues(new Uint8Array(32)),
@@ -53,7 +58,7 @@ export async function mintUnsubscribeToken(
     principalId,
     postId,
     action,
-    expiresAt: new Date(Date.now() + TTL_MS),
+    expiresAt,
   });
   return token;
 }

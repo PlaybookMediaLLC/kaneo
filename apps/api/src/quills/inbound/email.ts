@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { apiRouter, z } from "../../openapi";
 import { principal, user as customer } from "../../database/quills/schema/auth";
@@ -7,16 +7,26 @@ import {
   conversations,
 } from "../../database/quills/schema/conversation";
 import { defineQuillsRoute, type Database } from "../framework/define-route";
-import { receivedEmailText, resendInbound } from "../framework/signed";
+import {
+  ownMessageIds,
+  receivedEmailText,
+  replyAddressConversation,
+  resendInbound,
+} from "../framework/signed";
 import { preview } from "../support/conversation-model";
 import { reopened } from "../support/conversation-ops";
 
 // POST /quills-public/signed/chat/email/inbound: mail that Resend received for a workspace address
 // on EMAIL_INBOUND_DOMAIN (`<workspace slug>@domain` or `<slug>+tag@domain`). framework/signed.ts
-// checks the Svix signature and names the workspace that owns the address. A reply (In-Reply-To or
-// References naming an earlier inbound message) from the same sender appends to its conversation;
-// other mail opens an email conversation for the sender's customer profile. A repeated Message-ID
-// or delivery changes nothing.
+// checks the Svix signature and names the workspace that owns the address. A reply from the same
+// sender appends to its conversation: one sent to the conversation's signed reply address
+// (`<workspace ID>+c<conversation><tag>@domain`, the Reply-To of our mail), or one whose
+// In-Reply-To or References names an earlier inbound mail or one of our replies. Other mail opens
+// an email conversation for the sender's customer profile. A repeated Message-ID or delivery
+// changes nothing.
+
+type ConversationId = (typeof conversations.$inferSelect)["id"];
+type MessageId = (typeof conversationMessages.$inferSelect)["id"];
 
 const MAX_REFERENCES = 20;
 // Generous bounds: the body is at most 1 MiB, and a refused mail is lost after the provider retries.
@@ -153,7 +163,7 @@ const inbound = defineQuillsRoute({
       entityType: "conversation_message",
       entityId: result.messageId,
     },
-  handler: async ({ db, body, called }) => {
+  handler: async ({ db, body, called, workspaceId }) => {
     const answer = (
       status:
         | "duplicate"
@@ -190,31 +200,59 @@ const inbound = defineQuillsRoute({
       ...messageIds(readHeader(data, "in-reply-to")),
       ...messageIds(readHeader(data, "references")),
     ].slice(0, MAX_REFERENCES);
-    const [thread] = references.length
+    const threadColumns = {
+      id: conversations.id,
+      status: conversations.status,
+      visitorPrincipalId: conversations.visitorPrincipalId,
+      waitingSince: conversations.waitingSince,
+    };
+    // The signed reply address of an email conversation first: it routes without any header.
+    const addressed = replyAddressConversation(data.to ?? [], workspaceId);
+    const [byAddress] = addressed
       ? await db
-          .select({
-            id: conversations.id,
-            status: conversations.status,
-            visitorPrincipalId: conversations.visitorPrincipalId,
-            waitingSince: conversations.waitingSince,
-          })
-          .from(conversationMessages)
-          .innerJoin(
-            conversations,
-            eq(conversations.id, conversationMessages.conversationId),
-          )
+          .select(threadColumns)
+          .from(conversations)
           .where(
             and(
+              eq(conversations.id, addressed as ConversationId),
               eq(conversations.channel, "email"),
-              inArray(
-                sql<string>`${conversationMessages.metadata} ->> 'emailMessageId'`,
-                references,
-              ),
             ),
           )
-          .limit(1)
           .for("update")
       : [];
+    // Then In-Reply-To and References: an earlier inbound mail's Message-ID, or ours on a reply.
+    const ours = ownMessageIds(references) as MessageId[];
+    const [thread] = byAddress
+      ? [byAddress]
+      : references.length
+        ? await db
+            .select(threadColumns)
+            .from(conversationMessages)
+            .innerJoin(
+              conversations,
+              eq(conversations.id, conversationMessages.conversationId),
+            )
+            .where(
+              and(
+                eq(conversations.channel, "email"),
+                or(
+                  inArray(
+                    sql<string>`${conversationMessages.metadata} ->> 'emailMessageId'`,
+                    references,
+                  ),
+                  ours.length
+                    ? and(
+                        inArray(conversationMessages.id, ours),
+                        eq(conversationMessages.senderType, "agent"),
+                        eq(conversationMessages.isInternal, false),
+                      )
+                    : undefined,
+                ),
+              ),
+            )
+            .limit(1)
+            .for("update")
+        : [];
     // A reply from another address never joins someone else's thread.
     if (thread && thread.visitorPrincipalId !== visitor)
       return answer("from_mismatch");

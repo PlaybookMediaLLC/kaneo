@@ -270,6 +270,205 @@ export const resendInbound: SignedVerifier = {
   },
 };
 
+/** A key for one purpose, derived from an instance secret. Null while the secret is unset. */
+const derivedKey = (secret: string, purpose: string) =>
+  secret ? createHmac("sha256", secret).update(purpose).digest() : null;
+const eventsSecret = () =>
+  env("EMAIL_EVENTS_SIGNING_SECRET") || env("EMAIL_INBOUND_SIGNING_SECRET");
+const tagKey = () => derivedKey(eventsSecret(), "quills-mail-tags");
+const tagSignature = (key: Buffer, workspaceId: string, logId: string) =>
+  createHmac("sha256", key)
+    .update(`${workspaceId}\0${logId}`)
+    .digest("hex")
+    .slice(0, 32);
+
+/**
+ * Provider tags for one outbound mail: its workspace and `email_log` row, and an HMAC over both.
+ * Resend returns them with the mail's delivery events. The HMAC proves that this instance wrote
+ * them, so another sender on the same provider account cannot name a workspace. Empty while no
+ * events secret is set: the events route is then off.
+ */
+export function mailTags(workspaceId: string, logId: string) {
+  const key = tagKey();
+  if (!key) return [];
+  return [
+    { name: "kaneo_workspace", value: workspaceId },
+    { name: "kaneo_log", value: logId },
+    { name: "kaneo_sig", value: tagSignature(key, workspaceId, logId) },
+  ];
+}
+
+/** The workspace and log row of verified tags, in Resend's map or list form, or null. */
+export function readMailTags(tags: unknown) {
+  const entries: [unknown, unknown][] = Array.isArray(tags)
+    ? tags.map((tag) => [
+        (tag as { name?: unknown })?.name,
+        (tag as { value?: unknown })?.value,
+      ])
+    : tags && typeof tags === "object"
+      ? Object.entries(tags)
+      : [];
+  const value = (name: string) => {
+    const found = entries.find(([key]) => key === name)?.[1];
+    return typeof found === "string" ? found : "";
+  };
+  const workspaceId = value("kaneo_workspace");
+  const logId = value("kaneo_log");
+  const key = tagKey();
+  if (!key || !workspaceId || !isTypeId(logId, "emaillog")) return null;
+  return safeEqual(value("kaneo_sig"), tagSignature(key, workspaceId, logId))
+    ? { workspaceId, logId }
+    : null;
+}
+
+/**
+ * Delivery events from Resend (bounced, complained). `EMAIL_EVENTS_SIGNING_SECRET`, else the inbound
+ * secret, checks the Svix signature; the signed `webhook-id` is the delivery ID. The workspace comes
+ * from the mail's own tags, which this instance wrote and signed when it sent (`mailTags`).
+ */
+export const resendEvents: SignedVerifier = {
+  name: "resend-events",
+  disabled: () => !eventsSecret(),
+  locate: ({ raw, headers }) => {
+    const id = verifySvixSignature({ raw, headers }, eventsSecret());
+    if (!id) throw unauthorized();
+    let tags: unknown;
+    try {
+      tags = (JSON.parse(raw) as { data?: { tags?: unknown } })?.data?.tags;
+    } catch {
+      throw new HTTPException(400, { message: "Invalid JSON" });
+    }
+    const sent = readMailTags(tags);
+    if (!sent)
+      throw new HTTPException(404, {
+        message: "No workspace sent this mail",
+      });
+    return {
+      scope: { workspace: sent.workspaceId },
+      deliveryId: id,
+      claims: { logId: sent.logId },
+    };
+  },
+};
+
+const replyKey = () =>
+  derivedKey(env("EMAIL_INBOUND_SIGNING_SECRET"), "quills-reply-address");
+/** 12 base-36 characters (about 62 bits) of the HMAC: a local part stays case-insensitive. */
+const replyTag = (key: Buffer, workspaceId: string, conversationId: string) =>
+  BigInt(
+    `0x${createHmac("sha256", key).update(`${workspaceId}\0${conversationId}`).digest("hex")}`,
+  )
+    .toString(36)
+    .padStart(12, "0")
+    .slice(0, 12);
+
+/**
+ * The reply address of a conversation: `<workspace slug>+c<conversation ID suffix><tag>@<inbound
+ * domain>`. The slug routes the mail (`resendInbound`); workspace IDs are mixed-case and 32
+ * characters, too long for a local part and lost to lower-casing. The tag is an HMAC over the
+ * workspace ID and the conversation, so a reply address cannot be forged for another conversation
+ * or workspace. Null while inbound mail is not configured, for a slug that is not lower-case, and
+ * when the local part would pass the 64 characters of RFC 5321 (a slug of more than 24 characters).
+ */
+export function replyAddress(
+  workspace: { id: string; slug: string },
+  conversationId: string,
+) {
+  const key = replyKey();
+  const domain = env("EMAIL_INBOUND_DOMAIN").toLowerCase();
+  const suffix = conversationId.slice(conversationId.lastIndexOf("_") + 1);
+  if (
+    !key ||
+    !domain ||
+    !isTypeId(conversationId, "conversation") ||
+    !/^[a-z0-9][a-z0-9_-]*$/.test(workspace.slug)
+  )
+    return null;
+  const local = `${workspace.slug}+c${suffix}${replyTag(key, workspace.id, conversationId)}`;
+  return local.length <= 64 ? `${local}@${domain}` : null;
+}
+
+/**
+ * The conversation that a verified reply address among `addresses` names in this workspace (its ID,
+ * as resolved from the label), or null.
+ */
+export function replyAddressConversation(
+  addresses: readonly string[],
+  workspaceId: string,
+) {
+  const key = replyKey();
+  const domain = env("EMAIL_INBOUND_DOMAIN").toLowerCase();
+  if (!key || !domain) return null;
+  for (const address of addresses.slice(0, 50)) {
+    const bare = (/<([^<>]+)>\s*$/.exec(address)?.[1] ?? address)
+      .trim()
+      .toLowerCase();
+    const match =
+      /^([a-z0-9][a-z0-9_-]*)\+c([0-9a-z]{26})([0-9a-z]{12})@(.+)$/.exec(bare);
+    if (!match || match[4] !== domain) continue;
+    const conversationId = `conversation_${match[2]}`;
+    if (
+      isTypeId(conversationId, "conversation") &&
+      safeEqual(match[3]!, replyTag(key, workspaceId, conversationId))
+    )
+      return conversationId;
+  }
+  return null;
+}
+
+/**
+ * A six-digit address verification code (widget/contact-email.ts). It is derived from the workspace's
+ * widget secret and the pending request, so no code is stored and the mail worker can send the
+ * same code again after a failed attempt. A new request (new nonce) or a rotated secret changes it.
+ */
+export function contactEmailCode(
+  widgetSecret: string,
+  request: {
+    principalId: string;
+    purpose: string;
+    email: string;
+    nonce: string;
+  },
+) {
+  const digest = createHmac("sha256", widgetSecret)
+    .update(
+      `quills-contact-email\0${request.principalId}\0${request.purpose}\0${request.email}\0${request.nonce}`,
+    )
+    .digest();
+  return String(digest.readUInt32BE(0) % 1_000_000).padStart(6, "0");
+}
+
+/** The host of the Message-IDs this instance mints: the inbound domain, else the sender's domain. */
+function messageIdHost() {
+  const from = env("EMAIL_FROM");
+  const sender = /([^<>\s@]+@[^<>\s@]+)>?\s*$/.exec(from)?.[1] ?? "";
+  return (
+    env("EMAIL_INBOUND_DOMAIN") || sender.slice(sender.indexOf("@") + 1)
+  ).toLowerCase();
+}
+
+/** The Message-ID of an outbound mail about a message: deterministic, so every retry names it the same. */
+export function outboundMessageId(messageId: string) {
+  const host = messageIdHost();
+  return host ? `<${messageId}@${host}>` : undefined;
+}
+
+/** The message IDs that this instance's own Message-IDs among `ids` name. A malformed ID names none. */
+export function ownMessageIds(ids: readonly string[]) {
+  const host = messageIdHost();
+  return ids.flatMap((id) => {
+    const match = /^<(conversation_msg_[0-9a-z]{26})@([^<>\s]+)>$/.exec(
+      id.trim().toLowerCase(),
+    );
+    return match &&
+      host &&
+      match[2] === host &&
+      isTypeId(match[1]!, "conversation_msg")
+      ? [match[1]!]
+      : [];
+  });
+}
+
 /**
  * The plain-text body of a received mail. Resend's `email.received` event carries metadata only, so
  * the body comes from its Received Emails API with the instance Resend key. Null without a key or

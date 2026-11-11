@@ -10,6 +10,7 @@ import { defineQuillsRoute } from "../framework/define-route";
 import { mintWidgetSession, verifyIdentityToken } from "../framework/audience";
 import { mergeMetadata } from "../directory/customer";
 import { parseJson } from "../settings/area";
+import { mergeAnonymousSession } from "./anonymous-merge";
 import {
   autoSubscribeChangelog,
   claimedAttributes,
@@ -47,10 +48,19 @@ const identify = defineQuillsRoute({
     "Creates or updates the customer that the host app's signed ssoToken names and returns a widget session token for the Authorization header. The token needs sub (or id), email and exp. Optional claims: custom attributes that match a user attribute definition (at most 50; others are dropped), segments (at most 50 manual segment slugs; it replaces the widget-sourced memberships, and a missing claim removes them). Identify also subscribes the person to the changelog when the workspace auto-subscribes.",
   action: "create",
   rateLimit: { limit: 60, windowSeconds: 15 * 60 },
-  body: z.object({ ssoToken: z.string().min(1).max(8192) }),
+  body: z.object({
+    ssoToken: z.string().min(1).max(8192),
+    /**
+     * The widget's anonymous session token, sent also as the Bearer token: its conversations,
+     * votes and other activity move to the identified person, and the anonymous session ends.
+     */
+    previousToken: z.string().min(1).max(200).optional(),
+  }),
   response: z.object({
     sessionToken: z.string(),
     principalId: z.string(),
+    /** The anonymous principal whose activity moved to this person, or null. */
+    mergedPrincipalId: z.string().nullable(),
     user: z.object({
       id: z.string(),
       name: z.string(),
@@ -67,12 +77,24 @@ const identify = defineQuillsRoute({
     409: "The email belongs to another customer",
   },
   allowKeys: ["sessionToken"],
-  event: (_input, result) => ({
-    type: "user.identified",
-    entityType: "principal",
-    entityId: result.principalId,
-  }),
-  handler: async ({ db, body }) => {
+  event: (_input, result) => [
+    {
+      type: "user.identified",
+      entityType: "principal",
+      entityId: result.principalId,
+    },
+    ...(result.mergedPrincipalId
+      ? [
+          {
+            type: "user.lead_merged" as const,
+            entityType: "principal" as const,
+            entityId: result.principalId,
+            payload: { leadPrincipalId: result.mergedPrincipalId },
+          },
+        ]
+      : []),
+  ],
+  handler: async ({ db, body, caller }) => {
     const [config] = await db
       .select({
         widgetConfig: settings.widgetConfig,
@@ -196,6 +218,16 @@ const identify = defineQuillsRoute({
         .where(eq(customer.id, identity!.id));
     await reconcileClaimedSegments(db, person!.id, raw.segments);
     await autoSubscribeChangelog(db, person!.id);
+    // The Bearer resolved to the caller's anonymous session; the body names the same session.
+    const mergedPrincipalId =
+      body.previousToken && caller.principalId
+        ? await mergeAnonymousSession(
+            db,
+            body.previousToken,
+            caller.principalId,
+            person!.id,
+          )
+        : null;
     const session = await mintWidgetSession(
       db,
       { principalId: person!.id, customerId: identity!.id },
@@ -204,6 +236,7 @@ const identify = defineQuillsRoute({
     return {
       sessionToken: session.token,
       principalId: person!.id,
+      mergedPrincipalId,
       user: {
         id: identity!.id,
         name: identity!.name,

@@ -173,7 +173,7 @@ The rows below keep their P7a reasons; `ROUTES-OAUTH.md` lists what is still def
 | `searchQuillsExternalItems` | None of the seven providers implements remote item search. |
 | `fetchQuillsIntegrationDestinations`, `fetchQuillsShortcutProjects` | The outbound read needs the stored token. Inside the request transaction it would hold a pooled connection during network I/O; a post-commit step needs a framework change. Shortcut stories work without a group, and a channel accepts a known group ID. |
 | `verifyQuillsIntegrationSyncReference`; recovery actions `reconcile`, `keep_remote`, `link_existing` | Need remote item inspection, which none of the seven providers has. |
-| `fetchQuillsTicketExternalLinks` (P5 row) and ticket sync retry | Ticket visibility belongs to the P5 support slice. |
+| Ticket sync retry | Ticket issue links are built (`support/TICKETS.md`); a failed ticket create is retried through sync recovery. |
 | Freshdesk and Stripe customer context | The source has no event delivery for them; the context lookup belongs to the people and support views. |
 | Shortcut inbound status webhook, every `api/integrations/{type}/{webhook,hooks,identify}` row | Inbound provider webhooks need a signed audience. |
 | Every OAuth provider and `oauth/{integration}/**`, `oauth/connector/callback`, `*ConnectUrl` rows | OAuth connect and callback need a public, state-bound audience. |

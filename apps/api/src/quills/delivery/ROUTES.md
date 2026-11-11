@@ -148,6 +148,7 @@ New queues: `quills.webhook`, `quills.mail`, `quills.notification` (`jobs/handle
 |---|---|---|---|---|
 | `quills.webhook` | `{ eventId, webhookId }` | `{eventId}:{webhookId}` | 5 | `webhook:{eventId}:{webhookId}` |
 | `quills.mail` | `{ eventId, principalId }` | `{eventId}:{principalId}` | 5 | `mail:{eventId}:{principalId}` |
+| `quills.mail` (copy) | `{ eventId, messageId }` | `{eventId}:{messageId}` | 5 | `mail:{eventId}:{messageId}` |
 | `quills.notification` | `{ eventId, principalId }` | `{eventId}:{principalId}` | 3 | `notification:{eventId}:{principalId}` |
 
 - Fan-out: webhooks that list the event type, are active, existed when the event occurred and match the
@@ -171,5 +172,11 @@ New queues: `quills.webhook`, `quills.mail`, `quills.notification` (`jobs/handle
   another provider 4xx or a configuration error fails. A provider 5xx or a failure without an answer is
   uncertain. The provider also receives one idempotency key per send. The address and membership are read
   at send time. Each outcome writes an `email_log` row.
+- A mail content may name its own ledger key (`ledgerKey`): the CSAT request uses `mail:csat:{conversationId}`,
+  one per conversation across events. A `copies` entry (a tracker's reply-all) queues one mail per copy;
+  the handler checks again that the entry still names the copy. A `customerAddress` hook decides a
+  customer's address at send time for mail that is not about a post (status subscribers).
+- Every send carries Resend tags with its workspace and `email_log` row, signed with an HMAC
+  (`framework/signed.ts#mailTags`); the log row is written with that ID, so a delivery event finds it.
 - In-app: one transaction holds the ledger row, the notification and the job outcome.
 - Retention removes ledger rows after the event retention period, except while their event is unpublished.

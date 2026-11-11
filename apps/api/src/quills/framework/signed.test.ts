@@ -1,6 +1,7 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
-import { toUuid } from "@kaneo/ids";
+import { createId, toUuid } from "@kaneo/ids";
+import { emailLog } from "../../database/quills/schema/email-log";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import {
@@ -34,7 +35,13 @@ import {
 import { memberHoldsQuillsAction } from "./platform-reads";
 import {
   inboundLabel,
+  mailTags,
   mintOAuthState,
+  outboundMessageId,
+  ownMessageIds,
+  readMailTags,
+  replyAddress,
+  replyAddressConversation,
   safeEqual,
   verifySvixSignature,
 } from "./signed";
@@ -107,6 +114,66 @@ describe("signed verifiers without a database", () => {
     expect(
       verifySvixSignature({ raw, headers: new Headers() }, `whsec_${KEY}`),
     ).toBeNull();
+  });
+  it("mints reply addresses that only verify for their own workspace and conversation", () => {
+    process.env.EMAIL_INBOUND_SIGNING_SECRET = `whsec_${KEY}`;
+    process.env.EMAIL_INBOUND_DOMAIN = "in.example.test";
+    const conversation = createId("conversation");
+    // A workspace as Better Auth creates it: a 32-character mixed-case ID and a lower-case slug.
+    const workspace = { id: "Qx7bN2kLmP9vR4tYwZ1cD5fG8hJ3sA6e", slug: "acme" };
+    const address = replyAddress(workspace, conversation)!;
+    expect(address).toMatch(/^acme\+c[0-9a-z]{38}@in\.example\.test$/);
+    expect(address.split("@")[0]!.length).toBeLessThanOrEqual(64);
+    expect(
+      replyAddressConversation(
+        [`Ada <${address.toUpperCase()}>`],
+        workspace.id,
+      ),
+    ).toBe(conversation);
+    // Another workspace, another conversation or a changed tag never verifies.
+    expect(replyAddressConversation([address], "ws_b")).toBeNull();
+    const other = replyAddress(workspace, createId("conversation"))!;
+    expect(
+      replyAddressConversation(
+        [`${address.slice(0, 6)}${other.slice(6, 32)}${address.slice(32)}`],
+        workspace.id,
+      ),
+    ).toBeNull();
+    const at = address.indexOf("@");
+    const flipped = `${address.slice(0, at - 1)}${address[at - 1] === "0" ? "1" : "0"}${address.slice(at)}`;
+    expect(replyAddressConversation([flipped], workspace.id)).toBeNull();
+    // A slug past 24 characters (a local part past 64) or not lower-case is never minted.
+    expect(
+      replyAddress({ id: workspace.id, slug: "w".repeat(25) }, conversation),
+    ).toBeNull();
+    expect(
+      replyAddress({ id: workspace.id, slug: "Acme" }, conversation),
+    ).toBeNull();
+    // Our own Message-IDs name their message; another host's, or a malformed ID, do not.
+    const message = createId("conversation_message");
+    expect(outboundMessageId(message)).toBe(`<${message}@in.example.test>`);
+    expect(
+      ownMessageIds([
+        `<${message}@IN.example.test>`,
+        `<${message}@evil.test>`,
+        "<x@in.example.test>",
+        `<conversation_msg_${"z".repeat(26)}@in.example.test>`,
+      ]),
+    ).toEqual([message]);
+  });
+  it("signs mail tags so another sender cannot name a workspace", () => {
+    process.env.EMAIL_INBOUND_SIGNING_SECRET = `whsec_${KEY}`;
+    const log = createId("email_log");
+    const tags = mailTags("ws_a", log);
+    const map = Object.fromEntries(tags.map((t) => [t.name, t.value]));
+    expect(readMailTags(map)).toEqual({ workspaceId: "ws_a", logId: log });
+    expect(readMailTags(tags)).toEqual({ workspaceId: "ws_a", logId: log });
+    expect(readMailTags({ ...map, kaneo_workspace: "ws_b" })).toBeNull();
+    expect(
+      readMailTags({ ...map, kaneo_log: createId("email_log") }),
+    ).toBeNull();
+    expect(readMailTags({ ...map, kaneo_sig: undefined })).toBeNull();
+    expect(readMailTags(undefined)).toBeNull();
   });
   it("reads the workspace label of an inbound address", () => {
     const domain = "in.example.test";
@@ -244,6 +311,58 @@ describe.skipIf(!url)("signed audience with PostgreSQL", () => {
       status: "duplicate",
       messageId: null,
     });
+  });
+  it("records a bounce on the mail's own log row, once, and never for unsigned tags", async () => {
+    const env = contractEnv();
+    const [row] = await env.scoped(env.a, (db) =>
+      db
+        .insert(emailLog)
+        .values({
+          direction: "outbound",
+          emailType: "ConversationReplyEmail",
+          address: "ada@customer.test",
+          status: "sent",
+        })
+        .returning({ id: emailLog.id }),
+    );
+    const tags = Object.fromEntries(
+      mailTags(env.a, row!.id).map((t) => [t.name, t.value]),
+    );
+    const deliver = (type: string, data: Record<string, unknown>) => {
+      const raw = JSON.stringify({ type, data });
+      return app.request("/quills-public/signed/chat/email/events", {
+        method: "POST",
+        headers: svix(raw),
+        body: raw,
+      });
+    };
+    const status = async () =>
+      (
+        await env.scoped(env.a, (db) =>
+          db
+            .select({ status: emailLog.status })
+            .from(emailLog)
+            .where(eq(emailLog.id, row!.id)),
+        )
+      )[0]!.status;
+    expect(await (await deliver("email.delivered", { tags })).json()).toEqual({
+      status: "ignored",
+    });
+    expect(await status()).toBe("sent");
+    expect(await (await deliver("email.bounced", { tags })).json()).toEqual({
+      status: "recorded",
+    });
+    expect(await status()).toBe("bounced");
+    // Tags that this instance did not sign name no workspace.
+    expect(
+      (
+        await deliver("email.complained", {
+          tags: { ...tags, kaneo_sig: "0".repeat(32) },
+        })
+      ).status,
+    ).toBe(404);
+    expect((await deliver("email.complained", {})).status).toBe(404);
+    expect(await status()).toBe("bounced");
   });
   it("answers 404 for an address no workspace owns, and while unconfigured", async () => {
     expect((await mail("nobody-here", "a@b.test", "<x@b.test>")).status).toBe(

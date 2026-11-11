@@ -38,6 +38,22 @@ export async function mintCsatToken(
   return token;
 }
 
+// ponytail: apps/web has no portal CSAT page yet. The page at this path checks the token
+// (GET /support/csat-email) and POSTs the rating; point it at the real route when the portal UI lands.
+const clientUrl = () =>
+  (process.env.KANEO_CLIENT_URL || "http://localhost:5173").replace(/\/+$/, "");
+
+/**
+ * The five rating links of a CSAT mail (rating 1 to 5), on the portal's rating page, as in the
+ * source (`/csat?token=&rating=`). They share one token; the page checks it and POSTs the rating,
+ * which spends it. Opening a link changes nothing, because mail scanners open every link.
+ */
+export const csatRatingUrls = (workspaceId: string, token: string) =>
+  [1, 2, 3, 4, 5].map(
+    (rating) =>
+      `${clientUrl()}/portal/${encodeURIComponent(workspaceId)}/csat?token=${token}&rating=${rating}`,
+  ) as [string, string, string, string, string];
+
 /** The live token's conversation, still owned by the token's visitor, or undefined. */
 async function liveClaims(db: Database, token: string, lock = false) {
   const query = db

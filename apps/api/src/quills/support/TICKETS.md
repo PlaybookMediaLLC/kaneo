@@ -77,6 +77,25 @@ Merged: 7 (`listQuillsTicketsMessages` + `listQuillsTicketMessages`, `createQuil
 `sendQuillsTicketMessage`, `createQuillsTicketsNote` + `addQuillsTicketNote`, `fetchQuillsTicketActivity`).
 `TICKET_REPLY` and `TICKET_NOTE` map to update.
 
+## Tracker issue links
+
+| operationId | Route | Action | Tables | Event | Tests |
+|---|---|---|---|---|---|
+| `listQuillsTicketExternalLinks` | `GET /tickets/{ticketId}/external-links` (≤ 100; and the GitHub/GitLab trackers with their channels) | read | `ticket_external_links`, `integrations`, `integration_event_mappings` | - | contract, feature |
+| `linkQuillsTicketIssue` | `PUT /tickets/{ticketId}/external-links` (`integrationId`, `issue`) | update | `ticket_external_links`, `conversation_messages` | `ticket.external_linked` | contract, rollback, feature |
+| `createQuillsTicketIssue` | `POST /tickets/{ticketId}/external-links/issue` (`integrationId`, `target`) | update | `integration_sync_operations` | `ticket.issue_requested` | contract, rollback, feature (local provider server) |
+| `unlinkQuillsTicketIssue` | `DELETE /tickets/{ticketId}/external-links/{linkId}` | update | `ticket_external_links`, `conversation_messages` | `ticket.external_unlinked` | contract, rollback, feature |
+
+`support/ticket-external-links.ts`. `TICKET_ASSIGN` maps to update. The providers are the ones P7b built
+with issues: GitHub (`owner/repo#12` or the issue URL) and GitLab (`<project ID>#12`). The repository or
+project must be one of the connection's channels; a link is not checked remotely (no remote inspection
+exists). Linking and unlinking add a team-only note to the ticket thread. Create queues one sync operation
+per installation, ticket and channel; `jobs/handlers/integration.ts` claims it after commit (the channel
+must still be the connection's, the ticket live), creates the issue through the P7b delivery path, links
+it (origin `push`) and adds the note. Outcomes follow P7a: an uncertain create is never sent again. The
+issue carries the ticket title, its first customer-visible message (≤ 2,000 characters) and the ticket
+number, never the requester's name.
+
 ## Watchers and read markers
 
 | operationId | Route | Action | Tables | Event | Tests |
@@ -196,7 +215,7 @@ Total: 71 routes for 82 source capabilities.
 | Source | Reason |
 |---|---|
 | `exportQuillsTicketTranscript` | Uses the conversation transcript renderer that the conversations slice owns. The thread is readable through `listQuillsTicketMessages?includeInternal=true`. |
-| `fetchQuillsTicketExternalLinks`, `linkQuillsTicketIssue`, `createQuillsTicketIssue`, `unlinkQuillsTicketIssue` | Issue-tracker links call integration providers (integrations slice, P7). |
+| Ticket issue status sync (`updateTicketStatusMappingsFn`) | Inbound issue events update post links only. The ticket links below exist for it. |
 | `suggestQuillsTicketFieldValues` | AI suggestion (P8). |
 | `sendQuillsTestEmail` | Sends mail. Needs a P4 mail handler with retry and deduplication. |
 | `getQuillsEmailChannelStatus` | Reports the outbound provider and inbound domain of the mail transport, which Kaneo has not ported. A fixed answer would be a stub. |
@@ -245,9 +264,14 @@ workspace and seed macros and link rows only for the routes that need them.
 - Search matches the title or the number. The source also searches message text.
 - The ticket view has no SLA chip, last-message preview or attachment data; custom attributes are key/value pairs.
 - Messages are plain text. Rich content and attachments wait for the message file lifecycle.
-- A reply on a customer pair writes the conversation message and the conversation's last message, preview
-  and wait marker directly. The source runs the conversation send pipeline (SLA clocks, status changes,
-  notifications). Switch to the conversations slice's reply path after it merges.
+- A reply on a customer pair goes through the conversations slice's reply path
+  (`conversation-ops.ts#insertReply`): it reopens a closed conversation, claims an unassigned one, stops
+  the wait clock and counts as read. The event stays `ticket.replied`, whose mail entry is the same
+  `replyMail` that `message.created` uses. No SLA clock runs (none is ported).
+- Tracker reply-all and status cascade reach the linked requesters at delivery: the one tracker event
+  fans out per linked ticket (`customer/ROUTES.md`, "Not built, or built in part"). A reply-all copy on a
+  pair does not reopen or claim the linked conversation (`insertReply` with `claim` false), as a tracker
+  never reopens a closed linked ticket.
 - Creating a customer ticket for a requester makes the paired conversation with the minimum columns; no
   `conversation.created` webhook or workflow fires and no SLA hand-off runs. Linking a conversation does not
   hand its SLA to the ticket.

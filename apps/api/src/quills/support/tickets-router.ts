@@ -4,6 +4,7 @@ import macros from "./macros";
 import sla from "./sla";
 import supportReporting from "./support-reporting";
 import supportSettings from "./support-settings";
+import ticketExternalLinks from "./ticket-external-links";
 import ticketLinks from "./ticket-links";
 import ticketReadState from "./ticket-read-state";
 import ticketStatuses from "./ticket-statuses";
@@ -18,6 +19,7 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", ticketThread)
   .route("/", ticketWatchers)
   .route("/", ticketLinks)
+  .route("/", ticketExternalLinks)
   .route("/", ticketReadState)
   .route("/", ticketStatuses)
   .route("/", ticketTypes)
