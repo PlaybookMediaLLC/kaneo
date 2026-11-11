@@ -21,6 +21,8 @@ import {
 
 const SESSION_GAP = "30 minutes";
 const TOP_N = 10;
+// A test customer's page views are test data (test-data.ts). Raw SQL, because the top-stat query is raw.
+const REAL_VISITOR = `NOT coalesce(principal_id = any(array(select t.id from quills."principal" t where t.test_owner_principal_id is not null)), false)`;
 
 export const VISITOR_PERIODS: Record<string, number> = {
   "7d": 7,
@@ -60,6 +62,7 @@ async function computeDayStats(
       SELECT surface, visitor_hash, occurred_at
       FROM quills."page_views"
       WHERE occurred_at >= ${date}::date AND occurred_at < ${date}::date + 1
+        AND ${sql.raw(REAL_VISITOR)}
     ),
     gaps AS (
       SELECT surface, visitor_hash,
@@ -128,7 +131,7 @@ async function computeTopStats(
     ([dimension, column]) => `(
       SELECT '${dimension}' AS dimension, ${column} AS label, count(DISTINCT visitor_hash)::int AS visitors
       FROM quills."page_views"
-      WHERE occurred_at >= '${fromDate}'::date AND ${column} IS NOT NULL ${surfaceFilter}
+      WHERE occurred_at >= '${fromDate}'::date AND ${column} IS NOT NULL ${surfaceFilter} AND ${REAL_VISITOR}
       GROUP BY ${column}
       ORDER BY visitors DESC, label ASC
       LIMIT ${TOP_N}
@@ -142,92 +145,82 @@ async function computeTopStats(
   return Array.from(result.rows as Iterable<TopRow>);
 }
 
-/** Recompute today + yesterday daily rows and all top-stat snapshots. */
+/**
+ * Recompute today + yesterday daily rows and all top-stat snapshots. The steps run in order: a
+ * transaction client runs one query at a time.
+ */
 export async function refreshVisitorAnalytics(
   db: Database,
   opts?: { now?: Date },
 ): Promise<void> {
   const now = opts?.now ?? new Date();
-
-  // Daily rows: both days recompute concurrently, one multi-row upsert each.
-  await Promise.all(
-    [-1, 0].map(async (offset) => {
-      const date = utcDay(now, offset);
-      const stats = await computeDayStats(db, date);
-      const rows = VISITOR_SURFACES.map((surface) => {
-        const row = stats.find((s) => s.surface === surface);
-        return {
-          date,
-          surface,
-          uniqueVisitors: row?.uniqueVisitors ?? 0,
-          pageviews: row?.pageviews ?? 0,
-          visits: row?.visits ?? 0,
-          computedAt: new Date(),
-        };
-        // Days with no traffic get zero rows only while recomputed (today or
-        // yesterday); truly empty historical days simply have no row.
-      }).filter((row) => !(offset === -1 && row.pageviews === 0));
-      if (rows.length === 0) return;
-      await db
-        .insert(visitorStatsDaily)
-        .values(rows)
-        .onConflictDoUpdate({
-          target: [
-            visitorStatsDaily.workspaceId,
-            visitorStatsDaily.date,
-            visitorStatsDaily.surface,
-          ],
-          set: {
-            uniqueVisitors: sql`excluded.unique_visitors`,
-            pageviews: sql`excluded.pageviews`,
-            visits: sql`excluded.visits`,
-            computedAt: sql`excluded.computed_at`,
-          },
-        });
-    }),
+  // Most workspaces have no traffic: one probe instead of the full scan, and no stale snapshot.
+  const traffic = await db.execute(
+    sql`SELECT 1 FROM quills."page_views" LIMIT 1`,
   );
+  if (!traffic.rows.length) {
+    await db.delete(visitorTopStats);
+    return;
+  }
 
-  // Top snapshots: all (period, surface) scans are independent reads, so they
-  // run concurrently (bounded by the pool); each period then swaps its
-  // snapshot rows in one transaction.
-  await Promise.all(
-    Object.entries(VISITOR_PERIODS).map(async ([period, days]) => {
-      const fromDate = utcDay(now, -days);
-      const perSurface = await Promise.all(
-        VISITOR_SURFACES.map(async (surface) => ({
-          surface,
-          rows: await computeTopStats(db, fromDate, surface),
-        })),
-      );
-
-      const snapshots: (typeof visitorTopStats.$inferInsert)[] = [];
-      for (const { surface, rows } of perSurface) {
-        let currentDimension = "";
-        let rank = 0;
-        for (const row of rows) {
-          if (row.dimension !== currentDimension) {
-            currentDimension = row.dimension;
-            rank = 0;
-          }
-          rank += 1;
-          snapshots.push({
-            period,
-            surface,
-            dimension: row.dimension,
-            rank,
-            label: row.label,
-            count: row.visitors,
-            computedAt: new Date(),
-          });
-        }
-      }
-
-      await db.transaction(async (tx) => {
-        await tx.delete(visitorTopStats).where(sql`period = ${period}`);
-        if (snapshots.length > 0) {
-          await tx.insert(visitorTopStats).values(snapshots);
-        }
+  // Daily rows: both days recompute, one multi-row upsert each.
+  for (const offset of [-1, 0]) {
+    const date = utcDay(now, offset);
+    const stats = await computeDayStats(db, date);
+    // A day or surface with no traffic has no row.
+    const rows = stats
+      .filter((s) => s.pageviews > 0)
+      .map((s) => ({ date, ...s, computedAt: new Date() }));
+    if (rows.length === 0) continue;
+    await db
+      .insert(visitorStatsDaily)
+      .values(rows)
+      .onConflictDoUpdate({
+        target: [
+          visitorStatsDaily.workspaceId,
+          visitorStatsDaily.date,
+          visitorStatsDaily.surface,
+        ],
+        set: {
+          uniqueVisitors: sql`excluded.unique_visitors`,
+          pageviews: sql`excluded.pageviews`,
+          visits: sql`excluded.visits`,
+          computedAt: sql`excluded.computed_at`,
+        },
       });
-    }),
-  );
+  }
+
+  // Top snapshots: each period scans every surface, then swaps its snapshot
+  // rows in one savepoint.
+  for (const [period, days] of Object.entries(VISITOR_PERIODS)) {
+    const fromDate = utcDay(now, -days);
+    const snapshots: (typeof visitorTopStats.$inferInsert)[] = [];
+    for (const surface of VISITOR_SURFACES) {
+      let currentDimension = "";
+      let rank = 0;
+      for (const row of await computeTopStats(db, fromDate, surface)) {
+        if (row.dimension !== currentDimension) {
+          currentDimension = row.dimension;
+          rank = 0;
+        }
+        rank += 1;
+        snapshots.push({
+          period,
+          surface,
+          dimension: row.dimension,
+          rank,
+          label: row.label,
+          count: row.visitors,
+          computedAt: new Date(),
+        });
+      }
+    }
+
+    await db.transaction(async (tx) => {
+      await tx.delete(visitorTopStats).where(sql`period = ${period}`);
+      if (snapshots.length > 0) {
+        await tx.insert(visitorTopStats).values(snapshots);
+      }
+    });
+  }
 }

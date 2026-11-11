@@ -130,7 +130,7 @@ function client(config: StorageConfig) {
 const namespace = (
   config: StorageConfig,
   workspaceId: string,
-  purpose: Purpose,
+  purpose: Purpose | "export",
 ) =>
   `${applyKeyPrefix(config.keyPrefix, ["workspace", sanitizePathSegment(workspaceId), "quills", purpose].join("/"))}/`;
 
@@ -210,6 +210,44 @@ export async function createDownload(file: {
     ),
     downloadExpiresAt: new Date(Date.now() + config.presignTtlSeconds * 1000),
   };
+}
+
+/**
+ * A new key for a file that the server writes, in this workspace's export namespace. Store the key
+ * on its row before `putObject`, so the storage trigger queues cleanup when the row lets it go.
+ */
+export const exportKey = (workspaceId: string, extension: string) =>
+  `${namespace(storage(), workspaceId, "export")}${createId()}.${extension}`;
+
+/** Writes a file that the server generated, with a time limit. */
+export async function putObject(key: string, body: string, type: string) {
+  const config = storage();
+  await client(config).send(
+    new PutObjectCommand({
+      Bucket: config.bucket,
+      Key: key,
+      Body: body,
+      ContentType: type,
+    }),
+    { abortSignal: AbortSignal.timeout(120_000) },
+  );
+}
+
+/** Reads a stored object with a time limit. More than `maxBytes` throws. */
+export async function readObject(key: string, maxBytes: number) {
+  const config = storage();
+  const object = await client(config).send(
+    new GetObjectCommand({ Bucket: config.bucket, Key: key }),
+    { abortSignal: AbortSignal.timeout(60_000) },
+  );
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for await (const chunk of object.Body as AsyncIterable<Uint8Array>) {
+    size += chunk.length;
+    if (size > maxBytes) throw new Error("Stored object exceeds the limit");
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
 }
 
 export type VerifiedUpload = {
