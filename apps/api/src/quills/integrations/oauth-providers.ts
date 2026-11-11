@@ -78,7 +78,10 @@ type KeyConnect = {
 };
 /** A provider's catalog entry (catalog.ts), how it connects and its API calls. */
 export type OAuthProvider = Provider & {
-  /** Every host that the provider's calls reach. Tests send these hosts to a local provider server. */
+  /**
+   * Every host that the provider's calls reach. Pass it to providerJson, which refuses any other host.
+   * Tests send these hosts to a local provider server.
+   */
   hosts: RegExp;
   /** Platform credential fields. `clientSecret` and `botToken` are secret. */
   credentials: readonly string[];
@@ -136,7 +139,8 @@ export const rejected = () =>
 
 /**
  * The schema of a provider's connect fields. The whole value must match the pattern, so a provider
- * cannot forget an anchor. A value has at most 253 characters, the length of a host name.
+ * cannot forget an anchor. Flags are ignored: `m` would let a value hold a second line. A value has at
+ * most 253 characters, the length of a host name.
  */
 export const connectQuery = (fields: Record<string, RegExp>) =>
   z.object(
@@ -146,12 +150,7 @@ export const connectQuery = (fields: Record<string, RegExp>) =>
         z
           .string()
           .max(253)
-          .regex(
-            new RegExp(
-              `^(?:${pattern.source})$`,
-              pattern.flags.replace(/[gy]/g, ""),
-            ),
-          ),
+          .regex(new RegExp(`^(?:${pattern.source})$`)),
       ]),
     ),
   );

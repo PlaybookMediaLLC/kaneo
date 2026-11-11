@@ -46,7 +46,6 @@ export const startQuillsMondayOAuthConnect = connect("monday");
 export const startQuillsNotionOAuthConnect = connect("notion");
 export const startQuillsSalesforceOAuthConnect = connect("salesforce");
 export const startQuillsTeamsOAuthConnect = connect("teams");
-export const startQuillsTrelloOAuthConnect = connect("trello");
 export const startQuillsZendeskOAuthConnect = connect("zendesk", {
   subdomain: "contract",
 });

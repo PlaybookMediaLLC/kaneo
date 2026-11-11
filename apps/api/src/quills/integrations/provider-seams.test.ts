@@ -11,10 +11,11 @@ import {
   startContract,
   stopContract,
 } from "../framework/contract";
+import { providerJson } from "../framework/integration-config";
 import { mintOAuthState } from "../framework/signed";
 import quillsRouter from "../index";
 import publicRouter from "../public";
-import type { OAuthProvider } from "./oauth-providers";
+import { connectQuery, type OAuthProvider } from "./oauth-providers";
 import { oauthConnection, platformCredentials } from "./oauth-seed.fixture";
 
 // The provider seams of RFC 0001 with two stub providers that exist only in this file: connect
@@ -71,6 +72,7 @@ vi.mock("./providers/index", async (importOriginal) => {
   const oauthProviders = { ...real.oauthProviders, stubdesk, stubboard };
   const oauthProvider = (type: string) =>
     (oauthProviders as Record<string, OAuthProvider>)[type];
+  // validTarget and freshSecrets keep the real registry: the stubs declare no target and no refresh.
   return {
     ...real,
     oauthProviders,
@@ -101,6 +103,28 @@ vi.mock("../../utils/get-user-session", () => ({
   getUserSession: (headers: Headers) => contractSession(headers),
 }));
 const url = process.env.QUILLS_TEST_DATABASE_URL;
+
+describe("provider seams without a database", () => {
+  it("matches a whole connect field, without flags, of at most 253 characters", () => {
+    const parse = (pattern: RegExp, value: string) =>
+      connectQuery({ value: pattern }).safeParse({ value }).success;
+    expect(parse(/a+/, "a".repeat(253))).toBe(true);
+    expect(parse(/a+/, "a".repeat(254))).toBe(false);
+    expect(parse(/[a-z]+/, "acme.evil")).toBe(false);
+    // A multiline flag would let the anchors match at a line break.
+    expect(parse(/[a-z]+/m, "evil\nacme")).toBe(false);
+  });
+  it("refuses a provider call to a host outside the provider's hosts", async () => {
+    for (const [url, hosts] of [
+      ["https://atlassian.com.evil.test/x", /atlassian\.com/],
+      ["https://evil.test/x", /^api\.atlassian\.com$/m],
+      ["https://api.atlassian.com/x", undefined],
+    ] as const)
+      await expect(providerJson(url, {}, hosts)).rejects.toThrow(
+        "Provider host not allowed",
+      );
+  });
+});
 
 describe.skipIf(!url)("provider seams with PostgreSQL", () => {
   const app = contractApp(quillsRouter, publicRouter);
@@ -148,6 +172,16 @@ describe.skipIf(!url)("provider seams with PostgreSQL", () => {
     // The signature covers the fields: an altered field makes the state invalid.
     const altered = `${Buffer.from(JSON.stringify({ ...claims, f: { subdomain: "evil" } })).toString("base64url")}.${signature}`;
     expect((await callback(altered)).status).toBe(401);
+    // The callback checks the signed fields again: a value outside the pattern, or no value, is 400.
+    for (const fields of [{ subdomain: "evil.example.com" }, undefined]) {
+      const signed = mintOAuthState({
+        workspaceId: env.a,
+        userId: env.owner,
+        type: "stubdesk",
+        fields,
+      });
+      expect((await callback(signed)).status, String(fields)).toBe(400);
+    }
     expect(seen.exchanged).toEqual([]);
 
     const done = await callback(state);

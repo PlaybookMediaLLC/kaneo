@@ -20,9 +20,11 @@ out of scope.
 2. Export one object and end it with `satisfies OAuthProvider`:
 
    ```ts
+   const hosts = /(auth|api)\.atlassian\.com/;
+   // Every call passes the hosts: providerJson(url, init, hosts).
    export const jira = {
      name: "Jira",
-     hosts: /^(auth|api)\.atlassian\.com$/,
+     hosts,
      category: "issue_tracking",
      description: "Create Jira issues from new feedback.",
      events: [],
@@ -48,8 +50,9 @@ out of scope.
 4. Run `pnpm openapi:check:fix` from the repository root. The connect route of an OAuth provider is
    new: `startQuills<Key>OAuthConnect`, for example `startQuillsHubspotOAuthConnect`.
 5. Do not add a connect fixture. `../oauth.fixture.ts` already holds one for each RFC 0001 OAuth
-   provider. Write fixtures for your own new routes in `providers/<file>.fixture.ts`, and add one line
-   to `../index.fixture.ts`: `export * from "./providers/<file>.fixture";`.
+   provider except Trello (see "Trello"). Write fixtures for your own new routes in
+   `providers/<file>.fixture.ts`, and add one line to `../index.fixture.ts`:
+   `export * from "./providers/<file>.fixture";`.
 6. For a test that calls the provider, add the local answers in your fixture file. Do not edit the
    shared function:
 
@@ -72,7 +75,9 @@ out of scope.
 - **No import cycle.** A provider file imports values only from `../oauth-providers` and
   `../../framework/integration-config`. It never imports a value from `./index`, `../catalog`,
   `../connect` or `../oauth`. A type import (`import type`) is safe.
-- **Fixed hosts.** A provider calls only the hosts in its `hosts` pattern. Build a host only from a
+- **Fixed hosts.** Pass the provider's `hosts` to each call: `providerJson(url, init, hosts)`.
+  `providerJson` then refuses any other host; the whole host name must match, and flags are ignored.
+  Without `hosts`, it allows only the hosts of the first four providers. Build a host only from a
   validated value and a fixed domain suffix, never from free text.
 - **Check stored values again.** Check a value from `config` (a cloud ID, a subdomain, an instance URL)
   against a strict pattern before it enters a URL. Encode each path value with `encodeURIComponent`.
@@ -92,7 +97,7 @@ out of scope.
 
 | Field | Meaning | Used by |
 |---|---|---|
-| `hosts` | Every host that the provider calls | test edge |
+| `hosts` | Every host that the provider calls | `providerJson`, test edge |
 | `credentials` | Platform credential fields of the OAuth app | credentials routes |
 | `authorizeUrl`, `exchange` | OAuth redirect and code exchange | connect route, callback |
 | `connectFields` | Values that a teammate enters before the redirect | connect route, callback |
