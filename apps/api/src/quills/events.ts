@@ -261,6 +261,8 @@ export const changeSchema = z.object({
     "portal.invite_accepted",
     "settings.widget_hero_image_updated",
     "settings.widget_hero_image_removed",
+    "conversation.created",
+    "conversation.csat_submitted",
   ]),
   entityType: z.enum([
     "board",

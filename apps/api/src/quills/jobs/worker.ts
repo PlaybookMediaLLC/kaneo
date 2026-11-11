@@ -8,6 +8,7 @@ import { workspaceUserTable, userTable } from "../../database/schema";
 import { roleHasWorkspacePermission } from "../../utils/require-workspace-permission";
 import { broadcastToUserAndWait } from "../../ws";
 import { fanOut } from "./fanout";
+import { deliverCustomerChange } from "./handlers/customer-stream";
 import { fanOutIntegrations, runIntegrationJob } from "./handlers/integration";
 import { runDomainCheckJob } from "./handlers/domain-check";
 import { runMailJob } from "./handlers/mail";
@@ -69,6 +70,8 @@ export async function deliverQuillsChange(
         eventId,
       });
     }
+  // The portal customer who owns the conversation or ticket, on the same socket kind.
+  await deliverCustomerChange(workspaceId, eventId);
 }
 export async function drainQuillsWorkspace(
   workspaceId: string,

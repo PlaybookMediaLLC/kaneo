@@ -124,10 +124,14 @@ describe.skipIf(!url)("Quills customer feedback", () => {
     // Widget routes follow the widget's own flag (paths under /widget). An unsubscribe link in a
     // sent mail must keep working while the portal is off (teammates get the same mail), so the
     // three unsubscribe routes answer without the portal; portal/customer.test.ts covers them.
+    // A CSAT link in a support mail must work too: an email-only workspace may keep its portal off.
+    // support/customer/customer.test.ts covers both routes with the portal off.
     const alwaysOn = new Set([
       "previewQuillsUnsubscribeToken",
       "createQuillsUnsubscribe",
       "processQuillsUnsubscribeToken",
+      "validateQuillsCsatEmailToken",
+      "recordQuillsCsatViaToken",
     ]);
     const routes = [...registry.keys()].filter(
       (d: AnyQuillsRoute) =>
