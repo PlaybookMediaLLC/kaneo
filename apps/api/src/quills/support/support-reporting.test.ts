@@ -79,13 +79,24 @@ describe.skipIf(!url)("Quills attribute breakdown", () => {
       envelope(["eu", "us", "eu"]),
       envelope(null),
       envelope([]),
+      envelope([""]),
+      { [key]: [null] },
       { other: "x" },
       null,
     ]);
-    // Filtered before the counts: a test customer, an old conversation, workspace B.
-    await conversationsWith(env, env.a, [envelope("pro")], { test: true });
-    await conversationsWith(env, env.a, [envelope("pro")], { daysAgo: 10 });
-    await conversationsWith(env, env.b, [envelope("pro"), envelope("leak")]);
+    // Filtered before the counts, for values and for unset: a test customer, an old
+    // conversation, workspace B.
+    for (const [workspaceId, options] of [
+      [env.a, { test: true }],
+      [env.a, { daysAgo: 10 }],
+      [env.b, {}],
+    ] as const)
+      await conversationsWith(
+        env,
+        workspaceId,
+        [envelope("pro"), envelope("leak"), null],
+        options,
+      );
 
     const res = await call(
       app,
@@ -97,7 +108,7 @@ describe.skipIf(!url)("Quills attribute breakdown", () => {
     expect(res).toEqual({
       status: 200,
       body: {
-        unset: 4,
+        unset: 6,
         values: [
           { value: "pro", count: 2 },
           { value: "eu", count: 1 },
@@ -106,6 +117,28 @@ describe.skipIf(!url)("Quills attribute breakdown", () => {
         truncated: false,
       },
     });
+  });
+
+  it("refuses an empty, reversed or longer than 400-day window", async () => {
+    const env = contractEnv();
+    const at = (days: number) =>
+      new Date(Date.now() + days * DAY).toISOString();
+    for (const [from, to] of [
+      [at(0), at(0)],
+      [at(1), at(0)],
+      [at(-401), at(0)],
+    ])
+      expect(
+        (
+          await call(
+            app,
+            env,
+            env.owner,
+            "GET",
+            `/support/reporting/attribute-breakdown?key=tier&from=${from}&to=${to}`,
+          )
+        ).status,
+      ).toBe(400);
   });
 
   it("keeps the 100 most frequent values and says that more exist", async () => {

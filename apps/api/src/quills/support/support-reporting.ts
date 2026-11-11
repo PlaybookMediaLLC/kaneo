@@ -1,4 +1,4 @@
-import { and, count, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, count, eq, gte, inArray, lt, sql, type SQL } from "drizzle-orm";
 import { apiRouter, z, type BaseVariables } from "../../openapi";
 import { conversations } from "../../database/quills/schema/conversation";
 import { slaEvents, slaPolicies } from "../../database/quills/schema/sla";
@@ -255,20 +255,25 @@ const breakdown = defineQuillsRoute({
     const raw = sql`(${conversations.customAttributes} -> ${query.key})`;
     // A teammate or AI value is an envelope { v, src, at }; an imported value can be bare.
     const value = sql`(case when jsonb_typeof(${raw}) = 'object' and ${raw} ? 'v' then ${raw} -> 'v' else ${raw} end)`;
+    // The values a conversation counts for: each member of an array, else the value itself.
+    // null and "" count for none; a conversation with no counted value is unset.
+    const members = (v: SQL) =>
+      sql`jsonb_array_elements(case when jsonb_typeof(${v}) = 'array' then ${v} else jsonb_build_array(${v}) end) member`;
+    const counted = sql`jsonb_typeof(member) <> 'null' and member <> '""'::jsonb`;
     const [unset] = await db
       .select({ n: count() })
       .from(conversations)
       .where(
         and(
           scope,
-          sql`coalesce(${value}, 'null'::jsonb) in ('null'::jsonb, '""'::jsonb, '[]'::jsonb)`,
+          sql`not exists (select 1 from ${members(value)} where ${counted})`,
         ),
       );
     const { rows } = await db.execute<{ value: string; count: number }>(sql`
       select member #>> '{}' as value, count(distinct picked.id)::int as count
       from (select ${conversations.id} as id, ${value} as v from ${conversations} where ${scope}) picked,
-        jsonb_array_elements(case when jsonb_typeof(picked.v) = 'array' then picked.v else jsonb_build_array(picked.v) end) member
-      where jsonb_typeof(member) <> 'null' and member <> '""'::jsonb
+        ${members(sql`picked.v`)}
+      where ${counted}
       group by 1
       order by 2 desc, 1
       limit ${BUCKETS + 1}`);
