@@ -80,6 +80,18 @@
 			"state": "generated",
 			"lines": "every Quills operation",
 			"plannedChange": "regenerate with pnpm openapi:check:fix in each phase; on an upstream conflict take upstream and regenerate"
+		},
+		{
+			"file": ".trufflehog-exclude",
+			"state": "existing",
+			"lines": "fork exclusions for placeholder credentials in tests and GitLab false positives",
+			"plannedChange": "two Quills SSRF test paths (webhook and integration handler tests)"
+		},
+		{
+			"file": "packages/libs/src/hono.ts",
+			"state": "existing",
+			"lines": "1 line: an explicit ReturnType<typeof hc<AppType>> annotation on client",
+			"plannedChange": "none. The inferred client type with the Quills routes is too large to emit inline (TS7056)"
 		}
 	]
 }

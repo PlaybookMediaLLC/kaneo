@@ -20,3 +20,6 @@
 ^apps/api/src/plugins/gitlab/webhooks/issue-opened\.ts$
 ^apps/api/src/plugins/gitlab/webhooks/issue-updated\.ts$
 ^apps/web/src/components/project/gitlab-integration/gitlab-project-picker\.tsx$
+# Quills SSRF tests: placeholder credentials in a reserved documentation address (203.0.113.10).
+^apps/api/src/quills/jobs/handlers/webhook\.test\.ts$
+^apps/api/src/quills/jobs/handlers/integration\.test\.ts$

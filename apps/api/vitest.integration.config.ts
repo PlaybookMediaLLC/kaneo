@@ -19,11 +19,15 @@ export default defineConfig({
     target: "node18",
   },
   resolve: {
-    alias: {
-      "@kaneo/email": resolve(
-        __dirname,
-        "../../tests/api-integration/mocks/email.ts",
-      ),
-    },
+    // Exact match only: the Quills subpaths (@kaneo/email/quills...) resolve to the real package.
+    alias: [
+      {
+        find: /^@kaneo\/email$/,
+        replacement: resolve(
+          __dirname,
+          "../../tests/api-integration/mocks/email.ts",
+        ),
+      },
+    ],
   },
 });
