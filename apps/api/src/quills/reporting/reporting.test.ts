@@ -7,6 +7,7 @@ import { withQuillsSystemWorkspace } from "../../database/quills/client";
 import { maintainPageViewPartitions } from "../../database/quills/page-view-partitions";
 import { principal, user } from "../../database/quills/schema/auth";
 import { boards } from "../../database/quills/schema/boards";
+import { changelogEntries } from "../../database/quills/schema/changelog";
 import { boardProjects } from "../../database/quills/schema/platform-links";
 import {
   postComments,
@@ -237,5 +238,81 @@ describe.skipIf(!url)("Reporting aggregates", () => {
       "/reporting/visitor-analytics?period=7d&surface=portal",
     );
     expect([403, 404]).toContain(outsider.status);
+  });
+
+  it("lists the most viewed published changelog entries up to changelogLimit", async () => {
+    const day = 86_400_000;
+    await world.scoped(world.a, world.users.owner, (db) =>
+      db.insert(changelogEntries).values([
+        {
+          title: "Most read",
+          content: "-",
+          viewCount: 30,
+          publishedAt: new Date(Date.now() - day),
+        },
+        {
+          title: "Less read",
+          content: "-",
+          viewCount: 20,
+          publishedAt: new Date(Date.now() - day),
+        },
+        {
+          title: "Least read",
+          content: "-",
+          viewCount: 10,
+          publishedAt: new Date(Date.now() - day),
+        },
+        { title: "Draft entry", content: "-", viewCount: 99 },
+        {
+          title: "Scheduled entry",
+          content: "-",
+          viewCount: 98,
+          publishedAt: new Date(Date.now() + day),
+        },
+        {
+          title: "Deleted entry",
+          content: "-",
+          viewCount: 97,
+          publishedAt: new Date(Date.now() - day),
+          deletedAt: new Date(),
+        },
+      ]),
+    );
+    const res = await world.request(
+      world.users.member,
+      "GET",
+      "/reporting/analytics?period=7d&changelogLimit=2",
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.changelog.topEntries).toEqual([
+      expect.objectContaining({
+        title: "Most read",
+        viewCount: 30,
+        publishedAt: expect.any(String),
+      }),
+      expect.objectContaining({ title: "Less read", viewCount: 20 }),
+    ]);
+    const defaults = await world.request(
+      world.users.member,
+      "GET",
+      "/reporting/analytics?period=7d",
+    );
+    expect(
+      defaults.body.changelog.topEntries.map((e: { title: string }) => e.title),
+    ).toEqual(["Most read", "Less read", "Least read"]);
+    for (const limit of ["0", "21"])
+      expect(
+        (
+          await world.request(
+            world.users.member,
+            "GET",
+            `/reporting/analytics?changelogLimit=${limit}`,
+          )
+        ).status,
+      ).toBe(400);
+    expect([403, 404]).toContain(
+      (await world.request(world.users.outsider, "GET", "/reporting/analytics"))
+        .status,
+    );
   });
 });
