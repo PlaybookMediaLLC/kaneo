@@ -36,9 +36,11 @@ export async function send(
   let path =
     audience === "teammate"
       ? `/quills/${workspace}${d.path}`
-      : audience === "signed" || audience === "internal"
-        ? `/quills-public/${audience}${d.path}`
-        : `/quills-public/${workspace}${d.path}`;
+      : audience === "app"
+        ? `/quills/${workspace}/apps${d.path}`
+        : audience === "signed" || audience === "internal"
+          ? `/quills-public/${audience}${d.path}`
+          : `/quills-public/${workspace}${d.path}`;
   for (const [key, value] of Object.entries(input.params ?? {}))
     path = path.replace(`{${key}}`, encodeURIComponent(value));
   const query = new URLSearchParams(input.query).toString();
@@ -50,6 +52,8 @@ export async function send(
         "content-type": "application/json",
       }),
       ...(scope && { "x-test-scope": JSON.stringify(scope) }),
+      // An app route's key is the caller's app key.
+      ...(scope && audience === "app" && { "x-test-key": "app" }),
       ...(input.bearer && { authorization: `Bearer ${input.bearer}` }),
       // A fresh client per request keeps the checks under the rate limits; rate-limit.test.ts covers them.
       "x-kaneo-client-ip": `198.51.100.${++clientCount % 250}`,
@@ -288,6 +292,7 @@ export async function rollbackIssues(
   d: AnyQuillsRoute,
   f: Fixture,
   user: string,
+  scope?: PermissionMap,
 ) {
   const issues: string[] = [];
   const event = d.event;
@@ -317,13 +322,12 @@ export async function rollbackIssues(
     const failing = apiRouter<
       BaseVariables & { workspaceId: string }
     >().openapi(...buildQuillsRoute({ ...d, ...failure }));
-    const failingApp =
-      (d.audience ?? "teammate") === "teammate"
-        ? contractApp(failing)
-        : contractApp(apiRouter(), failing);
+    const failingApp = ["teammate", "app"].includes(d.audience ?? "teammate")
+      ? contractApp(failing)
+      : contractApp(apiRouter(), failing);
     const target = f.valid(await f.seed(env, users.owner));
     const before = await fingerprint(env.a);
-    const res = await send(failingApp, d, target, user);
+    const res = await send(failingApp, d, target, user, scope);
     if (res.status !== 500) issues.push(`expected 500, got ${res.status}`);
     if (before !== (await fingerprint(env.a)))
       issues.push("rows changed after the failed request");

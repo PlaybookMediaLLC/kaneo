@@ -43,6 +43,16 @@ Differences between this design and the P0 code:
   changed. They do not combine with `ensureCustomer`.
 - A widget fixture with `own` or `probe` gets the `customer-ownership` check: another visitor of A
   sends the same input with its own session and must not change or read the visitor's records.
+- The audience `app` (RFC 0001, lane X1) runs the teammate path under `/{workspaceId}/apps`. It declares a
+  `capability`. The caller needs an API key with a scope, and an active `apps` row of the workspace that holds
+  the key and the capability (`framework/app.ts`, the first statement of each transaction). Each change that an
+  app request records gets `metadata.appId`. Every teammate check runs with the caller's bound key, plus the
+  `app-*` checks and `app-actor`; an app read fixture declares `visible` values.
+- A teammate route refuses a key that an app of the workspace holds (403 `APP_KEY_CONFINED`). The contract
+  check `app-key-confined` covers every teammate route.
+- `prepare` also gets `actions`. The field `revert` undoes a `call`'s effect outside the database when the
+  handler's transaction fails (the app registration deletes the key it minted).
+  `framework/app-keys.ts` is the only Quills module that writes `public.apikey`.
 
 The framework is one helper and one test suite. Both use the code that exists today:
 `withQuillsRequest`, `workspaceAccess`, `requireWorkspacePermission`, `createRoute`,

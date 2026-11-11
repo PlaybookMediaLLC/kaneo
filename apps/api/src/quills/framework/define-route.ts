@@ -27,6 +27,14 @@ import {
   type QuillsAction,
 } from "../with-quills-request";
 import {
+  appKey,
+  boundApp,
+  confineKey,
+  withApp,
+  type AppCaller,
+  type AppCapability,
+} from "./app";
+import {
   callerActor,
   enforceRateLimit,
   readCredentials,
@@ -48,24 +56,31 @@ import {
 } from "./signed";
 
 export type { Database, QuillsActor };
+/** One change that a route's `event` records. */
+export type QuillsChange = z.input<typeof changeSchema>;
 
 type Method = "get" | "post" | "put" | "delete" | "patch";
 type Env = { Variables: BaseVariables & { workspaceId: string } };
 // Tuples keep `any` (AnyQuillsRoute) on the teammate side instead of a union.
-type RouteEnv<A> = [A] extends ["teammate"]
+type RouteEnv<A> = [A] extends ["teammate" | "app"]
   ? Env
   : { Variables: BaseVariables };
 type Errors = Partial<Record<400 | 403 | 404 | 409 | 502, string>>;
-/** "signed": a machine caller that a verifier in signed.ts checks. "internal": the instance's own job waker. */
-type Audience = "teammate" | QuillsAudience | "signed" | "internal";
+/**
+ * "app": a sidebar app, the owner of an API key that an active app of the workspace holds (framework/app.ts).
+ * "signed": a machine caller that a verifier in signed.ts checks. "internal": the instance's own job waker.
+ */
+type Audience = "teammate" | "app" | QuillsAudience | "signed" | "internal";
 /** The path parameter that names the workspace: an authorized ID for teammates, an ID or slug otherwise. */
-type Scope<A> = [A] extends ["teammate"] ? "workspaceId" : "workspace";
+type Scope<A> = [A] extends ["teammate" | "app"] ? "workspaceId" : "workspace";
 /** Signed and internal routes name no workspace in the path: the credential (or nothing) decides it. */
 type MachinePath<A, Path extends string> = [A] extends ["signed"]
   ? `/signed${Path}`
   : [A] extends ["internal"]
     ? `/internal${Path}`
-    : `/{${Scope<A>}}${Path}`;
+    : [A] extends ["app"]
+      ? `/{workspaceId}/apps${Path}`
+      : `/{${Scope<A>}}${Path}`;
 type Output<S> = S extends z.ZodType ? z.output<S> : undefined;
 /** Signed routes read at most this much body: the bytes are kept for the signature check. */
 const SIGNED_BODY_BYTES = 1_048_576;
@@ -102,8 +117,11 @@ export type QuillsRouteDeclaration<
    * framework/audience.ts resolves their caller. "signed" mounts under /quills-public/signed
    * through withQuillsSigned after `verifier` checks the caller. "internal" mounts under
    * /quills-public/internal, opens no transaction and is hidden from the OpenAPI document.
+   * "app" runs the teammate path under /quills/{workspaceId}/apps, with the app gate of framework/app.ts.
    */
   audience?: A;
+  /** App only: the capability that the bound app must hold. */
+  capability?: AppCapability;
   /** Signed: checks the machine caller and names the credential's workspace (framework/signed.ts). */
   verifier?: SignedVerifier<V>;
   /** Signed: the teammate principal that the verified credential names, for the audit row. */
@@ -114,23 +132,32 @@ export type QuillsRouteDeclaration<
   /** Signed: the response to a delivery that was already processed. Nothing else runs. */
   replay?: z.input<NoInfer<R>>;
   /**
-   * Teammate, signed, portal and widget: a read in its own scoped transaction, before `call`. It must
-   * not write. The handler then runs in a new scoped transaction with the call's result as `called`.
+   * Teammate, app, signed, portal and widget: a read in its own scoped transaction, before `call`. It
+   * must not write. The handler then runs in a new scoped transaction with the call's result as `called`.
    * Portal and widget: `prepare` gets the caller and runs the route's read gates; the handler's
    * transaction resolves the caller again and answers 409 when it changed. Use it for work that must
    * hold no pooled connection, for example an upload verification (framework/files.ts).
    */
   prepare?: (
     input: QuillsRouteInput<P, Q, B> & { db: Database } & ([A] extends [
-        "teammate",
+        "teammate" | "app",
       ]
-        ? { actor: QuillsActor; loaded: L }
+        ? {
+            actor: QuillsActor;
+            loaded: L;
+            actions: ReadonlySet<QuillsAction>;
+          } & ([A] extends ["app"] ? { app: AppCaller } : {})
         : [A] extends ["signed"]
           ? { credential: V; located: Located }
           : { caller: QuillsCaller }),
   ) => Promise<H>;
   /** The provider or object-store call, with no database transaction open. Required with `prepare`. */
   call?: (prepared: H, input: QuillsRouteInput<P, Q, B>) => Promise<C>;
+  /**
+   * Teammate and app: undoes the call's effect outside the database when the handler's transaction
+   * fails, for example deletes the API key that the call minted. The request still fails.
+   */
+  revert?: (called: C) => Promise<void>;
   /**
    * Teammate: the provider failure to answer after the handler's transaction commits, for example
    * when a refreshed token must be kept although the call after the refresh failed.
@@ -200,14 +227,14 @@ export type QuillsRouteDeclaration<
   handler: (
     // Teammate first: `any` (AnyQuillsRoute) resolves to the teammate shape.
     input: QuillsRouteInput<P, Q, B> &
-      ([A] extends ["teammate"]
+      ([A] extends ["teammate" | "app"]
         ? {
             db: Database;
             actor: QuillsActor;
             loaded: L;
             actions: ReadonlySet<QuillsAction>;
             called: C;
-          }
+          } & ([A] extends ["app"] ? { app: AppCaller } : {})
         : [A] extends ["signed"]
           ? {
               db: Database;
@@ -299,7 +326,7 @@ type QuillsRoute<
     };
   } & Record<
     // Non-teammate routes may also return 401 (sign-in), 403 (blocked) and 429 (rate limit).
-    | ([A] extends ["teammate"]
+    | ([A] extends ["teammate" | "app"]
         ? 401 | 403
         : [A] extends ["signed"]
           ? 400 | 401 | 404 | 413
@@ -406,12 +433,21 @@ export function buildQuillsRoute<
   if (
     d.prepare &&
     !(
-      ["teammate", "signed"].includes(audience) ||
+      ["teammate", "app", "signed"].includes(audience) ||
       (customer && !d.ensureCustomer)
     )
   )
     throw new Error(
-      `${d.operationId}: prepare and call are for teammate, signed, portal and widget routes, without ensureCustomer`,
+      `${d.operationId}: prepare and call are for teammate, app, signed, portal and widget routes, without ensureCustomer`,
+    );
+  // The handler's transaction is the only one that undoes the call; other audiences never run `revert`.
+  if (d.revert && !(d.call && ["teammate", "app"].includes(audience)))
+    throw new Error(
+      `${d.operationId}: revert is for a teammate or app route with call`,
+    );
+  if ((audience === "app") !== Boolean(d.capability))
+    throw new Error(
+      `${d.operationId}: an app route, and only one, names its capability`,
     );
   if (d.actor && audience !== "signed")
     throw new Error(`${d.operationId}: only a signed route names its actor`);
@@ -592,7 +628,7 @@ export function buildQuillsRoute<
     }) as unknown as RouteHandler<typeof route, RouteEnv<A>>;
     return [route, handler] as const;
   }
-  if (audience !== "teammate") {
+  if (audience !== "teammate" && audience !== "app") {
     if (
       d.native ||
       d.project ||
@@ -784,14 +820,23 @@ export function buildQuillsRoute<
     throw new Error(
       `${d.operationId}: signIn, ensureCustomer and rateLimit are for non-teammate audiences`,
     );
+  const app = audience === "app";
   // Key order matches the routes before the helper, so the OpenAPI document does not change.
   const route = createRoute({
     method: d.method,
-    path: `/{workspaceId}${d.path}`,
+    // App routes share one prefix, so a later CORS rule can name them.
+    path: `/{workspaceId}${app ? "/apps" : ""}${d.path}`,
     operationId: d.operationId,
     tags: ["Quills"],
     summary: d.summary,
-    description: d.description,
+    description: app
+      ? [
+          d.description,
+          `Requires an API key with quills scopes that an active app of this workspace holds, with the ${d.capability} capability.`,
+        ]
+          .filter(Boolean)
+          .join(" ")
+      : d.description,
     middleware: [
       workspaceAccess.fromParam("workspaceId"),
       ...(d.native ? [requireWorkspacePermission(d.native)] : []),
@@ -807,7 +852,11 @@ export function buildQuillsRoute<
     responses: {
       200: jsonResponse(d.responseDescription, d.response),
       401: errorResponse("Authentication required"),
-      403: errorResponse("Insufficient access"),
+      403: errorResponse(
+        app
+          ? "Insufficient access: MISSING_PERMISSION, API_KEY_SCOPE, APP_NOT_BOUND or APP_SCOPE"
+          : "Insufficient access",
+      ),
       ...Object.fromEntries(
         Object.entries(d.errors ?? {}).map(([status, text]) => [
           status,
@@ -848,23 +897,56 @@ export function buildQuillsRoute<
           return projectId;
         }),
     };
+    // An app route needs a scoped API key; a teammate route may come with any key or none.
+    const keyId = app
+      ? appKey(c)
+      : (c.get("apiKey") as { id: string } | undefined)?.id;
+    // The first statement of each scoped transaction. App routes: the active app that holds the
+    // key and the capability. Teammate routes with a key: refuse a key that an app holds.
+    const gate = async (db: Database): Promise<{ app?: AppCaller }> => {
+      if (app) return { app: await boundApp(db, keyId!, d.capability!) };
+      if (keyId) await confineKey(db, keyId);
+      return {};
+    };
     // Read, release the connection, call the provider, then write in a new scoped transaction.
     // The second transaction checks the permissions again.
     let called = undefined as C;
     if (prepare) {
-      const prepared = await withQuillsRequest(c, access, (db, actor) =>
-        prepare({ ...input, db, actor, loaded }),
+      const prepared = await withQuillsRequest(c, access, async (db, actor) =>
+        prepare({ ...input, db, actor, loaded, actions, ...(await gate(db)) }),
       );
       called = await d.call!(prepared, input);
     }
     const result = await withQuillsRequest(c, access, async (db, actor) => {
+      const caller = await gate(db);
       const result = d.response.parse(
-        await handle({ ...input, db, actor, loaded, actions, called }),
+        await handle({
+          ...input,
+          db,
+          actor,
+          loaded,
+          actions,
+          called,
+          ...caller,
+        }),
       ) as z.output<R>;
       const change = typeof d.event === "function" && d.event(input, result);
+      // Every change that an app request records names the app.
       for (const one of [change || []].flat())
-        await recordQuillsChange(db, actor, one);
+        await recordQuillsChange(
+          db,
+          actor,
+          caller.app ? withApp(one, caller.app.id) : one,
+        );
       return result;
+    }).catch(async (error) => {
+      // The call's effect outside the database must not outlive a failed handler transaction.
+      await d
+        .revert?.(called)
+        .catch((cause) =>
+          console.error(`${d.operationId}: revert failed`, cause),
+        );
+      throw error;
     });
     const failed = d.failure?.(called);
     if (failed) throw failed;
