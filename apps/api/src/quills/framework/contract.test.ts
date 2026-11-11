@@ -17,6 +17,7 @@ import * as jobFixtures from "../jobs/routes.fixture";
 import * as linkFixtures from "../links.fixture";
 import * as portalFixtures from "../portal/index.fixture";
 import * as operationsFixtures from "../operations/index.fixture";
+import * as reportingFixtures from "../reporting/index.fixture";
 import * as settingsFixtures from "../settings/index.fixture";
 import * as teamFixtures from "../teams.fixture";
 import * as taxonomyFixtures from "../feedback/taxonomy.fixture";
@@ -90,6 +91,7 @@ const fixtures: Record<string, Fixture> = {
   ...operationsFixtures,
   ...ticketFixtures,
   ...supportFixtures,
+  ...reportingFixtures,
 };
 const app = contractApp(quillsRouter, publicRouter);
 

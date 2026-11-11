@@ -33,6 +33,8 @@ import { enqueueQuillsJob, type QuillsQueue } from "./queue";
 export const eventQueues: Partial<Record<string, QuillsQueue>> = {
   "custom_domain.verification_requested": "quills.domain_check",
   "workspace.wipe_requested": "quills.wipe",
+  "export.requested": "quills.transfer",
+  "import.requested": "quills.transfer",
 };
 
 export type DeliveryEvent = Pick<

@@ -5,6 +5,7 @@ import {
   withQuillsSystemWorkspace,
   type Database,
 } from "../../database/quills/client";
+import { refreshVisitorAnalytics } from "../../database/quills/visitor-rollup";
 const days = z.coerce.number().int().min(1).max(3650);
 export const retentionSchema = z.object({
   events: days.default(90),
@@ -55,6 +56,14 @@ export async function runQuillsRetention() {
           (tx) => pruneQuillsWorkspace(tx, policy),
           { allowArchived: true },
         );
+      } catch {
+        degraded = true;
+      }
+      try {
+        // The hourly visitor rollup; visitor analytics reads only its tables.
+        await withQuillsSystemWorkspace(row.id, refreshVisitorAnalytics, {
+          allowArchived: true,
+        });
       } catch {
         degraded = true;
       }

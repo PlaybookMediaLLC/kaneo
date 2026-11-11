@@ -9,6 +9,7 @@ import links from "./links";
 import portalAccessSettings from "./portal/access-settings";
 import operations from "./operations/index";
 import quillsSettings from "./settings/index";
+import reporting from "./reporting/index";
 import sharedTeams from "./teams";
 import taxonomy from "./feedback/taxonomy";
 import supportTickets from "./support/tickets-router";
@@ -72,4 +73,5 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", operations)
   .route("/", supportTickets)
   .route("/", supportConversations)
+  .route("/", reporting)
   .openapi(...context);

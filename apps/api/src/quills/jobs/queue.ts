@@ -17,6 +17,7 @@ export const QUILLS_QUEUES = [
   "quills.notification",
   "quills.domain_check",
   "quills.wipe",
+  "quills.transfer",
 ] as const;
 export type QuillsQueue = (typeof QUILLS_QUEUES)[number];
 /** Enqueues once per queue and deduplication key; a repeat returns undefined. */

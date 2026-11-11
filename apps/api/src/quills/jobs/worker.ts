@@ -13,6 +13,7 @@ import { runDomainCheckJob } from "./handlers/domain-check";
 import { runMailJob } from "./handlers/mail";
 import { runNotificationJob } from "./handlers/notification";
 import { runWebhookJob } from "./handlers/webhook";
+import { runTransferJob } from "./handlers/transfer";
 import { runWipeJob } from "./handlers/wipe";
 import {
   claimQuillsJob,
@@ -36,6 +37,7 @@ const handlers: Record<
   "quills.notification": runNotificationJob,
   "quills.domain_check": runDomainCheckJob,
   "quills.wipe": runWipeJob,
+  "quills.transfer": runTransferJob,
 };
 
 export async function deliverQuillsChange(
