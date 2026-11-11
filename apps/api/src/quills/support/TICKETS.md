@@ -222,7 +222,7 @@ Total: 71 routes for 82 source capabilities.
 | `removeQuillsConversationSla` | Mutates a conversation's applied SLA; the SLA clock engine and conversations are not in this slice. |
 | `attributeQuillsBreakdown` | Built in RFC 0001 lane S1 (`CONVERSATIONS.md`) as `GET /support/reporting/attribute-breakdown`. |
 | Workflow effectiveness inside `supportQuillsReporting` | Workflows are not ported. The route returns the four SLA parts only. |
-| `readQuillsTogether` | Blocked in RFC 0001 lane S1 (`CONVERSATIONS.md`): it needs a framework seam. |
+| `readQuillsTogether` | Built in RFC 0001 lane S1 (`CONVERSATIONS.md`) as `POST /read-batch`. |
 | `getQuillsConversationTicketLink`, `assignQuillsConversationTeam` | Inbox and conversation slices. |
 | CSAT settings or reporting for teammates | The source has no teammate CSAT read; its CSAT rows are portal and public routes. |
 
