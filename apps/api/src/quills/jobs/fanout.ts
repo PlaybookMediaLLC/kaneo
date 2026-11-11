@@ -29,6 +29,7 @@ import { postComments, posts } from "../../database/quills/schema/posts";
 import { postStatuses } from "../../database/quills/schema/statuses";
 import { webhooks } from "../../database/quills/schema/webhooks";
 import { enqueueWorkflowRuns } from "../automation/engine";
+import { assistantWork } from "../assistant/engine/index";
 import { seesBoard } from "../feedback/visibility";
 import {
   accessibleProjectIds,
@@ -47,6 +48,10 @@ export const eventQueues: Partial<Record<string, QuillsQueue>> = {
   "workspace.wipe_requested": "quills.wipe",
   "export.requested": "quills.transfer",
   "import.requested": "quills.transfer",
+  // Assistant work (assistant/engine/index.ts). Without a provider the job finishes with no work.
+  ...Object.fromEntries(
+    Object.keys(assistantWork).map((type) => [type, "quills.ai" as const]),
+  ),
 };
 
 export type DeliveryEvent = Pick<

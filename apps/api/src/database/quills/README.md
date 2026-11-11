@@ -493,3 +493,23 @@ All entries are workspace-owned, including per-workspace reference catalogues.
 | `workflow_run_events` | `workflows.ts` |
 | `workflow_versions` | `workflows.ts` |
 | `workspace_assistant_threads` | `workspace-assistant.ts` |
+
+## AI provider
+
+The assistant and the AI features call an OpenAI-compatible HTTP API with `fetch`. There is
+no SDK and no other dependency. Set these server variables in the root `.env`:
+
+| Variable | Use |
+|---|---|
+| `QUILLS_AI_BASE_URL` | API root that serves `/chat/completions` and `/embeddings`, for example `https://api.openai.com/v1` or a local server. Required. |
+| `QUILLS_AI_MODEL` | Chat model name. Required. |
+| `QUILLS_AI_API_KEY` | Sent as `Authorization: Bearer`. Leave it empty for a local server that needs no key. |
+| `QUILLS_AI_EMBEDDING_MODEL` | Embedding model. It must return 1536 dimensions (the `vector(1536)` columns). Optional: without it, similar posts, duplicate checks and semantic search stay off. |
+
+Without `QUILLS_AI_BASE_URL` and `QUILLS_AI_MODEL`, every AI route returns 409
+("AI is not configured") and the rest of Quills works as before. Background AI work then
+finishes with no work. Provider calls run outside every database transaction and time out
+after 60 seconds. A failure returns a fixed message; the provider's text and the key never
+reach a response, a log row or a run. Each call writes one `ai_usage_log` row in its
+workspace. The `quills.ai` queue (migration `0013_assistant_queue`) runs the background work;
+`apps/api/src/quills/assistant/ROUTES.md` lists the routes and the work for each event.

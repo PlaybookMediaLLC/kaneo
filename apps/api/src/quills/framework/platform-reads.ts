@@ -1,4 +1,5 @@
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { statement } from "@kaneo/permissions";
 import { HTTPException } from "hono/http-exception";
 import platformDb from "../../database";
 import {
@@ -256,6 +257,35 @@ export async function isMemberOfNamedWorkspace(
  * A no-op when billing is off, so self-hosted installs are never gated. It can create the workspace's billing row.
  */
 export { requireWorkspaceEntitlement };
+
+/**
+ * The Quills actions that a current, unbanned member's role grants now; none for anyone else.
+ * A worker re-checks a requester with it before it acts on that person's behalf.
+ */
+export async function memberQuillsActions(workspaceId: string, userId: string) {
+  const [member] = await platformDb
+    .select({ role: workspaceUserTable.role })
+    .from(workspaceUserTable)
+    .innerJoin(userTable, eq(userTable.id, workspaceUserTable.userId))
+    .where(
+      and(
+        eq(workspaceUserTable.workspaceId, workspaceId),
+        eq(workspaceUserTable.userId, userId),
+        sql`coalesce(${userTable.banned},false)=false`,
+      ),
+    );
+  const held: (typeof statement.quills)[number][] = [];
+  if (member)
+    for (const action of statement.quills)
+      if (
+        await roleHasWorkspacePermission(workspaceId, member.role, {
+          workspace: ["read"],
+          quills: [action],
+        })
+      )
+        held.push(action);
+  return held;
+}
 
 /** Whether Kaneo's plan check passes, for a read that shows an upgrade prompt. */
 export async function hasWorkspaceEntitlement(workspaceId: string) {

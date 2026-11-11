@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, isNull, type SQL } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
-import type { PostId } from "@kaneo/ids";
+import type { PostId, TypeId } from "@kaneo/ids";
 import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
 import {
   apiRouter,
@@ -108,6 +108,72 @@ const preview = defineQuillsRoute({
   },
 });
 
+/**
+ * Links a duplicate to its canonical post in the caller's transaction. Both posts must be on
+ * boards the caller sees (`projects` from loadProjects). Shared with merge-suggestion accept.
+ */
+export async function mergePosts(
+  db: Db,
+  actor: { principalId: TypeId<"principal"> },
+  postId: PostId,
+  canonicalPostId: PostId,
+  projects: string[],
+) {
+  if (postId === canonicalPostId)
+    throw new HTTPException(400, {
+      message: "A post cannot merge into itself",
+    });
+  const rows = await lockPosts(
+    db,
+    [postId, canonicalPostId],
+    visiblePost(projects),
+  );
+  const duplicate = rows.find((row) => row.id === postId);
+  const canonical = rows.find((row) => row.id === canonicalPostId);
+  if (!duplicate || !canonical) throw notFound();
+  if (duplicate.canonicalPostId)
+    throw conflict("This post is already merged. Unmerge it first.");
+  if (canonical.canonicalPostId)
+    throw conflict("Merge into the canonical post, not into a merged post");
+  const [child] = await db
+    .select({ id: posts.id })
+    .from(posts)
+    .where(and(eq(posts.canonicalPostId, postId), isNull(posts.deletedAt)))
+    .limit(1);
+  if (child) throw conflict("A post with merged posts cannot itself be merged");
+  await db
+    .update(posts)
+    .set({
+      canonicalPostId,
+      mergedAt: new Date(),
+      mergedByPrincipalId: actor.principalId,
+    })
+    .where(eq(posts.id, postId));
+  const voteCount = await recount(db, canonicalPostId, true);
+  await db.insert(postActivity).values([
+    {
+      postId: canonicalPostId,
+      principalId: actor.principalId,
+      type: "post.merged_in",
+      metadata: {
+        duplicatePostId: postId,
+        duplicatePostTitle: duplicate.title,
+        duplicateVoteCount: duplicate.voteCount,
+      },
+    },
+    {
+      postId,
+      principalId: actor.principalId,
+      type: "post.merged_away",
+      metadata: { canonicalPostId, canonicalPostTitle: canonical.title },
+    },
+  ]);
+  return {
+    canonicalPost: { id: canonicalPostId, voteCount },
+    duplicatePost: { id: postId },
+  };
+}
+
 const mergePost = defineQuillsRoute({
   method: "post",
   path: "/posts/{postId}/merge",
@@ -134,63 +200,8 @@ const mergePost = defineQuillsRoute({
     entityId: params.postId,
     payload: { canonicalPostId: body.canonicalPostId },
   }),
-  handler: async ({ db, actor, params: { postId }, body, loaded }) => {
-    const { canonicalPostId } = body;
-    if (postId === canonicalPostId)
-      throw new HTTPException(400, {
-        message: "A post cannot merge into itself",
-      });
-    const rows = await lockPosts(
-      db,
-      [postId, canonicalPostId],
-      visiblePost(loaded),
-    );
-    const duplicate = rows.find((row) => row.id === postId);
-    const canonical = rows.find((row) => row.id === canonicalPostId);
-    if (!duplicate || !canonical) throw notFound();
-    if (duplicate.canonicalPostId)
-      throw conflict("This post is already merged. Unmerge it first.");
-    if (canonical.canonicalPostId)
-      throw conflict("Merge into the canonical post, not into a merged post");
-    const [child] = await db
-      .select({ id: posts.id })
-      .from(posts)
-      .where(and(eq(posts.canonicalPostId, postId), isNull(posts.deletedAt)))
-      .limit(1);
-    if (child)
-      throw conflict("A post with merged posts cannot itself be merged");
-    await db
-      .update(posts)
-      .set({
-        canonicalPostId,
-        mergedAt: new Date(),
-        mergedByPrincipalId: actor.principalId,
-      })
-      .where(eq(posts.id, postId));
-    const voteCount = await recount(db, canonicalPostId, true);
-    await db.insert(postActivity).values([
-      {
-        postId: canonicalPostId,
-        principalId: actor.principalId,
-        type: "post.merged_in",
-        metadata: {
-          duplicatePostId: postId,
-          duplicatePostTitle: duplicate.title,
-          duplicateVoteCount: duplicate.voteCount,
-        },
-      },
-      {
-        postId,
-        principalId: actor.principalId,
-        type: "post.merged_away",
-        metadata: { canonicalPostId, canonicalPostTitle: canonical.title },
-      },
-    ]);
-    return {
-      canonicalPost: { id: canonicalPostId, voteCount },
-      duplicatePost: { id: postId },
-    };
-  },
+  handler: ({ db, actor, params: { postId }, body, loaded }) =>
+    mergePosts(db, actor, postId, body.canonicalPostId, loaded),
 });
 
 const unmergePost = defineQuillsRoute({
