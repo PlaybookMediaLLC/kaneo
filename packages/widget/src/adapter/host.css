@@ -1,0 +1,7 @@
+/* The iframe page: the widget fills the frame that the SDK sizes. */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}

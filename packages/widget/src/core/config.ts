@@ -31,17 +31,35 @@ export const serverConfigSchema = z.object({
 });
 export type ServerConfig = z.infer<typeof serverConfigSchema>;
 
+/** The widget's base path on a Kaneo instance. */
+export const widgetBase = (instanceUrl: string, workspace: string) =>
+  `${instanceUrl}/api/quills-public/${encodeURIComponent(workspace)}/widget`;
+
 /** The version query keeps this cross-origin GET free of custom-header preflights. */
 export async function fetchServerConfig(
   instanceUrl: string,
+  workspace: string,
   signal?: AbortSignal,
 ): Promise<ServerConfig> {
   try {
-    const url = `${instanceUrl}/api/widget/config.json?sdk=${encodeURIComponent(SDK_VERSION)}`;
+    const url = `${widgetBase(instanceUrl, workspace)}/config.json?sdk=${encodeURIComponent(SDK_VERSION)}`;
     const res = await fetch(url, { signal });
     if (!res.ok) return {};
-    const parsed = serverConfigSchema.safeParse(await res.json());
-    return parsed.success ? parsed.data : {};
+    // The Quills API wraps the config as { enabled, config }; config is null while the widget is off.
+    const body: unknown = await res.json();
+    const parsed = serverConfigSchema.safeParse(
+      body && typeof body === "object"
+        ? (body as { config?: unknown }).config
+        : body,
+    );
+    if (!parsed.success) return {};
+    // Kaneo has no pageview ingest route yet: keep host-page analytics and the device ID off.
+    const {
+      visitorAnalytics: _a,
+      visitorDeviceTracking: _d,
+      ...config
+    } = parsed.data;
+    return config;
   } catch {
     return {};
   }

@@ -344,12 +344,20 @@ export function contractApp(router: App, publicRouter?: App) {
 }
 
 /** Routes under /quills and /quills-public that were not mounted through defineQuillsRoute. */
+/** Static widget files (widget/host.ts): no database row, credential or request input. */
+const STATIC_ROUTES = new Set(
+  ["", "/host.js", "/host.css", "/sdk.js"].map(
+    (file) => `GET /quills-public/:workspace/widget${file}`,
+  ),
+);
+
 export function unregisteredRoutes(app: App) {
   const handlers = new Set(registry.values());
   const routes = new Map<string, boolean>();
   for (const route of app.routes)
     if (
       route.method !== "ALL" &&
+      !STATIC_ROUTES.has(`${route.method} ${route.path}`) &&
       (route.path.startsWith("/quills/") ||
         route.path.startsWith("/quills-public/"))
     ) {

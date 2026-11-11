@@ -23,4 +23,12 @@ describe("public API", () => {
   it("init throws when instanceUrl is missing", () => {
     expect(() => Quackback.init({} as InitOptions)).toThrow(/instanceUrl/);
   });
+
+  it("init throws when workspace is missing", () => {
+    expect(() =>
+      Quackback.init({
+        instanceUrl: "https://kaneo.example.com",
+      } as InitOptions),
+    ).toThrow(/workspace/);
+  });
 });

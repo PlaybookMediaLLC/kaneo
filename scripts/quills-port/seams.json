@@ -64,6 +64,18 @@
 			"plannedChange": "none"
 		},
 		{
+			"file": "apps/api/Dockerfile",
+			"state": "existing",
+			"lines": "packages/widget: package.json and source copies in the builder, `pnpm exec tsup` in packages/widget, dist copy into the runtime image",
+			"plannedChange": "none. The API serves the widget iframe page and sdk.js from packages/widget/dist (src/quills/widget/host.ts)"
+		},
+		{
+			"file": "Dockerfile.kaneo",
+			"state": "existing",
+			"lines": "packages/widget: package.json and source copies in api-builder, `pnpm exec tsup` in packages/widget, dist copy into api-runtime",
+			"plannedChange": "none. Same widget build as apps/api/Dockerfile"
+		},
+		{
 			"file": "apps/docs/openapi.json",
 			"state": "generated",
 			"lines": "every Quills operation",

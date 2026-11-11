@@ -4,6 +4,7 @@ import { createSDK } from "../src/core/sdk";
 let sdk: ReturnType<typeof createSDK>;
 const DEVICE_KEY = "quackback:device-id";
 const ORIGIN = "https://feedback.example.com";
+const WORKSPACE = "acme";
 beforeEach(() => {
   sdk = createSDK();
   localStorage.clear();
@@ -43,7 +44,7 @@ it.each(["doNotTrack", "globalPrivacyControl"])(
     const uuid = vi.spyOn(crypto, "randomUUID");
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     sdk.dispatch("tracking", true);
     sdk.dispatch("open");
     const frame = document.querySelector("iframe")!;
@@ -67,10 +68,14 @@ it.each(["doNotTrack", "globalPrivacyControl"])(
 
 it("host consent false removes existing device identity and survives re-init", () => {
   localStorage.setItem(DEVICE_KEY, "old-device");
-  sdk.dispatch("init", { instanceUrl: ORIGIN, tracking: false });
+  sdk.dispatch("init", {
+    instanceUrl: ORIGIN,
+    workspace: WORKSPACE,
+    tracking: false,
+  });
   expect(localStorage.getItem(DEVICE_KEY)).toBeNull();
   sdk.dispatch("destroy");
-  sdk.dispatch("init", { instanceUrl: ORIGIN });
+  sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
   expect(localStorage.getItem(DEVICE_KEY)).toBeNull();
 });
 
@@ -83,7 +88,7 @@ it.each(["pushState", "replaceState"] as const)(
       configurable: true,
     });
     const original = history[method];
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     const wrapped = history[method];
     const host = function (
       this: History,
@@ -115,7 +120,9 @@ it("analytics transport failures cannot break navigation or the widget", () => {
     configurable: true,
   });
   try {
-    expect(() => sdk.dispatch("init", { instanceUrl: ORIGIN })).not.toThrow();
+    expect(() =>
+      sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE }),
+    ).not.toThrow();
     expect(() => history.pushState({}, "", "/transport-failure")).not.toThrow();
     sdk.dispatch("open");
     expect(sdk.isOpen()).toBe(true);

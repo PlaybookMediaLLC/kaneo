@@ -15,7 +15,7 @@ npm install @quackback/widget
 ```js
 import { Quackback } from '@quackback/widget'
 
-Quackback.init({ instanceUrl: 'https://feedback.yourcompany.com' })
+Quackback.init({ instanceUrl: 'https://kaneo.yourcompany.com', workspace: 'acme' })
 
 // When you know who the user is:
 Quackback.identify({ id: 'u_123', email: 'ada@example.com', name: 'Ada' })
@@ -33,7 +33,8 @@ function App() {
   const { user } = useAuth()
 
   useQuackbackInit({
-    instanceUrl: 'https://feedback.yourcompany.com',
+    instanceUrl: 'https://kaneo.yourcompany.com',
+    workspace: 'acme',
     identity: user ? { id: user.id, email: user.email, name: user.name } : undefined,
   })
 
@@ -52,7 +53,7 @@ function FeedbackButton() {
 
 No provider needed — Quackback is a singleton and the hooks wrap its lifecycle. The root entry and React adapter share one SDK within ESM and within CommonJS. Use one `useQuackbackInit` owner per page.
 
-Changing `identity` to `undefined` switches to anonymous mode. Delayed startup uses the latest options and does not send identity until initialization. Changing `instanceUrl`, `shouldInitialize`, or `initializeDelay` restarts that lifecycle; other options apply at the next initialization. Unmounting cancels pending startup and destroys the owned instance, including during React Strict Mode cleanup.
+Changing `identity` to `undefined` switches to anonymous mode. Delayed startup uses the latest options and does not send identity until initialization. Changing `instanceUrl`, `workspace`, `shouldInitialize`, or `initializeDelay` restarts that lifecycle; other options apply at the next initialization. Unmounting cancels pending startup and destroys the owned instance, including during React Strict Mode cleanup.
 
 ## Other frameworks
 
@@ -63,8 +64,10 @@ Vue, Svelte, Angular, Solid: import `Quackback` from the main entry and call it 
 Drop this in your `<head>` and skip the install step entirely:
 
 ```html
-<script src="https://feedback.yourcompany.com/api/widget/sdk.js" defer></script>
+<script src="https://kaneo.yourcompany.com/api/quills-public/acme/widget/sdk.js" defer></script>
 ```
+
+The script reads the instance URL and the workspace (ID or slug) from its own URL, so `Quackback("init")` needs neither. The unversioned URL caches for 5 minutes. A URL with `?v=` and the bundle's current content hash caches for one year.
 
 ## API
 
@@ -72,7 +75,7 @@ Drop this in your `<head>` and skip the install step entirely:
 
 | Method                                        | Description                                                                    |
 | --------------------------------------------- | ------------------------------------------------------------------------------ |
-| `Quackback.init(options)`                     | Create launcher + iframe. `options.instanceUrl` required.                      |
+| `Quackback.init(options)`                     | Create launcher + iframe. `options.instanceUrl` and `options.workspace` required. |
 | `Quackback.identify(identity?)`               | Attribute activity to a user. Omit for anonymous.                              |
 | `Quackback.logout()`                          | Clear identity and close the panel; keep the launcher available.                        |
 | `Quackback.open(options?)`                    | Open the panel; optional deep-link payload (see below).                        |
@@ -91,7 +94,8 @@ Drop this in your `<head>` and skip the install step entirely:
 
 ```ts
 Quackback.init({
-  instanceUrl: 'https://feedback.yourcompany.com', // required
+  instanceUrl: 'https://kaneo.yourcompany.com', // required
+  workspace: 'acme', // required: the Kaneo workspace ID or slug
   placement: 'right' | 'left', // default 'right'
   defaultBoard: 'bugs', // filter widget to one board
   launcher: true, // false = hide default button
@@ -241,7 +245,7 @@ Set `attachmentsEnabled` only when send/feedback/reply callbacks process `Submis
 
 Feedback's camera uses user-invoked `getDisplayMedia`, without audio; streams stop after capture, cancellation, or failure. The browser's chooser and secure context/Permissions Policy requirements still apply. Unsupported browsers retain image selection. `onCaptureScreenshot(signal)` can supply an approved host capture implementation. The review dialog can highlight or redact rectangles, supports keyboard position controls and Undo, and exports a flattened PNG (up to 2048 px on its longest side). Cancel preserves the original. No screenshot is silently captured or sent. Real uploads, authorization, image sanitization, and retention are specified in [RFC 0004](rfcs/0004-images-and-capture.md).
 
-This checkout has no application serving the widget iframe. The new UI is an optional presentation entry, not an automatic replacement for a deployed instance's `/widget` page. That page must mount the view and connect its data, actions, and existing iframe protocol. The SDK's commands, events, deep links, and protocol remain unchanged. React stays optional for the root, version, and browser entries; the UI and its locally served Inter font are excluded from the browser SDK bundle. Inter's [SIL Open Font License](src/ui/fonts/OFL.txt) is included with the font. The selected official SVG paths from `@phosphor-icons/core` 2.1.1 are vendored with the [Phosphor MIT license](src/icons/LICENSE), shared by the React UI and vanilla launcher. No icon runtime dependency is required.
+The Kaneo API serves the iframe page at `/api/quills-public/{workspace}/widget`. The page bundle (`dist/host.js`, `dist/host.css`) mounts this view with the adapter in `src/adapter/`, which connects it to the workspace's Quills routes and to the existing iframe protocol. See [Kaneo host page](#kaneo-host-page). The SDK's commands, events, deep links, and protocol remain unchanged. React stays optional for the root, version, and browser entries; the UI and its locally served Inter font are excluded from the browser SDK bundle. Inter's [SIL Open Font License](src/ui/fonts/OFL.txt) is included with the font. The selected official SVG paths from `@phosphor-icons/core` 2.1.1 are vendored with the [Phosphor MIT license](src/icons/LICENSE), shared by the React UI and vanilla launcher. No icon runtime dependency is required.
 
 ### Activity, media, and contextual help
 
@@ -254,6 +258,41 @@ Supply `activities: RequestActivity[]` and `onReadActivity(id)` to enable a priv
 Still need help opens an article-specific conversation draft and passes optional `SubmissionOptions.articleId` to `onSendMessage`. Ordinary message drafts stay separate. The host adapter must verify and persist that context; existing callbacks remain source-compatible but must adopt this option to retain article context on the server. Key the view by visitor as before.
 
 Storybook's Activity, Article Feedback, Conversation Reading, and Image Viewer stories exercise these additions. Follow a request before using Simulate request progress/reply; switch Demo visitor to check isolation. Everything stays in memory. [RFC 0005](rfcs/0005-activity-and-article-feedback.md) specifies the real activity/helpfulness/context backend; RFCs 0002 and 0004 cover conversation and media requirements. No real API, inbox delivery, durable upload, or notification service is implemented here.
+
+## Kaneo host page
+
+The API serves four static files from `packages/widget/dist` (`apps/api/src/quills/widget/host.ts`):
+
+| Path under `/api/quills-public/{workspace}/widget` | File |
+| --- | --- |
+| (the path itself) | The iframe page, with a strict Content-Security-Policy |
+| `/host.js`, `/host.css` | The React view and the adapter, with Inter inlined |
+| `/sdk.js` | The browser SDK (`dist/browser.js`) |
+
+Build the widget (`pnpm --dir packages/widget build`) before you start the API. Both Docker images build it. If the files are missing, these paths answer 503.
+
+The page is same-origin with the widget routes, so it needs no CORS. Its policy allows `frame-ancestors http: https:` because the widget configuration has no allowed-origin list. A page that frames the widget gets only an anonymous session: identify needs an `ssoToken` that the host app's backend signs with the widget secret.
+
+Session rules:
+
+1. An identified visitor gets a session from the signed token when the SDK sends `identify`.
+2. An anonymous visitor gets a session only when the panel first opens. Each anonymous session creates a person, and the API allows 10 per hour per client.
+3. The session token stays in memory. It is never stored or put in a URL.
+4. A 401 removes private data and starts a new session for the same identity. If the host's token no longer verifies, the widget continues anonymously and sends `quackback:auth-change` with `user: null`.
+5. An unverified identity (`{ id, email }`) is refused: Kaneo identifies visitors only with a signed token.
+
+The adapter polls the unread count at the interval from `/widget/capabilities`. When the count changes, it reads only new messages (`?after=`). Before the panel first opens, it polls only for an identified visitor, for the launcher badge.
+
+These view features have no Kaneo route yet. The adapter leaves the related prop out, so the view hides or disables the control:
+
+| Feature | In the view |
+| --- | --- |
+| Image attachments and screenshots (RFC 0004) | No picker or camera |
+| Followed-request activity (RFC 0005) | No activity button |
+| Update read state and reactions | No unread dot on updates, no reaction or share buttons |
+| Article context on a new conversation | The message sends without the article reference |
+| Team availability | The default contact text |
+| Host-page pageview analytics | Off: the SDK ignores `visitorAnalytics` from Kaneo |
 
 ## Development checks
 
@@ -287,7 +326,7 @@ pnpm --dir packages/widget storybook:build
 This writes `packages/widget/storybook-static/`, which is ignored by Git and
 excluded from the published package. Serve that folder with a static server that
 supports directory index files. The Storybook development configuration supplies
-the equivalent `/fixtures/widget` redirect. The default launcher, SDK, and submission stories
+the equivalent `/fixtures/api/quills-public/demo/widget` redirect. The default launcher, SDK, and submission stories
 include interaction assertions visible in Storybook's Interactions panel.
 
 Storybook and its React/Vite framework are development dependencies. The package

@@ -15,6 +15,7 @@ import { createPanel, type PanelHandle } from "./panel.js";
 import {
   fetchServerConfig,
   serverConfigSchema,
+  widgetBase,
   type ServerConfig,
 } from "./config.js";
 import { createTracker, type Tracker } from "./tracker.js";
@@ -199,7 +200,7 @@ export function createSDK(): SDK {
     if (panel) return panel;
     cancelPanelPreload();
     panel = createPanel({
-      widgetUrl: `${config!.instanceUrl}/widget`,
+      widgetUrl: widgetBase(config!.instanceUrl, config!.workspace),
       placement,
       defaultBoard: config!.defaultBoard,
       // The open panel covers the launcher; closing belongs inside the iframe.
@@ -366,7 +367,11 @@ export function createSDK(): SDK {
             LAUNCHER_REVEAL_FALLBACK_MS,
           );
           revealTimer = fallback;
-          void fetchServerConfig(next.instanceUrl, controller.signal)
+          void fetchServerConfig(
+            next.instanceUrl,
+            next.workspace,
+            controller.signal,
+          )
             .then((serverConfig) => applyServerConfig(serverConfig, next))
             .finally(() => {
               window.clearTimeout(fallback);

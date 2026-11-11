@@ -26,6 +26,8 @@ export const WIDGET_LOCALES = [
 export interface InitOptions {
   /** Workspace Quackback instance URL — required when using the npm package. */
   instanceUrl: InstanceUrl;
+  /** Kaneo workspace ID or slug. Script-tag installs read it from the sdk.js URL. */
+  workspace: string;
   placement?: "left" | "right";
   defaultBoard?: string;
   /** Set `launcher: false` to hide the default floating button and open programmatically. */

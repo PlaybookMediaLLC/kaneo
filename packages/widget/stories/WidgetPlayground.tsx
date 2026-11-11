@@ -35,6 +35,7 @@ export function WidgetPlayground(options: WidgetPlaygroundProps) {
   useQuackbackInit({
     ...options,
     instanceUrl: new URL("./fixtures", window.location.href).href,
+    workspace: "demo",
     tracking: false,
     identity:
       identity === "anonymous"

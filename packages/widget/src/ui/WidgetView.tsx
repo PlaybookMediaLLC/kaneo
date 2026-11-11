@@ -50,6 +50,8 @@ export function WidgetView({
   attachmentsEnabled,
   onCaptureScreenshot,
   onExpandedChange,
+  onOpenItem,
+  navigation,
   onCommentFeedback,
   onVoteComment,
   onClose,
@@ -119,6 +121,7 @@ export function WidgetView({
   const open = (next: WidgetTab, id: string) => {
     nav.go({ tab: next, detail: id });
     setNotice("");
+    onOpenItem?.(next, id);
     if (
       next === "updates" &&
       !offline &&
@@ -127,6 +130,16 @@ export function WidgetView({
     )
       void read.run(() => onReadUpdate(id), `updates:${id}`);
   };
+  const requested = useRef(navigation);
+  useEffect(() => {
+    // Only a new request object navigates; the first render keeps initialTab.
+    if (!navigation || navigation === requested.current) return;
+    requested.current = navigation;
+    if (navigation.detail) open(navigation.tab, navigation.detail);
+    else if (navigation.composer)
+      nav.go({ tab: navigation.tab, composer: navigation.composer });
+    else navigate(navigation.tab);
+  });
   const article =
     tab === "help" ? articles.find((item) => item.id === selected) : undefined;
   const post =

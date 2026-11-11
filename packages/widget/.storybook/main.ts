@@ -14,9 +14,10 @@ const config: StorybookConfig = {
           name: "widget-fixture-directory",
           configureServer(server) {
             server.middlewares.use((req, res, next) => {
-              if (req.url?.split("?")[0] !== "/fixtures/widget") return next();
+              const fixture = "/fixtures/api/quills-public/demo/widget";
+              if (req.url?.split("?")[0] !== fixture) return next();
               // Storybook's dev server does not resolve directory indexes.
-              res.writeHead(302, { Location: "/fixtures/widget/index.html" });
+              res.writeHead(302, { Location: `${fixture}/index.html` });
               res.end();
             });
           },
