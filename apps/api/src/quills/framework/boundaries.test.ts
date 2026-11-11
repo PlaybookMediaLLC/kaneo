@@ -52,6 +52,9 @@ const allowedImport = (file: string, specifier: string) => {
         "framework/internal",
         // Static widget page and bundles: reads files, never the database (see the module).
         "widget/host",
+        // MCP connector client: reaches a connector URL only through the destination guard, never
+        // the database (see the module).
+        "assistant/connector-client",
         "../openapi",
       ].includes(target) ||
       target.startsWith("../database/quills/schema/"))
@@ -136,6 +139,24 @@ describe("Quills module boundaries", () => {
     expect(
       [...host.source.matchAll(/from "([^"]+)"/g)].map((match) => match[1]),
     ).toEqual(["node:crypto", "node:fs", "node:path", "node:url", "hono"]);
+  });
+
+  it("keeps the exempt connector client to the MCP SDK and the destination guard: no database", () => {
+    const client = quills.find(
+      (file) => file.path === "assistant/connector-client.ts",
+    )!;
+    expect(
+      [...client.source.matchAll(/from "([^"]+)"/g)].map((match) => match[1]),
+    ).toEqual([
+      "@modelcontextprotocol/sdk/client/auth.js",
+      "@modelcontextprotocol/sdk/client/index.js",
+      "@modelcontextprotocol/sdk/client/streamableHttp.js",
+      "@modelcontextprotocol/sdk/server/auth/errors.js",
+      "@modelcontextprotocol/sdk/shared/transport.js",
+      "../../database/quills/schema/connectors",
+      "../../import/destination-fetch",
+      "../../import/guarded-fetch",
+    ]);
   });
 
   it("does not spread request bodies into writes", () => {
