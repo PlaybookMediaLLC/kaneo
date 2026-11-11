@@ -1,0 +1,132 @@
+# Hardened example values for a production install.
+#
+# Use it with:
+#   helm install kaneo oci://ghcr.io/playbookmediallc/charts/kaneo \
+#     -f values-production.yaml \
+#     --set kaneo.env.clientUrl=https://kaneo.example.com \
+#     --set kaneo.env.authSecret="$(openssl rand -hex 32)" \
+#     --set postgresql.auth.existingSecret=kaneo-db
+#
+# This file changes no template. Every value below is one the chart already reads.
+#
+# BEFORE YOU INSTALL: create the database secret. The chart does not create it.
+#
+#   kubectl create secret generic kaneo-db \
+#     --from-literal=password="$(openssl rand -hex 32)"
+#
+# The key name must match postgresql.auth.secretKeys.userPasswordKey (default
+# "password"). Keep the password URL-safe. On the existingSecret path the chart
+# interpolates $(KANEO_POSTGRES_PASSWORD) into DATABASE_URL without encoding it,
+# so a password that contains @, : or / breaks the connection string. The hex
+# output of `openssl rand` is always safe.
+#
+# This file covers only what values can reach. It does not add a sizeLimit to the
+# runtime emptyDir, a checksum annotation that restarts pods when a secret rotates,
+# automountServiceAccountToken, revisionHistoryLimit, or a startupProbe, because the
+# chart has no template support for them.
+
+kaneo:
+  # Without requests both pods get BestEffort QoS. The kubelet then evicts them
+  # first under node pressure, and the scheduler cannot pack the node.
+  # These match the 1 vCPU / 1 GB instance the project itself runs.
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      # Memory has a limit because exceeding it must kill one pod, not the node.
+      # CPU has none on purpose: a CPU limit throttles the container even when the
+      # node is idle. The request alone already guarantees the share.
+      memory: 1Gi
+
+  readinessProbe:
+    # The chart default waits 30s, so every rollout costs at least 30s per pod even
+    # when the app answers in 3s. Helm merges this map, so httpGet survives.
+    initialDelaySeconds: 0
+
+  # The liveness probe keeps the chart default of initialDelaySeconds: 60. That
+  # delay stands in for a startupProbe, which this chart does not support.
+
+  # kaneo.env.corsOrigins stays unset here on purpose.
+  #
+  # Set it only when you serve the web app from an origin other than
+  # kaneo.env.clientUrl. The API already falls back to KANEO_CLIENT_URL, which the
+  # chart always sets, so a same-origin install needs nothing.
+  #
+  # Do not rely on the chart's own documented fallback to clientUrl. It never runs:
+  # the default [] matches `kindIs "slice"`, so the chart joins the empty list and
+  # emits CORS_ORIGINS="".
+  #
+  # env:
+  #   corsOrigins:
+  #     - https://app.example.com
+  #
+  # Do not add a bare `env:` key with no children. YAML reads that as null, which
+  # overrides the chart's whole env map and breaks rendering.
+
+  service:
+    # Port 5173 appears in four places in values.yaml. Change all four together, or
+    # the ingress and gateway backends point at a port the service does not expose.
+    # The other two are ingress.hosts[].paths[].port and
+    # gateway.rules[].backendRefs[].port, commented at the bottom of this file.
+    port: 5173
+    targetPort: 5173
+
+postgresql:
+  # Read the password from a secret instead of values. Without this the password
+  # appears in plaintext in both Deployment specs, so anyone who can run
+  # `kubectl get deploy -o yaml` reads it.
+  auth:
+    existingSecret: kaneo-db
+    secretKeys:
+      userPasswordKey: password
+
+  resources:
+    # Sized for a small single-instance database. Raise memory before cpu.
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+  persistence:
+    enabled: true
+    size: 8Gi
+    # Name your cluster's class explicitly. The chart otherwise relies on the
+    # cluster default, which may not be the one you want for database storage.
+    # storageClass: ""
+
+# Ingress and gateway stay disabled. Both need an install-specific hostname, so
+# enabling them here with a placeholder would publish the wrong host.
+#
+# When you enable one, keep its port equal to kaneo.service.port above.
+#
+# ingress:
+#   enabled: true
+#   className: nginx
+#   hosts:
+#     - host: kaneo.example.com
+#       paths:
+#         - path: /
+#           pathType: Prefix
+#           service: kaneo
+#           port: 5173
+#   tls:
+#     - secretName: kaneo-tls
+#       hosts:
+#         - kaneo.example.com
+#
+# gateway:
+#   enabled: true
+#   parentRefs:
+#     - name: my-gateway
+#   hostnames:
+#     - kaneo.example.com
+#   rules:
+#     - matches:
+#         - path:
+#             type: PathPrefix
+#             value: /
+#       backendRefs:
+#         - service: kaneo
+#           port: 5173
