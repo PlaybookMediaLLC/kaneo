@@ -324,8 +324,8 @@ export const helpCenterSearchQueries = quillsSchema
         .notNull(),
     },
     (table) => [
-      // Backs the admin aggregation's time-window filter.
-      index("kb_search_queries_created_at_idx").on(table.createdAt),
+      // The admin aggregation's time window and retention read
+      // kb_search_queries_workspace_created_idx (schema-ops.ts).
       primaryKey({ columns: [table.workspaceId, table.id] }),
       workspacePolicy(table.workspaceId),
     ],

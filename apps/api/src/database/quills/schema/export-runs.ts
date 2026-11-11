@@ -72,6 +72,10 @@ export const exportRuns = quillsSchema
         .on(table.workspaceId, sql`(1)`)
         .where(sql`"status" IN ('pending', 'running')`),
       primaryKey({ columns: [table.workspaceId, table.id] }),
+      index("export_runs_initiated_by_principal_id_fk_idx").on(
+        table.workspaceId,
+        table.initiatedByPrincipalId,
+      ),
       workspacePolicy(table.workspaceId),
     ],
   )

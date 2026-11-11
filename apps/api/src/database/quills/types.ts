@@ -1309,6 +1309,9 @@ export interface ConversationMessageMetadata {
    *  carrying it never fans again, so a copy that finds its way back onto a
    *  tracker thread stops there. */
   repliedAllFromTicketId?: TicketId;
+  /** The tracker's own reply message that this copy repeats. Delivery finds a
+   *  reply-all's copies by it, so each linked requester gets one mail. */
+  repliedAllFromMessageId?: string;
 }
 
 /** See `ConversationMessageMetadata.translatedFrom`. */

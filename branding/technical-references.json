@@ -6502,5 +6502,119 @@
 		"value": "      <p>We and our licensors retain our rights in the service and its branding. Quills includes open-source components, including Kaneo under the MIT License. Their applicable license notices and rights continue to apply. These Terms govern use of this hosted service and do not replace open-source licenses.</p>",
 		"term": "Kaneo",
 		"reason": "Upstream license attribution retained under the repository branding boundaries; this credit identifies the original component, not the fork product."
+	},
+	{
+		"file": "apps/docs/openapi.json",
+		"value": "paths./quills/{workspaceId}/teams/{teamId}.put.responses.200.content.application/json.schema.required.2: \"kaneoTeamId\"",
+		"term": "kaneo",
+		"reason": "Existing public API property identifier; retain wire compatibility."
+	},
+	{
+		"file": "apps/docs/openapi.json",
+		"value": "paths./quills/{workspaceId}/webhooks.post.description: \"Returns the signing secret once. Deliveries are signed with HMAC-SHA256 over the x-kaneo-timestamp value, a dot and the body, in the x-kaneo-signature header.\"",
+		"term": "kaneo",
+		"reason": "Names the exact x-kaneo-timestamp and x-kaneo-signature delivery headers that receivers verify; preserve wire compatibility."
+	},
+	{
+		"file": "apps/api/src/database/quills/schema-ops.ts",
+		"value": "customer_identity_kaneo_user_id_fk_idx",
+		"term": "kaneo",
+		"reason": "Existing quills kaneo_user_id column and its mapped property; a storage identifier, not product copy."
+	},
+	{
+		"file": "apps/api/src/database/quills/schema-ops.ts",
+		"value": "CREATE INDEX CONCURRENTLY IF NOT EXISTS customer_identity_kaneo_user_id_fk_idx ON quills.customer_identity (kaneo_user_id) WHERE kaneo_user_id IS NOT NULL",
+		"term": "kaneo",
+		"reason": "Existing quills kaneo_user_id column and its mapped property; a storage identifier, not product copy."
+	},
+	{
+		"file": "apps/api/src/quills/delivery/webhooks.ts",
+		"value": "Returns the signing secret once. Deliveries are signed with HMAC-SHA256 over the x-kaneo-timestamp value, a dot and the body, in the x-kaneo-signature header.",
+		"term": "kaneo",
+		"reason": "Names the exact x-kaneo-timestamp and x-kaneo-signature delivery headers that receivers verify; preserve wire compatibility."
+	},
+	{
+		"file": "apps/api/src/quills/directory/companies.ts",
+		"value": " and m.kaneo_user_id is null and m.test_owner_principal_id is null)",
+		"term": "kaneo",
+		"reason": "Existing quills kaneo_user_id column and its mapped property; a storage identifier, not product copy."
+	},
+	{
+		"file": "apps/api/src/quills/directory/customer.ts",
+		"value": " m where m.kaneo_user_id = ",
+		"term": "kaneo",
+		"reason": "Existing quills kaneo_user_id column and its mapped property; a storage identifier, not product copy."
+	},
+	{
+		"file": "apps/api/src/quills/directory/segment-rules.ts",
+		"value": "SELECT p.id FROM quills.\"principal\" p\n    JOIN quills.\"customer_identity\" u ON u.id = p.user_id\n    LEFT JOIN quills.\"companies\" co ON co.id = p.company_id\n    WHERE p.role = 'user' AND p.type = 'user' AND p.kaneo_user_id IS NULL\n      AND NOT EXISTS (SELECT 1 FROM quills.\"principal\" m WHERE m.kaneo_user_id = u.kaneo_user_id)\n      AND p.test_owner_principal_id IS NULL\n      AND (",
+		"term": "kaneo",
+		"reason": "Existing quills kaneo_user_id column and its mapped property; a storage identifier, not product copy."
+	},
+	{
+		"file": "apps/api/src/quills/framework/contract-checks.ts",
+		"value": "SELECT p.id FROM quills.principal p JOIN quills.customer_identity c ON c.id=p.user_id AND c.workspace_id=p.workspace_id\n     WHERE c.workspace_id=$1 AND c.kaneo_user_id=$2",
+		"term": "kaneo",
+		"reason": "Existing quills kaneo_user_id column and its mapped property; a storage identifier, not product copy."
+	},
+	{
+		"file": "apps/api/src/quills/framework/contract-checks.ts",
+		"value": "SELECT (SELECT count(*) FROM public.workspace_member WHERE workspace_id=$1)::int AS members,\n                  (SELECT count(*) FROM quills.principal WHERE workspace_id=$1 AND kaneo_user_id IS NOT NULL)::int AS teammates",
+		"term": "kaneo",
+		"reason": "Existing quills kaneo_user_id column and its mapped property; a storage identifier, not product copy."
+	},
+	{
+		"file": "apps/api/src/quills/framework/contract-checks.ts",
+		"value": "SELECT id FROM quills.principal WHERE workspace_id=$1 AND kaneo_user_id=$2",
+		"term": "kaneo",
+		"reason": "Existing quills kaneo_user_id column and its mapped property; a storage identifier, not product copy."
+	},
+	{
+		"file": "apps/api/src/quills/framework/contract-probe.ts",
+		"value": "kaneoUserId",
+		"term": "kaneo",
+		"reason": "Existing quills kaneo_user_id column and its mapped property; a storage identifier, not product copy."
+	},
+	{
+		"file": "apps/api/src/quills/framework/contract-probe.ts",
+		"value": "SELECT\n      (SELECT count(*) FROM quills.events WHERE workspace_id=$1 AND occurred_at>=$2::timestamptz)::int AS events,\n      (SELECT count(*) FROM quills.events WHERE workspace_id=$1 AND occurred_at>=$2::timestamptz AND type=$3 AND entity_id=$4)::int AS \"matchingEvents\",\n      (SELECT count(*) FROM quills.audit_log WHERE workspace_id=$1 AND occurred_at>=$2::timestamptz)::int AS audit,\n      (SELECT count(*) FROM quills.audit_log l LEFT JOIN quills.principal p ON p.id=l.actor_principal_id AND p.workspace_id=l.workspace_id\n        WHERE l.workspace_id=$1 AND l.occurred_at>=$2::timestamptz AND l.event_type=$3 AND l.target_id=$4\n        AND CASE WHEN $6::boolean THEN p.kaneo_user_id=$5 ELSE l.actor_principal_id IS NOT DISTINCT FROM $7::uuid END)::int AS \"matchingAudit\",\n      (SELECT count(*) FROM quills.job_queue WHERE workspace_id=$1 AND created_at>=$2::timestamptz)::int AS jobs",
+		"term": "kaneo",
+		"reason": "Existing quills kaneo_user_id column and its mapped property; a storage identifier, not product copy."
+	},
+	{
+		"file": "apps/api/src/quills/framework/signed.ts",
+		"value": "kaneo_workspace",
+		"term": "kaneo",
+		"reason": "Mail provider tag name that the mail worker writes and the signed provider webhook reads back; never shown to users."
+	},
+	{
+		"file": "apps/api/src/quills/framework/signed.ts",
+		"value": "kaneo_log",
+		"term": "kaneo",
+		"reason": "Mail provider tag name that the mail worker writes and the signed provider webhook reads back; never shown to users."
+	},
+	{
+		"file": "apps/api/src/quills/framework/signed.ts",
+		"value": "kaneo_sig",
+		"term": "kaneo",
+		"reason": "Mail provider tag name that the mail worker writes and the signed provider webhook reads back; never shown to users."
+	},
+	{
+		"file": "apps/api/src/quills/inbound/email.fixture.ts",
+		"value": "kaneo_workspace",
+		"term": "kaneo",
+		"reason": "Mail provider tag name that the mail worker writes and the signed provider webhook reads back; never shown to users."
+	},
+	{
+		"file": "apps/api/src/quills/jobs/handlers/wipe.ts",
+		"value": " AND kaneo_user_id IS NULL",
+		"term": "kaneo",
+		"reason": "Existing quills kaneo_user_id column and its mapped property; a storage identifier, not product copy."
+	},
+	{
+		"file": "apps/api/src/quills/transfer/runs/import-posts.ts",
+		"value": " m where m.kaneo_user_id = ",
+		"term": "kaneo",
+		"reason": "Existing quills kaneo_user_id column and its mapped property; a storage identifier, not product copy."
 	}
 ]

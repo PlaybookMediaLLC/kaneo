@@ -7,7 +7,7 @@ UI.WidgetView satisfies (props: UI.WidgetViewProps) => unknown;
 
 export function useConsumer() {
   const sdk: typeof Widget.Quackback = ReactAdapter.useQuackback();
-  sdk.init({ instanceUrl: "https://feedback.example.com" });
+  sdk.init({ instanceUrl: "https://feedback.example.com", workspace: "acme" });
   sdk.open({ view: "messages" });
   Version.SDK_VERSION satisfies string;
   ({}) satisfies Widget.EventMap["close"];

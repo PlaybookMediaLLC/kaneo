@@ -2,7 +2,7 @@
 
 An embeddable support and feedback SDK with a separate, optional React presentation entry. Visitors can browse help, feedback, and updates, and send messages or ideas through actions supplied by the host.
 
-The user requested Storybook and a visual match to UserJot's live widget. The scoped interpretation is all five widget screens with Quills branding, plus the existing launcher and panel. This package has no application backend or iframe route; Storybook uses clearly marked, local demo data.
+The user requested Storybook and a visual match to UserJot's live widget. The scoped interpretation is all five widget screens with Quills branding, plus the existing launcher and panel. Storybook uses clearly marked, local demo data. The Kaneo API serves the iframe page, which connects the view to the workspace's Quills routes through `src/adapter/`.
 
 Preserve the SDK's commands, events, deep links, identity, consent, and iframe protocol. Keep React optional and analytics off in demos. No app integration, new provider, authentication implementation, publishing, or release is part of this work.
 

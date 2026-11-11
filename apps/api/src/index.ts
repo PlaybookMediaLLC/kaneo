@@ -1,5 +1,6 @@
 import { brandText } from "@kaneo/branding";
 import quills from "./quills";
+import quillsPublic from "./quills/public";
 import { runQuillsMigrations } from "./database/quills/migrate";
 import { resolveDatabaseConfig } from "./database/resolve-database-url";
 import { startWebhookWorker } from "./admin/webhooks/start-webhook-worker";
@@ -447,6 +448,7 @@ export function createApp() {
     );
 
   api.route("/calendar-feed", publicCalendarFeed);
+  const quillsPublicApi = api.route("/quills-public", quillsPublic);
 
   api.post("/github-integration/webhook", handleGithubWebhookRoute);
 
@@ -1022,6 +1024,7 @@ export function createApp() {
     workflowRuleApi,
     workspaceApi,
     quillsApi,
+    quillsPublicApi,
     customFieldApi,
     importApi,
     oauthApi,
@@ -1165,6 +1168,7 @@ const {
   workflowRuleApi,
   workspaceApi,
   quillsApi,
+  quillsPublicApi,
   customFieldApi,
   importApi,
   oauthApi,
@@ -1209,6 +1213,7 @@ export type AppType =
   | typeof invitationApi
   | typeof workspaceApi
   | typeof quillsApi
+  | typeof quillsPublicApi
   | typeof customFieldApi
   | typeof importApi
   | typeof userApi

@@ -78,6 +78,8 @@ export const integrations = quillsSchema
       ),
       // CHECK constraint to ensure error count is never negative
       check("error_count_non_negative", sql`error_count >= 0`),
+      // quills.integration_workspace: a signed webhook names an integration by ID alone.
+      index("integrations_id_idx").on(table.id),
       primaryKey({ columns: [table.workspaceId, table.id] }),
       foreignKey({
         columns: [table.workspaceId, table.connectedByPrincipalId],
@@ -87,6 +89,12 @@ export const integrations = quillsSchema
         columns: [table.workspaceId, table.principalId],
         foreignColumns: [principal.workspaceId, principal.id],
       }).onDelete("set null"),
+      index("integrations_connected_by_principal_id_fk_idx")
+        .on(table.workspaceId, table.connectedByPrincipalId)
+        .where(sql`${table.connectedByPrincipalId} IS NOT NULL`),
+      index("integrations_principal_id_fk_idx")
+        .on(table.workspaceId, table.principalId)
+        .where(sql`${table.principalId} IS NOT NULL`),
       workspacePolicy(table.workspaceId),
     ],
   )
@@ -127,6 +135,9 @@ export const integrationPlatformCredentials = quillsSchema
         table.integrationType,
       ),
       primaryKey({ columns: [table.workspaceId, table.id] }),
+      index("integration_platform_credentials_configured_by_fk_idx")
+        .on(table.workspaceId, table.configuredByPrincipalId)
+        .where(sql`${table.configuredByPrincipalId} IS NOT NULL`),
       workspacePolicy(table.workspaceId),
     ],
   )

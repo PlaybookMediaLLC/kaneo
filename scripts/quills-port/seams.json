@@ -1,0 +1,103 @@
+{
+	"upstream": "upstream/main",
+	"forkOwned": [
+		"apps/api/src/quills",
+		"apps/api/src/database/quills",
+		"apps/api/drizzle/quills",
+		"apps/api/drizzle.quills.config.ts",
+		"apps/api/scripts/generate-quills.ts",
+		"apps/api/scripts/migrate-quills.ts",
+		"apps/api/scripts/transfer-quills.ts",
+		"apps/api/AGENTS.md",
+		"packages/email/src/quills",
+		"packages/permissions/src/quills.test.ts",
+		"scripts/quills-port",
+		"docs/quills-port"
+	],
+	"seams": [
+		{
+			"file": "apps/api/src/index.ts",
+			"state": "existing",
+			"lines": "import + api.route(\"/quills\", quills) + 3 type-export entries + runQuillsMigrations at startup; import + api.route(\"/quills-public\", quillsPublic) before the session middleware + 3 type-export entries",
+			"plannedChange": "P3 added the /quills-public mount (src/quills/public.ts) before the session middleware, after the public calendar feed, plus its import and 3 type-export entries. No further change planned"
+		},
+		{
+			"file": "apps/api/src/scheduler/index.ts",
+			"state": "existing",
+			"lines": "3 imports + 3 withCheckIn registrations",
+			"plannedChange": "none. New job handlers register inside apps/api/src/quills/jobs/worker.ts"
+		},
+		{
+			"file": "apps/api/src/storage/cleanup-queue.ts",
+			"state": "existing",
+			"lines": "1 import + 1 reference probe",
+			"plannedChange": "none"
+		},
+		{
+			"file": "apps/api/src/workspace/lifecycle/list-workspace-object-keys.ts",
+			"state": "existing",
+			"lines": "1 import + 1 call",
+			"plannedChange": "none"
+		},
+		{
+			"file": "packages/permissions/src/index.ts",
+			"state": "existing",
+			"lines": "the quills resource and its 5 actions in 4 roles",
+			"plannedChange": "none (decision D2 keeps the 5 actions)"
+		},
+		{
+			"file": "packages/permissions/src/capabilities.ts",
+			"state": "existing",
+			"lines": "5 Quills capabilities",
+			"plannedChange": "none"
+		},
+		{
+			"file": "tests/api-integration/helpers/database.ts",
+			"state": "existing",
+			"lines": "runs the Quills migrations for integration tests",
+			"plannedChange": "none"
+		},
+		{
+			"file": "apps/api/package.json",
+			"state": "existing",
+			"lines": "db:generate:quills, db:migrate:quills, test:quills, db:transfer:quills",
+			"plannedChange": "none"
+		},
+		{
+			"file": "apps/api/Dockerfile",
+			"state": "existing",
+			"lines": "packages/widget: package.json and source copies in the builder, `pnpm exec tsup` in packages/widget, dist copy into the runtime image",
+			"plannedChange": "none. The API serves the widget iframe page and sdk.js from packages/widget/dist (src/quills/widget/host.ts)"
+		},
+		{
+			"file": "Dockerfile.kaneo",
+			"state": "existing",
+			"lines": "packages/widget: package.json and source copies in api-builder, `pnpm exec tsup` in packages/widget, dist copy into api-runtime",
+			"plannedChange": "none. Same widget build as apps/api/Dockerfile"
+		},
+		{
+			"file": "apps/docs/openapi.json",
+			"state": "generated",
+			"lines": "every Quills operation",
+			"plannedChange": "regenerate with pnpm openapi:check:fix in each phase; on an upstream conflict take upstream and regenerate"
+		},
+		{
+			"file": ".trufflehog-exclude",
+			"state": "existing",
+			"lines": "fork exclusions for placeholder credentials in tests and GitLab false positives",
+			"plannedChange": "two Quills SSRF test paths (webhook and integration handler tests)"
+		},
+		{
+			"file": "packages/libs/src/hono.ts",
+			"state": "existing",
+			"lines": "1 line: an explicit ReturnType<typeof hc<AppType>> annotation on client",
+			"plannedChange": "none. The inferred client type with the Quills routes is too large to emit inline (TS7056)"
+		},
+		{
+			"file": "apps/api/vitest.integration.config.ts",
+			"state": "existing",
+			"lines": "the @kaneo/email mock alias matches the exact name only (array form with a regex)",
+			"plannedChange": "none. The Quills subpaths @kaneo/email/quills... must resolve to the real package"
+		}
+	]
+}

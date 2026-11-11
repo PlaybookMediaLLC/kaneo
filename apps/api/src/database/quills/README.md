@@ -5,11 +5,13 @@ Imported from `quackback/packages/db/src` at source commit `42ef2e01b2b48db87f1a
 ## Ownership and identity
 
 Kaneo owns authentication, user accounts, workspaces, membership and workspace
-access. All 147 feature tables live in PostgreSQL schema `quills`.
+access. All 149 feature tables live in PostgreSQL schema `quills`.
 Every table has a text `workspace_id` referencing Kaneo's workspace. Domain IDs
 retain their UUID-backed TypeID representation. Keys, unique constraints and
 feature foreign keys include workspace ownership. Nullable composite foreign
 keys clear only the optional reference, never the workspace discriminator.
+One unique index is global on purpose: `custom_domains_domain_unique` keeps a
+custom domain in one workspace. Row security does not filter a unique index.
 
 Teammate actors in `principal` link directly to Kaneo through `kaneo_user_id`.
 Membership creation and existing-member migration provision these actors atomically.
@@ -19,9 +21,10 @@ changes update the actor; deleting the account anonymizes its historical actor.
 Instance administrators retain Kaneo's existing cross-workspace override.
 
 `customer_identity` retains customer/visitor profile data. Its optional text
-`kaneo_user_id` links a profile to an existing Kaneo user. A trigger rejects links
-to users outside the workspace. Domain principals and Quills RBAC describe
-feature permissions; they never grant Kaneo workspace membership.
+`kaneo_user_id` links a profile to an existing Kaneo user. A trigger rejects a link
+to a user outside the workspace, unless `withQuillsAudience` vouches for that user
+in the same transaction (portal sign-in, see below). Domain principals and Quills
+RBAC describe feature permissions; they never grant Kaneo workspace membership.
 
 Use `withQuillsWorkspace({ workspaceId, userId }, callback)` with the user from
 Kaneo's authenticated server context. The callback receives the scoped database
@@ -42,6 +45,63 @@ Trusted background jobs can import `withQuillsSystemWorkspace` from `client.ts`.
 Never use that function with an unchecked workspace ID from a request. Partition
 maintenance takes an administrative PostgreSQL Client and applies globally;
 workspace callbacks cannot access partitions directly or execute DDL.
+
+## Portal, widget and public callers
+
+`withQuillsAudience({ workspace, kaneoUserId? }, callback)` in `client.ts` is the
+trusted entry point for callers who are not workspace members. Its only caller is
+`defineQuillsRoute` (routes with `audience: "portal" | "widget" | "public"`, mounted
+at `/quills-public/{workspace}`), through the resolvers in `src/quills/framework/audience.ts`.
+
+1. `workspace` is an ID or slug that the caller names. An ID match wins. A missing or
+   archived workspace, or one that never initialized Quills, is rejected; the route
+   returns 404. An anonymous caller never seeds a workspace.
+2. It sets the transaction-local workspace and `SET LOCAL ROLE quills_runtime`, like
+   the other helpers. It authorizes nothing else. It locks the workspace row only for
+   a write (`lock`).
+3. It never reads or writes `workspace_member` and never creates a teammate principal.
+4. `kaneoUserId` is the signed-in Kaneo account from the session (decision D1), never
+   request input. Migration `0010_customer_portal_link` lets the `customer_membership`
+   trigger accept a new `customer_identity` row linked to that one account, so a portal
+   customer needs no membership. An update never moves a link to a non-member. The resolver creates the customer profile and
+   its principal (`principal.user_id`, role and type `user`) inside the transaction.
+5. A widget session is a `kv_store` row keyed by the SHA-256 hash of its token. The
+   raw token is returned once, by identify, and never stored. The row holds a
+   fingerprint of the widget secret: rotating the secret or turning the widget off ends
+   every session. Retention deletes expired rows.
+
+Never call `withQuillsSystemWorkspace` for these callers, and never pass it a
+workspace from a request.
+
+### Signed machine callers
+
+`withQuillsSigned(scope, callback)` in `client.ts` is the trusted entry point for
+machine callers: provider webhooks, the mail provider and OAuth redirects. Its only
+caller is `defineQuillsRoute` (routes with `audience: "signed"`, mounted at
+`/quills-public/signed/...`), after a verifier in `src/quills/framework/signed.ts`.
+
+1. There is no session, no customer principal and no teammate principal. The audit
+   row of a change records a system actor.
+2. The workspace comes from the credential, never from a body, query or path copy:
+   - `{ integration }`: the workspace of that `integrations` row, read by the
+     security-definer function `quills.integration_workspace(uuid)` (migration
+     `0018_signed_integration_workspace`). Only the application credential may
+     execute it; `PUBLIC` and `quills_runtime` may not. Migration
+     `0019_integrations_id_index` indexes `integrations (id)` for this lookup. The verifier
+     then reads the row's sealed secret under the workspace's RLS and checks the signature.
+   - `{ workspace }`: an ID or slug that an instance credential named before any
+     database access: the instance-signed OAuth state, or the mail provider
+     signature over the receiving address.
+3. Like `withQuillsAudience`, it rejects a missing, archived or uninitialized workspace,
+   never reads `workspace_member` and authorizes nothing else. It locks the workspace row.
+4. The route reads the raw body (at most 1 MiB) before any parser, checks the
+   signature in constant time and only then parses the body.
+5. A delivery receipt (`kv_store`, key `signed:<verifier>:<sha256 of the delivery ID>`,
+   kept 30 days) commits with the handler's writes, so a replay is a 200 no-op and a
+   failed handler leaves no receipt. Handlers ignore signed events older than 30 days.
+
+`audience: "internal"` (the job waker) opens no transaction. `QUILLS_INTERNAL_TOKEN`
+authorizes it with a constant-time comparison; without the variable the route is 404.
 
 ## Shared API and client foundation
 
@@ -206,8 +266,10 @@ migration history. A migration-backed manifest checks types, defaults, constrain
 all ordinary and unique indexes, RLS, triggers and functions after restore. Operational index
 expressions and predicates are compared with PostgreSQL-normalized definitions.
 Before the strict manifest comparison, startup repairs missing or invalid known
-operational indexes already recorded in the saved manifest. It does not recapture
-the manifest or repair unrelated schema drift.
+operational indexes already recorded in the saved manifest. A known operational index
+that the saved manifest does not list yet (its first build after the migration stopped)
+is left out of the comparison, rebuilt, checked against its definition, and then recorded.
+Startup does not recapture the manifest otherwise or repair unrelated schema drift.
 Custom SQL migrations must finish with
 `SELECT quills_migrations.capture_schema_manifest();`. Never recapture the manifest
 to hide unexpected drift. Authorization remains at request entry; already-authorized
@@ -224,6 +286,15 @@ Clients must refetch current state after reconnecting. Other imported feature
 queues are not executed. Mail, webhooks and other feature dispatch need registered
 handlers when those features are connected.
 
+Two operations queues run requested work after commit. `quills.domain_check` looks up the
+TXT record of a stored custom domain (five-second cap) and activates the domain when the
+record holds its value. `quills.wipe` deletes a workspace's Quills feature data in one
+transaction; a failure, or a lease that another worker took, rolls the whole wipe back for
+the retry. The wipe keeps settings, the seeded catalogues, teammate actors, custom domains,
+the outbox, the delivery ledger and audit history; it deletes all other Quills data,
+configuration included. Storage triggers queue the removed object keys. A large wipe runs
+inline in the drain loop and delays this instance's other Quills jobs until it ends.
+
 `GET /quills/{workspaceId}/jobs` is paginated and omits payloads. The
 `POST /quills/{workspaceId}/jobs/{jobId}/retry` endpoint requeues a failed registered
 job and audits the operator. Both require `quills:manage_settings`. Link and team
@@ -235,6 +306,16 @@ days, and email/AI logs after 90 days, in batches of 1,000 per table/workspace.
 It retains audit history, pending work, failed jobs with unpublished events, and
 current-month billing logs. Expired export keys enter the existing storage-cleanup
 flow. Archived workspaces receive retention but do not execute feature jobs.
+With the log retention (90 days by default) it also removes help-center search
+queries, finished integration sync attempts, and portal invites that are not
+accepted and expired before that time. The sync operation row, its operation key and
+its result stay: the key stops a second external create. Unsubscribe tokens go 30
+days after they expired or were used. Anonymous widget visitors (a principal and its
+customer profile) go eight days after creation when no widget session is live, they
+hold only what the session route wrote (no name, email, contact email, company,
+block, external ID or attributes), and no foreign key references them. Every foreign
+key to `principal` and `customer_identity` is read from the catalog. A cursor in
+`kv_store` moves past the visitors that stay. Audit rows and events keep their text IDs.
 Configure days (1–3650) with `QUILLS_EVENT_RETENTION_DAYS`,
 `QUILLS_JOB_RETENTION_DAYS` and `QUILLS_LOG_RETENTION_DAYS`.
 
@@ -347,6 +428,7 @@ All entries are workspace-owned, including per-workspace reference catalogues.
 | `connectors` | `connectors.ts` |
 | `conversation_attribute_definitions` | `conversation-attributes.ts` |
 | `conversation_summaries` | `conversation-summary.ts` |
+| `custom_domains` | `custom-domains.ts` |
 | `conversation_views` | `conversation-views.ts` |
 | `conversation_view_pins` | `conversation-views.ts` |
 | `conversations` | `conversation.ts` |
@@ -451,3 +533,23 @@ All entries are workspace-owned, including per-workspace reference catalogues.
 | `workflow_run_events` | `workflows.ts` |
 | `workflow_versions` | `workflows.ts` |
 | `workspace_assistant_threads` | `workspace-assistant.ts` |
+
+## AI provider
+
+The assistant and the AI features call an OpenAI-compatible HTTP API with `fetch`. There is
+no SDK and no other dependency. Set these server variables in the root `.env`:
+
+| Variable | Use |
+|---|---|
+| `QUILLS_AI_BASE_URL` | API root that serves `/chat/completions` and `/embeddings`, for example `https://api.openai.com/v1` or a local server. Required. |
+| `QUILLS_AI_MODEL` | Chat model name. Required. |
+| `QUILLS_AI_API_KEY` | Sent as `Authorization: Bearer`. Leave it empty for a local server that needs no key. |
+| `QUILLS_AI_EMBEDDING_MODEL` | Embedding model. It must return 1536 dimensions (the `vector(1536)` columns). Optional: without it, similar posts, duplicate checks and semantic search stay off. |
+
+Without `QUILLS_AI_BASE_URL` and `QUILLS_AI_MODEL`, every AI route returns 409
+("AI is not configured") and the rest of Quills works as before. Background AI work then
+finishes with no work. Provider calls run outside every database transaction and time out
+after 60 seconds. A failure returns a fixed message; the provider's text and the key never
+reach a response, a log row or a run. Each call writes one `ai_usage_log` row in its
+workspace. The `quills.ai` queue (migration `0017_assistant_queue`) runs the background work;
+`apps/api/src/quills/assistant/ROUTES.md` lists the routes and the work for each event.

@@ -93,6 +93,17 @@ export function prepareArchive(
         row.lease_expires_at = null;
         row.finished_at = new Date().toISOString();
       }
+      // An imported webhook must not send this workspace's events until an admin turns it on here.
+      if (name === "webhooks") row.status = "disabled";
+      // The same for an imported integration: it delivers nothing until an admin enables it here.
+      if (name === "integrations") row.status = "paused";
+      // An invite link of the source workspace must not open this one: no token survives the import.
+      if (name === "portal_invites") {
+        row.token_hashes = [];
+        if (row.status === "pending") row.status = "expired";
+      }
+      // An imported workflow acts only after a teammate here publishes it and becomes its actor.
+      if (name === "workflows" && row.status === "live") row.status = "paused";
       if (
         name === "workflow_runs" &&
         ["running", "waiting"].includes(String(row.state))
@@ -154,6 +165,23 @@ export function prepareArchive(
           "team",
         );
     }
+  }
+  // Live conversation tags that differ only in case would break the unique index on lower(name).
+  // As migration 0020 does: the oldest keeps its name, the others get the end of their ID added.
+  const live = (archive.tables.conversation_tags ?? [])
+    .filter((tag) => tag.deleted_at == null)
+    .sort(
+      (x, y) =>
+        (Date.parse(String(x.created_at)) || 0) -
+          (Date.parse(String(y.created_at)) || 0) ||
+        (String(x.id) < String(y.id) ? -1 : 1),
+    );
+  const names = new Set<string>();
+  for (const tag of live) {
+    const name = String(tag.name);
+    if (!names.has(name.toLowerCase())) names.add(name.toLowerCase());
+    else
+      tag.name = `${[...name].slice(0, 35).join("")} (${String(tag.id).slice(-12)})`;
   }
   const boundTeams = new Set(
     (archive.tables.teams ?? [])

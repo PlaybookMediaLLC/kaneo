@@ -44,6 +44,11 @@ export const CONCURRENT_INDEX_SPECS: readonly ConcurrentIndexSpec[] = [
     ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS settings_portal_og_image_key_lookup_idx ON quills.settings (portal_og_image_key) WHERE portal_og_image_key IS NOT NULL",
   },
   {
+    name: "settings_widget_hero_key_lookup_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS settings_widget_hero_key_lookup_idx ON quills.settings (widget_hero_key) WHERE widget_hero_key IS NOT NULL",
+  },
+  {
     name: "files_storage_key_lookup_idx",
     concurrent: true,
     ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS files_storage_key_lookup_idx ON quills.files (storage_key) WHERE storage_key IS NOT NULL",
@@ -131,6 +136,13 @@ export const CONCURRENT_INDEX_SPECS: readonly ConcurrentIndexSpec[] = [
     ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS posts_title_trgm_idx ON quills.posts USING gin (title gin_trgm_ops) WHERE deleted_at IS NULL",
   },
   {
+    // The post list's votes sort: workspace, then the full sort key, so the RLS predicate and the
+    // cursor are index conditions. posts is a large table, so it is built here.
+    name: "posts_workspace_vote_count_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS posts_workspace_vote_count_idx ON quills.posts (workspace_id, vote_count, created_at, id)",
+  },
+  {
     name: "user_name_trgm_idx",
     concurrent: true,
     ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS user_name_trgm_idx ON quills.customer_identity USING gin (name gin_trgm_ops)",
@@ -189,6 +201,199 @@ export const CONCURRENT_INDEX_SPECS: readonly ConcurrentIndexSpec[] = [
     name: "conversations_subject_trgm_idx",
     concurrent: true,
     ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS conversations_subject_trgm_idx ON quills.conversations USING gin (subject gin_trgm_ops)",
+  },
+  // Foreign keys to principal, customer_identity and other parents on tables that grow with
+  // traffic. Without these, each deleted parent row (a customer delete, a workspace delete with
+  // many customers) scans the whole referencing table. Workspace first, as the composite keys.
+  // Partial where the column is nullable. customer_identity.kaneo_user_id references a Kaneo user
+  // across workspaces, so its index is global, as principal_kaneo_user_id_lookup_idx is.
+  // foreign-key-indexes.test.ts fails when a new foreign key has no usable index.
+  {
+    name: "customer_identity_kaneo_user_id_fk_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS customer_identity_kaneo_user_id_fk_idx ON quills.customer_identity (kaneo_user_id) WHERE kaneo_user_id IS NOT NULL",
+  },
+  {
+    name: "conversation_participants_added_by_principal_id_fk_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS conversation_participants_added_by_principal_id_fk_idx ON quills.conversation_participants (workspace_id, added_by_principal_id) WHERE added_by_principal_id IS NOT NULL",
+  },
+  {
+    name: "ticket_activity_principal_id_fk_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS ticket_activity_principal_id_fk_idx ON quills.ticket_activity (workspace_id, principal_id) WHERE principal_id IS NOT NULL",
+  },
+  {
+    name: "ticket_conversations_linked_by_principal_id_fk_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS ticket_conversations_linked_by_principal_id_fk_idx ON quills.ticket_conversations (workspace_id, linked_by_principal_id) WHERE linked_by_principal_id IS NOT NULL",
+  },
+  {
+    name: "ticket_links_linked_by_principal_id_fk_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS ticket_links_linked_by_principal_id_fk_idx ON quills.ticket_links (workspace_id, linked_by_principal_id) WHERE linked_by_principal_id IS NOT NULL",
+  },
+  {
+    name: "ticket_links_tracker_ticket_id_fk_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS ticket_links_tracker_ticket_id_fk_idx ON quills.ticket_links (workspace_id, tracker_ticket_id)",
+  },
+  {
+    name: "workflow_runs_subject_principal_id_fk_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS workflow_runs_subject_principal_id_fk_idx ON quills.workflow_runs (workspace_id, subject_principal_id) WHERE subject_principal_id IS NOT NULL",
+  },
+  {
+    name: "workflow_run_events_subject_principal_id_fk_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS workflow_run_events_subject_principal_id_fk_idx ON quills.workflow_run_events (workspace_id, subject_principal_id) WHERE subject_principal_id IS NOT NULL",
+  },
+  {
+    name: "post_merge_suggestions_resolved_by_principal_id_fk_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS post_merge_suggestions_resolved_by_principal_id_fk_idx ON quills.post_merge_suggestions (workspace_id, resolved_by_principal_id) WHERE resolved_by_principal_id IS NOT NULL",
+  },
+  {
+    name: "post_activity_principal_id_fk_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS post_activity_principal_id_fk_idx ON quills.post_activity (workspace_id, principal_id) WHERE principal_id IS NOT NULL",
+  },
+  {
+    name: "kb_article_feedback_principal_id_fk_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS kb_article_feedback_principal_id_fk_idx ON quills.kb_article_feedback (workspace_id, principal_id) WHERE principal_id IS NOT NULL",
+  },
+  {
+    name: "files_uploaded_by_id_fk_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS files_uploaded_by_id_fk_idx ON quills.files (workspace_id, uploaded_by_id) WHERE uploaded_by_id IS NOT NULL",
+  },
+  {
+    name: "assistant_pending_actions_on_behalf_of_principal_id_fk_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS assistant_pending_actions_on_behalf_of_principal_id_fk_idx ON quills.assistant_pending_actions (workspace_id, on_behalf_of_principal_id) WHERE on_behalf_of_principal_id IS NOT NULL",
+  },
+  {
+    name: "assistant_pending_actions_decided_by_id_fk_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS assistant_pending_actions_decided_by_id_fk_idx ON quills.assistant_pending_actions (workspace_id, decided_by_id) WHERE decided_by_id IS NOT NULL",
+  },
+  {
+    name: "assistant_pending_actions_requested_by_id_fk_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS assistant_pending_actions_requested_by_id_fk_idx ON quills.assistant_pending_actions (workspace_id, requested_by_id) WHERE requested_by_id IS NOT NULL",
+  },
+  {
+    name: "assistant_pending_actions_involvement_id_fk_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS assistant_pending_actions_involvement_id_fk_idx ON quills.assistant_pending_actions (workspace_id, involvement_id) WHERE involvement_id IS NOT NULL",
+  },
+  {
+    name: "assistant_tool_calls_principal_id_fk_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS assistant_tool_calls_principal_id_fk_idx ON quills.assistant_tool_calls (workspace_id, principal_id) WHERE principal_id IS NOT NULL",
+  },
+  {
+    name: "assistant_tool_calls_involvement_id_fk_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS assistant_tool_calls_involvement_id_fk_idx ON quills.assistant_tool_calls (workspace_id, involvement_id) WHERE involvement_id IS NOT NULL",
+  },
+  {
+    name: "assistant_tool_calls_pending_action_id_fk_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS assistant_tool_calls_pending_action_id_fk_idx ON quills.assistant_tool_calls (workspace_id, pending_action_id) WHERE pending_action_id IS NOT NULL",
+  },
+  {
+    name: "assistant_events_principal_id_fk_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS assistant_events_principal_id_fk_idx ON quills.assistant_events (workspace_id, principal_id) WHERE principal_id IS NOT NULL",
+  },
+  {
+    name: "post_comments_status_change_from_id_fk_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS post_comments_status_change_from_id_fk_idx ON quills.post_comments (workspace_id, status_change_from_id) WHERE status_change_from_id IS NOT NULL",
+  },
+  {
+    name: "unsubscribe_tokens_post_id_fk_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS unsubscribe_tokens_post_id_fk_idx ON quills.unsubscribe_tokens (workspace_id, post_id) WHERE post_id IS NOT NULL",
+  },
+  // The partial indexes on these columns (status = 'proposed', ticket_type = 'customer') and the
+  // ticket_conversations key (ticket_id third) cannot serve a delete of the parent.
+  {
+    name: "assistant_pending_actions_conversation_id_fk_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS assistant_pending_actions_conversation_id_fk_idx ON quills.assistant_pending_actions (workspace_id, conversation_id) WHERE conversation_id IS NOT NULL",
+  },
+  {
+    name: "assistant_pending_actions_ticket_id_fk_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS assistant_pending_actions_ticket_id_fk_idx ON quills.assistant_pending_actions (workspace_id, ticket_id) WHERE ticket_id IS NOT NULL",
+  },
+  {
+    name: "ticket_conversations_ticket_id_fk_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS ticket_conversations_ticket_id_fk_idx ON quills.ticket_conversations (workspace_id, ticket_id)",
+  },
+  {
+    name: "post_external_links_integration_id_fk_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS post_external_links_integration_id_fk_idx ON quills.post_external_links (workspace_id, integration_id)",
+  },
+  {
+    name: "ticket_external_links_integration_id_fk_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS ticket_external_links_integration_id_fk_idx ON quills.ticket_external_links (workspace_id, integration_id)",
+  },
+  {
+    // The sync history (integrations/syncs.ts): one integration, newest first, keyset cursor.
+    name: "integration_sync_operations_history_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS integration_sync_operations_history_idx ON quills.integration_sync_operations (workspace_id, integration_id, created_at, id)",
+  },
+  {
+    // The support report's time range (support/support-reporting.ts).
+    name: "sla_events_workspace_at_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS sla_events_workspace_at_idx ON quills.sla_events (workspace_id, at)",
+  },
+  {
+    // The ticket list's sort=priority and its cursor (support/tickets.ts). The expression must
+    // stay identical to the route's rank, or the planner cannot use the index.
+    name: "tickets_workspace_priority_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS tickets_workspace_priority_idx ON quills.tickets (workspace_id, (CASE priority WHEN 'urgent' THEN 4 WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 0 END), id) WHERE deleted_at IS NULL",
+  },
+  {
+    // The status subscriber list, newest first (content/status/subscribers.ts).
+    name: "status_subscriptions_workspace_created_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS status_subscriptions_workspace_created_idx ON quills.status_subscriptions (workspace_id, created_at, id)",
+  },
+  {
+    // The help-center search terms window (content/help-center/feedback.ts) and its retention.
+    // Replaces kb_search_queries_created_at_idx, which had no workspace prefix.
+    name: "kb_search_queries_workspace_created_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS kb_search_queries_workspace_created_idx ON quills.kb_search_queries (workspace_id, created_at)",
+  },
+  // Retention batches (jobs/retention.ts), so each hourly run reads only the rows it removes.
+  {
+    // The keyset of the anonymous visitor sweep (jobs/anonymous-visitors.ts).
+    name: "principal_anonymous_created_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS principal_anonymous_created_idx ON quills.principal (workspace_id, created_at, id) WHERE type = 'anonymous'",
+  },
+  {
+    // least() skips a NULL used_at: the time the token stopped working.
+    name: "unsubscribe_tokens_retention_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS unsubscribe_tokens_retention_idx ON quills.unsubscribe_tokens (workspace_id, least(expires_at, used_at))",
+  },
+  {
+    name: "integration_sync_attempts_finished_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS integration_sync_attempts_finished_idx ON quills.integration_sync_attempts (workspace_id, finished_at)",
   },
   {
     // page_views is range-partitioned (0137); Postgres rejects CREATE INDEX

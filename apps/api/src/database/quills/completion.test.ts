@@ -26,6 +26,7 @@ import { auditLog } from "./schema/audit-log";
 import { events } from "./schema/events";
 import { jobQueue } from "./schema/job-queue";
 import { settings } from "./schema/auth";
+import { webhooks } from "./schema/webhooks";
 import { recordQuillsChange } from "../../quills/events";
 import {
   claimQuillsJob,
@@ -225,6 +226,37 @@ describe.skipIf(!url)("Quills completion", () => {
       await pool.query(
         "CREATE INDEX IF NOT EXISTS files_storage_key_lookup_idx ON quills.files(storage_key) WHERE storage_key IS NOT NULL",
       );
+    }
+  }, 120000);
+  it("finishes a new operational index whose first build stopped before the manifest recorded it", async () => {
+    const index = "posts_workspace_vote_count_idx";
+    const create = `CREATE INDEX ${index} ON quills.posts (workspace_id, vote_count, created_at, id)`;
+    const invalid = `UPDATE pg_index SET indisvalid=false WHERE indexrelid='quills.${index}'::regclass`;
+    // The state after the migration that added the index committed its manifest, and the build failed
+    // (an invalid index) or the process stopped before the manifest was saved again (a valid one).
+    for (const stopped of [[create, invalid], [create]]) {
+      await pool.query(`DROP INDEX quills.${index}`);
+      await pool.query("SELECT quills_migrations.capture_schema_manifest()");
+      for (const statement of stopped) await pool.query(statement);
+      try {
+        await runQuillsMigrations(url!, resolve("drizzle/quills"));
+        const after = await pool.query(
+          `SELECT definition=quills_migrations.current_schema_manifest() AS matches,
+            definition->'tables'->'posts'->'indexes' ? $1 AS recorded,
+            (SELECT indisvalid FROM pg_index WHERE indexrelid=('quills.'||$1)::regclass) AS valid
+           FROM quills_migrations.schema_manifest WHERE id=true`,
+          [index],
+        );
+        expect(after.rows[0]).toEqual({
+          matches: true,
+          recorded: true,
+          valid: true,
+        });
+      } finally {
+        await pool.query(`DROP INDEX IF EXISTS quills.${index}`);
+        await pool.query(create);
+        await pool.query("SELECT quills_migrations.capture_schema_manifest()");
+      }
     }
   }, 120000);
   it("rejects restored defaults, disabled shared triggers and wrong operational index definitions", async () => {
@@ -480,6 +512,19 @@ describe.skipIf(!url)("Quills completion", () => {
         content: "See /hc/en/articles/910-intro",
       },
     ];
+    // An active webhook in the archive must arrive disabled.
+    archive.tables.webhooks = [
+      {
+        id: randomUUID(),
+        created_by_id: archive.tables.principal!.find(
+          (p) => p.kaneo_user_id === user,
+        )!.id!,
+        url: "https://203.0.113.10/hook",
+        secret: "enc:v1:imported",
+        events: ["team.bound"],
+        status: "active",
+      },
+    ];
     let occurredAt = "";
     for (let age = 20; age < 90; age++) {
       const date = new Date(Date.now() - age * 86400000);
@@ -535,6 +580,23 @@ describe.skipIf(!url)("Quills completion", () => {
     });
     expect(archive.tables.events).toBeUndefined();
     expect(archive.tables.job_queue).toBeUndefined();
+    // Live tags that differ only in case, as an archive from before migration 0020 may hold.
+    const [caseTag, caseTwin] = [randomUUID(), randomUUID()];
+    archive.tables.conversation_tags = [
+      ...(archive.tables.conversation_tags ?? []),
+      {
+        id: caseTag,
+        name: "Case",
+        color: "#000000",
+        created_at: "2026-01-01T00:00:00Z",
+      },
+      {
+        id: caseTwin,
+        name: "case",
+        color: "#000000",
+        created_at: "2026-01-02T00:00:00Z",
+      },
+    ];
     const members = [
       { id: user, name: user, image: null },
       { id: peer, name: peer, image: null },
@@ -644,6 +706,20 @@ describe.skipIf(!url)("Quills completion", () => {
     );
     expect(imported.rows).toBeGreaterThan(0);
     expect(await scoped((tx) => tx.select().from(boards), c)).toHaveLength(1);
+    expect(
+      (
+        await pool.query(
+          "SELECT name FROM quills.conversation_tags WHERE workspace_id=$1 AND id = ANY($2::uuid[]) ORDER BY created_at",
+          [c, [caseTag, caseTwin]],
+        )
+      ).rows.map((row) => row.name),
+    ).toEqual(["Case", `case (${caseTwin.slice(-12)})`]);
+    expect(
+      await scoped(
+        (tx) => tx.select({ status: webhooks.status }).from(webhooks),
+        c,
+      ),
+    ).toEqual([{ status: "disabled" }]);
     await scoped(async (tx, actor) => {
       expect((await tx.select().from(kbArticles))[0]).toMatchObject({
         urlId: 910,

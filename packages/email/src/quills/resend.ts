@@ -24,6 +24,8 @@ export interface ResendSendRequest {
   attachments?: EmailAttachment[];
   /** Sent as the Idempotency-Key header, so a retried send is delivered once. */
   idempotencyKey?: string;
+  /** Returned by Resend with the message's delivery events. */
+  tags?: { name: string; value: string }[];
 }
 
 /** The slice of the SDK client this rung uses. */
@@ -94,6 +96,7 @@ export function buildResendPayload(
     ...(request.text !== undefined ? { text: request.text } : {}),
     ...(request.replyTo !== undefined ? { replyTo: request.replyTo } : {}),
     ...(Object.keys(headers).length > 0 ? { headers } : {}),
+    ...(request.tags && request.tags.length > 0 ? { tags: request.tags } : {}),
     ...(request.attachments && request.attachments.length > 0
       ? {
           attachments: request.attachments.map((attachment) => ({

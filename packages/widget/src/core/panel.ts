@@ -2,7 +2,7 @@ import { ensureStyles } from "./style.js";
 import { X } from "../icons/phosphor.js";
 
 export interface PanelOptions {
-  /** Widget URL — e.g. "https://feedback.acme.com/widget". */
+  /** Widget URL — e.g. "https://kaneo.acme.com/api/quills-public/acme/widget". */
   widgetUrl: string;
   placement: "left" | "right";
   defaultBoard?: string;

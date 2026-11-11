@@ -98,8 +98,12 @@ Kaneo user ID into a principal ID or infer membership by matching email addresse
 Read [withQuillsRequest](src/quills/with-quills-request.ts),
 [client.ts](src/database/quills/client.ts) and the nearest existing route first.
 
-1. Define the route with the existing OpenAPI/Zod helpers and bounded inputs and
-   responses. Mount feature routers through [src/quills/index.ts](src/quills/index.ts).
+1. Define the route with `defineQuillsRoute` from
+   [src/quills/framework/define-route.ts](src/quills/framework/define-route.ts), with bounded
+   inputs and responses, and add a sibling `*.fixture.ts` so the contract suite covers it.
+   The helper calls `withQuillsRequest` for you; route modules must not call it or
+   `createRoute` directly (the boundary test fails). The steps below describe what the
+   helper enforces. Mount feature routers through [src/quills/index.ts](src/quills/index.ts).
    Keep the normal authenticated middleware and `workspaceAccess.fromParam("workspaceId")`.
    Read identity/workspace from authenticated context, never from a submitted user ID.
 2. Call `withQuillsRequest(c, { action }, async (db, actor) => ...)`, adding
@@ -107,6 +111,8 @@ Read [withQuillsRequest](src/quills/with-quills-request.ts),
    access, `workspace:read`, the requested Quills
    action, API-key scope, and the supplied project's workspace and visibility.
    Choose the actual action; reads are not permission to mutate or manage settings.
+   When the caller's own record needs less than another person's record, declare the minimum
+   action, set `callerActions`, and check the handler's `actions` set for the other case.
 3. Pass the callback's branded `Database` handle into Quills domain helpers. Execute
    and await all Quills queries inside that callback. Return resolved data, never
    the transaction or a lazy query builder. Do not use the global platform DB for

@@ -27,6 +27,7 @@ const { createSDK } = await import("../src/core/sdk");
 let sdk: ReturnType<typeof createSDK> | undefined;
 
 const ORIGIN = "https://feedback.acme.com";
+const WORKSPACE = "acme";
 const DEVICE_KEY = "quackback:device-id";
 
 function bakeConfig(visitorDeviceTracking = true) {
@@ -66,7 +67,7 @@ describe("sdk host-page tracking", () => {
   it("starts the tracker and mints a device id when the instance enables it", () => {
     bakeConfig();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     expect(trackers).toHaveLength(1);
     expect(trackers[0].start).toHaveBeenCalled();
     expect(trackers[0].deviceId).toBeTruthy();
@@ -76,7 +77,11 @@ describe("sdk host-page tracking", () => {
   it("init with { tracking: false } sends no pageviews and stores no device id", () => {
     bakeConfig();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, tracking: false });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      tracking: false,
+    });
     expect(trackers).toHaveLength(0);
     expect(window.localStorage.getItem(DEVICE_KEY)).toBeNull();
     expect(
@@ -87,14 +92,18 @@ describe("sdk host-page tracking", () => {
   it("tracking(true) after init starts the tracker the instance allows", () => {
     bakeConfig();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, tracking: false });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      tracking: false,
+    });
     sdk.dispatch("tracking", true);
     expect(trackers).toHaveLength(1);
     expect(trackers[0].start).toHaveBeenCalled();
     expect(window.localStorage.getItem(DEVICE_KEY)).toBe(trackers[0].deviceId);
   });
 
-  it("tracking(true) applied before the server config arrives takes effect on arrival", async () => {
+  it("a fetched Kaneo config never starts a tracker: the instance has no pageview ingest route", async () => {
     let respond: (value: unknown) => void = () => {};
     vi.stubGlobal(
       "fetch",
@@ -106,18 +115,32 @@ describe("sdk host-page tracking", () => {
       ),
     );
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, tracking: false });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      tracking: false,
+    });
     sdk.dispatch("tracking", true);
     expect(trackers).toHaveLength(0);
     respond({
       ok: true,
       json: async () => ({
-        visitorAnalytics: true,
-        visitorDeviceTracking: false,
+        enabled: true,
+        config: {
+          visitorAnalytics: true,
+          visitorDeviceTracking: true,
+          launcherLabel: "Feedback",
+        },
       }),
     });
-    await vi.waitFor(() => expect(trackers).toHaveLength(1));
-    expect(trackers[0].deviceId).toBeNull();
+    // The rest of the config arrives and applies; only analytics stay off.
+    await vi.waitFor(() =>
+      expect(
+        document.querySelector('button[aria-label="Feedback"]'),
+      ).not.toBeNull(),
+    );
+    expect(trackers).toHaveLength(0);
+    expect(window.localStorage.getItem(DEVICE_KEY)).toBeNull();
   });
 
   it("tracking(true) never starts a tracker the instance has turned off", () => {
@@ -125,7 +148,11 @@ describe("sdk host-page tracking", () => {
       visitorAnalytics: false,
     };
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, tracking: false });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      tracking: false,
+    });
     sdk.dispatch("tracking", true);
     expect(trackers).toHaveLength(0);
   });
@@ -133,7 +160,7 @@ describe("sdk host-page tracking", () => {
   it("tracking(false) stops the tracker and removes the device id", () => {
     bakeConfig();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     expect(window.localStorage.getItem(DEVICE_KEY)).not.toBeNull();
     sdk.dispatch("tracking", false);
     expect(trackers[0].stop).toHaveBeenCalled();
@@ -143,7 +170,7 @@ describe("sdk host-page tracking", () => {
   it("tracking(true) twice keeps a single tracker running", () => {
     bakeConfig();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     sdk.dispatch("tracking", true);
     sdk.dispatch("tracking", true);
     // A restarted tracker would beacon the current page again.
@@ -155,17 +182,17 @@ describe("sdk host-page tracking", () => {
     bakeConfig();
     sdk = createSDK();
     sdk.dispatch("tracking", false);
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     expect(trackers).toHaveLength(0);
   });
 
   it("a withdrawal holds through destroy and a later init without the option", () => {
     bakeConfig();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     sdk.dispatch("tracking", false);
     sdk.dispatch("destroy");
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     expect(trackers).toHaveLength(1);
     expect(window.localStorage.getItem(DEVICE_KEY)).toBeNull();
   });
@@ -181,7 +208,7 @@ describe("sdk host-page tracking", () => {
       postMessage,
     } as unknown as Window);
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     window.dispatchEvent(
       new MessageEvent("message", {
         origin: ORIGIN,

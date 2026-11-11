@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
-import type { statement } from "@kaneo/permissions";
+import { statement } from "@kaneo/permissions";
 import db from "../database";
 import { projectTable } from "../database/schema";
 import {
@@ -10,15 +10,41 @@ import {
   type QuillsActor,
 } from "../database/quills/client";
 import { assertProjectAccess } from "../project-access/assert-project-access";
-import { requireWorkspacePermission } from "../utils/require-workspace-permission";
+import {
+  requireWorkspacePermission,
+  workspacePermissionChecker,
+} from "../utils/require-workspace-permission";
 import { validateWorkspaceAccess } from "../utils/validate-workspace-access";
 
 export type QuillsAction = (typeof statement.quills)[number];
 
-/** Project IDs must come from the feature's persisted relationship, never a caller's substitute. */
+/**
+ * The Quills actions that the caller holds: the role's permissions within the API key's scope,
+ * as requireWorkspacePermission checks them. Call it after withQuillsRequest's permission checks.
+ */
+export async function quillsActions(
+  c: Context,
+): Promise<ReadonlySet<QuillsAction>> {
+  const can = await workspacePermissionChecker(c);
+  return new Set(
+    statement.quills.filter((action) =>
+      can({ workspace: ["read"], quills: [action] }),
+    ),
+  );
+}
+
+/**
+ * Project IDs must come from the feature's persisted relationship, never a caller's substitute.
+ * A function project ID runs after the permission checks, so a denied caller learns nothing from its lookup.
+ */
 export async function withQuillsRequest<T>(
   c: Context,
-  access: { action: QuillsAction; projectId?: string },
+  access: {
+    action: QuillsAction;
+    /** Further Quills actions that the caller must also hold (role and API-key scope). */
+    also?: readonly QuillsAction[];
+    projectId?: string | (() => Promise<string | undefined>);
+  },
   work: (db: Database, actor: QuillsActor) => Promise<T>,
 ): Promise<T> {
   const userId = c.get("userId") as string | undefined;
@@ -29,15 +55,19 @@ export async function withQuillsRequest<T>(
   await validateWorkspaceAccess(userId, workspaceId, c.get("apiKey")?.id);
   await requireWorkspacePermission({
     workspace: ["read"],
-    quills: [access.action],
+    quills: [access.action, ...(access.also ?? [])],
   })(c, async () => {});
-  if (access.projectId) {
+  const projectId =
+    typeof access.projectId === "function"
+      ? await access.projectId()
+      : access.projectId;
+  if (projectId) {
     const [project] = await db
       .select({ id: projectTable.id })
       .from(projectTable)
       .where(
         and(
-          eq(projectTable.id, access.projectId),
+          eq(projectTable.id, projectId),
           eq(projectTable.workspaceId, workspaceId),
         ),
       )

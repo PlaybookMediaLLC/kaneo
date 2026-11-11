@@ -574,6 +574,11 @@ export const conversationTags = quillsSchema
       index("conversation_tags_deleted_at_idx").on(table.deletedAt),
       primaryKey({ columns: [table.workspaceId, table.id] }),
       unique().on(table.workspaceId, table.name),
+      // A live name is unique in any case (support/conversation-tags.ts); an archived tag can
+      // differ from a live one only in case.
+      uniqueIndex("conversation_tags_live_lower_name_idx")
+        .on(table.workspaceId, sql`lower(${table.name})`)
+        .where(sql`${table.deletedAt} IS NULL`),
       workspacePolicy(table.workspaceId),
     ],
   )

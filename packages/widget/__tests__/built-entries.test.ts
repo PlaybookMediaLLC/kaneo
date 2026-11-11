@@ -43,7 +43,7 @@ it("built IIFE replays its queue and preserves explicit init over baked defaults
       window.__QUACKBACK_URL__='https://baked.example.com';
       window.__QUACKBACK_CONFIG__={};
       window.Quackback=function(){(window.Quackback.q??=[]).push(arguments)};
-      Quackback('init',{instanceUrl:'https://explicit.example.com',launcher:false,placement:'left'});
+      Quackback('init',{instanceUrl:'https://explicit.example.com',workspace:'acme',launcher:false,placement:'left'});
       Quackback('metadata',{page:'queue-replay'});
       Quackback('open',{articleId:'article_saved'});
     `);
@@ -54,7 +54,7 @@ it("built IIFE replays its queue and preserves explicit init over baked defaults
     expect(browser.document.querySelector(".quackback-launcher")).toBeNull();
     expect(browser.document.querySelectorAll("iframe")).toHaveLength(1);
     expect(browser.document.querySelector("iframe")?.src).toBe(
-      "https://explicit.example.com/widget?showClose=1",
+      "https://explicit.example.com/api/quills-public/acme/widget?showClose=1",
     );
     expect(
       browser.document

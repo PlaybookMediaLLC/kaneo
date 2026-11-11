@@ -21,7 +21,7 @@ import {
   primaryKey,
   foreignKey,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   typeIdWithDefault,
   typeIdColumn,
@@ -226,6 +226,9 @@ export const statusIncidents = quillsSchema
         columns: [table.workspaceId, table.createdBy],
         foreignColumns: [principal.workspaceId, principal.id],
       }).onDelete("set null"),
+      index("status_incidents_created_by_fk_idx")
+        .on(table.workspaceId, table.createdBy)
+        .where(sql`${table.createdBy} IS NOT NULL`),
       workspacePolicy(table.workspaceId),
     ],
   )
@@ -307,6 +310,9 @@ export const statusIncidentUpdates = quillsSchema
         columns: [table.workspaceId, table.createdBy],
         foreignColumns: [principal.workspaceId, principal.id],
       }).onDelete("set null"),
+      index("status_incident_updates_created_by_fk_idx")
+        .on(table.workspaceId, table.createdBy)
+        .where(sql`${table.createdBy} IS NOT NULL`),
       workspacePolicy(table.workspaceId),
     ],
   )
@@ -340,6 +346,10 @@ export const statusIncidentComponents = quillsSchema
         columns: [table.workspaceId, table.componentId],
         foreignColumns: [statusComponents.workspaceId, statusComponents.id],
       }).onDelete("cascade"),
+      index("status_incident_components_incident_id_fk_idx").on(
+        table.workspaceId,
+        table.incidentId,
+      ),
       workspacePolicy(table.workspaceId),
     ],
   )

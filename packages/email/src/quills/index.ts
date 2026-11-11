@@ -36,6 +36,7 @@ import { reportSesTenantPaused, resolveSesTenant } from "./tenant-hooks";
 import { sendViaResend } from "./resend";
 import { listUnsubscribeHeaders } from "./list-unsubscribe";
 import { currentEmailIdempotencyKey } from "./idempotency";
+import { currentEmailTags } from "./tags";
 import {
   EmailConfigError,
   resendApiKey,
@@ -50,6 +51,7 @@ export {
 export type { EmailProvider } from "./provider";
 export { ResendEmailError } from "./resend";
 export { withEmailIdempotencyKey } from "./idempotency";
+export { withEmailTags, type EmailTag } from "./tags";
 import type { EmailAttachment } from "./attachment";
 export type { EmailAttachment } from "./attachment";
 export { MAX_EMAIL_ATTACHMENT_BYTES } from "./attachment";
@@ -490,6 +492,7 @@ async function dispatch(input: DispatchOptions): Promise<EmailResult> {
     // quote. The plus-addressed Reply-To carries the reply home, and
     // In-Reply-To and References keep the recipient's client threading.
     const idempotencyKey = currentEmailIdempotencyKey();
+    const tags = currentEmailTags();
     try {
       const result = await sendViaResend(
         {
@@ -508,6 +511,7 @@ async function dispatch(input: DispatchOptions): Promise<EmailResult> {
             ? { attachments: options.attachments }
             : {}),
           ...(idempotencyKey ? { idempotencyKey } : {}),
+          ...(tags ? { tags } : {}),
         },
         getResendClient(),
       );

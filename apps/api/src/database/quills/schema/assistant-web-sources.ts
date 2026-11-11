@@ -1,5 +1,6 @@
 import { quillsSchema, workspaceColumn, workspacePolicy } from "../tenancy";
 import { foreignKey, primaryKey } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 /**
  * Web sources — public pages an admin adds by URL for Quinn to ground
  * answers on, alongside the knowledge base and snippets. The crawled text
@@ -49,6 +50,9 @@ export const assistantWebSources = quillsSchema
         columns: [table.workspaceId, table.createdById],
         foreignColumns: [principal.workspaceId, principal.id],
       }).onDelete("set null"),
+      index("assistant_web_sources_created_by_id_fk_idx")
+        .on(table.workspaceId, table.createdById)
+        .where(sql`${table.createdById} IS NOT NULL`),
       workspacePolicy(table.workspaceId),
     ],
   )
