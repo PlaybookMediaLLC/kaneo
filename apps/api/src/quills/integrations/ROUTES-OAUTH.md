@@ -191,7 +191,26 @@ yet. The design and what is missing are in `providers/README.md` ("Trello").
 
 ### Monday
 
-Filled by lane P2.
+| Source | Route | operationId |
+|---|---|---|
+| `getMondayConnectUrl` | `GET /oauth/monday/connect` | `startQuillsMondayOAuthConnect` |
+| `fetchMondayBoardsFn` | `GET /integrations/{integrationId}/destinations` | `listQuillsIntegrationDestinations` |
+
+- Boundary: the map at the top of this file. Both routes need `manage_settings`. The provider calls
+  only `auth.monday.com` and `api.monday.com`, with no transaction open.
+- Connect: the callback exchanges the code at `auth.monday.com/oauth2/token`, then reads the account
+  name with the GraphQL query `me`. The sealed secret is `accessToken`; Monday.com tokens do not
+  expire.
+- Destinations: one kind, the boards (`boards(limit: 100, order_by: used_at)`). The route keeps only
+  IDs of 1 to 30 letters and digits. A failed GraphQL query (200 with `errors` and no `data`) is 502.
+- Tests: `providers/monday.test.ts` (local provider server): connect with a sealed token, the limit
+  of 200 and the ID filter, a refused `kind`, and malformed answers (400 and 502 with fixed text).
+
+| Difference from the source | Reason |
+|---|---|
+| A failed account read fails the connect. The source connected with the name "Monday.com". | The same rule as the other providers: a connect that cannot read the account is not complete. |
+| The account label is the Monday.com user name. The source stored no account label. | The integration summary shows `account`. |
+| No item creation. | Delivery is out of scope for #131. |
 
 ### Notion
 
