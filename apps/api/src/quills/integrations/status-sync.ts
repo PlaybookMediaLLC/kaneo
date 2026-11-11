@@ -16,13 +16,11 @@ import { integrationParams } from "./connect";
 import { appCredentials, keepRefreshed } from "./oauth";
 import {
   failureOf,
-  freshSecrets,
   githubRepo,
-  oauthProvider,
   signedUrl,
   tokenFields,
-  validTarget,
 } from "./oauth-providers";
+import { freshSecrets, oauthProvider, validTarget } from "./providers";
 
 // Status sync (P6 rows moved here): an issue that closes or reopens in GitHub or GitLab changes the
 // linked post's status through the teammate's mappings. Enabling registers a webhook in the provider

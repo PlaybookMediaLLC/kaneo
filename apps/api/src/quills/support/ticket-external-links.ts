@@ -12,7 +12,8 @@ import {
 import { defineQuillsRoute, type Database } from "../framework/define-route";
 import { httpsUrl, installationOf, provider } from "../integrations/catalog";
 import { DEFAULT_TARGET } from "../integrations/channels";
-import { githubRepo, validTarget } from "../integrations/oauth-providers";
+import { githubRepo } from "../integrations/oauth-providers";
+import { validTarget } from "../integrations/providers";
 import { findTicket, systemMessage, ticketParams } from "./ticket-view";
 
 // A ticket's links to issues in the connected trackers that P7b built (GitHub, GitLab): list, link an

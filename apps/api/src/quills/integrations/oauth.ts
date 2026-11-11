@@ -23,18 +23,20 @@ import {
 } from "./connect";
 import {
   failureOf,
-  freshSecrets,
-  oauthProvider,
-  oauthTypes,
   providerFailure,
   redirectUri,
   tokenFields,
-  validTarget,
   type Destination,
   type ExternalItem,
 } from "./oauth-providers";
+import {
+  freshSecrets,
+  oauthProvider,
+  oauthTypes,
+  validTarget,
+} from "./providers";
 
-// OAuth connections (GitHub, GitLab, Slack, Discord). A teammate saves the workspace's OAuth app
+// OAuth connections (the providers in providers/). A teammate saves the workspace's OAuth app
 // (platform credentials) and starts a connect; the provider redirects the browser to the signed
 // callback, which the state binds to that teammate, workspace and provider. Tokens are sealed with
 // NOTIFICATION_SECRET_ENCRYPTION_KEY and never returned. Every provider call runs with no database

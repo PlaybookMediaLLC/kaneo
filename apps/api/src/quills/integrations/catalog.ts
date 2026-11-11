@@ -1,5 +1,6 @@
 // Route-module helper: framework/boundaries.test.ts checks its imports like a module that uses ../framework/define-route.
 import { z } from "../../openapi";
+import { oauthProviders } from "./providers";
 
 /**
  * Event types that an integration can deliver. A deletion notice is not one: the shared purge trigger stops
@@ -14,7 +15,7 @@ export type DeliveredEvent = z.infer<typeof deliveredEvent>;
 
 const webhookEvents: DeliveredEvent[] = deliveredEvent.options;
 
-type Provider = {
+export type Provider = {
   name: string;
   category: string;
   description: string;
@@ -25,7 +26,7 @@ type Provider = {
   hosts?: RegExp;
 };
 
-/** The providers this build connects: an API key, a webhook URL or OAuth (oauth-providers.ts). */
+/** The providers this build connects: an API key, a webhook URL or OAuth (providers/). */
 export const providers = {
   make: {
     name: "Make",
@@ -78,44 +79,15 @@ export const providers = {
     events: [],
     channels: false,
   },
-  // OAuth providers (oauth-providers.ts). A channel is a repository, project or chat channel.
+  // OAuth providers (providers/). A channel is a repository, project or chat channel.
   // Issue trackers deliver creates only, so an inbound status change never echoes back.
-  github: {
-    name: "GitHub",
-    category: "issue_tracking",
-    description:
-      "Create GitHub issues from new feedback and sync their status.",
-    events: ["post.created"],
-    channels: true,
-  },
-  gitlab: {
-    name: "GitLab",
-    category: "issue_tracking",
-    description:
-      "Create GitLab issues from new feedback and sync their status.",
-    events: ["post.created"],
-    channels: true,
-  },
-  slack: {
-    name: "Slack",
-    category: "notifications",
-    description: "Post feedback events to Slack channels.",
-    events: webhookEvents,
-    channels: true,
-  },
-  discord: {
-    name: "Discord",
-    category: "notifications",
-    description: "Post feedback events to Discord channels.",
-    events: webhookEvents,
-    channels: true,
-  },
+  ...oauthProviders,
 } satisfies Record<string, Provider>;
 export type ProviderType = keyof typeof providers;
 export const provider = (type: string): Provider | undefined =>
   (providers as Record<string, Provider>)[type];
 
-/** Source providers that this build does not connect yet (decision D6: they come by demand). */
+/** Source providers that this build does not connect yet. A provider in providers/ leaves this list. */
 const later = [
   ["asana", "Asana", "issue_tracking"],
   ["azure_devops", "Azure DevOps", "issue_tracking"],
@@ -142,14 +114,16 @@ export const catalog = [
     available: true,
     events: entry.events,
   })),
-  ...later.map(([id, name, category]) => ({
-    id,
-    name,
-    category,
-    description: "Not available in this build.",
-    available: false,
-    events: [] as DeliveredEvent[],
-  })),
+  ...later
+    .filter(([id]) => !(id in providers))
+    .map(([id, name, category]) => ({
+      id,
+      name,
+      category,
+      description: "Not available in this build.",
+      available: false,
+      events: [] as DeliveredEvent[],
+    })),
 ];
 
 /** Sync error codes and their messages, authored for people. Provider and SQL errors never reach a response. */

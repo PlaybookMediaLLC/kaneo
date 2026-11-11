@@ -10,11 +10,8 @@ import {
   providerJson,
 } from "../../framework/integration-config";
 import { provider, type DeliveredEvent } from "../../integrations/catalog";
-import {
-  freshSecrets,
-  githubRepo,
-  validTarget,
-} from "../../integrations/oauth-providers";
+import { githubRepo } from "../../integrations/oauth-providers";
+import { freshSecrets, validTarget } from "../../integrations/providers";
 
 /** What a delivery says about one post, read from the live rows at claim time. */
 export type Content = {
@@ -243,7 +240,7 @@ const issueBody = (d: Delivery) =>
   ].join("\n");
 
 /**
- * OAuth providers (integrations/oauth-providers.ts): a GitHub or GitLab issue for a new post, a Slack
+ * OAuth providers (integrations/providers/): a GitHub or GitLab issue for a new post, a Slack
  * or Discord message for each delivered event. A due GitLab token is refreshed first; the new secrets
  * return in the outcome and are stored in the settling transaction.
  */
