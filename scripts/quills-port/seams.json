@@ -92,6 +92,12 @@
 			"state": "existing",
 			"lines": "1 line: an explicit ReturnType<typeof hc<AppType>> annotation on client",
 			"plannedChange": "none. The inferred client type with the Quills routes is too large to emit inline (TS7056)"
+		},
+		{
+			"file": "apps/api/vitest.integration.config.ts",
+			"state": "existing",
+			"lines": "the @kaneo/email mock alias matches the exact name only (array form with a regex)",
+			"plannedChange": "none. The Quills subpaths @kaneo/email/quills... must resolve to the real package"
 		}
 	]
 }
