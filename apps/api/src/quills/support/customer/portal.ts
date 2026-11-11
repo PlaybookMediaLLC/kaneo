@@ -3,6 +3,7 @@ import { conversationRoutes } from "./conversations";
 import csatEmail from "./csat-email";
 import { ticketRoutes } from "./tickets";
 import { embedRoutes } from "../embeds";
+import { customerLinkPreview } from "../link-preview";
 import { portalPresenceRoutes } from "../presence";
 
 // Portal support routes under /quills-public/{workspace}/support: the signed-in customer's
@@ -13,4 +14,5 @@ export default apiRouter()
   .route("/", conversationRoutes("portal"))
   .route("/", ticketRoutes("portal"))
   .route("/", portalPresenceRoutes)
-  .route("/", embedRoutes("portal"));
+  .route("/", embedRoutes("portal"))
+  .route("/", customerLinkPreview("portal"));

@@ -16,6 +16,7 @@ import {
   ticketOf,
 } from "./seed.fixture";
 
+export * from "../link-preview.fixture";
 export * from "../presence.fixture";
 
 // Fixtures for the customer support routes of both audiences, the CSAT email link and the
