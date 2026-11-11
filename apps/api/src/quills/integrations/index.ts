@@ -1,6 +1,7 @@
 import { apiRouter, type BaseVariables } from "../../openapi";
 import channels from "./channels";
 import contacts from "./contacts";
+import customerContext from "./customer-context";
 import externalLinks from "./external-links";
 import freshdesk from "./freshdesk";
 import integrations from "./integrations";
@@ -28,4 +29,5 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", stripe)
   .route("/", oauth)
   .route("/", statusSync)
-  .route("/", contacts);
+  .route("/", contacts)
+  .route("/", customerContext);
