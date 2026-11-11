@@ -6,7 +6,12 @@ import { aiConfig, embed } from "../assistant/provider";
 import { defineQuillsRoute } from "../framework/define-route";
 import { sorts } from "../feedback/post-filters";
 import { loadProjects, visiblePost } from "../feedback/visibility";
-import { appPost, searchPosts, selectAppPosts } from "./app-posts";
+import {
+  anyWordPosts,
+  appPost,
+  searchPosts,
+  selectAppPosts,
+} from "./app-posts";
 
 /** A suggestion's least cosine similarity, as in the source. */
 const MIN_SIMILARITY = 0.5;
@@ -64,9 +69,9 @@ const suggest = defineQuillsRoute({
   handler: async ({ db, query, loaded: projects, called: vector }) => {
     if (!vector)
       return {
-        items: (
-          await searchPosts(db, query.text.slice(0, 200), query.limit, projects)
-        ).map((post) => ({ ...post, similarity: null })),
+        items: (await anyWordPosts(db, query.text, query.limit, projects)).map(
+          (post) => ({ ...post, similarity: null }),
+        ),
       };
     const distance = exactDistance(
       posts.embedding,

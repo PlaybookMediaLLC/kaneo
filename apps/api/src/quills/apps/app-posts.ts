@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import type { TypeId } from "@kaneo/ids";
 import { z } from "../../openapi";
 import { boards } from "../../database/quills/schema/boards";
@@ -28,7 +28,11 @@ export const externalKey = z
   .min(1)
   .max(500)
   .openapi({ description: "The item's key in the external system" });
-export const externalUrl = z.string().trim().url().max(2048).optional();
+export const externalUrl = z
+  .url({ protocol: /^https$/ })
+  .max(2048)
+  .optional()
+  .openapi({ description: "An https link to the item" });
 export const requester = z
   .object({ email, name: z.string().trim().min(1).max(200).optional() })
   .optional()
@@ -80,6 +84,31 @@ export const searchPosts = (
     )
     .orderBy(...sorts.votes.order)
     .limit(limit);
+
+/**
+ * Visible, unmerged posts that share a word with `text`, best match first: the suggest fallback.
+ * Ticket text has many words, and a post rarely holds all of them.
+ */
+export function anyWordPosts(
+  db: Database,
+  text: string,
+  limit: number,
+  projects: string[],
+) {
+  const words = sql`replace(plainto_tsquery('english', ${text})::text, ' & ', ' | ')::tsquery`;
+  return selectAppPosts(db, {})
+    .where(
+      and(
+        filterConditions(db, { showDeleted: "false" }, projects),
+        sql`${posts.searchVector} @@ ${words}`,
+      ),
+    )
+    .orderBy(
+      desc(sql`ts_rank(${posts.searchVector}, ${words})`),
+      ...sorts.votes.order,
+    )
+    .limit(limit);
+}
 
 /** The vote count of a post. */
 export async function voteCountOf(db: Database, postId: TypeId<"post">) {

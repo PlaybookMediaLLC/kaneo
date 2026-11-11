@@ -177,7 +177,79 @@ describe.skipIf(!url)("Sidebar apps", () => {
     await pool.query("DELETE FROM quills.apps WHERE api_key_id LIKE 'x1_%'");
   });
 
-  it("mints a key that works only on the app routes, and stops it when the app is disabled", async () => {
+  it("registers apps only with a session: an API key cannot mint or rescope a key", async () => {
+    const before = (
+      await pool.query("SELECT count(*)::int AS n FROM public.apikey")
+    ).rows[0].n;
+    const body = { name: "By key", grantedScopes: ["read:feedback"] };
+    const scoped = await as("POST", "/app-registrations", body, {
+      key: "teammate",
+    });
+    const unscoped = await send(
+      app,
+      "POST",
+      "/app-registrations",
+      { "x-test-user": contractEnv().owner, "x-test-scope": "null" },
+      body,
+    );
+    for (const res of [scoped, unscoped])
+      expect([res.status, res.body.code]).toEqual([403, "SESSION_REQUIRED"]);
+    expect(
+      (await pool.query("SELECT count(*)::int AS n FROM public.apikey")).rows[0]
+        .n,
+    ).toBe(before);
+    const { id } = (await as("POST", "/app-registrations", body)).body;
+    const rescope = await as(
+      "PATCH",
+      `/app-registrations/${id}`,
+      { grantedScopes: ["read:feedback", "write:feedback"] },
+      { key: "teammate" },
+    );
+    expect([rescope.status, rescope.body.code]).toEqual([
+      403,
+      "SESSION_REQUIRED",
+    ]);
+  });
+
+  it("refuses a requester whose email belongs to a teammate", async () => {
+    const env = contractEnv();
+    const ids = await appSeed(env);
+    // The owner's portal profile, with the email that a requester gives.
+    await env.portalCustomer(env.a, env.owner);
+    const teammate = { email: `${env.owner}@example.test` };
+    await pool.query(
+      "UPDATE quills.customer_identity SET email=$1 WHERE workspace_id=$2 AND kaneo_user_id=$3",
+      [teammate.email, env.a, env.owner],
+    );
+    const linked = await as(
+      "PUT",
+      "/apps/links",
+      {
+        postId: ids.a.postId,
+        externalType: "zendesk",
+        externalKey: "T-teammate",
+        requester: teammate,
+      },
+      { key: "app" },
+    );
+    const created = await as(
+      "POST",
+      "/apps/posts",
+      { boardId: ids.a.boardId, title: "As a teammate", requester: teammate },
+      { key: "app" },
+    );
+    expect([linked.status, created.status]).toEqual([409, 409]);
+    expect(
+      (
+        await pool.query(
+          "SELECT count(*)::int AS n FROM quills.post_external_links WHERE workspace_id=$1 AND external_id='T-teammate'",
+          [env.a],
+        )
+      ).rows[0].n,
+    ).toBe(0);
+  });
+
+  it("mints a key that works only on the app routes of this workspace's Quills API, and stops it when the app is disabled", async () => {
     const created = await as("POST", "/app-registrations", {
       name: "Zendesk",
       grantedScopes: ["read:feedback", "write:feedback"],
@@ -323,7 +395,10 @@ describe.skipIf(!url)("Sidebar apps", () => {
           const query = (
             typeof config === "string" ? { text: config } : config
           ) as { text: string; values?: unknown };
-          return { text: query.text, values: query.values ?? values };
+          return {
+            text: query.text,
+            values: (query.values ?? values) as unknown[] | undefined,
+          };
         })
         .filter(({ text }) => text?.includes('"quills"."apps"'));
     try {
@@ -378,10 +453,20 @@ describe.skipIf(!url)("Sidebar apps", () => {
 
     provider.reply(() => ({ status: 500, json: { error: "down" } }));
     try {
-      const fallback = await as("GET", path, undefined, { key: "app" });
-      expect(fallback.body.items).toEqual([
+      // Ticket text: a post that holds one of its words is a match.
+      const text = encodeURIComponent(
+        `Hello, the ${ids.a.title} export times out for our team`,
+      );
+      const fallback = await as(
+        "GET",
+        `/apps/suggest?text=${text}&limit=20`,
+        undefined,
+        { key: "app" },
+      );
+      expect(fallback.body.items).toContainEqual(
         expect.objectContaining({ id: ids.a.postId, similarity: null }),
-      ]);
+      );
+      expect(fallback.text).not.toContain(ids.b.postId);
     } finally {
       provider.reply();
     }

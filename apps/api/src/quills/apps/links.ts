@@ -125,15 +125,16 @@ const link = defineQuillsRoute({
       throw new HTTPException(409, {
         message: "An integration owns this link",
       });
-    const result = {
-      linkId,
-      linked: Boolean(inserted),
-      voted: false,
-      voteCount: await voteCountOf(db, post.id),
-      votedPostId: null as string | null,
-      voterPrincipalId: null as string | null,
-    };
-    if (!body.requester) return result;
+    const linked = Boolean(inserted);
+    if (!body.requester)
+      return {
+        linkId,
+        linked,
+        voted: false,
+        voteCount: await voteCountOf(db, post.id),
+        votedPostId: null,
+        voterPrincipalId: null,
+      };
     const { principalId } = await identifyCustomer(db, body.requester);
     const vote = await addVote(db, post.id, projects, principalId, actor);
     if (vote.changed) {
@@ -147,7 +148,8 @@ const link = defineQuillsRoute({
       });
     }
     return {
-      ...result,
+      linkId,
+      linked,
       voted: vote.changed,
       voteCount: vote.voteCount,
       votedPostId: vote.postId,

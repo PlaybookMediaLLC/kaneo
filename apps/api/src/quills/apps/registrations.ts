@@ -10,9 +10,8 @@ import {
   type BaseVariables,
 } from "../../openapi";
 import { apps } from "../../database/quills/schema/apps";
-import { appCapabilities, grantedActions } from "../framework/app";
+import { appCapabilities, appKeyScope } from "../framework/app";
 import {
-  appKeyScope,
   deleteAppKey,
   mintAppKey,
   setAppKeyScope,
@@ -84,9 +83,11 @@ const createApp = defineQuillsRoute({
   operationId: "createQuillsAppRegistration",
   summary: "Register a sidebar app and create its API key",
   description:
-    "Creates an API key for the caller with workspace:read and the Quills actions that the scopes need, and binds it to the new app. The caller must hold those actions. `secret` is the key: it is shown only in this response. The key works only on the app routes of this workspace.",
+    "Needs a user session, as API key management does. Creates an API key for the caller with workspace:read and the Quills actions that the scopes need, and binds it to the new app. The caller must hold those actions. `secret` is the key: it is shown only in this response. In this workspace's Quills API the key works only on the app routes; it keeps workspace:read on other Kaneo routes, and its scope in the caller's other workspaces.",
   action: "manage_settings",
-  // Every app reads; the write capability's actions are checked against the caller's own.
+  // A key must not mint a key that outlives it.
+  sessionOnly: true,
+  // Registration also needs quills:read; the scopes' actions are checked against the caller's own.
   alsoRequires: ["read"],
   callerActions: true,
   body: z.object({ name, grantedScopes: scopes }),
@@ -105,7 +106,7 @@ const createApp = defineQuillsRoute({
   prepare: async ({ actor, actions, body }) => ({
     userId: actor.userId,
     name: body.name,
-    permissions: appKeyScope(grantedActions(actions, body.grantedScopes)),
+    permissions: appKeyScope(actions, body.grantedScopes),
   }),
   // The key and the app row are in two stores: mint first, bind in the handler, and delete
   // the key when the binding does not commit. The secret leaves only with a committed app.
@@ -131,8 +132,10 @@ const updateApp = defineQuillsRoute({
   operationId: "updateQuillsAppRegistration",
   summary: "Rename, rescope, disable or enable a sidebar app",
   description:
-    "A disabled app's key is refused at once, on the app routes and on every other Quills route. New scopes also set the key's scope; the caller must hold their Quills actions.",
+    "Needs a user session. A disabled app's key is refused at once on the app routes and stays refused on this workspace's other Quills routes. The key itself stays enabled: delete it in the API key settings to revoke it everywhere. New scopes also set the key's scope; the caller must hold their Quills actions.",
   action: "manage_settings",
+  // It changes an API key's scope.
+  sessionOnly: true,
   callerActions: true,
   params: z.object({ appId: flexibleToTypeIdSchema("app") }),
   body: z
@@ -167,11 +170,11 @@ const updateApp = defineQuillsRoute({
     if (!body.grantedScopes || !row.apiKeyId) return null;
     return {
       apiKeyId: row.apiKeyId,
-      permissions: appKeyScope(grantedActions(actions, body.grantedScopes)),
+      permissions: appKeyScope(actions, body.grantedScopes),
     };
   },
-  // Set the key's scope before the app row. An app route needs both, so a failure between the
-  // two steps leaves the narrower of the old and new scopes in force, never a wider one.
+  // Set the key's scope before the app row. An app route of this workspace needs both, so a
+  // failure between the two steps leaves the narrower of the old and new scopes in force here.
   call: async (scope) => {
     if (scope) await setAppKeyScope(scope.apiKeyId, scope.permissions);
   },

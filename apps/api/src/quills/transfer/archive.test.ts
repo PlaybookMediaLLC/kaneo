@@ -164,6 +164,14 @@ describe("Workspace archive validation", () => {
       "Unsupported public number",
     );
   });
+  it("leaves out the rows of a table that a later release omits", () => {
+    // Archives exported before RFC 0001 hold `apps`; an import must not bind an app again.
+    const archive = base();
+    archive.tables.apps = [
+      { id: "app_old", name: "Old", oauth_client_id: "client" },
+    ];
+    expect(prepareArchive(archive, {}, "target", []).tables).toEqual({});
+  });
   it("rejects unknown tables, columns, versions and malformed mappings", () => {
     const archive = base();
     archive.tables.session = [];

@@ -21,7 +21,8 @@ Permissions:               workspace:read + quills:<action>, checked against the
                            The key scope must not be null. App gate: an active apps row of the path workspace
                            with api_key_id = the key, whose granted_scopes hold the route's capability.
                            Registration: quills:manage_settings, also quills:read to create; the caller must
-                           hold every Quills action that the requested scopes give the key.
+                           hold every Quills action that the requested scopes give the key. Create and update
+                           need a user session (403 SESSION_REQUIRED for a key), as Kaneo's API key management.
 Persisted relationships:   apps.api_key_id (decision D12); board_projects (visibility); post_external_links in
                            the app namespace (integration_id IS NULL, sync_scope = '').
 Transactions:              one scoped transaction per request; its first statement is the gate. Suggest and the
@@ -81,11 +82,28 @@ to every teammate route.
 Difference from the design: confinement holds for an app in any status, not only an active one. A disabled
 app's key must not get its teammate access back.
 
+Trade-off: the check is in the transaction, so a route's `load` runs before it. On most routes `load` is a
+platform read. On a few it calls the AI provider (copilot transform, help-center semantic search) or takes
+an upload verification lease (files). A confined key that the owner's role and scope allow can cause that
+work, then gets 403. A check before `load` would cost one more scoped transaction for every request made with a
+key.
+
+Known limits (decision D15 says "the path workspace"):
+
+- The key is not confined in the owner's other workspaces. There it acts as a scoped key with workspace:read
+  and the Quills actions of its scopes.
+- Confinement covers the Quills teammate routes only. On other Kaneo routes the key keeps workspace:read, for
+  example the workspace and member lists.
+- To confine a key everywhere, Kaneo's API-key path must know that the key belongs to an app (a marker on the
+  key that `authenticateApiRequest` reads). That is a change outside `quills/` for the owner to decide.
+
 ## Two stores: the app's API key (decision D14)
 
 The key is in `public.apikey`; the app row is in `quills.apps`. They never share a transaction.
-An app route needs both: the key's scope and the gate. So the authority in force is the smaller of the two.
+An app route of this workspace needs both: the key's scope and the gate. So the authority in force there is the
+smaller of the two.
 
+- Only a user session registers or rescopes an app. An API key cannot mint a key that outlives it.
 - Create: `prepare` checks the caller's actions and computes the key scope (workspace:read and the Quills actions
   of the scopes). `call` mints the key through the better-auth API-key plugin (`auth.api.createApiKey`, server side,
   with `permissions`). The handler inserts the bound app row and returns the secret. When the handler transaction
@@ -93,11 +111,15 @@ An app route needs both: the key's scope and the gate. So the authority in force
 - If the delete fails too (the database is down), the key stays with no app. Its secret was never sent or logged,
   so nobody can use it; the owner sees it as "App <name>" in the API key list and can delete it. A crash between
   the mint and the commit leaves the same state.
-- Update: `call` sets the key's scope before the handler changes the app row. A failure between the two steps
-  leaves the narrower of the old and new scopes in force, never a wider one. A retry repairs it.
-- Disable: the gate refuses the key at once; confinement keeps it off the teammate routes. The key row stays
-  enabled, so an enabled app works again with the same key.
+- Update: `call` sets the key's scope before the handler changes the app row. In this workspace, a failure
+  between the two steps leaves the narrower of the old and new scopes in force. A retry repairs it. Two updates
+  of one app's scopes at the same time can leave the key and the row apart; outside this workspace the key's
+  scope then decides (see "Known limits").
+- Disable: the gate refuses the key at once on the app routes; confinement keeps it off this workspace's other
+  Quills routes. The key row stays enabled, so an enabled app works again with the same key. To revoke the key
+  everywhere, delete it in the API key settings.
 - The registration response returns the secret once. When the response is lost, disable the app and register again.
+- The key gets the plugin's default rate limit (100 requests a minute). Every user of one app shares it.
 
 ## Differences from the source
 
@@ -114,7 +136,8 @@ An app route needs both: the key's scope and the gate. So the authority in force
 | Boards and linked are not limited | Boards is paged; linked returns at most 100 | Bounded responses |
 | Search returns `[]` for an empty `q` | 400 | Bounded inputs |
 | Search returns null status values | Real status name and color | - |
-| Suggest falls back only when AI is not configured | Also when the provider fails; leaves out merged posts; ties rank by votes | Availability; duplicate suggestions |
+| Suggest falls back only when AI is not configured | Also when the provider fails; the fallback matches any word of the text, best rank first; leaves out merged posts; ties rank by votes | Availability; ticket text has many words; duplicate suggestions |
+| Any `externalUrl` string | An https URL only | Read paths show only https links |
 | Suggest logs AI usage | No usage row | A read writes no rows |
 | Create response has `content` | No `content`; adds `authorPrincipalId` and `linkId` | Intentional fields |
 | A requester-authored post | The key's owner is recorded as `trackedByPrincipalId` | As conversation posts |
