@@ -6502,5 +6502,17 @@
 		"value": "      <p>We and our licensors retain our rights in the service and its branding. Quills includes open-source components, including Kaneo under the MIT License. Their applicable license notices and rights continue to apply. These Terms govern use of this hosted service and do not replace open-source licenses.</p>",
 		"term": "Kaneo",
 		"reason": "Upstream license attribution retained under the repository branding boundaries; this credit identifies the original component, not the fork product."
+	},
+	{
+		"file": "apps/docs/openapi.json",
+		"value": "paths./quills/{workspaceId}/teams/{teamId}.put.responses.200.content.application/json.schema.required.2: \"kaneoTeamId\"",
+		"term": "kaneo",
+		"reason": "Existing public API property identifier; retain wire compatibility."
+	},
+	{
+		"file": "apps/docs/openapi.json",
+		"value": "paths./quills/{workspaceId}/webhooks.post.description: \"Returns the signing secret once. Deliveries are signed with HMAC-SHA256 over the x-kaneo-timestamp value, a dot and the body, in the x-kaneo-signature header.\"",
+		"term": "kaneo",
+		"reason": "Names the exact x-kaneo-timestamp and x-kaneo-signature delivery headers that receivers verify; preserve wire compatibility."
 	}
 ]
