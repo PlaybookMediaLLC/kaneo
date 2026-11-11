@@ -263,7 +263,7 @@ External effects:          GitHub webhook update (request, `call`); Slack users.
 |---|---|
 | Microsoft Teams | Graph channel messages need tenant consent and a bot registration. Decision D7 (RFC 0001) puts it in scope: lane P4. |
 | Asana, Azure DevOps, ClickUp, HubSpot, Intercom, Jira, Linear, Monday, Notion, Salesforce, Trello, Zendesk | Decision D7 (RFC 0001) puts them in scope: lanes P1 to P3 (see "Providers in RFC 0001"). |
-| Segment | Decision D6: by demand. RFC 0001 leaves it out of scope (section 11). |
+| Segment outbound sync (segment membership pushed to Segment) | RFC 0001 section 11 leaves Segment out of scope. Lane G1 builds only the connection and the identify hook, because identify has no other provider. |
 | GitLab self-managed instances | The provider host would come from user input; needs the SSRF-checked outbound path and a host field. gitlab.com only. |
 | `api/integrations/{type}/hooks/{kind}` kinds `interactions`, `commands`, `options` | The Slack `events` kind is built ("Agent channels"); buttons, the slash command and shortcuts are not ported. |
 | `api/v1/apps/**`, `apps*`, `setQuillsIframeHeaders` | The app sidebar authenticates a third-party app with its own token and needs iframe headers; neither fits the signed nor the teammate audience without a new app-token model. |

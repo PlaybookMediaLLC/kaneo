@@ -1,3 +1,4 @@
+import agentChannels from "./agent-channels";
 import automation from "./automation/index";
 import assistant from "./assistant/index";
 import content from "./content/index";
@@ -82,4 +83,5 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", reporting)
   .route("/", automation)
   .route("/", assistant)
+  .route("/", agentChannels)
   .openapi(...context);
