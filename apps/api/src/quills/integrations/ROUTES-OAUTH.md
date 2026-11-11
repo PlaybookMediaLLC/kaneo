@@ -186,8 +186,54 @@ Filled by lane P1.
 
 ### Trello
 
-Filled by lane P2. The connect is deferred: the token returns in a URL fragment, and no page reads it
-yet. The design and what is missing are in `providers/README.md` ("Trello").
+The connect is deferred: Trello returns the token in the URL fragment, and no page reads it yet.
+`providers/trello.ts` exists but is not in `providers/index.ts`. So Trello stays "not available" in
+the catalog, and none of its three entry points has a route.
+
+| Source | Route when registered | State |
+|---|---|---|
+| `getTrelloConnectUrl` | `GET /oauth/trello/connect` (`startQuillsTrelloOAuthConnect`) | Open: the callback cannot complete |
+| `fetchTrelloBoardsFn` | `GET /integrations/{integrationId}/destinations` (default kind, or `?kind=board`) | Open: no connection can exist |
+| `fetchTrelloListsFn` | `GET /integrations/{integrationId}/destinations?kind=list&parent=<board ID>` | Open: no connection can exist |
+
+Built in `providers/trello.ts` (tests: `providers/trello.test.ts`, with fetch answered in the test):
+
+- `authorizeUrl`: `https://trello.com/1/authorize` with `callback_method=fragment`,
+  `response_type=token`, `scope=read,write`, `expiration=never`, and `return_url` set to the signed
+  callback with the state. The client ID is the Trello API key.
+- `exchange(token)`: refuses a token that is not 32 to 256 letters and digits (it goes into a
+  header). Then it checks the token with `GET https://api.trello.com/1/members/me` and returns it as
+  the only secret. The username is the account label.
+- `destinationKinds: { board: {}, list: { parent: "board" } }`. Boards are the member's open boards;
+  lists are the open lists of one board. Only 24-digit hexadecimal IDs pass. A list answer that is
+  not a list is 502.
+- Each call sends the key and the token in the `Authorization: OAuth …` header, never in the URL.
+  Hosts: `trello.com` and `api.trello.com`.
+
+Missing (from `providers/README.md`, "Trello"):
+
+1. An HTML answer for a signed route. `framework/define-route.ts` allows `raw` answers only as RSS and
+   XML for portal, widget and public reads. Lane X1 owns that file.
+2. A `callback: "fragment"` option on the provider type, and the GET callback in `oauth.ts` answering
+   the bridge page for such a provider without consuming the state. The page reads `token` from
+   `location.hash`, removes the fragment with `history.replaceState`, and posts `{ token }` as JSON to
+   the same URL with `credentials: "same-origin"`. Headers:
+   `Content-Security-Policy: default-src 'none'; script-src 'nonce-…'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'`,
+   `Cache-Control: no-store`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`.
+3. `POST /quills-public/signed/oauth/{type}/callback?state=…` for fragment providers only, with the
+   same `oauthState` verifier (valid signature, unexpired, same session account, still holds
+   `quills:manage_settings`, single use), an `Origin` header equal to the API origin, and a body of at
+   most 4 KiB. The token never enters a log, an event or a response. The handler calls
+   `exchange(token, …)`, then `connect`.
+4. Then two lines in `providers/index.ts`, a connect fixture `startQuillsTrelloOAuthConnect` in
+   `oauth.fixture.ts`, and route tests against the local provider server, as for the other providers.
+
+| Difference from the source | Reason |
+|---|---|
+| The key and the token travel in the `Authorization` header. The source put them in the query string. | A URL reaches logs and proxies. |
+| The API key comes from the OAuth app credentials at each call. The source copied it into `config`. | One place for the key. |
+| `exchange` checks the token format before the call. | The token comes from the browser. |
+| Lists keep Trello's order. The source sorted them by `pos`. | Trello already answers in board order. |
 
 ### Monday
 
