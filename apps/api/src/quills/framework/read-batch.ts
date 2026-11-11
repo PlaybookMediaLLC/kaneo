@@ -8,7 +8,9 @@ import { registry } from "./registry";
 // transaction of a batch request (support/read-batch.ts). It adds no check of its own and skips
 // none: a read is batchable only when every check of its route runs in withQuillsRequest or in
 // its handler. A route with path parameters, native permissions, a project resolver, `load`,
-// `after` or `prepare` has checks outside the handler, so it is never batchable.
+// `after` or `prepare` has checks outside the handler, so it is never batchable. Nor is a route
+// with `alsoRequires` or `callerActions`: its single route checks the actions together in one
+// role, where the batch has only each action alone.
 
 /** A teammate GET route whose checks all run in withQuillsRequest and in its handler. */
 export const batchable = (d: AnyQuillsRoute) =>
@@ -19,7 +21,9 @@ export const batchable = (d: AnyQuillsRoute) =>
   !d.project &&
   !d.load &&
   !d.after &&
-  !d.prepare;
+  !d.prepare &&
+  !d.alsoRequires?.length &&
+  !d.callerActions;
 
 export type BatchedRead = {
   operationId: string;
@@ -31,8 +35,8 @@ export type BatchedRead = {
 
 /**
  * One read, as its own route runs it for the same caller: the route's query schema first (400),
- * then its action and `alsoRequires` against the caller's actions (role within the API-key scope,
- * 403), then its handler with the same transaction and actor, and its response schema. The read
+ * then its action against the caller's actions (role within the API-key scope, 403), then its
+ * handler with the same transaction and actor, and its response schema. The read
  * runs in a savepoint, so a failed statement does not stop the next read. An expected failure
  * (HTTPException) stays in its result; any other error fails the batch.
  */
@@ -51,14 +55,10 @@ export async function runRead(
     (route) => route.operationId === operationId && batchable(route),
   );
   if (!d) return refused(404);
-  const query = d.query?.safeParse(read.query ?? {});
+  // Async, as the route's validator parses it.
+  const query = await d.query?.safeParseAsync(read.query ?? {});
   if (query && !query.success) return refused(400);
-  if (
-    ![d.action, ...(d.alsoRequires ?? [])].every((action) =>
-      caller.actions.has(action),
-    )
-  )
-    return refused(403);
+  if (!caller.actions.has(d.action)) return refused(403);
   try {
     const result = await db.transaction(async (savepoint) =>
       d.response.parse(
@@ -70,8 +70,8 @@ export async function runRead(
           db: savepoint as Database,
           actor: caller.actor,
           loaded: undefined,
-          // As on the route: without callerActions its handler gets no actions.
-          actions: d.callerActions ? caller.actions : new Set(),
+          // As on the route: a route without callerActions gives its handler no actions.
+          actions: new Set(),
           called: undefined,
         }),
       ),
