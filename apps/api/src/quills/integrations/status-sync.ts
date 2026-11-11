@@ -1,7 +1,8 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
 import { apiRouter, z, type BaseVariables } from "../../openapi";
+import { channelAccounts } from "../../database/quills/schema/channel-accounts";
 import { integrations } from "../../database/quills/schema/integrations";
 import { postStatuses } from "../../database/quills/schema/statuses";
 import { defineQuillsRoute, type Database } from "../framework/define-route";
@@ -291,9 +292,29 @@ const enableStatusSync = defineQuillsRoute({
         updatedAt: new Date(),
       })
       .where(eq(integrations.id, row.id));
+    await inboxOff(db, row.id);
     return { statusSync: view(row.type, row.id, next), changed: true };
   },
 });
+
+/**
+ * The GitHub inbox (support/github-inbox.ts) adds issue_comment to the status-sync webhook. A new
+ * webhook has issues only, and a removed one sends nothing: the inbox turns off, and a teammate turns
+ * it on again.
+ */
+async function inboxOff(db: Database, integrationId: string) {
+  await db
+    .update(channelAccounts)
+    .set({ deletedAt: new Date(), updatedAt: new Date() })
+    .where(
+      and(
+        eq(channelAccounts.channel, "github"),
+        eq(channelAccounts.role, "connection"),
+        isNull(channelAccounts.deletedAt),
+        sql`${channelAccounts.config} ->> 'integrationId' = ${integrationId}`,
+      ),
+    );
+}
 
 const disableStatusSync = defineQuillsRoute({
   method: "delete",
@@ -301,7 +322,7 @@ const disableStatusSync = defineQuillsRoute({
   operationId: "disableQuillsStatusSync",
   summary: "Disable status sync",
   description:
-    "Removes the webhook secret, so the inbound route rejects later deliveries. Remove the webhook in the provider too.",
+    "Removes the webhook secret, so the inbound route rejects later deliveries. Remove the webhook in the provider too. The GitHub inbox uses this webhook, so it turns off too.",
   action: "manage_settings",
   params: integrationParams,
   response: z.object({ statusSync: statusSyncView, changed: z.boolean() }),
@@ -328,6 +349,7 @@ const disableStatusSync = defineQuillsRoute({
         updatedAt: new Date(),
       })
       .where(eq(integrations.id, row.id));
+    await inboxOff(db, row.id);
     return { statusSync: view(row.type, row.id, next), changed: true };
   },
 });

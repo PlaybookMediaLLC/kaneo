@@ -214,6 +214,8 @@ const setInbox = defineQuillsRoute({
               role: "connection",
               config,
             })
+            // channel_accounts_one_github_connection_uq: a concurrent enable wrote it first.
+            .onConflictDoNothing()
             .returning({ id: channelAccounts.id });
       changed = written.length > 0;
     }

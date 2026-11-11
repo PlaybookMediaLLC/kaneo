@@ -13,6 +13,7 @@ import {
   ticketExternalLinks,
 } from "../../database/quills/schema/external-links";
 import type { Database } from "../framework/define-route";
+import { replayHorizon } from "../framework/signed";
 import { preview } from "./conversation-model";
 import { reopened } from "./conversation-ops";
 
@@ -20,21 +21,31 @@ import { reopened } from "./conversation-ops";
 // transaction). While a live GitHub connection account names this integration, an opened issue or a
 // new issue comment becomes a conversation message, a close or reopen sets the conversation status,
 // and a comment edit or delete follows. The connected account's own comments, and comments that
-// carry the outbound marker (jobs/handlers/github-comment.ts), are ours and are skipped.
+// carry the outbound marker (jobs/handlers/github-comment.ts), are ours and are skipped; an edit or a
+// delete changes only a customer's message, never a teammate reply that went out as a comment.
+// Events older than the replay horizon change nothing.
+// ponytail: a close and a reopen that arrive out of order leave the last one to commit; ordering them
+// needs the issue's last remote state time on channel_threads (a migration).
 
 type GitHubUser = { id?: number; login?: string; avatar_url?: string };
 export type GitHubEvent = {
   action?: string;
   issue?: {
     number: number;
+    updated_at?: string;
     title?: string;
     body?: string | null;
-    user?: GitHubUser;
+    user?: GitHubUser | null;
     pull_request?: object;
   };
-  comment?: { id: number; body?: string; user?: GitHubUser };
+  comment?: {
+    id: number;
+    body?: string;
+    updated_at?: string;
+    user?: GitHubUser | null;
+  };
   repository?: { full_name?: string };
-  sender?: GitHubUser;
+  sender?: GitHubUser | null;
 };
 export type InboxChange = {
   kind: "message" | "edited" | "deleted" | "closed" | "reopened";
@@ -226,6 +237,9 @@ export async function ingestGitHub(
   const issue = event.issue;
   const repo = event.repository?.full_name;
   if (!issue || issue.pull_request || !repo) return null;
+  // Older than the receipts: possibly a replay that the receipt store forgot.
+  const at = Date.parse(event.comment?.updated_at ?? issue.updated_at ?? "");
+  if (at < replayHorizon().getTime()) return null;
   const [account] = await db
     .select({ id: channelAccounts.id, config: channelAccounts.config })
     .from(channelAccounts)
@@ -286,6 +300,7 @@ export async function ingestGitHub(
     .select({
       id: conversationMessages.id,
       conversationId: conversationMessages.conversationId,
+      senderType: conversationMessages.senderType,
     })
     .from(conversationMessages)
     .where(
@@ -296,7 +311,8 @@ export async function ingestGitHub(
     )
     .for("update");
   if (event.action === "edited" || event.action === "deleted") {
-    if (!stored?.conversationId) return null;
+    // A teammate reply that went out as this comment stays as the teammate wrote it.
+    if (!stored?.conversationId || stored.senderType !== "visitor") return null;
     const now = new Date();
     await db
       .update(conversationMessages)

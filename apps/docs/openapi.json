@@ -10046,7 +10046,7 @@
         ],
         "responses": {
           "200": {
-            "description": "How many linked posts changed status",
+            "description": "How many linked posts changed status, and what changed in the GitHub inbox",
             "content": {
               "application/json": {
                 "schema": {
@@ -10075,12 +10075,262 @@
                           "statusId"
                         ]
                       }
+                    },
+                    "inbox": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "message",
+                            "edited",
+                            "deleted",
+                            "closed",
+                            "reopened"
+                          ]
+                        },
+                        "conversationId": {
+                          "type": "string"
+                        },
+                        "messageIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "conversationId",
+                        "messageIds"
+                      ]
                     }
                   },
                   "required": [
                     "applied",
                     "duplicate",
-                    "changed"
+                    "changed",
+                    "inbox"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid signature",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not configured, or no workspace owns the credential",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/signed/integrations/{type}/{integrationId}/hooks/{kind}": {
+      "post": {
+        "operationId": "receiveQuillsAppHook",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Receive a Slack app event for the assistant",
+        "description": "Slack signs the body (x-slack-signature, x-slack-request-timestamp; five minutes). Answers the URL verification challenge. A repeated event changes nothing. The caller signs the raw request body; the body is parsed only after the signature check.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "slack"
+              ]
+            },
+            "required": true,
+            "name": "type",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^integration_[0-9a-z]{26}$"
+            },
+            "required": true,
+            "name": "integrationId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "events"
+              ]
+            },
+            "required": true,
+            "name": "kind",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The URL verification challenge, or whether the assistant will answer the event",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "challenge": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "accepted": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "challenge",
+                    "accepted"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid signature",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not configured, or no workspace owns the credential",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/signed/integrations/{type}/{integrationId}/identify": {
+      "post": {
+        "operationId": "receiveQuillsIdentify",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Receive a Segment identify call",
+        "description": "Segment signs the body (x-signature: base64 HMAC-SHA1). Only existing customers change, and only attributes that a user attribute definition names. A repeated call changes nothing. The caller signs the raw request body; the body is parsed only after the signature check.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "segment"
+              ]
+            },
+            "required": true,
+            "name": "type",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^integration_[0-9a-z]{26}$"
+            },
+            "required": true,
+            "name": "integrationId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Whether a customer changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "updated",
+                        "unchanged",
+                        "unknown",
+                        "ignored"
+                      ]
+                    },
+                    "principalId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "principalId"
                   ]
                 }
               }
@@ -84736,7 +84986,7 @@
           "Quills"
         ],
         "summary": "Save the OAuth app credentials for a provider",
-        "description": "A provider whose bot posts messages (Discord) also needs the bot token. Secrets are stored encrypted and never returned. Register the returned redirect URI in the provider app.",
+        "description": "A provider whose bot posts messages (Discord) also needs the bot token. Slack takes the app's signing secret for the assistant's event hook. Secrets are stored encrypted and never returned. Register the returned redirect URI in the provider app.",
         "parameters": [
           {
             "schema": {
@@ -84786,6 +85036,12 @@
                     ]
                   },
                   "botToken": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "pattern": "^[\\x21-\\x7e]+$"
+                  },
+                  "signingSecret": {
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 500,
@@ -85886,7 +86142,7 @@
           "Quills"
         ],
         "summary": "Disable status sync",
-        "description": "Removes the webhook secret, so the inbound route rejects later deliveries. Remove the webhook in the provider too.",
+        "description": "Removes the webhook secret, so the inbound route rejects later deliveries. Remove the webhook in the provider too. The GitHub inbox uses this webhook, so it turns off too.",
         "parameters": [
           {
             "schema": {
@@ -132892,6 +133148,701 @@
           },
           "403": {
             "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/assistant/slack": {
+      "get": {
+        "operationId": "getQuillsSlackAgentSettings",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get the Slack assistant settings",
+        "description": "Whether the assistant answers in Slack, and what it still needs: an active Slack connection with the assistant scopes, and the Slack app's signing secret. `hookUrl` is the Event Subscriptions URL to register in the Slack app.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The Slack assistant settings and their revision",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "revision": {
+                      "type": "number"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "active": {
+                      "type": "boolean"
+                    },
+                    "missingScopes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "signingConfigured": {
+                      "type": "boolean"
+                    },
+                    "hookUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "revision",
+                    "enabled",
+                    "active",
+                    "missingScopes",
+                    "signingConfigured",
+                    "hookUrl"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      },
+      "put": {
+        "operationId": "setQuillsSlackAssistantEnabled",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Turn the Slack assistant on or off",
+        "description": "Send the revision you read; another writer's change since then returns 409. Turning it on needs an active Slack connection with every scope in `missingScopes` granted, and the signing secret.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "expectedRevision": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "expectedRevision",
+                  "enabled"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated Slack assistant settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "revision": {
+                      "type": "number"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "active": {
+                      "type": "boolean"
+                    },
+                    "missingScopes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "signingConfigured": {
+                      "type": "boolean"
+                    },
+                    "hookUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "revision",
+                    "enabled",
+                    "active",
+                    "missingScopes",
+                    "signingConfigured",
+                    "hookUrl"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Slack is not ready, or the settings changed since you read them",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/channels/github": {
+      "get": {
+        "operationId": "getQuillsGitHubChannelStatus",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get the GitHub inbox channel status",
+        "description": "The connection, whether the inbox is on, and its last errors. `hasToken` says whether a token is stored; the token is never returned.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The GitHub channel status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "connected": {
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "inboxEnabled": {
+                      "type": "boolean"
+                    },
+                    "hasToken": {
+                      "type": "boolean"
+                    },
+                    "webhookReady": {
+                      "type": "boolean"
+                    },
+                    "repo": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "username": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lastError": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lastErrorAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lastOutboundAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lastInboundAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "connected",
+                    "status",
+                    "inboxEnabled",
+                    "hasToken",
+                    "webhookReady",
+                    "repo",
+                    "username",
+                    "lastError",
+                    "lastErrorAt",
+                    "lastOutboundAt",
+                    "lastInboundAt"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/channels/github/inbox": {
+      "put": {
+        "operationId": "setQuillsGitHubInboxEnabled",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Turn the GitHub inbox channel on or off",
+        "description": "The inbox uses the status-sync webhook of the GitHub connection: turn status sync on first. The webhook's events change in GitHub; when that fails the switch still changes and `lastError` says so.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "enabled"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The GitHub channel status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "connected": {
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "inboxEnabled": {
+                      "type": "boolean"
+                    },
+                    "hasToken": {
+                      "type": "boolean"
+                    },
+                    "webhookReady": {
+                      "type": "boolean"
+                    },
+                    "repo": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "username": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lastError": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lastErrorAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lastOutboundAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lastInboundAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "changed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "connected",
+                    "status",
+                    "inboxEnabled",
+                    "hasToken",
+                    "webhookReady",
+                    "repo",
+                    "username",
+                    "lastError",
+                    "lastErrorAt",
+                    "lastOutboundAt",
+                    "lastInboundAt",
+                    "changed"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "GitHub is not connected, status sync is off, or no default team exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/conversation-messages/{messageId}/github-retry": {
+      "post": {
+        "operationId": "retryQuillsGitHubAgentMessage",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Send a failed reply to GitHub again",
+        "description": "For a teammate reply on a GitHub conversation whose delivery failed, or is still pending after ten minutes. The worker first looks for the comment on the issue, so a reply that reached GitHub is not posted twice.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "messageId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The reply is queued for delivery",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "messageId": {
+                      "type": "string"
+                    },
+                    "conversationId": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "messageId",
+                    "conversationId",
+                    "status"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Message not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The reply was sent, or it is still being sent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/integrations/segment/connection": {
+      "put": {
+        "operationId": "saveQuillsSegmentConnection",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Connect Segment with its shared secret",
+        "description": "Segment signs each identify call with this secret (x-signature). Send them to /api/quills-public/signed/integrations/segment/{integrationId}/identify.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "incomingSecret": {
+                    "type": "string",
+                    "minLength": 16,
+                    "maxLength": 500,
+                    "pattern": "^[\\x21-\\x7e]+$"
+                  }
+                },
+                "required": [
+                  "incomingSecret"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The connection without its secret",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "integration": {
+                      "$ref": "#/components/schemas/QuillsIntegrationSummary"
+                    }
+                  },
+                  "required": [
+                    "integration"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient permission",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Set NOTIFICATION_SECRET_ENCRYPTION_KEY first",
             "content": {
               "application/json": {
                 "schema": {

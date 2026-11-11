@@ -42,9 +42,10 @@ const receive = defineQuillsRoute({
     event: z
       .object({
         type: z.string().max(64),
-        user: slackId.optional(),
+        // Other event types carry objects here; they are ignored, not refused.
+        user: slackId.optional().catch(undefined),
         text: z.string().max(40_000).optional(),
-        channel: slackId.optional(),
+        channel: slackId.optional().catch(undefined),
         channel_type: z.string().max(32).optional(),
         ts: slackId.optional(),
         thread_ts: slackId.optional(),
@@ -109,6 +110,8 @@ const receive = defineQuillsRoute({
           user: event.user,
           ts: event.ts,
           threadTs: event.thread_ts ?? null,
+          // A direct message: only the asker reads the answer.
+          im: event.type === "message",
           text: event.text.slice(0, 4000),
         },
         expiresAt: new Date(Date.now() + HOOK_TTL_MS),

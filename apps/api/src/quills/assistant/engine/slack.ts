@@ -28,8 +28,8 @@ import { failedUsage, nothing, type Work } from "./shared";
 // the signed hook stored (integrations/slack-hook.ts). The asker must be a teammate who holds
 // quills:read now: the Slack user that slack_user_links names, or, on first contact, the one current
 // member whose verified account email is the Slack profile email (then linked, never rebound). The
-// answer comes from the help center and the knowledge at the team ceiling, with one provider call
-// and no tools. The hook_deliveries receipt is written before the Slack call, so a rerun, a lost
+// answer comes from the help center and the knowledge, with one provider call and no tools: at the
+// team ceiling in a direct message, at the public ceiling in a channel. The hook_deliveries receipt is written before the Slack call, so a rerun, a lost
 // lease or an expired lease never posts twice; an attempt that stopped after its claim is uncertain
 // and is not posted again.
 
@@ -39,6 +39,7 @@ const hookSchema = z.object({
   user: z.string(),
   ts: z.string(),
   threadTs: z.string().nullable(),
+  im: z.boolean().default(false),
   text: z.string(),
 });
 type Hook = z.infer<typeof hookSchema>;
@@ -106,7 +107,16 @@ async function post(
       },
     )) as { ok?: unknown } | null;
     // Slack answers 200 with ok: false when it refuses a message: nothing was posted.
-    outcome = answer?.ok === true ? "completed" : "failed";
+    // Slack's internal_error and fatal_error, and an unreadable answer, may follow a posted message.
+    outcome =
+      answer?.ok === true
+        ? "completed"
+        : answer &&
+            !["internal_error", "fatal_error"].includes(
+              String((answer as { error?: unknown }).error),
+            )
+          ? "failed"
+          : "uncertain";
   } catch (error) {
     if (!(error instanceof ProviderCallError)) throw error;
     outcome =
@@ -207,16 +217,18 @@ export const answerSlackHook: Work = async (workspaceId, event) => {
     .replace(/\s+/g, " ")
     .trim();
   const usage: UsageEntry[] = [];
+  // A channel can hold Slack guests and other teams: there the answer uses public sources only.
+  const ceiling = hook.im ? "team" : "public";
   let text: string;
   try {
     const sources = await withQuillsSystemWorkspace(workspaceId, async (db) => [
       ...(config.copilot.knowledge.helpCenter
-        ? await searchArticles(db, question, "team")
+        ? await searchArticles(db, question, ceiling)
         : []),
       ...(await searchKnowledge(
         db,
         question,
-        "team",
+        ceiling,
         config.copilot.knowledge.documents,
       )),
     ]);

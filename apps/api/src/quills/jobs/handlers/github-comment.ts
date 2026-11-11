@@ -100,7 +100,36 @@ async function mark(
     .set({
       metadata: sql`coalesce(${conversationMessages.metadata}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb`,
     })
-    .where(eq(conversationMessages.id, messageId));
+    .where(
+      and(
+        eq(conversationMessages.id, messageId),
+        // A reply that is on GitHub stays sent: a late attempt cannot mark it failed.
+        delivery.status === "sent"
+          ? undefined
+          : sql`${conversationMessages.metadata} ->> 'githubCommentId' is null`,
+      ),
+    );
+}
+
+/**
+ * One teammate retry of a message at a time, across workers: two retries could both find no
+ * comment and both post. The lock is a receipt row; one older than ten minutes is from a stopped worker.
+ */
+async function lockRetry(db: Database, lock: string) {
+  const taken = await db
+    .insert(hookDeliveries)
+    .values({
+      jobId: lock,
+      hookType: "github_retry_lock",
+      outcome: "processing",
+    })
+    .onConflictDoUpdate({
+      target: [hookDeliveries.workspaceId, hookDeliveries.jobId],
+      set: { outcome: "processing", processedAt: sql`now()` },
+      setWhere: sql`${hookDeliveries.outcome} <> 'processing' or ${hookDeliveries.processedAt} < now() - interval '10 minutes'`,
+    })
+    .returning({ key: hookDeliveries.jobId });
+  return taken.length > 0;
 }
 
 type Target = {
@@ -191,8 +220,10 @@ async function findComment(target: Target, messageId: string) {
     `https://api.github.com/repos/${target.repo}/issues/${target.number}/comments?per_page=100&since=${encodeURIComponent(target.since)}`,
     { headers: headers(target.token) },
   );
+  // An unreadable answer says nothing about an earlier attempt: treat it as no answer.
+  if (!Array.isArray(comments)) throw new ProviderCallError(null);
   // ponytail: reads the first 100 comments since the reply; page through them if issues get that busy.
-  const found = (Array.isArray(comments) ? comments : []).find(
+  const found = comments.find(
     (comment: { body?: unknown }) =>
       typeof comment?.body === "string" &&
       comment.body.includes(outboundMarker(messageId)),
@@ -235,105 +266,124 @@ export async function runGitHubCommentJob(
   });
   if (!prepared) return finish();
   const { messageId, target, key } = prepared;
-  if (prepared.retry) {
-    // An earlier attempt may have posted it: look before sending again.
-    let found: string | undefined;
+  if (!prepared.retry) return attempt();
+  const lock = `github-retry-lock:${messageId}`;
+  if (!(await system((db) => lockRetry(db, lock))))
+    return finish("Another retry of this reply is running");
+  try {
+    return await attempt();
+  } finally {
+    await system((db) =>
+      db
+        .update(hookDeliveries)
+        .set({ outcome: "released" })
+        .where(eq(hookDeliveries.jobId, lock)),
+    );
+  }
+
+  async function attempt() {
+    if (prepared!.retry) {
+      // An earlier attempt may have posted it: look before sending again.
+      let found: string | undefined;
+      try {
+        found = await findComment(target, messageId);
+      } catch (error) {
+        if (!(error instanceof ProviderCallError)) throw error;
+        await system((db) =>
+          mark(db, messageId, {
+            status: "failed",
+            error: error.status
+              ? failure(error.status)
+              : "GitHub did not answer. Try again later.",
+          }),
+        );
+        return finish("GitHub comment check failed");
+      }
+      if (found) {
+        const commentId = found;
+        await system(async (db) => {
+          await db
+            .insert(hookDeliveries)
+            .values({ jobId: key, hookType: "github_comment" })
+            .onConflictDoNothing();
+          await mark(db, messageId, { status: "sent", externalId: commentId });
+        });
+        return finish();
+      }
+    }
+    const claim = await system(async (db) => {
+      const outcome = await claimDelivery(db, key, "github_comment");
+      if (outcome !== "completed")
+        await mark(
+          db,
+          messageId,
+          outcome === "send"
+            ? { status: "pending" }
+            : { status: "failed", error: UNCERTAIN },
+        );
+      return outcome;
+    });
+    if (claim === "completed") return finish();
+    if (claim === "uncertain") return finish(UNCERTAIN);
+    let outcome:
+      | { state: "completed"; id: string }
+      | { state: "uncertain" }
+      | { state: "failed"; status: number };
     try {
-      found = await findComment(target, messageId);
+      const comment = (await providerJson(
+        `https://api.github.com/repos/${target.repo}/issues/${target.number}/comments`,
+        {
+          method: "POST",
+          headers: headers(target.token),
+          body: JSON.stringify({ body: target.body }),
+        },
+      )) as { id?: unknown } | null;
+      outcome =
+        typeof comment?.id === "number"
+          ? { state: "completed", id: String(comment.id) }
+          : { state: "uncertain" };
     } catch (error) {
       if (!(error instanceof ProviderCallError)) throw error;
-      await system((db) =>
-        mark(db, messageId, {
-          status: "failed",
-          error: "GitHub did not answer. Try again later.",
-        }),
-      );
-      return finish("GitHub comment check failed");
+      // No answer, or a 5xx: GitHub may have stored the comment.
+      outcome =
+        error.status === null || error.status >= 500
+          ? { state: "uncertain" }
+          : { state: "failed", status: error.status };
     }
-    if (found) {
-      const commentId = found;
-      await system(async (db) => {
-        await db
-          .insert(hookDeliveries)
-          .values({ jobId: key, hookType: "github_comment" })
-          .onConflictDoNothing();
-        await mark(db, messageId, { status: "sent", externalId: commentId });
-      });
-      return finish();
-    }
-  }
-  const claim = await system(async (db) => {
-    const outcome = await claimDelivery(db, key, "github_comment");
-    if (outcome !== "completed")
+    // Its own transaction, so a lease lost later cannot erase what happened.
+    await system(async (db) => {
+      await settleDelivery(db, key, outcome.state);
       await mark(
         db,
         messageId,
-        outcome === "send"
-          ? { status: "pending" }
-          : { status: "failed", error: UNCERTAIN },
+        outcome.state === "completed"
+          ? { status: "sent", externalId: outcome.id }
+          : {
+              status: "failed",
+              error:
+                outcome.state === "uncertain"
+                  ? UNCERTAIN
+                  : failure(outcome.status),
+            },
       );
-    return outcome;
-  });
-  if (claim === "completed") return finish();
-  if (claim === "uncertain") return finish(UNCERTAIN);
-  let outcome:
-    | { state: "completed"; id: string }
-    | { state: "uncertain" }
-    | { state: "failed"; status: number };
-  try {
-    const comment = (await providerJson(
-      `https://api.github.com/repos/${target.repo}/issues/${target.number}/comments`,
-      {
-        method: "POST",
-        headers: headers(target.token),
-        body: JSON.stringify({ body: target.body }),
-      },
-    )) as { id?: unknown } | null;
-    outcome =
-      typeof comment?.id === "number"
-        ? { state: "completed", id: String(comment.id) }
-        : { state: "uncertain" };
-  } catch (error) {
-    if (!(error instanceof ProviderCallError)) throw error;
-    // No answer, or a 5xx: GitHub may have stored the comment.
-    outcome =
-      error.status === null || error.status >= 500
-        ? { state: "uncertain" }
-        : { state: "failed", status: error.status };
-  }
-  // Its own transaction, so a lease lost later cannot erase what happened.
-  await system(async (db) => {
-    await settleDelivery(db, key, outcome.state);
-    await mark(
-      db,
-      messageId,
+      const health =
+        outcome.state === "completed"
+          ? { lastOutboundAt: new Date() }
+          : outcome.state === "failed" && outcome.status === 401
+            ? { lastError: failure(401), lastErrorAt: new Date() }
+            : undefined;
+      if (health)
+        await db
+          .update(integrations)
+          .set(health)
+          .where(eq(integrations.id, target.integrationId));
+    });
+    return finish(
       outcome.state === "completed"
-        ? { status: "sent", externalId: outcome.id }
-        : {
-            status: "failed",
-            error:
-              outcome.state === "uncertain"
-                ? UNCERTAIN
-                : failure(outcome.status),
-          },
+        ? undefined
+        : outcome.state === "uncertain"
+          ? UNCERTAIN
+          : "GitHub comment failed",
     );
-    const health =
-      outcome.state === "completed"
-        ? { lastOutboundAt: new Date() }
-        : outcome.state === "failed" && outcome.status === 401
-          ? { lastError: failure(401), lastErrorAt: new Date() }
-          : undefined;
-    if (health)
-      await db
-        .update(integrations)
-        .set(health)
-        .where(eq(integrations.id, target.integrationId));
-  });
-  return finish(
-    outcome.state === "completed"
-      ? undefined
-      : outcome.state === "uncertain"
-        ? UNCERTAIN
-        : "GitHub comment failed",
-  );
+  }
 }

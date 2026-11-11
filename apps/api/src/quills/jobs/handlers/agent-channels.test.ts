@@ -8,11 +8,17 @@ import {
   it,
   vi,
 } from "vite-plus/test";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
+import { createHmac } from "node:crypto";
+import { Hono } from "hono";
 import { Pool } from "pg";
 import * as kaneo from "../../../database/schema";
-import { settings } from "../../../database/quills/schema/auth";
+import {
+  principal,
+  settings,
+  user,
+} from "../../../database/quills/schema/auth";
 import { channelAccounts } from "../../../database/quills/schema/channel-accounts";
 import { channelThreads } from "../../../database/quills/schema/channel-threads";
 import {
@@ -20,18 +26,26 @@ import {
   conversations,
 } from "../../../database/quills/schema/conversation";
 import { hookDeliveries } from "../../../database/quills/schema/hook-deliveries";
-import { integrations } from "../../../database/quills/schema/integrations";
+import {
+  integrationPlatformCredentials,
+  integrations,
+} from "../../../database/quills/schema/integrations";
 import { jobQueue } from "../../../database/quills/schema/job-queue";
 import { kvStore } from "../../../database/quills/schema/kv";
 import { slackUserLinks } from "../../../database/quills/schema/slack";
-import { teams } from "../../../database/quills/schema/teams";
+import { userAttributeDefinitions } from "../../../database/quills/schema/user-attributes";
 import { encryptSecret } from "../../../notification-preferences/secrets";
+import type { BaseVariables } from "../../../openapi";
+import router from "../..";
+import publicRouter from "../../public";
 import { provider } from "../../assistant/provider-edge.fixture";
 import { recordQuillsChange } from "../../events";
 import {
   providerCalls,
   providerOverrides,
 } from "../../integrations/provider-edge.fixture";
+import { slackDelivery } from "../../integrations/slack-hook.fixture";
+import { defaultTeam } from "../../support/github-inbox.fixture";
 import { ingestGitHub, outboundMarker } from "../../support/github-ingest";
 import { claimFrom } from "../queue";
 import { drainQuillsWorkspace } from "../worker";
@@ -88,16 +102,16 @@ async function githubInbox() {
       .values({
         integrationType: "github",
         status: "active",
-        secrets: seal({ accessToken: "gho_inbox" }),
-        config: { account: "kaneo-bot" },
+        secrets: seal({ accessToken: "gho_inbox", webhookSecret: "whsec" }),
+        config: {
+          account: "kaneo-bot",
+          statusSync: { target: "acme:app", hookId: "1", state: "active" },
+        },
         connectedByPrincipalId: actor.principalId,
         connectedAt: new Date(),
       })
       .returning({ id: integrations.id });
-    const [team] = await db
-      .insert(teams)
-      .values({ name: `Support ${Date.now()}`, isDefault: false })
-      .returning({ id: teams.id });
+    const team = await defaultTeam(db);
     await db
       .update(channelAccounts)
       .set({ deletedAt: new Date() })
@@ -105,7 +119,7 @@ async function githubInbox() {
     const [account] = await db
       .insert(channelAccounts)
       .values({
-        owningTeamId: team!.id,
+        owningTeamId: team,
         channel: "github",
         role: "connection",
         config: { integrationId: connection!.id },
@@ -288,6 +302,129 @@ describe.skipIf(!url)("Agent channels", () => {
           ingestGitHub(db, connection, comment(1004, "Hello?")),
         ),
       ).toBeNull();
+    });
+
+    it("opens conversations for new issues, and skips pull requests and the bot's issues", async () => {
+      const inbox = await githubInbox();
+      const connection = {
+        integrationId: inbox.integrationId,
+        config: { account: "kaneo-bot" },
+      };
+      const ingest = (event: Parameters<typeof ingestGitHub>[2]) =>
+        h.system(h.a, (db) => ingestGitHub(db, connection, event));
+      const issue = (number: number, login = "octocat") => ({
+        number,
+        title: `Issue ${number}`,
+        body: "Please help",
+        user: { id: 21, login },
+      });
+      const opened = await ingest({
+        action: "opened",
+        issue: issue(8),
+        repository: { full_name: "acme/app" },
+      });
+      expect(opened).toMatchObject({ kind: "message" });
+      expect(opened!.conversationId).not.toBe(inbox.conversationId);
+      // The first comment on an issue with no conversation stores the issue text and the comment.
+      const first = await ingest({
+        ...comment(1101, "Any news?"),
+        issue: issue(9),
+      });
+      expect(first!.messageIds).toHaveLength(2);
+      // The same GitHub user is one principal across both conversations.
+      const visitors = await h.system(h.a, (db) =>
+        db
+          .select({ visitor: conversations.visitorPrincipalId })
+          .from(conversations)
+          .where(
+            inArray(conversations.id, [
+              opened!.conversationId,
+              first!.conversationId,
+            ] as never[]),
+          ),
+      );
+      expect(new Set(visitors.map((row) => row.visitor)).size).toBe(1);
+      for (const event of [
+        {
+          action: "opened",
+          issue: { ...issue(10), pull_request: {} },
+          repository: { full_name: "acme/app" },
+        },
+        {
+          action: "opened",
+          issue: issue(11, "kaneo-bot"),
+          repository: { full_name: "acme/app" },
+        },
+        // Older than the replay horizon.
+        {
+          ...comment(1102, "Old"),
+          comment: {
+            id: 1102,
+            body: "Old",
+            updated_at: new Date(Date.now() - 40 * 86_400_000).toISOString(),
+          },
+        },
+      ])
+        expect(await ingest(event)).toBeNull();
+    });
+
+    it("follows a customer's edit and delete, and never changes a teammate reply", async () => {
+      const inbox = await githubInbox();
+      const connection = {
+        integrationId: inbox.integrationId,
+        config: { account: "kaneo-bot" },
+      };
+      const ingest = (event: Parameters<typeof ingestGitHub>[2]) =>
+        h.system(h.a, (db) => ingestGitHub(db, connection, event));
+      const created = await ingest(comment(1201, "Broken"));
+      const [customerMessage] = created!.messageIds;
+      expect(
+        await ingest({ ...comment(1201, "Broken on 1.2"), action: "edited" }),
+      ).toMatchObject({ kind: "edited", messageIds: [customerMessage] });
+      // A teammate reply that went out as comment 1202.
+      const replyId = await reply(inbox.conversationId, "Our reply");
+      await h.system(h.a, (db) =>
+        db
+          .update(conversationMessages)
+          .set({ metadata: { githubCommentId: "1202" } })
+          .where(eq(conversationMessages.id, replyId as never)),
+      );
+      expect(
+        await ingest({
+          ...comment(1202, "Changed on GitHub"),
+          action: "edited",
+        }),
+      ).toBeNull();
+      expect(
+        await ingest({ ...comment(1202, "", "kaneo-bot"), action: "deleted" }),
+      ).toBeNull();
+      expect(
+        await ingest({ ...comment(1201, ""), action: "deleted" }),
+      ).toMatchObject({ kind: "deleted" });
+      const rows = await h.system(h.a, (db) =>
+        db
+          .select({
+            id: conversationMessages.id,
+            content: conversationMessages.content,
+            deletedAt: conversationMessages.deletedAt,
+          })
+          .from(conversationMessages)
+          .where(
+            inArray(conversationMessages.id, [
+              customerMessage,
+              replyId,
+            ] as never[]),
+          ),
+      );
+      const byId = new Map(rows.map((row) => [row.id as string, row]));
+      expect(byId.get(customerMessage!)).toMatchObject({
+        content: "Broken on 1.2",
+      });
+      expect(byId.get(customerMessage!)!.deletedAt).not.toBeNull();
+      expect(byId.get(replyId)).toMatchObject({
+        content: "Our reply",
+        deletedAt: null,
+      });
     });
   });
 
@@ -599,6 +736,292 @@ describe.skipIf(!url)("Agent channels", () => {
       await h.drain(h.a);
       expect(calls("POST", POST)).toHaveLength(0);
       expect(calls("POST", EPHEMERAL)).toHaveLength(0);
+    });
+
+    it("refuses a linked teammate who lost access, and an unverified email", async () => {
+      // UMATE was linked while the member could read; the member then left the workspace.
+      const matePrincipal = await h.principal(h.a, h.mate);
+      await h.system(h.a, (db) =>
+        db.insert(slackUserLinks).values({
+          slackTeamId: "T1",
+          slackUserId: "UMATE",
+          principalId: matePrincipal as never,
+          method: "email",
+        }),
+      );
+      await h
+        .db()
+        .delete(kaneo.workspaceUserTable)
+        .where(
+          and(
+            eq(kaneo.workspaceUserTable.workspaceId, h.a),
+            eq(kaneo.workspaceUserTable.userId, h.mate),
+          ),
+        );
+      await mention("UMATE");
+      await h.drain(h.a);
+      // The link decides: no profile lookup, and a refusal only the asker sees.
+      expect(calls("GET", "/slack.com/api/users.info")).toHaveLength(0);
+      expect(calls("POST", POST)).toHaveLength(0);
+      expect(calls("POST", EPHEMERAL)).toHaveLength(1);
+      // An unverified account email links no one.
+      await h
+        .db()
+        .update(kaneo.userTable)
+        .set({ emailVerified: false })
+        .where(eq(kaneo.userTable.id, h.owner));
+      try {
+        await mention("UNVERIFIED");
+        await h.drain(h.a);
+        expect(calls("POST", POST)).toHaveLength(0);
+        expect(calls("POST", EPHEMERAL)).toHaveLength(2);
+      } finally {
+        await h
+          .db()
+          .update(kaneo.userTable)
+          .set({ emailVerified: true })
+          .where(eq(kaneo.userTable.id, h.owner));
+      }
+    });
+  });
+
+  describe("Routes", () => {
+    const app = new Hono<{
+      Variables: BaseVariables & { workspaceId: string };
+    }>();
+    app.use("*", async (c, next) => {
+      c.set("userId", h.owner);
+      c.set("user", null);
+      await next();
+    });
+    app.route("/quills", router);
+    app.route("/quills-public", publicRouter);
+    const call = (path: string, method = "GET", body?: unknown) =>
+      app.request(`/quills/${h.a}${path}`, {
+        method,
+        headers: body ? { "content-type": "application/json" } : {},
+        body: body ? JSON.stringify(body) : undefined,
+      });
+    const signed = (
+      path: string,
+      raw: string,
+      headers: Record<string, string>,
+    ) =>
+      app.request(`/quills-public/signed${path}`, {
+        method: "POST",
+        headers: { ...headers, "content-type": "application/json" },
+        body: raw,
+      });
+    const retry = (messageId: string) =>
+      call(`/conversation-messages/${messageId}/github-retry`, "POST");
+
+    it("retries only a failed reply, once", async () => {
+      const inbox = await githubInbox();
+      providerOverrides.set(`POST ${COMMENTS}`, { status: 422 });
+      const messageId = await reply(inbox.conversationId);
+      await h.drain(h.a);
+      providerOverrides.set(`POST ${COMMENTS}`, {
+        status: 201,
+        body: { id: commentId + 5 },
+      });
+      const retried = await retry(messageId);
+      expect(retried.status).toBe(200);
+      expect(await retried.json()).toMatchObject({ status: "pending" });
+      // A second retry while the first is pending is refused.
+      expect((await retry(messageId)).status).toBe(409);
+      await h.drain(h.a);
+      expect(calls("POST", COMMENTS)).toHaveLength(2);
+      expect(await metadata(messageId)).toMatchObject({
+        githubCommentId: String(commentId + 5),
+      });
+      // On GitHub now: no retry. A reply that was never attempted is still being sent.
+      expect((await retry(messageId)).status).toBe(409);
+      const fresh = await reply(inbox.conversationId, "Another");
+      expect((await retry(fresh)).status).toBe(409);
+    });
+
+    it("switches the inbox in the webhook, restores its account, and stops with status sync", async () => {
+      const inbox = await githubInbox();
+      const PATCH = "/api.github.com/repos/acme/app/hooks/1";
+      const toggle = async (enabled: boolean) =>
+        (await call("/channels/github/inbox", "PUT", { enabled })).json();
+      providerOverrides.set(`PATCH ${PATCH}`, { status: 200, body: { id: 1 } });
+      expect(await toggle(false)).toMatchObject({
+        inboxEnabled: false,
+        changed: true,
+      });
+      expect(await toggle(true)).toMatchObject({
+        inboxEnabled: true,
+        changed: true,
+      });
+      expect(
+        calls("PATCH", PATCH).map((patch) => JSON.parse(patch.body).events),
+      ).toEqual([["issues"], ["issues", "issue_comment"]]);
+      // The earlier account keeps its issue threads.
+      const [live] = await h.system(h.a, (db) =>
+        db
+          .select({ id: channelAccounts.id })
+          .from(channelAccounts)
+          .where(
+            and(
+              eq(channelAccounts.channel, "github"),
+              sql`${channelAccounts.deletedAt} is null`,
+            ),
+          ),
+      );
+      expect(live?.id).toBe(inbox.accountId);
+      // A webhook update that fails keeps the switch and says so.
+      providerOverrides.set(`PATCH ${PATCH}`, { status: 500 });
+      expect(await toggle(false)).toMatchObject({
+        inboxEnabled: false,
+        lastError: expect.any(String),
+      });
+      await toggle(true);
+      // Status sync off: its webhook goes, so the inbox goes too.
+      expect(
+        (
+          await call(
+            `/integrations/${inbox.integrationId}/status-sync`,
+            "DELETE",
+          )
+        ).status,
+      ).toBe(200);
+      expect(await (await call("/channels/github")).json()).toMatchObject({
+        inboxEnabled: false,
+      });
+    });
+
+    it("answers Slack's URL check and ignores another team's event", async () => {
+      const seeded = await h.as(h.a, h.owner, async (db, actor) => {
+        for (const table of [integrations, integrationPlatformCredentials])
+          await db.delete(table).where(eq(table.integrationType, "slack"));
+        await db.insert(integrationPlatformCredentials).values({
+          integrationType: "slack",
+          secrets: seal({
+            clientId: "c",
+            clientSecret: "s",
+            signingSecret: "sig",
+          }),
+        });
+        const [row] = await db
+          .insert(integrations)
+          .values({
+            integrationType: "slack",
+            status: "active",
+            secrets: seal({ accessToken: "xoxb-test" }),
+            config: { teamId: "T1", botUserId: "UBOT" },
+            connectedByPrincipalId: actor.principalId,
+            connectedAt: new Date(),
+          })
+          .returning({ id: integrations.id });
+        await db.update(settings).set({
+          assistantConfig: sql`jsonb_set(${settings.assistantConfig}, '{agents,workspace,slack,enabled}', 'true'::jsonb)`,
+        });
+        return {
+          integrationId: row!.id,
+          signingSecret: "sig",
+          teamId: "T1",
+          revision: 1,
+        };
+      });
+      const send = async (raw: string) =>
+        signed(
+          `/integrations/slack/${seeded.integrationId}/hooks/events`,
+          raw,
+          slackDelivery(seeded, "sig", { raw }).headers as Record<
+            string,
+            string
+          >,
+        );
+      const check = await send(
+        JSON.stringify({ type: "url_verification", challenge: "c-123" }),
+      );
+      expect(await check.json()).toEqual({
+        challenge: "c-123",
+        accepted: false,
+      });
+      const event = (team: string, id: string) =>
+        JSON.stringify({
+          type: "event_callback",
+          team_id: team,
+          event_id: id,
+          event: {
+            type: "app_mention",
+            user: "UASKER",
+            text: "<@UBOT> hi",
+            channel: "C1",
+            ts: "2.2",
+          },
+        });
+      expect(await (await send(event("T2", "EvOther1"))).json()).toEqual({
+        challenge: null,
+        accepted: false,
+      });
+      expect(await (await send(event("T1", "EvOwn1"))).json()).toEqual({
+        challenge: null,
+        accepted: true,
+      });
+      const keys = await h.system(h.a, (db) =>
+        db
+          .select({ key: kvStore.key })
+          .from(kvStore)
+          .where(
+            sql`${kvStore.key} in ('slack-hook:EvOther1', 'slack-hook:EvOwn1')`,
+          ),
+      );
+      expect(keys.map((row) => row.key)).toEqual(["slack-hook:EvOwn1"]);
+    });
+
+    it("never lets identify change a teammate's account", async () => {
+      const email = `${h.owner}-cdp@identify.test`;
+      const integrationId = await h.as(h.a, h.owner, async (db, actor) => {
+        await db
+          .delete(integrations)
+          .where(eq(integrations.integrationType, "segment"));
+        const [row] = await db
+          .insert(integrations)
+          .values({
+            integrationType: "segment",
+            status: "active",
+            secrets: seal({ incomingSecret: "segment-secret" }),
+            config: {},
+            connectedByPrincipalId: actor.principalId,
+            connectedAt: new Date(),
+          })
+          .returning({ id: integrations.id });
+        await db
+          .insert(userAttributeDefinitions)
+          .values({ key: "plan", label: "Plan", type: "string" })
+          .onConflictDoNothing();
+        const [identity] = await db
+          .insert(user)
+          .values({ name: "Teammate", email, kaneoUserId: h.owner })
+          .returning({ id: user.id });
+        await db.insert(principal).values({
+          userId: identity!.id,
+          role: "user",
+          type: "user",
+          createdAt: new Date(),
+        });
+        return row!.id;
+      });
+      const raw = JSON.stringify({
+        type: "identify",
+        traits: { email, plan: "pro" },
+      });
+      const res = await signed(
+        `/integrations/segment/${integrationId}/identify`,
+        raw,
+        {
+          "x-signature": createHmac("sha1", "segment-secret")
+            .update(raw)
+            .digest("base64"),
+        },
+      );
+      expect(await res.json()).toEqual({
+        status: "unknown",
+        principalId: null,
+      });
     });
   });
 });

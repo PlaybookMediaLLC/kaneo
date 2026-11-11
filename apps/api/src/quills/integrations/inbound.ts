@@ -32,7 +32,7 @@ const issueEvent = z.object({
       updated_at: z.string().max(64).optional(),
       title: z.string().max(1000).optional(),
       body: z.string().max(100_000).nullable().optional(),
-      user: githubUser.optional(),
+      user: githubUser.nullish(),
       // Present on pull requests, which share these events.
       pull_request: z.object({}).optional(),
     })
@@ -41,10 +41,11 @@ const issueEvent = z.object({
     .object({
       id: z.number().int().positive(),
       body: z.string().max(100_000).optional(),
-      user: githubUser.optional(),
+      updated_at: z.string().max(64).optional(),
+      user: githubUser.nullish(),
     })
     .optional(),
-  sender: githubUser.optional(),
+  sender: githubUser.nullish(),
   // GitLab also sends `repository`, without full_name.
   repository: z
     .object({ full_name: z.string().max(300).optional() })

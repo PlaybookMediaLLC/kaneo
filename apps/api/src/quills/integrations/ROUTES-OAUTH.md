@@ -220,7 +220,7 @@ External effects:          GitHub webhook update (request, `call`); Slack users.
 | `saveQuillsSegmentConnection` | `PUT /integrations/segment/connection` (`incomingSecret`) | teammate | manage_settings | `integrations` | `integration.connected` |
 | `receiveQuillsAppHook` | `POST /quills-public/signed/integrations/slack/{integrationId}/hooks/events` | signed (Slack) | create | `kv_store`, `settings` | `integration.hook_received` |
 | `receiveQuillsIdentify` | `POST /quills-public/signed/integrations/segment/{integrationId}/identify` | signed (Segment) | update | `user`, `user_attribute_definitions` | `user.identified` |
-| `receiveQuillsIntegrationWebhook` (extended) | `POST /quills-public/signed/integrations/github/{integrationId}/webhook` | signed (GitHub) | update | `channel_accounts`, `channel_threads`, `channel_identities`, `principal`, `conversations`, `conversation_messages` | `conversation.created`, `message.created`, `message.updated`, `message.deleted`, `conversation.status_changed` |
+| `receiveQuillsIntegrationWebhook` (extended) | `POST /quills-public/signed/integrations/github/{integrationId}/webhook` | signed (GitHub) | update | `channel_accounts`, `channel_threads`, `channel_identities`, `principal`, `conversations`, `conversation_messages` | `message.created`, `message.updated`, `message.deleted`, `conversation.status_changed` |
 
 - Slack: register `<KANEO_API_URL origin>/api/quills-public/signed/integrations/slack/<integration ID>/hooks/events`
   (the settings read returns it) as the Event Subscriptions URL, and subscribe to `app_mention` and
@@ -229,7 +229,12 @@ External effects:          GitHub webhook update (request, `call`); Slack users.
   never in the event or audit row.
 - GitHub inbox: it uses the status-sync webhook of the connection. Enabling adds `issue_comment` to
   that webhook's events; disabling sets them back to `issues`. A webhook update that fails keeps the
-  switch and records `lastError`, as the source does. Disabling status sync stops the inbox's events.
+  switch and records `lastError`, as the source does. Enabling or disabling status sync turns the
+  inbox off (`status-sync.ts#inboxOff`): a new webhook has `issues` only, and a removed one sends
+  nothing. An edit or a delete in GitHub changes only a customer's message, never a teammate reply,
+  and events older than the replay horizon change nothing.
+- Slack answers: the team ceiling in a direct message, the public ceiling in a channel (a channel can
+  hold Slack guests and Slack Connect members).
 - Identify: connect Segment with its shared secret, then send identify calls to
   `/api/quills-public/signed/integrations/segment/<integration ID>/identify` (`x-signature`:
   base64 HMAC-SHA1 of the body).
@@ -246,7 +251,9 @@ External effects:          GitHub webhook update (request, `call`); Slack users.
 | Source | Kaneo |
 |---|---|
 | Slack: streamed replies, slash command, message shortcut, proposal buttons, feedback reactions, App Home prompts, Stop, thread follow-ups, revocation events | Not ported. The assistant answers an `app_mention` or a direct message with one reply in the thread, from the help center and knowledge (team ceiling, copilot knowledge settings). |
-| Slack: the workspace assistant with every workspace tool | One provider call over the retrieved sources; no write tools. |
+| Slack: the workspace assistant with every workspace tool, with the asker's access in any channel | One provider call over the retrieved sources; no write tools. A channel answer uses public sources only. |
+| Slack: an attempt that the job reruns calls the model again before it finds the receipt | The same: a rerun or a replacement worker after a lost lease calls the provider again, then posts nothing. |
+| GitHub inbox close and reopen order | The last event to commit wins; ordering needs the issue's remote state time on `channel_threads` (a migration). |
 | Slack routing check (`routing`, pooled tenancy) | Not applicable: Kaneo serves each workspace directly. The read returns `hookUrl` and `signingConfigured` instead. |
 | Slack signing secret in instance platform credentials | In the workspace's Slack platform credentials (`signingSecret`). |
 | GitHub inbox: its own webhook on `config.channelId` | The status-sync webhook; status sync must be on (409 otherwise). |

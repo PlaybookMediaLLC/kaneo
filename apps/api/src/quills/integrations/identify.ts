@@ -95,7 +95,9 @@ const receive = defineQuillsRoute({
       .limit(500);
     const set: Record<string, string | number | boolean> = {};
     for (const definition of definitions) {
-      const value = values[definition.externalKey ?? definition.key];
+      const name = definition.externalKey ?? definition.key;
+      // Own traits only: `constructor` and the like are not attributes.
+      const value = Object.hasOwn(values, name) ? values[name] : undefined;
       if (value === null || value === undefined) continue;
       const coerced = coerce(value, definition.type);
       if (coerced !== undefined) set[definition.key] = coerced;
