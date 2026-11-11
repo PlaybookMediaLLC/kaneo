@@ -13,6 +13,16 @@ import {
   type OAuthProvider,
 } from "../oauth-providers";
 
+/** Channel messages, and the assistant: mentions, direct messages and the asker's profile email. */
+export const SLACK_SCOPES = [
+  "chat:write",
+  "channels:read",
+  "app_mentions:read",
+  "im:history",
+  "users:read",
+  "users:read.email",
+];
+
 export const slack = {
   name: "Slack",
   hosts: /^slack\.com$/,
@@ -26,7 +36,7 @@ export const slack = {
       client_id: creds.clientId!,
       redirect_uri: redirectUri,
       state,
-      scope: "chat:write,channels:read",
+      scope: SLACK_SCOPES.join(","),
     })}`,
   exchange: async (code, redirectUri, creds) => {
     const token = record(
@@ -49,7 +59,11 @@ export const slack = {
       secrets: { accessToken },
       workspaceName: text(team.name) || "Slack",
       account: text(team.name) || null,
-      config: { teamId: text(team.id) },
+      config: {
+        teamId: text(team.id),
+        scopes: text(token.scope),
+        botUserId: text(token.bot_user_id),
+      },
     };
   },
   destinations: async (secrets) => {
