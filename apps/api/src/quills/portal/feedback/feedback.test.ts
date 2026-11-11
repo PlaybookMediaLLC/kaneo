@@ -19,6 +19,7 @@ import {
 import type { AnyQuillsRoute } from "../../framework/define-route";
 import { registry } from "../../framework/registry";
 import * as portalFixtures from "../index.fixture";
+import * as contentPublicFixtures from "../../content/public/index.fixture";
 import { enableWidget } from "../../widget/seed.fixture";
 import { scene, world } from "./seed.fixture";
 
@@ -120,10 +121,14 @@ describe.skipIf(!url)("Quills customer feedback", () => {
 
   it("answers 404 and leaks nothing on every portal and public route while the portal is off", async () => {
     const env = contractEnv();
-    const fixtures = portalFixtures as Record<string, Fixture>;
+    const fixtures = {
+      ...portalFixtures,
+      ...contentPublicFixtures,
+    } as Record<string, Fixture>;
     // Widget routes follow the widget's own flag (paths under /widget). An unsubscribe link in a
     // sent mail must keep working while the portal is off (teammates get the same mail), so the
     // three unsubscribe routes answer without the portal; portal/customer.test.ts covers them.
+    // The status page has its own switch, not the portal's; content/public/public.test.ts covers it.
     const alwaysOn = new Set([
       "previewQuillsUnsubscribeToken",
       "createQuillsUnsubscribe",
@@ -135,6 +140,7 @@ describe.skipIf(!url)("Quills customer feedback", () => {
         d.audience !== "teammate" &&
         d.audience !== "widget" &&
         !d.path.startsWith("/widget/") &&
+        !d.path.startsWith("/status") &&
         !alwaysOn.has(d.operationId),
     );
     expect(routes.length).toBeGreaterThan(25);

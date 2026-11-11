@@ -8,10 +8,6 @@ import { changelogSubscriptions } from "../../database/quills/schema/changelog-s
 import { postSubscriptions } from "../../database/quills/schema/notifications";
 import { posts } from "../../database/quills/schema/posts";
 import { segments, userSegments } from "../../database/quills/schema/segments";
-import {
-  statusComponents,
-  statusSubscriptions,
-} from "../../database/quills/schema/status";
 import type { QuillsCaller } from "../framework/audience";
 import { defineQuillsRoute, type Database } from "../framework/define-route";
 import { requirePortalAccess } from "./gate";
@@ -270,150 +266,10 @@ const unsubscribeChangelog = defineQuillsRoute({
   },
 });
 
-const statusView = z.object({
-  subscribed: z.boolean(),
-  scope: z.enum(["page", "components"]),
-  componentIds: z.array(z.string()),
-});
-const statusSubscription = (caller: QuillsCaller) =>
-  eq(statusSubscriptions.principalId, caller.principalId!);
-
-const getStatusSubscription = defineQuillsRoute({
-  audience: "portal",
-  signIn: false,
-  method: "get",
-  path: "/status/subscription",
-  operationId: "getQuillsMyStatusSubscription",
-  summary: "Get the caller's status page subscription",
-  action: "read",
-  response: statusView,
-  responseDescription: "The caller's status page subscription",
-  errors: { 403: "Portal access denied", 404: "Portal not found" },
-  handler: async ({ db, caller }) => {
-    await requirePortalAccess(db, caller);
-    const [row] = caller.principalId
-      ? await db
-          .select({
-            scope: statusSubscriptions.scope,
-            componentIds: statusSubscriptions.componentIds,
-            unsubscribedAt: statusSubscriptions.unsubscribedAt,
-          })
-          .from(statusSubscriptions)
-          .where(statusSubscription(caller))
-      : [];
-    return row && !row.unsubscribedAt
-      ? { subscribed: true, scope: row.scope, componentIds: row.componentIds }
-      : { subscribed: false, scope: "page" as const, componentIds: [] };
-  },
-});
-
-const subscribeStatus = defineQuillsRoute({
-  audience: "portal",
-  ensureCustomer: true,
-  method: "put",
-  path: "/status/subscription",
-  operationId: "subscribeQuillsMyStatus",
-  summary: "Subscribe the caller to the status page",
-  description:
-    "scope page hears about every component; scope components needs live component IDs of this workspace.",
-  action: "update",
-  rateLimit: { limit: 30, windowSeconds: 600 },
-  body: z
-    .object({
-      scope: z.enum(["page", "components"]),
-      componentIds: z
-        .array(flexibleToTypeIdSchema("status_component"))
-        .max(50)
-        .default([]),
-    })
-    .refine(
-      (value) => (value.scope === "page") === (value.componentIds.length === 0),
-      "Scope components needs component IDs; scope page takes none",
-    ),
-  response: statusView,
-  responseDescription: "The caller's status page subscription",
-  errors: {
-    403: "Portal access denied",
-    404: "Portal or status component not found",
-  },
-  event: personal,
-  handler: async ({ db, caller, body }) => {
-    await requirePortalAccess(db, caller);
-    const componentIds = [...new Set(body.componentIds)];
-    if (componentIds.length) {
-      const live = await db
-        .select({ id: statusComponents.id })
-        .from(statusComponents)
-        .where(
-          and(
-            inArray(statusComponents.id, componentIds),
-            isNull(statusComponents.deletedAt),
-          ),
-        );
-      if (live.length !== componentIds.length)
-        throw notFound("Status component");
-    }
-    const now = new Date();
-    await db
-      .insert(statusSubscriptions)
-      .values({
-        principalId: caller.principalId!,
-        scope: body.scope,
-        componentIds,
-        source: "self_serve",
-      })
-      .onConflictDoUpdate({
-        target: [
-          statusSubscriptions.workspaceId,
-          statusSubscriptions.principalId,
-        ],
-        set: {
-          scope: body.scope,
-          componentIds,
-          unsubscribedAt: null,
-          updatedAt: now,
-        },
-      });
-    return { subscribed: true, scope: body.scope, componentIds };
-  },
-});
-
-const unsubscribeStatus = defineQuillsRoute({
-  audience: "portal",
-  method: "delete",
-  path: "/status/subscription",
-  operationId: "unsubscribeQuillsMyStatus",
-  summary: "Unsubscribe the caller from the status page",
-  action: "update",
-  response: z.object({ changed: z.boolean() }),
-  responseDescription: "Whether a subscription ended",
-  errors: { 403: "Portal access denied", 404: "Portal not found" },
-  event: personal,
-  handler: async ({ db, caller }) => {
-    await requirePortalAccess(db, caller);
-    if (!caller.principalId) return { changed: false };
-    const now = new Date();
-    const rows = await db
-      .update(statusSubscriptions)
-      .set({ unsubscribedAt: now, updatedAt: now })
-      .where(
-        and(
-          statusSubscription(caller),
-          isNull(statusSubscriptions.unsubscribedAt),
-        ),
-      )
-      .returning({ id: statusSubscriptions.id });
-    return { changed: rows.length > 0 };
-  },
-});
-
 export default apiRouter()
   .openapi(...getPostSubscription)
   .openapi(...setPostSubscription)
   .openapi(...deletePostSubscription)
   .openapi(...getChangelogSubscription)
   .openapi(...subscribeChangelog)
-  .openapi(...unsubscribeChangelog)
-  .openapi(...getStatusSubscription)
-  .openapi(...subscribeStatus)
-  .openapi(...unsubscribeStatus);
+  .openapi(...unsubscribeChangelog);

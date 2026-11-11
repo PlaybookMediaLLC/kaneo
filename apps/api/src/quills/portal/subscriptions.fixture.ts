@@ -98,12 +98,4 @@ export const unsubscribeQuillsMyChangelog = selfServe(
   undefined,
   true,
 );
-export const getQuillsMyStatusSubscription = selfServe(statusSubscriptions);
-export const subscribeQuillsMyStatus = selfServe(statusSubscriptions, {
-  scope: "page",
-});
-export const unsubscribeQuillsMyStatus = selfServe(
-  statusSubscriptions,
-  undefined,
-  true,
-);
+// Status page subscriptions are content/public/status/subscriptions.ts (P6b).

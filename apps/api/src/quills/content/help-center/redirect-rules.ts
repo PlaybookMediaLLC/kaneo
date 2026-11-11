@@ -43,7 +43,7 @@ const path = z
   .refine((value) => value.startsWith("/"), "Path must start with /");
 
 /** `/foo//bar/` and `/foo/bar` are the same rule. */
-const normalize = (value: string) => {
+export const normalize = (value: string) => {
   const collapsed = value.replace(/\/+/g, "/");
   return collapsed.length > 1 ? collapsed.replace(/\/$/, "") : collapsed;
 };

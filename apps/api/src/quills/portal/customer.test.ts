@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
+import { openPublic } from "../content/public/seed.fixture";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
@@ -456,7 +457,8 @@ describe.skipIf(!url)("Quills portal invites and customer routes", () => {
 
   it("refuses a status component of another workspace", async () => {
     const env = contractEnv();
-    await enablePortal(env, env.a);
+    // Opens the portal and the status page, so a 404 comes from the foreign component.
+    await openPublic(env);
     const foreign = await env.scoped(env.b, async (db) => {
       const [row] = await db
         .insert(statusComponents)
