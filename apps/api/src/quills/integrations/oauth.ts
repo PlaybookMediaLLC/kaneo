@@ -31,6 +31,7 @@ import {
 } from "./oauth-providers";
 import {
   freshSecrets,
+  oauthApp,
   oauthProvider,
   oauthTypes,
   validTarget,
@@ -192,7 +193,7 @@ const startConnect = (type: (typeof oauthTypes)[number]) =>
         type,
       });
       return {
-        authorizeUrl: oauthProvider(type)!.authorizeUrl(
+        authorizeUrl: oauthApp(type).authorizeUrl(
           creds,
           redirectUri(type),
           state,
@@ -251,7 +252,7 @@ const callback = defineQuillsRoute({
     return { creds, code: query.code };
   },
   call: ({ creds, code }, { params }) =>
-    oauthProvider(params.type)!
+    oauthApp(params.type)
       .exchange(code, redirectUri(params.type), creds)
       .catch(providerFailure),
   event: (input, result) =>

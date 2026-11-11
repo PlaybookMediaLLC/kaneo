@@ -1,26 +1,38 @@
 // Route-module helper: framework/boundaries.test.ts checks its imports like a module that uses ../framework/define-route.
 import { ProviderCallError } from "../../framework/integration-config";
-import type { OAuthProvider } from "../oauth-providers";
+import type { OAuthConnect, OAuthProvider } from "../oauth-providers";
 import { discord } from "./discord";
 import { github } from "./github";
 import { gitlab } from "./gitlab";
 import { slack } from "./slack";
 
-// The OAuth providers, one file each. Add a provider with its file and one line here. Its catalog
-// entry, its connect route (oauth.ts) and its token refresh follow from this registry.
+// The OAuth and key providers, one file each. To add a provider, add its file, its import above and
+// one entry below. The key is the integration type. The catalog entry, the connect route (oauth.ts)
+// and the token refresh follow from this registry.
 export const oauthProviders = {
   github,
   gitlab,
   slack,
   discord,
 } satisfies Record<string, OAuthProvider>;
-export type OAuthProviderType = keyof typeof oauthProviders;
+type Registry = typeof oauthProviders;
 export const oauthProvider = (type: string): OAuthProvider | undefined =>
   (oauthProviders as Record<string, OAuthProvider>)[type];
-export const oauthTypes = Object.keys(oauthProviders) as [
+
+/** The providers that connect through the OAuth redirect. A key provider has no connect route or callback. */
+export type OAuthProviderType = {
+  [K in keyof Registry]: Registry[K] extends OAuthConnect ? K : never;
+}[keyof Registry];
+export const oauthTypes = (
+  Object.keys(oauthProviders) as (keyof Registry)[]
+).filter((type) => "authorizeUrl" in oauthProviders[type]) as [
   OAuthProviderType,
   ...OAuthProviderType[],
 ];
+/** A provider of `oauthTypes`, with its OAuth calls. */
+export const oauthApp = (
+  type: OAuthProviderType,
+): OAuthProvider & OAuthConnect => oauthProviders[type];
 
 /** A channel ID that is safe in a provider URL path. Without a provider rule: 1 to 30 letters and digits. */
 export const validTarget = (type: string, target: string) =>

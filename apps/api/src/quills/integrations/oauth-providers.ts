@@ -23,10 +23,16 @@ export type Exchanged = {
   /** Non-secret provider IDs, for example the Discord server. */
   config?: Record<string, string>;
 };
-/** A provider's catalog entry (catalog.ts) and its API calls. */
-export type OAuthProvider = Provider & {
-  /** Platform credential fields. `clientSecret` and `botToken` are secret. */
-  credentials: readonly string[];
+/** A CRM record for customer context. The route that returns it selects and bounds the fields. */
+export type Contact = {
+  name: string | null;
+  company: string | null;
+  /** The record in the provider's own tool. */
+  url: string | null;
+  fields: { label: string; value: string }[];
+};
+/** Connects through the OAuth redirect: a connect route and the signed callback (oauth.ts). */
+export type OAuthConnect = {
   authorizeUrl: (
     creds: Record<string, string>,
     redirectUri: string,
@@ -37,6 +43,26 @@ export type OAuthProvider = Provider & {
     redirectUri: string,
     creds: Record<string, string>,
   ) => Promise<Exchanged>;
+  connectWithKey?: never;
+};
+/**
+ * Connects with a key that a teammate enters, not through OAuth (Azure DevOps: a personal access
+ * token). `fields` holds the other values that the connect route validated, for example the
+ * organization. It checks the key with one provider call. The route seals `secrets` and calls
+ * connect (connect.ts). Such a provider has no OAuth connect route and no callback.
+ */
+type KeyConnect = {
+  connectWithKey: (
+    key: string,
+    fields: Record<string, string>,
+  ) => Promise<Exchanged>;
+  authorizeUrl?: never;
+  exchange?: never;
+};
+/** A provider's catalog entry (catalog.ts), how it connects and its API calls. */
+export type OAuthProvider = Provider & {
+  /** Platform credential fields. `clientSecret` and `botToken` are secret. */
+  credentials: readonly string[];
   /** Targets for channels: repositories, projects or chat channels. */
   destinations: (
     secrets: Record<string, string>,
@@ -61,7 +87,13 @@ export type OAuthProvider = Provider & {
     secrets: Record<string, string>,
     creds: Record<string, string>,
   ) => Promise<Record<string, string>>;
-};
+  /** CRM lookup by email (HubSpot, Intercom, Zendesk). Null when no record matches. */
+  contact?: (
+    secrets: Record<string, string>,
+    config: Record<string, unknown>,
+    email: string,
+  ) => Promise<Contact | null>;
+} & (OAuthConnect | KeyConnect);
 
 export const text = (value: unknown) =>
   typeof value === "string" ? value : "";
