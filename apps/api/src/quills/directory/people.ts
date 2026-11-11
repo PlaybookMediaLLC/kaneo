@@ -28,11 +28,12 @@ import {
   toPerson,
   type Db,
 } from "./customer";
+import { byEmail, emailTaken, identifyCustomer } from "./identify-customer";
 
 const principalParams = z.object({
   principalId: flexibleToTypeIdSchema("principal"),
 });
-const email = z.string().trim().toLowerCase().email().max(254);
+export const email = z.string().trim().toLowerCase().email().max(254);
 const notFound = { 404: "Person not found" };
 const nonEmpty = (value: object) => Object.keys(value).length > 0;
 
@@ -45,25 +46,6 @@ const leadEngaged = sql`(
   or exists (select 1 from ${postComments} c where c.principal_id = ${principal.id})
   or exists (select 1 from ${postCommentReactions} r where r.principal_id = ${principal.id})
 )`;
-
-const byEmail = (address: string) =>
-  sql`lower(${user.email}) = ${address.toLowerCase()}`;
-
-async function emailTaken(db: Db, address: string, exceptUserId?: string) {
-  const [row] = await db
-    .select({ id: user.id })
-    .from(user)
-    .where(
-      and(
-        byEmail(address),
-        exceptUserId
-          ? ne(user.id, exceptUserId as typeof user.$inferSelect.id)
-          : undefined,
-      ),
-    )
-    .limit(1);
-  return Boolean(row);
-}
 
 async function personResult(db: Db, principalId: string) {
   return toPerson(await loadCustomer(db, principalId));
@@ -291,88 +273,8 @@ const identifyUser = defineQuillsRoute({
     payload: { created: String(result.created) },
   }),
   handler: async ({ db, body }) => {
-    const attributes = await coerceAttributes(db, body.attributes ?? {});
-    const [match] = await db
-      .select({
-        id: user.id,
-        kaneoUserId: user.kaneoUserId,
-        metadata: user.metadata,
-      })
-      .from(user)
-      .where(
-        body.externalId
-          ? or(eq(user.externalId, body.externalId), byEmail(body.email))
-          : byEmail(body.email),
-      )
-      // An external ID match wins over an email match.
-      .orderBy(
-        body.externalId
-          ? sql`(${user.externalId} = ${body.externalId}) desc`
-          : asc(user.createdAt),
-      )
-      .limit(1)
-      .for("update");
-    if (match?.kaneoUserId)
-      throw new HTTPException(409, {
-        message: "The email or external ID belongs to a teammate",
-      });
-    if (
-      match &&
-      body.externalId &&
-      (await emailTaken(db, body.email, match.id))
-    )
-      throw new HTTPException(409, { message: "Email already in use" });
-    const fields = {
-      email: body.email,
-      name: body.name,
-      image: body.image,
-      emailVerified: body.emailVerified,
-      externalId: body.externalId,
-      metadata: mergeMetadata(match?.metadata ?? null, attributes),
-    };
-    const [identity] = match
-      ? await db
-          .update(user)
-          .set(fields)
-          .where(eq(user.id, match.id))
-          .returning({ id: user.id, name: user.name, image: user.image })
-      : await db
-          .insert(user)
-          .values({
-            ...fields,
-            name: body.name ?? body.email.split("@")[0]!,
-            emailVerified: body.emailVerified ?? false,
-          })
-          .returning({ id: user.id, name: user.name, image: user.image });
-    const [existing] = await db
-      .select({ id: principal.id })
-      .from(principal)
-      .where(eq(principal.userId, identity!.id))
-      .limit(1);
-    const principalId = existing
-      ? existing.id
-      : (
-          await db
-            .insert(principal)
-            .values({
-              userId: identity!.id,
-              role: "user",
-              type: "user",
-              displayName: identity!.name,
-              avatarUrl: identity!.image,
-              createdAt: new Date(),
-            })
-            .returning({ id: principal.id })
-        )[0]!.id;
-    if (existing)
-      await db
-        .update(principal)
-        .set({ displayName: identity!.name, avatarUrl: identity!.image })
-        .where(eq(principal.id, principalId));
-    return {
-      ...(await personResult(db, principalId)),
-      created: !existing,
-    };
+    const { principalId, created } = await identifyCustomer(db, body);
+    return { ...(await personResult(db, principalId)), created };
   },
 });
 
