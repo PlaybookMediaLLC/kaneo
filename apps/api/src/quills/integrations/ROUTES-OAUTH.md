@@ -107,12 +107,72 @@ again; Slack's `ok: false` errors map to `auth_required` or `failed`; a due GitL
 before the call (never retried; a rejected refresh is `auth_required`) and the new tokens are stored
 with the outcome.
 
+Each provider is one file in `providers/`. `providers/index.ts` collects them in one registry.
+
+## Providers in RFC 0001
+
+Decision D7 (RFC 0001) puts these providers in scope. Each provider lane fills only its own heading:
+the boundary map, the routes, the tests and the differences from the source.
+
+### Jira
+
+Filled by lane P1.
+
+### Linear
+
+Filled by lane P1.
+
+### Azure DevOps
+
+Filled by lane P1.
+
+### Asana
+
+Filled by lane P2.
+
+### ClickUp
+
+Filled by lane P2.
+
+### Trello
+
+Filled by lane P2.
+
+### Monday
+
+Filled by lane P2.
+
+### Notion
+
+Filled by lane P2.
+
+### HubSpot
+
+Filled by lane P3.
+
+### Intercom
+
+Filled by lane P3.
+
+### Zendesk
+
+Filled by lane P3.
+
+### Salesforce
+
+Filled by lane P3.
+
+### Microsoft Teams
+
+Filled by lane P4.
+
 ## Deferred or not implemented
 
 | Source rows | Reason |
 |---|---|
-| Microsoft Teams | Graph channel messages need tenant consent and a bot registration; not small. By demand (D6). |
-| Asana, Azure DevOps, ClickUp, HubSpot, Intercom, Jira, Linear, Monday, Notion, Salesforce, Segment, Trello, Zendesk | Decision D6: they come by demand. |
+| Microsoft Teams | Graph channel messages need tenant consent and a bot registration. Decision D7 (RFC 0001) puts it in scope: lane P4. |
+| Asana, Azure DevOps, ClickUp, HubSpot, Intercom, Jira, Linear, Monday, Notion, Salesforce, Trello, Zendesk | Decision D7 (RFC 0001) puts them in scope: lanes P1 to P3 (see "Providers in RFC 0001"). |
+| Segment | Decision D6: by demand. RFC 0001 leaves it out of scope (section 11). |
 | GitLab self-managed instances | The provider host would come from user input; needs the SSRF-checked outbound path and a host field. gitlab.com only. |
 | `api/integrations/{type}/hooks/{kind}` (Slack interactivity, app hooks) | Their consumers are the Slack assistant and message shortcuts (P8 assistant slice). |
 | `api/integrations/{type}/identify` | User-sync providers (Segment and similar) are not in this provider set. |
