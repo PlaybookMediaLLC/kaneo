@@ -251,6 +251,32 @@ Completion checks:         authenticated endpoint, tenant/object access, read (a
                            customer visibility), mutation (heartbeat, no event: expiring marker).
 ```
 
+Boundary map of the two entry points that the coordinator unblocked (link unfurl and read batch):
+
+```
+Tables and owning schema:  unfurl: quills.kv_store (the preview cache, keyed by a hash of the URL;
+                           RLS scopes it to the workspace), settings (portal and widget switches, read).
+                           read batch: the tables of each read it runs, through that read's own handler.
+                           public: none.
+Actor and workspace:       teammate: authenticated context. Portal: the Kaneo session. Widget: the widget
+                           session Bearer. Never a body or query copy. A batch element never names a
+                           workspace: it runs in the batch request's workspace and transaction.
+Permissions:               unfurl: quills:read (teammate); portal and widget: the portal gate and support
+                           switch, or the widget and messenger switches. Read batch: quills:read for the
+                           batch, then each element's own action and alsoRequires, against the caller's
+                           role and API-key scope (callerActions).
+Persisted relationships:   none for unfurl. A batch element runs its route's handler, so its object
+                           checks are the route's own. Routes with path IDs, native permissions, a
+                           project resolver, load, after or prepare are not batchable.
+Transaction:               unfurl: prepare reads the cache in one scoped transaction, call fetches with
+                           no transaction open, the handler writes the cache in a second one. Read
+                           batch: one scoped transaction; each element in its own savepoint.
+External effects:          unfurl: one GET to the URL through support/link-fetch.ts, the only Quills
+                           module that imports import/guarded-fetch: every hop and the socket's DNS
+                           answer are checked, at most 3 redirects, 5 seconds, 512 KB. Read batch: none.
+Completion checks:         authenticated endpoint, tenant/object access, read, outbound request (SSRF).
+```
+
 ### Routes
 
 | operationId | Route | Audience | Action | Tables | Event | Tests |
