@@ -103,7 +103,7 @@ const fields = {
 };
 type Row = Pick<typeof changelogEntries.$inferSelect, keyof typeof fields>;
 const params = z.object({ entryId: flexibleToTypeIdSchema("changelog") });
-const date = z.iso.datetime({ offset: true });
+const date = z.iso.datetime({ offset: true }).max(64);
 const publishState = z.discriminatedUnion("type", [
   z.object({ type: z.literal("draft") }),
   z.object({ type: z.literal("scheduled"), publishAt: date }),

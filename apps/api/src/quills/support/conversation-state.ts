@@ -82,7 +82,9 @@ const snoozeRoute = defineQuillsRoute({
   summary: "Snooze a conversation",
   description:
     "Until a wake time, or until the customer replies (null). The transcript notice is team-only.",
-  body: z.object({ until: z.iso.datetime({ offset: true }).nullable() }),
+  body: z.object({
+    until: z.iso.datetime({ offset: true }).max(64).nullable(),
+  }),
   event: ({ params }, result) =>
     result.changed && {
       type: "conversation.status_changed",

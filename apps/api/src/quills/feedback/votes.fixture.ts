@@ -1,10 +1,11 @@
 import { fixture } from "../framework/contract";
-import { customerVote, seed, type Ids } from "./seed.fixture";
+import { customerVote, seed, softDeletePost, type Ids } from "./seed.fixture";
 
 const onPost = fixture({
   seed,
   valid: ({ a }: Ids) => ({ params: { postId: a.postId } }),
   foreign: ({ b }: Ids) => ({ postId: b.postId }),
+  softDelete: softDeletePost,
 });
 const onVoter = fixture({
   seed,
@@ -12,6 +13,7 @@ const onVoter = fixture({
     params: { postId: a.postId, principalId: a.customerId },
   }),
   foreign: ({ b }: Ids) => ({ postId: b.postId, principalId: b.customerId }),
+  softDelete: softDeletePost,
 });
 
 export const listQuillsPostVoters = { ...onPost, seed: customerVote };

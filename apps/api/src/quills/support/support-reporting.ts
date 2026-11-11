@@ -64,8 +64,8 @@ const reporting = defineQuillsRoute({
   action: "read",
   query: z
     .object({
-      from: z.iso.datetime({ offset: true }),
-      to: z.iso.datetime({ offset: true }),
+      from: z.iso.datetime({ offset: true }).max(64),
+      to: z.iso.datetime({ offset: true }).max(64),
     })
     .refine((q) => {
       const span = Date.parse(q.to) - Date.parse(q.from);

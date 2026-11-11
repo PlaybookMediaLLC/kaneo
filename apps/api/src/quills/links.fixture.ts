@@ -6,6 +6,7 @@ import {
 } from "../database/quills/schema/platform-links";
 import { posts } from "../database/quills/schema/posts";
 import { postStatuses } from "../database/quills/schema/statuses";
+import { softDeletes } from "./feedback/seeds.fixture";
 import { fixture, type ContractEnv } from "./framework/contract";
 
 /** A project, task, board and post in one workspace. */
@@ -63,12 +64,14 @@ const boardLink = (linked: boolean) =>
       params: { boardId: a.boardId, projectId: a.projectId },
     }),
     foreign: ({ b }: Ids) => ({ boardId: b.boardId, projectId: b.projectId }),
+    softDelete: softDeletes("boards", ({ a }: Ids) => a.boardId),
   });
 const postLink = (linked: boolean) =>
   fixture({
     seed: (env) => seed(env, linked),
     valid: ({ a }: Ids) => ({ params: { postId: a.postId, taskId: a.taskId } }),
     foreign: ({ b }: Ids) => ({ postId: b.postId, taskId: b.taskId }),
+    softDelete: softDeletes("posts", ({ a }: Ids) => a.postId),
   });
 
 export const linkQuillsBoardToProject = boardLink(false);

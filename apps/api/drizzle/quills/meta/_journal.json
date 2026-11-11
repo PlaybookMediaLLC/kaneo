@@ -99,6 +99,13 @@
 			"when": 1794355813511,
 			"tag": "0013_portal_invites_hero_image",
 			"breakpoints": true
+		},
+		{
+			"idx": 14,
+			"version": "7",
+			"when": 1794357064537,
+			"tag": "0014_posts_vote_sort_index",
+			"breakpoints": true
 		}
 	]
 }

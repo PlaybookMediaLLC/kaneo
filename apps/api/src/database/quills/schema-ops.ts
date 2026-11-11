@@ -136,6 +136,13 @@ export const CONCURRENT_INDEX_SPECS: readonly ConcurrentIndexSpec[] = [
     ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS posts_title_trgm_idx ON quills.posts USING gin (title gin_trgm_ops) WHERE deleted_at IS NULL",
   },
   {
+    // The post list's votes sort: workspace, then the full sort key, so the RLS predicate and the
+    // cursor are index conditions. posts is a large table, so it is built here.
+    name: "posts_workspace_vote_count_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS posts_workspace_vote_count_idx ON quills.posts (workspace_id, vote_count, created_at, id)",
+  },
+  {
     name: "user_name_trgm_idx",
     concurrent: true,
     ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS user_name_trgm_idx ON quills.customer_identity USING gin (name gin_trgm_ops)",

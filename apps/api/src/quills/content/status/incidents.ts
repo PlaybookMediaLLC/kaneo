@@ -47,7 +47,7 @@ import {
   type Db,
 } from "./shared";
 
-const date = z.iso.datetime({ offset: true });
+const date = z.iso.datetime({ offset: true }).max(64);
 const toDate = (value: string | null | undefined) =>
   value === undefined ? undefined : value === null ? null : new Date(value);
 const affected = z

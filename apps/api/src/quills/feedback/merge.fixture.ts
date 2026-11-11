@@ -1,5 +1,13 @@
 import { fixture } from "../framework/contract";
-import { byParam, feedbackSeed, type FeedbackIds } from "./seeds.fixture";
+import {
+  byParam,
+  feedbackSeed,
+  softDeletes,
+  type FeedbackIds,
+} from "./seeds.fixture";
+
+const deletedPost = (pick: (ids: FeedbackIds["a"]) => string) =>
+  softDeletes("posts", ({ a }: FeedbackIds) => pick(a));
 
 export const getQuillsPostMergePreview = fixture({
   seed: feedbackSeed,
@@ -8,6 +16,7 @@ export const getQuillsPostMergePreview = fixture({
     query: { into: a.canonicalPostId },
   }),
   foreign: ({ b }: FeedbackIds) => ({ postId: b.duplicatePostId }),
+  softDelete: deletedPost((a) => a.duplicatePostId),
 });
 export const mergeQuillsPost = fixture({
   seed: feedbackSeed,
@@ -19,9 +28,13 @@ export const mergeQuillsPost = fixture({
     postId: b.duplicatePostId,
     canonicalPostId: b.canonicalPostId,
   }),
+  softDelete: deletedPost((a) => a.duplicatePostId),
 });
-export const unmergeQuillsPost = byParam("postId", (s) => s.mergedPostId);
-export const listQuillsMergedPosts = byParam(
-  "postId",
-  (s) => s.canonicalPostId,
-);
+export const unmergeQuillsPost = {
+  ...byParam("postId", (s) => s.mergedPostId),
+  softDelete: deletedPost((a) => a.mergedPostId),
+};
+export const listQuillsMergedPosts = {
+  ...byParam("postId", (s) => s.canonicalPostId),
+  softDelete: deletedPost((a) => a.canonicalPostId),
+};

@@ -19,7 +19,11 @@ import type { PermissionMap } from "../../utils/role-permissions";
 import { requireWorkspacePermission } from "../../utils/require-workspace-permission";
 import { workspaceAccess } from "../../utils/workspace-access-middleware";
 import { recordQuillsChange, type changeSchema } from "../events";
-import { withQuillsRequest, type QuillsAction } from "../with-quills-request";
+import {
+  quillsActions,
+  withQuillsRequest,
+  type QuillsAction,
+} from "../with-quills-request";
 import {
   callerActor,
   enforceRateLimit,
@@ -82,6 +86,11 @@ export type QuillsRouteDeclaration<
   description?: string;
   /** Teammate: the checked Quills action. Other audiences: recorded for the ledger, not checked. */
   action: QuillsAction;
+  /**
+   * Teammate: give the handler `actions`, every Quills action that the caller holds. Use it when the
+   * declared action is the minimum and another person's record needs more. Without it, `actions` is empty.
+   */
+  callerActions?: true;
   /** Extra Kaneo permissions, checked by route middleware. */
   native?: PermissionMap;
   /** Path parameters. The helper adds workspaceId. */
@@ -109,7 +118,11 @@ export type QuillsRouteDeclaration<
     input: QuillsRouteInput<P, Q, B> & { db: Database } & ([A] extends [
         "teammate",
       ]
-        ? { actor: QuillsActor; loaded: L }
+        ? {
+            actor: QuillsActor;
+            loaded: L;
+            actions: ReadonlySet<QuillsAction>;
+          }
         : { caller: QuillsCaller; acceptLanguage: string | null }),
   ) => Promise<z.input<R>>;
   /** Read-only shaping after commit, for example a visibility filter over public tables. */
@@ -204,9 +217,9 @@ export function buildQuillsRoute<
   const handle = d.handler as (input: object) => Promise<z.input<R>>;
   const audience: Audience = d.audience ?? "teammate";
   if (audience !== "teammate") {
-    if (d.native || d.project || d.load || d.after)
+    if (d.native || d.project || d.load || d.after || d.callerActions)
       throw new Error(
-        `${d.operationId}: native, project, load and after are teammate-only`,
+        `${d.operationId}: native, project, load, after and callerActions are teammate-only`,
       );
     if (
       (d.ensureCustomer && audience !== "portal") ||
@@ -336,7 +349,7 @@ export function buildQuillsRoute<
     ],
     request: {
       params: z.object({
-        workspaceId: z.string().min(1),
+        workspaceId: z.string().min(1).max(200),
         ...d.params?.shape,
       }),
       query: d.query,
@@ -367,16 +380,18 @@ export function buildQuillsRoute<
           : emptyBody(d.body)),
       workspaceId: c.get("workspaceId"),
     } as QuillsRouteInput<P, Q, B>;
-    const { load, project } = d;
+    const { load, project, callerActions } = d;
     let loaded = undefined as L;
+    let actions: ReadonlySet<QuillsAction> = new Set();
     const result = await withQuillsRequest(
       c,
       {
         action: d.action,
-        // A function project ID runs after the permission checks, so `load` runs there too.
+        // A function project ID runs after the permission checks, so `load` and the action set run there too.
         projectId:
-          (load || project) &&
+          (load || project || callerActions) &&
           (async () => {
+            if (callerActions) actions = await quillsActions(c);
             if (load)
               loaded = await load({ ...input, userId: c.get("userId") });
             if (!project) return undefined;
@@ -388,7 +403,7 @@ export function buildQuillsRoute<
       },
       async (db, actor) => {
         const result = d.response.parse(
-          await handle({ ...input, db, actor, loaded }),
+          await handle({ ...input, db, actor, loaded, actions }),
         ) as z.output<R>;
         const change = typeof d.event === "function" && d.event(input, result);
         if (change) await recordQuillsChange(db, actor, change);

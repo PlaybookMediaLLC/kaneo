@@ -111,6 +111,8 @@ Read [withQuillsRequest](src/quills/with-quills-request.ts),
    access, `workspace:read`, the requested Quills
    action, API-key scope, and the supplied project's workspace and visibility.
    Choose the actual action; reads are not permission to mutate or manage settings.
+   When the caller's own record needs less than another person's record, declare the minimum
+   action, set `callerActions`, and check the handler's `actions` set for the other case.
 3. Pass the callback's branded `Database` handle into Quills domain helpers. Execute
    and await all Quills queries inside that callback. Return resolved data, never
    the transaction or a lazy query builder. Do not use the global platform DB for

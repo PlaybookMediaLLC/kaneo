@@ -1,11 +1,19 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
+import { toUuid } from "@kaneo/ids";
 import { boards } from "../../database/quills/schema/boards";
 import { postComments, posts } from "../../database/quills/schema/posts";
-import { postViews } from "../../database/quills/schema/post-views";
 import { postStatuses } from "../../database/quills/schema/statuses";
 import { fixture, type ContractEnv } from "../framework/contract";
 
 // Seed helpers shared by the feedback fixtures and feature tests. Not fixtures themselves.
+
+/** A fixture `softDelete` hook: sets deleted_at on the row of quills.`table` in A that `pick` names. */
+export const softDeletes =
+  <T>(table: string, pick: (ids: T) => string) =>
+  (env: ContractEnv, ids: T) =>
+    env.db.execute(
+      sql`UPDATE quills.${sql.identifier(table)} SET deleted_at = now() WHERE workspace_id = ${env.a} AND id = ${toUuid(pick(ids))}::uuid`,
+    );
 
 /** A fresh status in one workspace. */
 export const statusIn = async (env: ContractEnv, workspaceId: string) => {
@@ -43,7 +51,7 @@ export const postIn = (
     return { boardId: board!.id, postId: post!.id };
   });
 
-/** A pending post, a published post with a pending comment, a merged pair and a saved view. */
+/** A pending post, a published post with a pending comment and a merged pair. */
 async function feedbackSide(env: ContractEnv, workspaceId: string) {
   const pending = await postIn(env, workspaceId, {
     moderationState: "pending",
@@ -65,21 +73,12 @@ async function feedbackSide(env: ContractEnv, workspaceId: string) {
       .update(posts)
       .set({ canonicalPostId: canonical.postId, mergedAt: new Date() })
       .where(eq(posts.id, merged.postId));
-    const [view] = await db
-      .insert(postViews)
-      .values({
-        name: "Contract",
-        filters: { sort: "votes" },
-        createdByPrincipalId: actor.principalId,
-      })
-      .returning({ id: postViews.id });
     return {
       pendingPostId: pending.postId,
       commentId: comment!.id,
       canonicalPostId: canonical.postId,
       duplicatePostId: duplicate.postId,
       mergedPostId: merged.postId,
-      viewId: view!.id,
     };
   });
 }

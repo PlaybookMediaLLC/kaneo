@@ -1,0 +1,264 @@
+import { toUuid } from "@kaneo/ids";
+import { statement } from "@kaneo/permissions";
+import { apiRouter, z, type BaseVariables } from "../../openapi";
+import type { PermissionMap } from "../../utils/role-permissions";
+import {
+  contractApp,
+  env,
+  fingerprintSql,
+  pool,
+  role,
+  users,
+  type App,
+  type ContractInput,
+  type Fixture,
+} from "./contract-world";
+import { buildQuillsRoute, type AnyQuillsRoute } from "./define-route";
+
+// Requests, row fingerprints and response probes that the contract checks share.
+
+export type Sent = { status: number; body: any };
+export const forbiddenKey = /secret|token|password|hash|workspaceId/i;
+
+let clientCount = 0;
+export async function send(
+  app: App,
+  d: AnyQuillsRoute,
+  input: ContractInput,
+  user: string,
+  scope?: PermissionMap,
+  workspace = env.a,
+): Promise<Sent> {
+  const teammate = (d.audience ?? "teammate") === "teammate";
+  let path = `${teammate ? "/quills" : "/quills-public"}/${workspace}${d.path}`;
+  for (const [key, value] of Object.entries(input.params ?? {}))
+    path = path.replace(`{${key}}`, encodeURIComponent(value));
+  const query = new URLSearchParams(input.query).toString();
+  const res = await app.request(query ? `${path}?${query}` : path, {
+    method: d.method.toUpperCase(),
+    headers: {
+      "x-test-user": user,
+      ...(input.body !== undefined && { "content-type": "application/json" }),
+      ...(scope && { "x-test-scope": JSON.stringify(scope) }),
+      ...(input.bearer && { authorization: `Bearer ${input.bearer}` }),
+      // A fresh client per request keeps the checks under the rate limits; rate-limit.test.ts covers them.
+      "x-kaneo-client-ip": `198.51.100.${++clientCount % 250}`,
+    },
+    body: input.body === undefined ? undefined : JSON.stringify(input.body),
+  });
+  return { status: res.status, body: await res.json().catch(() => null) };
+}
+
+/** The declared Quills action, or every other action, with or without the native permissions. */
+export const grant = (
+  d: AnyQuillsRoute,
+  allowed: boolean,
+  native = true,
+): PermissionMap => ({
+  ...(native && d.native),
+  workspace: [...((native && d.native?.workspace) || []), "read"],
+  quills: allowed
+    ? [d.action]
+    : statement.quills.filter((action) => action !== d.action),
+});
+
+export const setRole = (permission: PermissionMap) =>
+  pool.query(
+    "UPDATE public.workspace_role SET permission=$1 WHERE workspace_id=$2 AND role=$3",
+    [JSON.stringify(permission), env.a, role],
+  );
+
+export const fingerprint = async (
+  workspaceId: string,
+  rows: keyof typeof fingerprintSql = "all",
+): Promise<string> =>
+  (await pool.query(fingerprintSql[rows], [workspaceId])).rows[0].h;
+
+export const replace = (
+  input: ContractInput,
+  key: string,
+  value: string,
+): ContractInput => {
+  if (input.params && key in input.params)
+    return { ...input, params: { ...input.params, [key]: value } };
+  if (input.query && key in input.query)
+    return { ...input, query: { ...input.query, [key]: value } };
+  return { ...input, body: { ...(input.body as object), [key]: value } };
+};
+
+/** Inputs that the declared schemas must reject with 400. */
+export function badInputs(d: AnyQuillsRoute, input: ContractInput) {
+  const bad: ContractInput[] = [];
+  for (const key of Object.keys(input.params ?? {}))
+    if (!d.params?.shape[key]?.safeParse("!").success)
+      bad.push(replace(input, key, "!"));
+  if (d.query?.shape.limit)
+    bad.push({ ...input, query: { ...input.query, limit: "1000000000" } });
+  if (d.body)
+    bad.push(
+      { ...input, body: "not an object" },
+      { ...input, body: undefined },
+    );
+  return bad;
+}
+
+/** Response values that a closed object schema does not declare. */
+export function looseness(
+  schema: z.ZodType,
+  value: unknown,
+  path = "$",
+): string[] {
+  if (value === null || typeof value !== "object") return [];
+  if (
+    schema instanceof z.ZodOptional ||
+    schema instanceof z.ZodNullable ||
+    schema instanceof z.ZodDefault
+  )
+    return looseness(schema.unwrap() as z.ZodType, value, path);
+  if (schema instanceof z.ZodArray && Array.isArray(value))
+    return value.flatMap((item, index) =>
+      looseness(schema.element as z.ZodType, item, `${path}[${index}]`),
+    );
+  const catchall = schema instanceof z.ZodObject && schema.def.catchall;
+  if (
+    !(schema instanceof z.ZodObject) ||
+    Array.isArray(value) ||
+    (catchall && !(catchall instanceof z.ZodNever))
+  )
+    return [`${path} is not a closed object schema`];
+  return Object.entries(value).flatMap(([key, item]) => {
+    const field = schema.shape[key] as z.ZodType | undefined;
+    return field
+      ? looseness(field, item, `${path}.${key}`)
+      : [`${path}.${key} is not declared`];
+  });
+}
+
+export const strings = (value: unknown): string[] =>
+  typeof value === "string"
+    ? [value]
+    : value !== null && typeof value === "object"
+      ? Object.values(value).flatMap(strings)
+      : [];
+
+export const keyNames = (value: unknown): string[] =>
+  value !== null && typeof value === "object"
+    ? Object.entries(value).flatMap(([key, item]) => [key, ...keyNames(item)])
+    : [];
+
+/** Outbox rows written by the authorized request since `since`. */
+export async function outboxIssues(
+  d: AnyQuillsRoute,
+  input: ContractInput,
+  body: unknown,
+  since: string,
+  domain: string,
+  /** The teammate who called, or the principal (a TypeID or null) that the audit row must name. */
+  actor: { kaneoUserId: string } | { principalId: string | null } = {
+    kaneoUserId: users.limited,
+  },
+): Promise<string[]> {
+  const change =
+    typeof d.event === "function" &&
+    d.event(
+      {
+        params: d.params?.parse(input.params),
+        query: d.query?.parse(input.query ?? {}),
+        body: d.body?.parse(input.body),
+        workspaceId: env.a,
+      },
+      // The JSON body, not a parse with the server schema: dates arrive as strings.
+      body,
+    );
+  const byTeammate = "kaneoUserId" in actor;
+  const {
+    rows: [n],
+  } = await pool.query(
+    `SELECT
+      (SELECT count(*) FROM quills.events WHERE workspace_id=$1 AND occurred_at>=$2::timestamptz)::int AS events,
+      (SELECT count(*) FROM quills.events WHERE workspace_id=$1 AND occurred_at>=$2::timestamptz AND type=$3 AND entity_id=$4)::int AS "matchingEvents",
+      (SELECT count(*) FROM quills.audit_log WHERE workspace_id=$1 AND occurred_at>=$2::timestamptz)::int AS audit,
+      (SELECT count(*) FROM quills.audit_log l LEFT JOIN quills.principal p ON p.id=l.actor_principal_id AND p.workspace_id=l.workspace_id
+        WHERE l.workspace_id=$1 AND l.occurred_at>=$2::timestamptz AND l.event_type=$3 AND l.target_id=$4
+        AND CASE WHEN $6::boolean THEN p.kaneo_user_id=$5 ELSE l.actor_principal_id IS NOT DISTINCT FROM $7::uuid END)::int AS "matchingAudit",
+      (SELECT count(*) FROM quills.job_queue WHERE workspace_id=$1 AND created_at>=$2::timestamptz)::int AS jobs`,
+    [
+      env.a,
+      since,
+      change ? change.type : "",
+      change ? change.entityId : "",
+      byTeammate ? actor.kaneoUserId : "",
+      byTeammate,
+      !byTeammate && actor.principalId ? toUuid(actor.principalId) : null,
+    ],
+  );
+  if (d.method === "get")
+    return n.events ||
+      n.audit ||
+      n.jobs ||
+      domain !== (await fingerprint(env.a, "domain"))
+      ? ["a read wrote rows"]
+      : [];
+  if (typeof d.event !== "function")
+    return n.events || n.jobs
+      ? ["a route without an event wrote an outbox row"]
+      : [];
+  if (!change) return ["the authorized mutation recorded no change event"];
+  return [
+    ...(n.events === 1 && n.matchingEvents === 1
+      ? []
+      : [
+          `expected one ${change.type} event for ${change.entityId}, found ${n.events} events`,
+        ]),
+    ...(n.audit === 1 && n.matchingAudit === 1
+      ? []
+      : [
+          `expected one ${change.type} audit row by the caller, found ${n.audit}`,
+        ]),
+    ...(n.jobs === 1 ? [] : [`expected one job, found ${n.jobs}`]),
+  ];
+}
+
+/** Fail after the handler, then fail the outbox write: neither may leave a row behind. */
+export async function rollbackIssues(
+  d: AnyQuillsRoute,
+  f: Fixture,
+  user: string,
+) {
+  const issues: string[] = [];
+  const event = d.event;
+  const failures: Partial<AnyQuillsRoute>[] = [
+    {
+      handler: async (input) => {
+        await d.handler(input);
+        throw new Error("Injected failure after the handler");
+      },
+    },
+    ...(typeof event === "function"
+      ? [
+          {
+            event: (input: any, result: any) => {
+              const change = event(input, result);
+              return change && { ...change, entityId: "" };
+            },
+          },
+        ]
+      : []),
+  ];
+  for (const failure of d.method === "get" ? [] : failures) {
+    const failing = apiRouter<
+      BaseVariables & { workspaceId: string }
+    >().openapi(...buildQuillsRoute({ ...d, ...failure }));
+    const failingApp =
+      (d.audience ?? "teammate") === "teammate"
+        ? contractApp(failing)
+        : contractApp(apiRouter(), failing);
+    const target = f.valid(await f.seed(env, users.owner));
+    const before = await fingerprint(env.a);
+    const res = await send(failingApp, d, target, user);
+    if (res.status !== 500) issues.push(`expected 500, got ${res.status}`);
+    if (before !== (await fingerprint(env.a)))
+      issues.push("rows changed after the failed request");
+  }
+  return issues;
+}

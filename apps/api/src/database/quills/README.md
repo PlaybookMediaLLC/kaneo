@@ -236,8 +236,10 @@ migration history. A migration-backed manifest checks types, defaults, constrain
 all ordinary and unique indexes, RLS, triggers and functions after restore. Operational index
 expressions and predicates are compared with PostgreSQL-normalized definitions.
 Before the strict manifest comparison, startup repairs missing or invalid known
-operational indexes already recorded in the saved manifest. It does not recapture
-the manifest or repair unrelated schema drift.
+operational indexes already recorded in the saved manifest. A known operational index
+that the saved manifest does not list yet (its first build after the migration stopped)
+is left out of the comparison, rebuilt, checked against its definition, and then recorded.
+Startup does not recapture the manifest otherwise or repair unrelated schema drift.
 Custom SQL migrations must finish with
 `SELECT quills_migrations.capture_schema_manifest();`. Never recapture the manifest
 to hide unexpected drift. Authorization remains at request entry; already-authorized

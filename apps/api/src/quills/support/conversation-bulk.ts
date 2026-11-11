@@ -60,7 +60,7 @@ const action = z.discriminatedUnion("type", [
   z.object({ type: z.literal("priority"), priority: z.enum(priorities) }),
   z.object({
     type: z.literal("snooze"),
-    until: z.iso.datetime({ offset: true }).nullable(),
+    until: z.iso.datetime({ offset: true }).max(64).nullable(),
   }),
   z.object({
     type: z.literal("tag"),

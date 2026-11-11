@@ -14,12 +14,8 @@ import { boardProjects } from "../../database/quills/schema/platform-links";
 import { posts } from "../../database/quills/schema/posts";
 import { segments } from "../../database/quills/schema/segments";
 import { defineQuillsRoute, type Database } from "../framework/define-route";
-import {
-  boardVisible,
-  findBoard,
-  loadProjects,
-  notTestPrincipal,
-} from "./visibility";
+import { recountMergeTargets } from "./thread-counts";
+import { boardVisible, findBoard, loadProjects, notTest } from "./visibility";
 
 const tiers = ["anonymous", "authenticated", "segments", "team"] as const;
 const rank = { anonymous: 0, authenticated: 1, segments: 2, team: 3 };
@@ -236,7 +232,7 @@ const listBoards = defineQuillsRoute({
                 ),
                 isNull(posts.deletedAt),
                 isNull(posts.canonicalPostId),
-                notTestPrincipal(db, posts.principalId),
+                notTest(posts.principalId),
               ),
             )
             .groupBy(posts.boardId)
@@ -402,6 +398,8 @@ const deleteBoard = defineQuillsRoute({
       .returning({ id: boards.id, deletedAt: boards.deletedAt });
     if (!row) throw new HTTPException(404, { message: "Board not found" });
     await db.delete(boardProjects).where(eq(boardProjects.boardId, row.id));
+    // Merged posts on a deleted board no longer count on their canonical posts.
+    await recountMergeTargets(db, eq(posts.boardId, row.id));
     return { id: row.id, deletedAt: row.deletedAt! };
   },
 });

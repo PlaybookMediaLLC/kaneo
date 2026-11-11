@@ -1,5 +1,11 @@
 import { fixture } from "../framework/contract";
-import { deletePost, seed, type Ids } from "./seed.fixture";
+import {
+  deletePost,
+  seed,
+  softDeleteBoard,
+  softDeletePost,
+  type Ids,
+} from "./seed.fixture";
 
 /** A request on A's post, with extra input and the workspace B values for its IDs. */
 const onPost = (
@@ -10,6 +16,7 @@ const onPost = (
     seed,
     valid: (ids: Ids) => ({ params: { postId: ids.a.postId }, ...extra(ids) }),
     foreign: (ids: Ids) => ({ postId: ids.b.postId, ...more(ids) }),
+    softDelete: softDeletePost,
   });
 const all = fixture({ seed, valid: () => ({}) });
 
@@ -19,7 +26,12 @@ export const listQuillsPostOwnerCandidates = all;
 export const getQuillsPost = onPost();
 export const listQuillsPostActivity = onPost();
 export const deleteQuillsPost = onPost();
-export const restoreQuillsPost = { ...onPost(), seed: deletePost };
+// Its target is a deleted post.
+export const restoreQuillsPost = {
+  ...onPost(),
+  seed: deletePost,
+  softDelete: undefined,
+};
 export const createQuillsPost = fixture({
   seed,
   valid: ({ a }: Ids) => ({
@@ -32,6 +44,7 @@ export const createQuillsPost = fixture({
     },
   }),
   foreign: ({ b }: Ids) => ({ boardId: b.boardId, statusId: b.statusId }),
+  softDelete: softDeleteBoard,
 });
 export const updateQuillsPost = onPost(() => ({
   body: { title: "Edited", content: "Edited", isCommentsLocked: true },

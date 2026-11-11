@@ -31,8 +31,8 @@ const listAuditEvents = defineQuillsRoute({
       .pipe(z.array(eventType).max(20))
       .optional(),
     actorPrincipalId: flexibleToTypeIdSchema("principal").optional(),
-    from: z.iso.datetime({ offset: true }).optional(),
-    to: z.iso.datetime({ offset: true }).optional(),
+    from: z.iso.datetime({ offset: true }).max(64).optional(),
+    to: z.iso.datetime({ offset: true }).max(64).optional(),
     before: flexibleToTypeIdSchema("audit").optional(),
     limit: z.coerce.number().int().min(1).max(100).default(50),
   }),

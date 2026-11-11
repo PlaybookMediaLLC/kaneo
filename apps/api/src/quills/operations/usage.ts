@@ -4,11 +4,7 @@ import { aiUsageLog } from "../../database/quills/schema/ai-usage-log";
 import { boards } from "../../database/quills/schema/boards";
 import { posts } from "../../database/quills/schema/posts";
 import { defineQuillsRoute } from "../framework/define-route";
-import {
-  boardVisible,
-  loadProjects,
-  notTestPrincipal,
-} from "../feedback/visibility";
+import { boardVisible, loadProjects, notTest } from "../feedback/visibility";
 
 // Usage counters from the source's /api/v1/admin/usage. Seats and invitations are Kaneo
 // membership, so they are not here. Post and board counts skip boards the caller cannot see.
@@ -55,7 +51,7 @@ const usage = defineQuillsRoute({
         and(
           isNull(posts.deletedAt),
           boardVisible(projects),
-          notTestPrincipal(db, posts.principalId),
+          notTest(posts.principalId),
         ),
       );
     const [boardRow] = await db
