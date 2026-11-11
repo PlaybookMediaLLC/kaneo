@@ -20,6 +20,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Hono } from "hono";
 import { Pool } from "pg";
 import * as kaneo from "../../../database/schema";
+import { auditLog } from "../../../database/quills/schema/audit-log";
 import { boards } from "../../../database/quills/schema/boards";
 import { events } from "../../../database/quills/schema/events";
 import { hookDeliveries } from "../../../database/quills/schema/hook-deliveries";
@@ -30,7 +31,7 @@ import { webhooks } from "../../../database/quills/schema/webhooks";
 import { encryptSecret } from "../../../notification-preferences/secrets";
 import type { BaseVariables } from "../../../openapi";
 import router from "../..";
-import { recordQuillsChange } from "../../events";
+import { RECEIPT_MAX_BYTES, recordQuillsChange } from "../../events";
 import { claimQuillsJob, enqueueQuillsJob, finishQuillsJob } from "../queue";
 import { pruneQuillsWorkspace } from "../retention";
 import { harness } from "./harness.fixture";
@@ -199,6 +200,76 @@ describe.skipIf(!url)("Quills webhook delivery", () => {
     await h.drain(h.a);
     expect(hits).toHaveLength(1);
     expect((await job(eventId, webhookId))!.status).toBe("succeeded");
+  });
+
+  it("keeps a settings receipt in the audit row only, and refuses an oversized one", async () => {
+    await hook();
+    const record = (entityId: string, receipt?: unknown) =>
+      h.as(h.a, h.owner, (db, actor) =>
+        recordQuillsChange(db, actor, {
+          type: "team.bound",
+          entityType: "team",
+          entityId,
+          payload: { field: "kept" },
+          receipt: receipt as never,
+        }),
+      );
+    const rows = (entityId: string) =>
+      h.system(h.a, async (db) => ({
+        audit: await db
+          .select({ metadata: auditLog.metadata })
+          .from(auditLog)
+          .where(eq(auditLog.targetId, entityId)),
+        events: await db
+          .select()
+          .from(events)
+          .where(eq(events.entityId, entityId)),
+      }));
+    const receipt = {
+      area: "branding",
+      before: { theme: { primary: "#111111" }, customCss: "a{color:red}" },
+      after: { theme: { primary: "#222222" }, customCss: "a{color:blue}" },
+    };
+    const eventId = await record("undo-with", receipt);
+    const stored = await rows("undo-with");
+    expect(stored.audit).toEqual([{ metadata: { field: "kept", receipt } }]);
+    expect(stored.events).toHaveLength(1);
+    expect(stored.events[0]!.payload).toEqual({ field: "kept" });
+    await h.drain(h.a);
+    const jobs = await h.system(h.a, (db) =>
+      db
+        .select()
+        .from(jobQueue)
+        .where(like(jobQueue.dedupeKey, `${eventId}%`)),
+    );
+    expect(jobs.length).toBeGreaterThan(0);
+    for (const value of [stored.events, jobs, hits.map((hit) => hit.body)])
+      expect(
+        JSON.stringify(value, (_key, item) =>
+          typeof item === "bigint" ? String(item) : item,
+        ),
+      ).not.toMatch(/#111111|#222222|customCss|receipt/);
+    expect(hits).toHaveLength(1);
+    expect(JSON.parse(hits[0]!.body).data).toEqual({
+      field: "kept",
+      entityType: "team",
+      entityId: "undo-with",
+    });
+
+    // Without a receipt, the audit metadata is the payload, as before.
+    await record("undo-without");
+    expect((await rows("undo-without")).audit).toEqual([
+      { metadata: { field: "kept" } },
+    ]);
+
+    // An oversized receipt fails before any write.
+    const oversized = {
+      area: "branding",
+      before: { customCss: "x".repeat(RECEIPT_MAX_BYTES) },
+      after: {},
+    };
+    await expect(record("undo-oversized", oversized)).rejects.toThrow();
+    expect(await rows("undo-oversized")).toEqual({ audit: [], events: [] });
   });
 
   it("records an uncertain outcome and never sends it again", async () => {

@@ -5,6 +5,29 @@ import { auditLog } from "../database/quills/schema/audit-log";
 import { events } from "../database/quills/schema/events";
 import { enqueueQuillsEvent } from "./jobs/queue";
 
+/**
+ * The largest serialized receipt: the largest allowlisted settings area is custom CSS (up to 50 KB)
+ * before and after, with room for the theme and other small fields.
+ */
+export const RECEIPT_MAX_BYTES = 128 * 1024;
+/**
+ * A settings receipt (decision D11): the before and after values of one settings write. The caller
+ * allowlists the fields; a secret, a token or a credential never enters a receipt. It goes only into
+ * the audit row's metadata (`metadata.receipt`), never into the outbox event, its jobs or a webhook.
+ * Settings undo parses `metadata.receipt` with this schema.
+ */
+export const receiptSchema = z
+  .object({
+    area: z.string().min(1).max(64),
+    before: z.record(z.string().max(100), z.json()),
+    after: z.record(z.string().max(100), z.json()),
+  })
+  .refine(
+    (receipt) =>
+      Buffer.byteLength(JSON.stringify(receipt)) <= RECEIPT_MAX_BYTES,
+    "The settings receipt is too large.",
+  );
+
 export const changeSchema = z.object({
   type: z.enum([
     "board.project_linked",
@@ -406,6 +429,7 @@ export const changeSchema = z.object({
   ]),
   entityId: z.string().min(1).max(200),
   payload: z.record(z.string(), z.string().max(500)).default({}),
+  receipt: receiptSchema.optional(),
 });
 /** "user" is a teammate; portal and widget callers are customers or anonymous visitors. */
 export const actorTypeSchema = z.enum(["user", "customer", "anonymous"]);
@@ -416,13 +440,14 @@ export type ChangeActor = {
 /**
  * Writes the audit row, the outbox event and its job in the caller's transaction.
  * `actor` null records a change that a worker made, with no teammate or customer actor.
+ * A `receipt` goes only into the audit row's metadata (see receiptSchema).
  */
 export async function recordQuillsChange(
   db: Database,
   actor: ChangeActor | null,
   input: z.input<typeof changeSchema>,
 ) {
-  const change = changeSchema.parse(input);
+  const { receipt, ...change } = changeSchema.parse(input);
   const actorType = actor
     ? actorTypeSchema.parse(actor.actorType ?? "user")
     : "system";
@@ -433,7 +458,7 @@ export async function recordQuillsChange(
     eventType: change.type,
     targetType: change.entityType,
     targetId: change.entityId,
-    metadata: change.payload,
+    metadata: receipt ? { ...change.payload, receipt } : change.payload,
     channel: actor ? "api" : "system",
   });
   await db.insert(events).values({
