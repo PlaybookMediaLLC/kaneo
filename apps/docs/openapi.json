@@ -60266,7 +60266,7 @@
             }
           },
           "409": {
-            "description": "The workspace has a logo, or file storage is not configured",
+            "description": "The workspace has a logo, file storage is not configured, or a lookup is running",
             "content": {
               "application/json": {
                 "schema": {
@@ -60337,6 +60337,16 @@
           },
           "403": {
             "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A lookup is running",
             "content": {
               "application/json": {
                 "schema": {
