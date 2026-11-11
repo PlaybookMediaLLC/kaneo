@@ -5,7 +5,7 @@ import * as schema from "./schema";
 const tables = Object.values(schema).filter((value) => is(value, PgTable));
 describe("Quills schema ownership", () => {
   it("keeps every feature table tenant-scoped and outside Kaneo's namespace", () => {
-    expect(tables.length).toBe(147);
+    expect(tables.length).toBe(148);
     for (const table of tables) {
       const config = getTableConfig(table);
       expect(config.schema, config.name).toBe("quills");

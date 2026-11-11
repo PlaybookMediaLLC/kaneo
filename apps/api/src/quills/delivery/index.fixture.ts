@@ -1,4 +1,5 @@
 export * from "./changelog-subscribers.fixture";
+export * from "./devices.fixture";
 export * from "./notification-preferences.fixture";
 export * from "./notifications.fixture";
 export * from "./post-subscriptions.fixture";

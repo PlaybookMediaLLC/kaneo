@@ -33,3 +33,5 @@ export const saveQuillsFaviconKey = save("favicon");
 export const deleteQuillsFavicon = remove("favicon");
 export const saveQuillsHeaderLogoKey = save("header_logo");
 export const deleteQuillsHeaderLogo = remove("header_logo");
+export const saveQuillsWidgetHeroImageKey = save("widget_hero");
+export const deleteQuillsWidgetHeroImage = remove("widget_hero");

@@ -44,6 +44,11 @@ export const CONCURRENT_INDEX_SPECS: readonly ConcurrentIndexSpec[] = [
     ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS settings_portal_og_image_key_lookup_idx ON quills.settings (portal_og_image_key) WHERE portal_og_image_key IS NOT NULL",
   },
   {
+    name: "settings_widget_hero_key_lookup_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS settings_widget_hero_key_lookup_idx ON quills.settings (widget_hero_key) WHERE widget_hero_key IS NOT NULL",
+  },
+  {
     name: "files_storage_key_lookup_idx",
     concurrent: true,
     ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS files_storage_key_lookup_idx ON quills.files (storage_key) WHERE storage_key IS NOT NULL",

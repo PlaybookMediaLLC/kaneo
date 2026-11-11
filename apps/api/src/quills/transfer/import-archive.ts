@@ -95,6 +95,11 @@ export function prepareArchive(
       }
       // An imported webhook must not send this workspace's events until an admin turns it on here.
       if (name === "webhooks") row.status = "disabled";
+      // An invite link of the source workspace must not open this one: no token survives the import.
+      if (name === "portal_invites") {
+        row.token_hashes = [];
+        if (row.status === "pending") row.status = "expired";
+      }
       if (
         name === "workflow_runs" &&
         ["running", "waiting"].includes(String(row.state))

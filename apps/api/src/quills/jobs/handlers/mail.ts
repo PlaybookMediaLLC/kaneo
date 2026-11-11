@@ -15,7 +15,8 @@ import { finishQuillsJob } from "../queue";
 export const mailPayloadSchema = z
   .object({
     eventId: z.string().min(1).max(200),
-    principalId: typeIdSchema("principal"),
+    /** Absent for direct mail: the event's content names the one address (an invite). */
+    principalId: typeIdSchema("principal").optional(),
   })
   .strict();
 
@@ -53,29 +54,37 @@ export function rejection(error: unknown) {
 
 export async function runMailJob(workspaceId: string, job: JobQueueRow) {
   const { eventId, principalId } = mailPayloadSchema.parse(job.payload);
-  const key = `mail:${eventId}:${principalId}`;
+  const key = `mail:${eventId}:${principalId ?? "direct"}`;
   const finish = (error?: string, permanent?: boolean) =>
     withQuillsSystemWorkspace(workspaceId, (db) =>
       finishQuillsJob(db, job.id, job.leaseToken!, error, permanent),
     );
   const prepared = await withQuillsSystemWorkspace(workspaceId, async (db) => {
     const event = await loadEvent(db, eventId);
-    const content = event && (await subscribers[event.type]?.mail?.(db, event));
-    if (!content || !(await wants(db, principalId, content.type, "email")))
+    const entry = event && subscribers[event.type];
+    // A direct entry mails only the address its content names; a principal entry never does.
+    if (!entry || Boolean(entry.direct) === Boolean(principalId))
+      return undefined;
+    const content = await entry.mail?.(db, event, principalId ?? null);
+    if (!content) return undefined;
+    if (!principalId)
+      return content.to ? { content, to: content.to, userId: null } : undefined;
+    if (!(await wants(db, principalId, content.type, "email")))
       return undefined;
     const [recipient] = await db
       .select({ userId: principal.kaneoUserId })
       .from(principal)
       .where(eq(principal.id, principalId));
     return recipient?.userId
-      ? { content, userId: recipient.userId }
+      ? { content, to: null, userId: recipient.userId }
       : undefined;
   });
+  if (!prepared) return finish();
   // Membership and address are read at send time: a teammate who left or lost access gets nothing.
-  const reader =
-    prepared &&
-    (await quillsReaders(workspaceId, [prepared.userId])).get(prepared.userId);
-  if (!prepared || !reader) return finish();
+  const reader = prepared.userId
+    ? (await quillsReaders(workspaceId, [prepared.userId])).get(prepared.userId)
+    : prepared.to && { email: prepared.to };
+  if (!reader) return finish();
   const claim = await withQuillsSystemWorkspace(workspaceId, (db) =>
     claimDelivery(db, key, "mail"),
   );
@@ -101,7 +110,7 @@ export async function runMailJob(workspaceId: string, job: JobQueueRow) {
     await db.insert(emailLog).values({
       direction: "outbound",
       emailType: prepared.content.emailType,
-      principalId,
+      principalId: principalId ?? null,
       address: reader.email,
       postId: prepared.content.postId ?? null,
       status:

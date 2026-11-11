@@ -42,6 +42,7 @@ export const settingsPurposes = [
   "favicon",
   "header_logo",
   "assistant_avatar",
+  "widget_hero",
 ] as const;
 /** Purposes registered in `quills.files`. Settings keys register in their own column. */
 export const filePurposes = [...contentPurposes, "assistant_avatar"] as const;

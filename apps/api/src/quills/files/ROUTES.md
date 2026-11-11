@@ -72,7 +72,7 @@ A PUT with the key that is already set and a DELETE with no key change nothing a
 
 | Source capability | Reason |
 |---|---|
-| `getQuillsWidgetHeroUploadUrl`, `saveQuillsWidgetHeroImageKey`, `deleteQuillsWidgetHeroImage` | The key lives in `settings.widget_config` (JSON text) at `home.heroImageKey`. The reference probe, cleanup trigger, deletion listing and transfer do not cover it. Covering it needs a Quills migration that replaces four storage functions and parses JSON text in a trigger. Do it with the widget configuration routes. |
+| `getQuillsWidgetHeroUploadUrl`, `saveQuillsWidgetHeroImageKey`, `deleteQuillsWidgetHeroImage` | Built in P3c with a `settings.widget_hero_key` column; see `portal/CUSTOMER-ROUTES.md`. |
 | `getQuillsIdentityProviderLogoUploadUrl` | AUTH_MANAGE. The Kaneo Quills schema has no identity provider logo field to hold the key. Do it with the sign-in configuration routes. |
 | `getQuillsAvatarUploadUrl` (teammate part) | A teammate avatar is the canonical Kaneo profile image. A Quills copy would be a parallel profile. |
 | `getQuillsAvatarUploadUrl` (customer part), `getQuillsWidgetImageUploadUrl`, `createQuillsPortalFiles`, `createQuillsPortalUpload`, `listQuillsStorage` and `putQuillsStorage` (public proxy), the beacon form of `createQuillsFilesOpened`, the public use of `checkQuillsS3Configured` | Portal, widget or public audience: phase P3. |

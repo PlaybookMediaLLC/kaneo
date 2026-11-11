@@ -291,6 +291,9 @@ export const settings = quillsSchema
       headerLogoKey: text("header_logo_key"),
       // Portal social share (OG) image - S3 storage key
       portalOgImageKey: text("portal_og_image_key"),
+      // Widget Home hero image - S3 storage key. A column, not widget_config JSON, so the
+      // storage lifecycle (probe, cleanup trigger, deletion listing, transfer) sees it.
+      widgetHeroKey: text("widget_hero_key"),
       createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
       metadata: text("metadata"),
       /**

@@ -117,6 +117,8 @@ The source has no teammate-only status-subscriber route. All three rows are self
 
 ## Deferred (not teammate)
 
+P3c builds every row below; see `portal/CUSTOMER-ROUTES.md`. `api/devices` is a teammate route there.
+
 | Source row | Audience | Reason |
 |---|---|---|
 | `getQuillsMyChangelogSubscription`, `subscribeQuillsToChangelog`, `unsubscribeQuillsFromChangelog` | signed-in principal on the public changelog | portal audience (P3 model) |
@@ -153,8 +155,10 @@ New queues: `quills.webhook`, `quills.mail`, `quills.notification` (`jobs/handle
   no board passes the filter. Private comments go to no webhook. Recipients come from the `subscribers` table in
   `jobs/fanout.ts` (event type to recipients and content). Today only current teammates who can read
   Quills and see the post's board are told, never the actor. Customers wait for the portal audience.
-  The table has in-app entries for `post.status_changed` and `comment.created`. It has no production
-  mail entry yet: every Quills mail needs an unsubscribe link and Quills web URLs, and both are deferred.
+  The table has in-app and mail entries for `post.status_changed` and `comment.created`; each mail
+  carries its recipient's one-click unsubscribe link. A `direct` entry (portal invites) mails the one
+  address its content names, with payload `{ eventId }` and ledger key `mail:{eventId}:direct`.
+  See `portal/CUSTOMER-ROUTES.md` (P3c).
 - No backlog: `recordQuillsChange` marks new events with `context.deliver`. Older events are never delivered.
 - Webhook and mail: the ledger row is committed as `processing` before the external call. The outcome is
   `completed`, `failed` (certainly not delivered; a later attempt may send) or `uncertain` (no automatic

@@ -186,7 +186,7 @@ export async function coerceAttributes(
   return { set, remove };
 }
 
-function coerce(value: string | number | boolean, type: string) {
+export function coerce(value: string | number | boolean, type: string) {
   if (type === "string") return String(value);
   if (type === "boolean")
     return typeof value === "boolean"

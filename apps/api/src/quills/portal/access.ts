@@ -1,6 +1,6 @@
 import { apiRouter, z } from "../../openapi";
 import { defineQuillsRoute } from "../framework/define-route";
-import { evaluatePortalAccess } from "../framework/audience";
+import { portalAccess } from "./gate";
 
 // The private-portal gate for the calling Kaneo account. Only the decision leaves the server;
 // the policy (allowed domains and segments) does not.
@@ -12,6 +12,7 @@ const decision = z.object({
     "team",
     "domain",
     "segment",
+    "invite",
     "unauthenticated",
     "unauthorized",
   ]),
@@ -29,7 +30,7 @@ const myAccess = defineQuillsRoute({
   action: "read",
   response: decision,
   responseDescription: "The access decision",
-  handler: ({ db, caller }) => evaluatePortalAccess(db, caller),
+  handler: ({ db, caller }) => portalAccess(db, caller),
 });
 
 const recordDenied = defineQuillsRoute({
@@ -52,7 +53,7 @@ const recordDenied = defineQuillsRoute({
       payload: { reason: result.reason },
     },
   handler: async ({ db, caller }) => {
-    const access = await evaluatePortalAccess(db, caller);
+    const access = await portalAccess(db, caller);
     return { recorded: !access.granted, reason: access.reason };
   },
 });
