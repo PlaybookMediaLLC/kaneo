@@ -117,9 +117,11 @@ Merged: `public-profile.ts#getPublicUserProfileFn`; `public-profile.ts#getProfil
 
 Rules of the public profile:
 
-- A profile resolves only for a principal of type `user` with a portal role, that is not blocked
-  and not a test customer. Anything else is 404 `Profile not found`, the same answer as an
-  unknown ID or an ID of another workspace.
+- A profile resolves only for a principal of type `user` with a portal role and a live account (a
+  customer identity or a Kaneo account), that is not blocked and not a test customer. Anything
+  else is 404 `Profile not found`, the same answer as an unknown ID or an ID of another workspace.
+  A deleted Kaneo account keeps its principal as "Deleted user" without an account, so it has no
+  profile.
 - Activity uses the customer view of `feedback/viewer.ts`: visible boards, live posts, public
   comments, no held content of other people and no test data. A profile with no activity that
   the caller can see is 404, so the route does not confirm that an account exists.
@@ -132,9 +134,10 @@ Rules of the public profile:
 | Portal off, private portal denied | `null` (404) | 404 while the portal is off; 403 `Portal access required` on a private portal, as every portal route | one gate for every portal route (`viewer.ts`) |
 | Upvotes | list and `voteCount` | not returned | P3b keeps voter names private; a list of upvoted posts names the voter |
 | Blocked person | resolves | 404 | a blocked person is out of the portal |
+| Deleted account | no profile (the inner join to the account) | 404 | the same rule: the principal has no live account |
 | Avatar | uploaded image, account image or principal avatar | the principal's http(s) avatar, as the portal post list | one avatar rule for the portal |
 | Team context `lastSeenAt` | latest session or device | latest visitor device | sessions are Kaneo's |
-| Team context email of a teammate | account email | null | a teammate's email is Kaneo's; `getQuillsPrincipal` has the roster |
+| Team context email of a teammate | account email | the Quills contact email, or null | a teammate's account email is Kaneo's; `getQuillsPrincipal` has the roster |
 | Links to profiles | author names link to `/u/{principalId}` | portal lists name no author principal IDs (P3b) | a client reaches a profile by an ID it already has, for example its own from `GET /user/profile`; exposing author IDs needs an owner decision |
 
 ## Not built in this slice

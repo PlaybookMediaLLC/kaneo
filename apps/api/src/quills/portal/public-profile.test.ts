@@ -9,12 +9,15 @@ import {
   user as customer,
 } from "../../database/quills/schema/auth";
 import { boards } from "../../database/quills/schema/boards";
+import { companies } from "../../database/quills/schema/companies";
 import {
   postComments,
   posts,
   postVotes,
 } from "../../database/quills/schema/posts";
+import { segments, userSegments } from "../../database/quills/schema/segments";
 import { postStatuses } from "../../database/quills/schema/statuses";
+import { visitorDevices } from "../../database/quills/schema/visitor-analytics";
 import { DEFAULT_BOARD_ACCESS } from "../../database/quills/types";
 import * as kaneo from "../../database/schema";
 import quillsRouter from "../index";
@@ -143,8 +146,9 @@ describe.skipIf(!url)("Quills public profiles", () => {
       const comment = async (
         title: string,
         values: Partial<typeof postComments.$inferInsert> = {},
+        on: Partial<typeof posts.$inferInsert> = {},
       ) => {
-        const postId: PostId = await post(title, actor.principalId);
+        const postId: PostId = await post(title, actor.principalId, on);
         await db
           .insert(postComments)
           .values({ postId, principalId: x, content: title, ...values });
@@ -153,6 +157,44 @@ describe.skipIf(!url)("Quills public profiles", () => {
       await comment("commented-private", { isPrivate: true });
       await comment("commented-held", { moderationState: "pending" });
       await comment("commented-deleted", { deletedAt: new Date() });
+      // Public comments on posts that the caller cannot see.
+      await comment("on-team-board", {}, { boardId: team!.id as BoardId });
+      await comment("on-deleted-post", {}, { deletedAt: new Date() });
+      await comment("on-held-post", {}, { moderationState: "pending" });
+      await comment(
+        "on-test-post",
+        {},
+        {
+          principalId: await person("test-author", { testOwnerPrincipalId: x }),
+        },
+      );
+      const [company] = await db
+        .insert(companies)
+        .values({ name: "xavier-co", plan: "pro" })
+        .returning({ id: companies.id });
+      await db
+        .update(principal)
+        .set({ companyId: company!.id })
+        .where(eq(principal.id, x));
+      const [live, gone] = await db
+        .insert(segments)
+        .values([
+          { name: "xavier-segment", slug: env.id("live") },
+          { name: "gone-segment", slug: env.id("gone"), deletedAt: new Date() },
+        ])
+        .returning({ id: segments.id });
+      await db.insert(userSegments).values([
+        { principalId: x, segmentId: live!.id },
+        { principalId: x, segmentId: gone!.id },
+      ]);
+      ids.company = company!.id;
+      ids.segment = live!.id;
+      ids.seenAt = "2026-01-02T03:04:05.000Z";
+      await db.insert(visitorDevices).values({
+        deviceId: env.id("device"),
+        principalId: x,
+        lastSeenAt: new Date(ids.seenAt),
+      });
       await db.insert(postVotes).values({
         postId: await post("voted-post", actor.principalId),
         principalId: x,
@@ -169,6 +211,19 @@ describe.skipIf(!url)("Quills public profiles", () => {
       });
       ids.removed = await person("removed");
       await db.delete(principal).where(eq(principal.id, ids.removed as never));
+      // A deleted Kaneo account keeps its principal and its posts, without an account.
+      ids.deleted = (
+        await db
+          .insert(principal)
+          .values({
+            type: "user",
+            role: "user",
+            displayName: "Deleted user",
+            createdAt: new Date(),
+          })
+          .returning({ id: principal.id })
+      )[0]!.id;
+      await post("deleted-account-post", ids.deleted as PrincipalId);
     });
     await env.scoped(env.b, async (db, actor) => {
       const [board] = await db
@@ -229,12 +284,19 @@ describe.skipIf(!url)("Quills public profiles", () => {
       "commented-private",
       "commented-held",
       "commented-deleted",
+      "on-team-board",
+      "on-deleted-post",
+      "on-held-post",
+      "on-test-post",
       "voted-post",
+      "xavier-co",
+      "xavier-segment",
+      ids.company!,
     ])
       expect(text).not.toContain(hidden);
   });
 
-  it("answers 404 alike for blocked, test, removed, unknown, foreign and quiet people", async () => {
+  it("answers 404 alike for blocked, test, removed, deleted, unknown, foreign and quiet people", async () => {
     const unknown = await profile(ids.removed!.replace(/.$/, "0"));
     expect(unknown.status).toBe(404);
     for (const id of [
@@ -242,6 +304,7 @@ describe.skipIf(!url)("Quills public profiles", () => {
       ids.tester,
       ids.quiet,
       ids.removed,
+      ids.deleted,
       ids.foreign,
     ]) {
       const res = await profile(id!);
@@ -271,9 +334,16 @@ describe.skipIf(!url)("Quills public profiles", () => {
     expect(context.status).toBe(200);
     expect(context.body).toEqual({
       email: "xavier@example.test",
-      company: null,
-      segments: [],
-      lastSeenAt: null,
+      company: {
+        id: ids.company,
+        name: "xavier-co",
+        plan: "pro",
+        mrrCents: null,
+      },
+      segments: [
+        { id: ids.segment, name: "xavier-segment", color: expect.any(String) },
+      ],
+      lastSeenAt: ids.seenAt,
       emailVerified: false,
       blocked: false,
     });
@@ -281,7 +351,7 @@ describe.skipIf(!url)("Quills public profiles", () => {
       (await call(`/profiles/${ids.blocked}/team-context`, env.owner, true))
         .body.blocked,
     ).toBe(true);
-    for (const id of [ids.tester, ids.removed, ids.foreign])
+    for (const id of [ids.tester, ids.removed, ids.deleted, ids.foreign])
       expect(
         (await call(`/profiles/${id}/team-context`, env.owner, true)).status,
       ).toBe(404);

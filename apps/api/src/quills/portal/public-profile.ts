@@ -5,7 +5,10 @@ import {
   countDistinct,
   desc,
   eq,
+  inArray,
+  isNotNull,
   isNull,
+  or,
   sql,
 } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
@@ -41,11 +44,16 @@ const ACTIVITY_LIMIT = 100;
 const params = z.object({ principalId: flexibleToTypeIdSchema("principal") });
 const notFound = () => new HTTPException(404, { message: "Profile not found" });
 
-/** A person a profile may show: a human with a portal role, not a test customer. */
+/**
+ * A person a profile may show: a human with a portal role and a live account, not a test customer.
+ * A deleted Kaneo account keeps its principal ("Deleted user") with neither a customer identity
+ * nor a Kaneo account, so it has no profile.
+ */
 const profileOwner = and(
   eq(principal.type, "user"),
-  sql`${principal.role} in ('user', 'member', 'admin')`,
+  inArray(principal.role, ["user", "member", "admin"]),
   isNull(principal.testOwnerPrincipalId),
+  or(isNotNull(principal.userId), isNotNull(principal.kaneoUserId)),
 );
 
 const activityItem = z.object({
@@ -96,13 +104,12 @@ const publicProfile = defineQuillsRoute({
     const [owner] = await db
       .select({
         principalId: principal.id,
-        displayName: sql<string>`coalesce(${principal.displayName}, ${customer.name}, '')`,
+        displayName: principal.displayName,
         avatarUrl: principal.avatarUrl,
         teammate: principal.kaneoUserId,
         joinedAt: principal.createdAt,
       })
       .from(principal)
-      .leftJoin(customer, eq(customer.id, principal.userId))
       .where(
         and(
           eq(principal.id, params.principalId),
@@ -139,7 +146,7 @@ const publicProfile = defineQuillsRoute({
     );
     return {
       principalId: owner.principalId,
-      displayName: owner.displayName,
+      displayName: owner.displayName ?? "",
       avatarUrl: httpUrl(owner.avatarUrl),
       isTeamMember: owner.teammate !== null,
       joinedAt: owner.joinedAt,
@@ -179,7 +186,7 @@ const teamContext = defineQuillsRoute({
   operationId: "getQuillsProfileTeamContext",
   summary: "Get the team context of a profile",
   description:
-    "The email, company, segments, last device visit and the verified and blocked flags of a person with a profile. A teammate's email is Kaneo's and is null here.",
+    "The email, company, segments, last device visit and the verified and blocked flags of a person with a profile. The email is the customer account's, else the contact email; a teammate's account email stays in Kaneo.",
   action: "read",
   params,
   response: z.object({
