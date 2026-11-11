@@ -14,7 +14,7 @@ const batch = defineQuillsRoute({
   operationId: "readQuillsTogether",
   summary: "Run up to 20 teammate reads in one request",
   description:
-    "Each read names a teammate GET route by operationId, with its query values. A route with path parameters, native permissions, a project or a step outside its handler is not batchable (status 404), and neither is this route. Each result carries the status that the route itself answers this caller (200, 400, 403, 404 or 409) and, for 200, the route's JSON answer as text. One refused read does not fail the others; an unexpected server error fails the batch.",
+    "Each read names a teammate GET route by operationId, with its query values. A route with path parameters, native permissions, a project or a step outside its handler is not batchable (status 404), and neither is this route. Each result carries the status that the route itself answers this caller (200, 400, 403, 404 or 409) and, for 200, the route's JSON answer as text. One refused read does not fail the others; an unexpected server error fails the batch. An API key spends one request of its rate limit and quota on the whole batch.",
   action: "read",
   callerActions: true,
   body: z.object({

@@ -13,6 +13,8 @@ import {
   removeMembers,
   restrictedMember,
 } from "../feedback/taxonomy-harness.fixture";
+import { batchable } from "../framework/read-batch";
+import { registry } from "../framework/registry";
 import { sharedRows } from "./customer/seed.fixture";
 
 let pool: Pool;
@@ -56,6 +58,29 @@ async function send(
 type Read = { operationId: string; query?: Record<string, string> };
 const batch = (caller: Caller, reads: Read[]) =>
   send("POST", "/read-batch", caller, { reads });
+
+describe("batchable reads", () => {
+  it("refuses a route with any check outside its handler or a combined action check", () => {
+    const read = [...registry.keys()].find(
+      (d) => d.operationId === "listQuillsTicketStatuses",
+    )!;
+    expect(batchable(read)).toBe(true);
+    for (const extra of [
+      { project: () => "project" },
+      { after: async (result: unknown) => result },
+      { load: async () => undefined },
+      { native: { project: ["read"] } },
+      { alsoRequires: ["update"] },
+      { callerActions: true },
+      { audience: "portal" },
+      { method: "post" },
+    ])
+      expect([extra, batchable({ ...read, ...extra } as never)]).toEqual([
+        extra,
+        false,
+      ]);
+  });
+});
 
 describe.skipIf(!url)("Quills read batch", () => {
   beforeAll(async () => {
@@ -135,6 +160,9 @@ describe.skipIf(!url)("Quills read batch", () => {
       "listQuillsLinks",
       "readQuillsTogether",
       "getQuillsConversationPresence",
+      // load and prepare: steps outside the handler.
+      "getQuillsUsage",
+      "unfurlQuillsLink",
       "noSuchRead",
     ];
     const res = await batch({ user: env.owner }, [
