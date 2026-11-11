@@ -11,6 +11,8 @@ import {
 } from "../../database/schema";
 import { findInaccessibleProjectIds } from "../../project-access/find-inaccessible-project-ids";
 import { roleHasWorkspacePermission } from "../../utils/require-workspace-permission";
+import { hasInstanceAdminRole } from "../../utils/instance-admin-role";
+import type { QuillsAction } from "../with-quills-request";
 import { listAccessibleProjectIds } from "../../project-access/list-accessible-project-ids";
 import { requireWorkspaceEntitlement } from "../../billing/controllers/require-entitlement";
 
@@ -161,6 +163,43 @@ export async function quillsReaders(
     )
       readers.set(row.userId, { email: row.email });
   return readers;
+}
+
+/**
+ * Whether the user may take a Quills action in this workspace now, by the request rules with no
+ * request: an unbanned account that is an instance administrator, or a current member whose
+ * Kaneo role grants workspace:read and the action. Automation re-checks its acting teammate here.
+ */
+export async function teammateMayAct(
+  workspaceId: string,
+  userId: string,
+  action: QuillsAction,
+) {
+  const [row] = await platformDb
+    .select({
+      role: userTable.role,
+      banned: userTable.banned,
+      memberRole: workspaceUserTable.role,
+    })
+    .from(userTable)
+    .leftJoin(
+      workspaceUserTable,
+      and(
+        eq(workspaceUserTable.userId, userTable.id),
+        eq(workspaceUserTable.workspaceId, workspaceId),
+      ),
+    )
+    .where(eq(userTable.id, userId))
+    .limit(1);
+  if (!row || row.banned) return false;
+  if (hasInstanceAdminRole(row.role)) return true;
+  return (
+    row.memberRole !== null &&
+    roleHasWorkspacePermission(workspaceId, row.memberRole, {
+      workspace: ["read"],
+      quills: [action],
+    })
+  );
 }
 
 /**

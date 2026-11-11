@@ -102,6 +102,8 @@ export function prepareArchive(
         row.token_hashes = [];
         if (row.status === "pending") row.status = "expired";
       }
+      // An imported workflow acts only after a teammate here publishes it and becomes its actor.
+      if (name === "workflows" && row.status === "live") row.status = "paused";
       if (
         name === "workflow_runs" &&
         ["running", "waiting"].includes(String(row.state))

@@ -46,6 +46,7 @@ import {
   reconcileComponents,
   type Db,
 } from "./shared";
+import { startMaintenanceWindow } from "./maintenance";
 
 const date = z.iso.datetime({ offset: true }).max(64);
 const toDate = (value: string | null | undefined) =>
@@ -657,27 +658,8 @@ const startMaintenance = defineQuillsRoute({
     entityId: result.id,
   }),
   handler: async ({ db, actor, params: { incidentId } }) => {
-    const existing = await lockIncident(db, incidentId);
-    if (existing.kind !== "maintenance" || existing.status !== "scheduled")
+    if (!(await startMaintenanceWindow(db, incidentId, actor.principalId)))
       throw conflict("Only a scheduled maintenance window can be started");
-    const now = new Date();
-    await db
-      .update(statusIncidents)
-      .set({ status: "in_progress", startedAt: now, updatedAt: now })
-      .where(eq(statusIncidents.id, incidentId));
-    await db.insert(statusIncidentUpdates).values({
-      incidentId,
-      status: "in_progress",
-      body: "This scheduled maintenance is now in progress.",
-      createdBy: actor.principalId,
-      createdAt: now,
-    });
-    await reconcileComponents(
-      db,
-      await linkedComponentIds(db, incidentId),
-      "maintenance",
-      incidentId,
-    );
     return incidentById(db, incidentId);
   },
 });

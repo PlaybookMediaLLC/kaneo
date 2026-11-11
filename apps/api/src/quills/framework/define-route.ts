@@ -91,6 +91,11 @@ export type QuillsRouteDeclaration<
    * declared action is the minimum and another person's record needs more. Without it, `actions` is empty.
    */
   callerActions?: true;
+  /**
+   * Teammate: Quills actions the caller must hold besides `action`, checked with it against the role
+   * and the API-key scope. The contract grants them with `action` and denies each one alone.
+   */
+  alsoRequires?: readonly QuillsAction[];
   /** Extra Kaneo permissions, checked by route middleware. */
   native?: PermissionMap;
   /** Path parameters. The helper adds workspaceId. */
@@ -217,9 +222,16 @@ export function buildQuillsRoute<
   const handle = d.handler as (input: object) => Promise<z.input<R>>;
   const audience: Audience = d.audience ?? "teammate";
   if (audience !== "teammate") {
-    if (d.native || d.project || d.load || d.after || d.callerActions)
+    if (
+      d.native ||
+      d.project ||
+      d.load ||
+      d.after ||
+      d.callerActions ||
+      d.alsoRequires
+    )
       throw new Error(
-        `${d.operationId}: native, project, load, after and callerActions are teammate-only`,
+        `${d.operationId}: native, project, load, after, callerActions and alsoRequires are teammate-only`,
       );
     if (
       (d.ensureCustomer && audience !== "portal") ||
@@ -387,6 +399,7 @@ export function buildQuillsRoute<
       c,
       {
         action: d.action,
+        also: d.alsoRequires,
         // A function project ID runs after the permission checks, so `load` and the action set run there too.
         projectId:
           (load || project || callerActions) &&

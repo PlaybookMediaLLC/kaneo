@@ -41,6 +41,8 @@ export async function withQuillsRequest<T>(
   c: Context,
   access: {
     action: QuillsAction;
+    /** Further Quills actions that the caller must also hold (role and API-key scope). */
+    also?: readonly QuillsAction[];
     projectId?: string | (() => Promise<string | undefined>);
   },
   work: (db: Database, actor: QuillsActor) => Promise<T>,
@@ -53,7 +55,7 @@ export async function withQuillsRequest<T>(
   await validateWorkspaceAccess(userId, workspaceId, c.get("apiKey")?.id);
   await requireWorkspacePermission({
     workspace: ["read"],
-    quills: [access.action],
+    quills: [access.action, ...(access.also ?? [])],
   })(c, async () => {});
   const projectId =
     typeof access.projectId === "function"

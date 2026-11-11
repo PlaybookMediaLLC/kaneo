@@ -426,6 +426,7 @@ describe.skipIf(!url)("Quills portal invites and customer routes", () => {
           type: "post.status_changed",
           entityType: "post",
           entityId: postId,
+          actorType: "user",
           actorId: null,
           payload: {},
           context: {},

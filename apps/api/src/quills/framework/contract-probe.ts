@@ -58,7 +58,7 @@ export const grant = (
   ...(native && d.native),
   workspace: [...((native && d.native?.workspace) || []), "read"],
   quills: allowed
-    ? [d.action]
+    ? [d.action, ...(d.alsoRequires ?? [])]
     : statement.quills.filter((action) => action !== d.action),
 });
 

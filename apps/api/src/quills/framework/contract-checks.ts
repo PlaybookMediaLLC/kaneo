@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { fromUuid } from "@kaneo/ids";
+import { statement } from "@kaneo/permissions";
 import * as kaneo from "../../database/schema";
 import type { PermissionMap } from "../../utils/role-permissions";
 import { hashToken } from "./audience";
@@ -97,6 +98,18 @@ export async function checkRoute(
       "api-key-scope",
       `got ${scoped.status} ${JSON.stringify(scoped.body)}`,
     );
+  // Each extra required action alone: a role or key that lacks it is denied.
+  for (const extra of d.alsoRequires ?? []) {
+    const without: PermissionMap = {
+      ...grant(d, true),
+      quills: statement.quills.filter((action) => action !== extra),
+    };
+    await setRole(without);
+    await expectStatus("denied-action", [403], users.limited, input);
+    const key = await send(app, d, input, users.owner, without);
+    if (key.status !== 403 || key.body?.code !== "API_KEY_SCOPE")
+      fail("api-key-scope", `without ${extra}: got ${key.status}`);
+  }
   for (const bad of badInputs(d, input))
     await expectStatus("schema-400", [400], users.owner, bad);
   // A route that authorizes a project must also hold the native permission.

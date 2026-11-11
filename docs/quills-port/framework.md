@@ -12,6 +12,10 @@ Differences between this design and the P0 code:
   `deleteQuillsComment` and `deleteQuillsPostView` declare `update`: the caller's own record needs only
   `update`, and another person's record also needs `delete`. `restoreQuillsComment` keeps `delete`,
   because the source restores with a moderation permission.
+- The declaration has the field `alsoRequires` (teammate only): Quills actions the caller must
+  hold besides `action`. The helper checks them with `action` against the role and the API-key
+  scope. The contract grants them in its authorized check and denies each one alone. The
+  workflow routes that set a run's actor use `alsoRequires: ["update"]`.
 - The check `native-permission` is added.
 - The check `bounded-inputs` is static. A string input (also a TypeID, a paging number or an ISO datetime)
   must reject a value of 100,001 characters, and a record must reject 10,001 entries. An array needs
