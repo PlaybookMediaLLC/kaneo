@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
-import { and, eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import type { TypeId } from "@kaneo/ids";
@@ -44,6 +44,7 @@ const email = (label: string) =>
 type Status = (typeof assistantInvolvements.$inferInsert)["status"];
 let ids: {
   visitor: string;
+  tester: string;
   real: string;
   twice: string;
   test: string;
@@ -65,13 +66,16 @@ describe.skipIf(!url)("Assistant inbox surface and outbound start", () => {
       conversationId: string,
       status: Status,
       sources: (typeof assistantInvolvements.$inferInsert)["sources"] = [],
+      createdAt = new Date(),
     ) =>
       db.insert(assistantInvolvements).values({
         conversationId: conversationId as never,
         triggeredBy: "first_touch",
         status,
         sources,
+        createdAt,
       });
+    const hourAgo = new Date(Date.now() - 3600000);
     const foreign = await world.scoped(
       world.b,
       users.outsider,
@@ -122,6 +126,8 @@ describe.skipIf(!url)("Assistant inbox surface and outbound start", () => {
           resolvedAt: new Date(),
         })
       ).conversationId;
+      // Two involvements in one bucket count once; the latest one is the activity.
+      await involve(db, real, "resolved_confirmed", [], hourAgo);
       await involve(db, real, "resolved_assumed", [
         { type: "post", id: hiddenPost, title: "Hidden" },
         { type: "post", id: openPost, title: "Open" },
@@ -129,12 +135,13 @@ describe.skipIf(!url)("Assistant inbox surface and outbound start", () => {
         { type: "article", id: "article", title: "Guide", url: "/guide" },
       ]);
       // A conversation the agent handed off and then took again counts once in each bucket.
-      await involve(db, twice, "handed_off");
+      await involve(db, twice, "handed_off", [], hourAgo);
       await involve(db, twice, "active");
       await involve(db, test, "active");
       await involve(db, spam, "active");
       return {
         visitor,
+        tester,
         real,
         twice,
         test,
@@ -188,6 +195,12 @@ describe.skipIf(!url)("Assistant inbox surface and outbound start", () => {
     );
     // One conversation reads like getQuillsConversation: a spam thread has its activity too.
     expect(spam.body.activity.outcome).toBe("active");
+    const twice = await world.request(
+      world.users.owner,
+      "GET",
+      `/conversations/${ids.twice}/assistant-activity`,
+    );
+    expect(twice.body.activity.outcome).toBe("active");
   });
 
   it("starts a conversation and mails its first message once, after commit", async () => {
@@ -200,7 +213,7 @@ describe.skipIf(!url)("Assistant inbox surface and outbound start", () => {
     const { conversation: started, message } = res.body;
     expect(started).toMatchObject({
       status: "open",
-      channel: "messenger",
+      channel: "email",
       assignedAgentPrincipalId: ids.teammate,
       subject: "We have news about your request",
       lastMessagePreview: "We have news about your request",
@@ -208,46 +221,32 @@ describe.skipIf(!url)("Assistant inbox surface and outbound start", () => {
     expect(message).toMatchObject({ senderType: "agent", isInternal: false });
     await world.scoped(world.a, owner, async (db) => {
       const recorded = await db
-        .select({ type: events.type, entityId: events.entityId })
-        .from(events)
-        .where(eq(events.entityId, started.id));
-      expect(recorded).toEqual([
-        { type: "conversation.agent_started", entityId: started.id },
-      ]);
-      const [event] = await db
         .select()
         .from(events)
-        .where(eq(events.entityId, started.id));
-      const entry = supportSubscribers["conversation.agent_started"]!;
+        .where(inArray(events.entityId, [started.id, message.id]));
+      const byType = new Map(recorded.map((row) => [row.type, row]));
+      expect(recorded).toHaveLength(2);
+      expect(byType.get("conversation.agent_started")?.entityId).toBe(
+        started.id,
+      );
+      const created = byType.get("message.created")!;
+      expect(created.entityId).toBe(message.id);
+      // Only the reply delivery mails, once per event (its ledger key), to the customer.
+      expect(supportSubscribers["conversation.agent_started"]).toBeUndefined();
+      const reply = supportSubscribers["message.created"]!;
       expect(
-        typeof entry.direct === "function" && (await entry.direct(db, event!)),
+        typeof reply.direct === "function" && (await reply.direct(db, created)),
       ).toBe(true);
-      const mail = await entry.mail!(db, event!, null);
       const [address] = await db
         .select({ email: user.email })
         .from(principal)
         .innerJoin(user, eq(user.id, principal.userId))
         .where(eq(principal.id, ids.visitor as never));
-      expect(mail).toMatchObject({
+      expect(await reply.mail!(db, created, null)).toMatchObject({
         to: address!.email,
-        emailType: "ConversationStartedEmail",
+        emailType: "ConversationReplyEmail",
         conversationId: started.id,
       });
-      // The message.created event of the same message mails nothing: a messenger reply is not mail.
-      const [created] = await db
-        .select()
-        .from(events)
-        .where(
-          and(
-            eq(events.type, "message.created"),
-            eq(events.entityId, message.id),
-          ),
-        );
-      const reply = supportSubscribers["message.created"]!;
-      expect(
-        typeof reply.direct === "function" &&
-          (await reply.direct(db, created!)),
-      ).toBe(false);
     });
   });
 
@@ -296,6 +295,7 @@ describe.skipIf(!url)("Assistant inbox surface and outbound start", () => {
     const before = await count();
     for (const [target, status] of [
       [ids.teammate, 404],
+      [ids.tester, 404],
       [ids.foreignCustomer, 404],
       [lead, 409],
       [noMail, 409],

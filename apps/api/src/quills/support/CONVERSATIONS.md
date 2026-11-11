@@ -210,14 +210,16 @@ Tables and owning schema:  quills: conversations, conversation_messages, princip
                            events, audit_log, job_queue. public (read only, through
                            framework/platform-reads.ts): project access (`loadProjects`).
 Actor and workspace:       authenticated context (helper). The target customer comes from the body
-                           and is checked against this workspace (`isCustomer`, row security).
+                           and is checked against this workspace (`loadCustomer`: `isCustomer` and
+                           row security).
 Permissions:               workspace:read + quills:read (counts, activity); quills:update (start, the
                            source's CONVERSATION_REPLY). No native permissions.
 Persisted relationships:   assistant_involvements.conversation_id; board_projects for a cited post.
 Transaction:               one scoped transaction per request. The start writes the conversation, the
                            first message and two outbox events together; any failure rolls all back.
-External effects:          none in a request. `conversation.agent_started` makes the delivery worker
-                           mail the first message (jobs/handlers/support-mail.ts, ledger-deduplicated).
+External effects:          none in a request. The conversation is an email conversation, so its
+                           `message.created` makes the existing reply delivery mail the first message
+                           (jobs/handlers/support-mail.ts, one send per event through the ledger).
 Completion checks:         authenticated endpoint, tenant/object access, mutation, read/search/export.
 ```
 
@@ -238,15 +240,20 @@ Differences from the source, on purpose:
 - The start refuses a lead (409), a customer with no real mail address (409) and a blocked customer
   (409). The source refuses the first two; a blocked customer would get no mail here, so the start
   fails instead of reporting a delivery that cannot happen.
-- A teammate, a test customer or a customer of another workspace is "Customer not found" (404). The
-  source answers a teammate with a validation error.
+- A teammate, a test customer or a customer of another workspace is "Person not found" (404). The
+  source answers a teammate with a validation error and accepts a test customer.
+- The start opens an email conversation, not a messenger one. Kaneo's inbound mail threads only into
+  email conversations, and only those mail later replies. The source opens a messenger thread and
+  promotes it to email when the customer replies by mail. The first mail therefore uses the reply
+  template of an email conversation, not the source's "sent you a message" card.
 - The start does not check the `supportInbox` flag. No Kaneo teammate route checks a product flag.
-- The start records `conversation.agent_started` (the mail) and `message.created` (the customer's live
-  channel and webhooks), not `conversation.created`. It sends no SLA or workflow trigger of its own.
+- The start records `conversation.agent_started` (no handler; audit and webhooks) and `message.created`
+  (the mail and the customer's live channel), not `conversation.created`. It sends no SLA or workflow
+  trigger of its own.
 - The counts count distinct conversations, as the list would show them. The source counts involvement
   rows and also counts spam conversations.
-- The activity leaves out a cited post on a board that the caller cannot see, and returns at most 50
-  sources. The source returns every stored source.
+- The activity leaves out a cited post on a board that the caller cannot see and a malformed stored
+  source, and then returns at most 50 sources. The source returns every stored source.
 - Nothing in Kaneo writes `assistant_involvements` yet (the customer agent is not ported). The counts
   and the activity read imported rows and rows that a later agent writes.
 

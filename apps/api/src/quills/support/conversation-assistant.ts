@@ -1,5 +1,5 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
-import { isTypeId, type TypeId } from "@kaneo/ids";
+import { isTypeId } from "@kaneo/ids";
 import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
 import {
   apiRouter,
@@ -11,11 +11,11 @@ import {
   ASSISTANT_INVOLVEMENT_STATUSES,
   assistantInvolvements,
 } from "../../database/quills/schema/assistant";
-import { principal, user } from "../../database/quills/schema/auth";
+import { principal } from "../../database/quills/schema/auth";
 import { conversations } from "../../database/quills/schema/conversation";
 import { posts } from "../../database/quills/schema/posts";
 import { defineQuillsRoute } from "../framework/define-route";
-import { isCustomer, realEmail } from "../directory/customer";
+import { loadCustomer, realEmail } from "../directory/customer";
 import { loadProjects, visiblePost } from "../feedback/visibility";
 import { notSpam } from "./conversation-list";
 import {
@@ -26,7 +26,6 @@ import {
   findConversation,
   loadConversation,
   messageText,
-  notFound,
   preview,
   realConversation,
 } from "./conversation-model";
@@ -43,6 +42,13 @@ const BUCKETS = {
 } as const;
 /** A stored source list is not bounded by a schema; the response is. */
 const MAX_SOURCES = 50;
+/** One stored citation. Imported rows are not validated: a malformed entry is left out. */
+const storedSource = z.object({
+  type: z.string(),
+  id: z.string(),
+  title: z.string().nullish(),
+  url: z.string().nullish(),
+});
 
 const start = defineQuillsRoute({
   method: "post",
@@ -50,7 +56,7 @@ const start = defineQuillsRoute({
   operationId: "startQuillsAgentConversation",
   summary: "Start a conversation with a customer",
   description:
-    "Opens a messenger conversation with an identified customer, assigned to the caller, with the caller's plain-text message. The delivery worker mails the message to the customer after commit (`conversation.agent_started`); the request sends nothing. A lead, a blocked customer or a customer with no real mail address is refused.",
+    "Opens an email conversation with an identified customer, assigned to the caller, with the caller's plain-text message. The delivery worker mails the message to the customer after commit (`message.created`), and the customer's mail reply threads back; the request sends nothing. A lead, a blocked customer or a customer with no real mail address is refused.",
   action: "update",
   body: z.object({
     targetPrincipalId: flexibleToTypeIdSchema("principal"),
@@ -62,9 +68,10 @@ const start = defineQuillsRoute({
   }),
   responseDescription: "The new conversation and its first message",
   errors: {
-    404: "Customer not found",
+    404: "Person not found",
     409: "The customer cannot receive the message",
   },
+  // `message.created` also drives the reply mail, as for every teammate reply on an email thread.
   event: (_input, result) => [
     {
       type: "conversation.agent_started" as const,
@@ -80,18 +87,7 @@ const start = defineQuillsRoute({
     },
   ],
   handler: async ({ db, actor, body }) => {
-    const [target] = await db
-      .select({
-        type: principal.type,
-        email: user.email,
-        contactEmail: principal.contactEmail,
-        blockedAt: principal.blockedAt,
-      })
-      .from(principal)
-      .innerJoin(user, eq(user.id, principal.userId))
-      .where(and(eq(principal.id, body.targetPrincipalId), isCustomer))
-      .limit(1);
-    if (!target) throw notFound("Customer");
+    const target = await loadCustomer(db, body.targetPrincipalId);
     if (target.type !== "user")
       throw conflict(
         "Conversations can only be started with identified customers",
@@ -105,7 +101,9 @@ const start = defineQuillsRoute({
       .insert(conversations)
       .values({
         visitorPrincipalId: body.targetPrincipalId,
-        channel: "messenger",
+        // Kaneo's inbound mail threads only into email conversations; the source promotes a
+        // messenger thread to email when the customer replies by mail.
+        channel: "email",
         // The composer owns the thread from the start.
         assignedAgentPrincipalId: actor.principalId,
         status: "open",
@@ -152,11 +150,8 @@ const counts = defineQuillsRoute({
       )
       .innerJoin(principal, eq(principal.id, conversations.visitorPrincipalId))
       .where(and(realConversation, notSpam));
-    return {
-      resolved: row?.resolved ?? 0,
-      escalated: row?.escalated ?? 0,
-      pending: row?.pending ?? 0,
-    };
+    // An aggregate with no GROUP BY returns one row.
+    return row!;
   },
 });
 
@@ -208,12 +203,15 @@ const activity = defineQuillsRoute({
       )
       .limit(1);
     if (!latest) return { activity: null };
-    const sources = latest.sources.slice(0, MAX_SOURCES);
-    // Imported rows are not validated: a malformed post ID is left out, never cast.
-    const postIds = sources.flatMap((source) =>
-      source.type === "post" && isTypeId(source.id, "post")
-        ? [source.id as TypeId<"post">]
-        : [],
+    const stored = (
+      Array.isArray(latest.sources) ? (latest.sources as unknown[]) : []
+    ).flatMap((raw) => {
+      const parsed = storedSource.safeParse(raw);
+      return parsed.success ? [parsed.data] : [];
+    });
+    // A malformed post ID is left out, never cast.
+    const postIds = stored.flatMap((source) =>
+      source.type === "post" && isTypeId(source.id, "post") ? [source.id] : [],
     );
     const visible = new Set<string>(
       postIds.length
@@ -228,11 +226,12 @@ const activity = defineQuillsRoute({
     return {
       activity: {
         ...latest,
-        sources: sources
+        // Visibility first, then the bound.
+        sources: stored
           .filter((source) => source.type !== "post" || visible.has(source.id))
+          .slice(0, MAX_SOURCES)
           .map((source) => ({
-            type: source.type,
-            id: source.id,
+            ...source,
             title: source.title ?? "",
             url: source.url ?? "",
           })),

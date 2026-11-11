@@ -99853,7 +99853,7 @@
           "Quills"
         ],
         "summary": "Start a conversation with a customer",
-        "description": "Opens a messenger conversation with an identified customer, assigned to the caller, with the caller's plain-text message. The delivery worker mails the message to the customer after commit (`conversation.agent_started`); the request sends nothing. A lead, a blocked customer or a customer with no real mail address is refused.",
+        "description": "Opens an email conversation with an identified customer, assigned to the caller, with the caller's plain-text message. The delivery worker mails the message to the customer after commit (`message.created`), and the customer's mail reply threads back; the request sends nothing. A lead, a blocked customer or a customer with no real mail address is refused.",
         "parameters": [
           {
             "schema": {
@@ -100275,7 +100275,7 @@
             }
           },
           "404": {
-            "description": "Customer not found",
+            "description": "Person not found",
             "content": {
               "application/json": {
                 "schema": {
