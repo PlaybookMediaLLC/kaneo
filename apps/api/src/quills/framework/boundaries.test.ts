@@ -53,7 +53,7 @@ const allowedImport = (file: string, specifier: string) => {
         "framework/read-batch",
         // Static widget page and bundles: reads files, never the database (see the module).
         "widget/host",
-        // Link unfurl: the only importer of import/guarded-fetch, no database (link-preview.test.ts pins it).
+        // Link unfurl: the guarded fetch for route modules, no database (link-preview.test.ts pins its imports).
         "support/link-fetch",
         "../openapi",
       ].includes(target) ||
