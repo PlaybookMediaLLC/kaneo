@@ -99846,6 +99846,458 @@
             "$ref": "#/components/responses/ApiKeyRateLimited"
           }
         }
+      },
+      "post": {
+        "operationId": "startQuillsAgentConversation",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Start a conversation with a customer",
+        "description": "Opens a messenger conversation with an identified customer, assigned to the caller, with the caller's plain-text message. The delivery worker mails the message to the customer after commit (`conversation.agent_started`); the request sends nothing. A lead, a blocked customer or a customer with no real mail address is refused.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "targetPrincipalId": {
+                    "type": "string"
+                  },
+                  "content": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 10000
+                  }
+                },
+                "required": [
+                  "targetPrincipalId",
+                  "content"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The new conversation and its first message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "conversation": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "snoozed",
+                            "closed"
+                          ]
+                        },
+                        "priority": {
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "low",
+                            "medium",
+                            "high",
+                            "urgent"
+                          ]
+                        },
+                        "channel": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "type": "string"
+                        },
+                        "subject": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "lastMessagePreview": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "lastMessageAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "updatedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "visitorPrincipalId": {
+                          "type": "string"
+                        },
+                        "visitorName": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "visitorEmail": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "isTest": {
+                          "type": "boolean"
+                        },
+                        "assignedAgentPrincipalId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "assignedTeamId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "unreadCount": {
+                          "type": "number"
+                        },
+                        "waitingSince": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "snoozedUntil": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "resolvedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "endReason": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "endNote": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "spamReason": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "csatRating": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "agentLastReadAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "visitorLastReadAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "tags": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "color": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name",
+                              "color"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "status",
+                        "priority",
+                        "channel",
+                        "source",
+                        "subject",
+                        "lastMessagePreview",
+                        "lastMessageAt",
+                        "createdAt",
+                        "updatedAt",
+                        "visitorPrincipalId",
+                        "visitorName",
+                        "visitorEmail",
+                        "isTest",
+                        "assignedAgentPrincipalId",
+                        "assignedTeamId",
+                        "unreadCount",
+                        "waitingSince",
+                        "snoozedUntil",
+                        "resolvedAt",
+                        "endReason",
+                        "endNote",
+                        "spamReason",
+                        "csatRating",
+                        "agentLastReadAt",
+                        "visitorLastReadAt",
+                        "tags"
+                      ]
+                    },
+                    "message": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "conversationId": {
+                          "type": "string"
+                        },
+                        "senderType": {
+                          "type": "string",
+                          "enum": [
+                            "visitor",
+                            "agent",
+                            "system"
+                          ]
+                        },
+                        "isInternal": {
+                          "type": "boolean"
+                        },
+                        "authorPrincipalId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "authorName": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "content": {
+                          "type": "string"
+                        },
+                        "systemKind": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "embeds": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string"
+                              },
+                              "id": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "id"
+                            ]
+                          }
+                        },
+                        "attachments": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "fileId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "contentType": {
+                                "type": "string"
+                              },
+                              "size": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "fileId",
+                              "name",
+                              "contentType",
+                              "size"
+                            ]
+                          }
+                        },
+                        "reactions": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "emoji": {
+                                "type": "string"
+                              },
+                              "count": {
+                                "type": "number"
+                              },
+                              "reacted": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "emoji",
+                              "count",
+                              "reacted"
+                            ]
+                          }
+                        },
+                        "flaggedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "editedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "conversationId",
+                        "senderType",
+                        "isInternal",
+                        "authorPrincipalId",
+                        "authorName",
+                        "content",
+                        "systemKind",
+                        "embeds",
+                        "attachments",
+                        "reactions",
+                        "flaggedAt",
+                        "createdAt",
+                        "editedAt"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "conversation",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Customer not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The customer cannot receive the message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
       }
     },
     "/quills/{workspaceId}/conversations/{conversationId}": {
@@ -112467,6 +112919,412 @@
           },
           "409": {
             "description": "The conversation is not in the required state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/inbox/assistant-counts": {
+      "get": {
+        "operationId": "fetchQuillsAssistantInboxCounts",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Count the conversations in each assistant inbox bucket",
+        "description": "Conversations that the customer agent resolved, escalated to a teammate, or still handles. Each counts once per bucket. The inbox list's rule applies first: test customers' and spam conversations are not counted.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Counts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "resolved": {
+                      "type": "number"
+                    },
+                    "escalated": {
+                      "type": "number"
+                    },
+                    "pending": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "resolved",
+                    "escalated",
+                    "pending"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/conversations/{conversationId}/assistant-activity": {
+      "get": {
+        "operationId": "getQuillsConversationAssistantActivity",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get the customer agent's activity on a conversation",
+        "description": "The agent's latest involvement: outcome, handoff reason, cited sources, rating and the time of its last answer. `activity` is null when the agent never took part. A cited post on a board that the caller cannot see is left out.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "conversationId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The latest involvement, or null",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "activity": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "outcome": {
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "handed_off",
+                            "resolved_confirmed",
+                            "resolved_assumed",
+                            "abandoned"
+                          ]
+                        },
+                        "handoffReason": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "sources": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string"
+                              },
+                              "id": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "url": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "id",
+                              "title",
+                              "url"
+                            ]
+                          }
+                        },
+                        "rating": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "answeredAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "outcome",
+                        "handoffReason",
+                        "sources",
+                        "rating",
+                        "answeredAt"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "activity"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Conversation or related record not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The conversation is not in the required state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/search": {
+      "get": {
+        "operationId": "searchQuillsWorkspace",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Search the workspace",
+        "description": "Posts, conversations, tickets, articles, changelog entries, customers, teammates and companies in one ranked list. Each kind shows only records that its own list shows the caller: a post on a board the caller cannot see, a test customer's or spam conversation and a deleted record are never found. A query under 2 characters finds nothing; `offset + limit` stops at 100.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "q",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "post",
+                "conversation",
+                "ticket",
+                "article",
+                "changelog",
+                "person",
+                "teammate",
+                "company"
+              ]
+            },
+            "required": false,
+            "name": "kind",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100,
+              "default": 0
+            },
+            "required": false,
+            "name": "offset",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of results, best first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "post",
+                              "conversation",
+                              "ticket",
+                              "article",
+                              "changelog",
+                              "person",
+                              "teammate",
+                              "company"
+                            ]
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "excerpt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "subtitle": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "updatedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "date-time"
+                          },
+                          "score": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "id",
+                          "title",
+                          "excerpt",
+                          "subtitle",
+                          "updatedAt",
+                          "score"
+                        ]
+                      }
+                    },
+                    "hasMore": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "results",
+                    "hasMore"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
             "content": {
               "application/json": {
                 "schema": {
