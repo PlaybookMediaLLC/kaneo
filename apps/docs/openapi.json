@@ -133298,7 +133298,8 @@
                       "externalUrl": {
                         "type": "string",
                         "maxLength": 2048,
-                        "format": "uri"
+                        "format": "uri",
+                        "description": "An https link to the item"
                       }
                     },
                     "required": [
@@ -133478,7 +133479,8 @@
                   "externalUrl": {
                     "type": "string",
                     "maxLength": 2048,
-                    "format": "uri"
+                    "format": "uri",
+                    "description": "An https link to the item"
                   },
                   "requester": {
                     "type": "object",
@@ -133980,7 +133982,7 @@
           "Quills"
         ],
         "summary": "Register a sidebar app and create its API key",
-        "description": "Creates an API key for the caller with workspace:read and the Quills actions that the scopes need, and binds it to the new app. The caller must hold those actions. `secret` is the key: it is shown only in this response. The key works only on the app routes of this workspace.",
+        "description": "Needs a user session, as API key management does. Creates an API key for the caller with workspace:read and the Quills actions that the scopes need, and binds it to the new app. The caller must hold those actions. `secret` is the key: it is shown only in this response. In this workspace's Quills API the key works only on the app routes; it keeps workspace:read on other Kaneo routes, and its scope in the caller's other workspaces.",
         "parameters": [
           {
             "schema": {
@@ -134113,7 +134115,7 @@
           "Quills"
         ],
         "summary": "Rename, rescope, disable or enable a sidebar app",
-        "description": "A disabled app's key is refused at once, on the app routes and on every other Quills route. New scopes also set the key's scope; the caller must hold their Quills actions.",
+        "description": "Needs a user session. A disabled app's key is refused at once on the app routes and stays refused on this workspace's other Quills routes. The key itself stays enabled: delete it in the API key settings to revoke it everywhere. New scopes also set the key's scope; the caller must hold their Quills actions.",
         "parameters": [
           {
             "schema": {
