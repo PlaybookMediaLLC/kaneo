@@ -117,7 +117,7 @@ Merged: the nine `widgetQuills*` ticket rows and `createQuillsMyTicket`, `getQui
 |---|---|---|---|---|---|
 | `validateQuillsCsatEmailToken` | `GET /support/csat-email?token=` | public | read | - | contract, never spends, other workspace |
 | `recordQuillsCsatViaToken` | `POST /support/csat-email` (20 per 10 min) | public | update | `conversation.csat_submitted` | contract, rollback, single use |
-| `getQuillsWidgetPresence` | `GET /widget/presence` | public | read | - | contract, office-hours unit test |
+| `getQuillsWidgetPresence` | `GET /widget/presence` | public | read | - | contract, office-hours unit test, `support/presence.test.ts` |
 | `listQuillsWidgetTeamAvatars` | `GET /widget/team-avatars` (3) | public | read | - | contract |
 
 - CSAT token: the format of `portal/unsubscribe-token.ts` (32 random bytes, SHA-256 hash stored,
@@ -126,8 +126,9 @@ Merged: the nine `widgetQuills*` ticket rows and `createQuillsMyTicket`, `getQui
   `mintCsatToken` is the entry point for the mail that carries the rating links. The GET carries
   the token in its query, as the unsubscribe preview does, so access logs can hold a live token.
 - Presence: `withinOfficeHours` reads the office hours of `support/support-settings.ts` in their
-  timezone, with overnight intervals and holidays. `agentsOnline` is null: Kaneo keeps no live
-  agent presence.
+  timezone, with overnight intervals and holidays. `agentsOnline` comes from the teammate heartbeat
+  (RFC 0001 decision D8, `support/presence.ts`); the portal twin is `getQuillsConversationPresence`.
+  The routes and their boundary map are in `../CONVERSATIONS.md`, "RFC 0001 lane S1".
 
 ## Teammate additions
 
@@ -209,7 +210,7 @@ Merged: the nine `widgetQuills*` ticket rows and `createQuillsMyTicket`, `getQui
 | Reply-To and threading headers on customer reply mail | built | Reply-To is the conversation's signed reply address (`framework/signed.ts#replyAddress`); Message-ID is `<{messageId}@{inbound domain}>`; In-Reply-To and References name up to 20 earlier mails of the thread. |
 | Teammate mail for a new visitor message | not built | The source mails an offline assignee; Kaneo has no presence to decide "offline". Teammates get the `QUILLS_CHANGED` invalidation. |
 | Watcher mail | not built | The ticket templates are requester-facing; watchers get in-app notices. |
-| Presence `agentsOnline`, `nextOpenAt` | part | No live presence store; office hours only. |
+| Presence `nextOpenAt` | not built | `agentsOnline` is built (heartbeat, D8); the next opening time is not computed. |
 | Conversation participants | not built | Only the visitor reads a conversation; the source also lets added participants read it. |
 | Linked ticket with tickets off | differs | 404, where the source returns null. |
 

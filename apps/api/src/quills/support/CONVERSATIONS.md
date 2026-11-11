@@ -251,6 +251,64 @@ Completion checks:         authenticated endpoint, tenant/object access, read (a
                            customer visibility), mutation (heartbeat, no event: expiring marker).
 ```
 
+### Routes
+
+| operationId | Route | Audience | Action | Tables | Event | Tests |
+|---|---|---|---|---|---|---|
+| `sendQuillsAgentHeartbeat` | `PUT /quills/{workspaceId}/support/presence` | teammate | update | `kv_store` | none: expiring marker (90 s) | contract, `presence.test.ts` |
+| `getQuillsConversationPresence` | `GET /quills-public/{workspace}/support/presence` (sign-in optional) | portal | read | `kv_store`, `principal`, `settings` | - | contract, portal off, `presence.test.ts` |
+| `getQuillsWidgetPresence` (changed) | `GET /quills-public/{workspace}/widget/presence` | public | read | as above | - | contract, `presence.test.ts` |
+| `getQuillsEmbedPreview` | `GET /quills-public/{workspace}/portal/embed-preview?kind&id` (sign-in optional) | portal | read | see the boundary map | - | contract, portal off, `embeds.test.ts` |
+| `getQuillsWidgetEmbedPreview` | `GET /quills-public/{workspace}/widget/embed-preview?kind&id` | widget | read | see the boundary map | - | contract, `embeds.test.ts` |
+| `getQuillsEmailChannelStatus` | `GET /quills/{workspaceId}/support/email-channel/status` | teammate | manage_settings | none (process configuration) | - | contract, `support-settings.test.ts` |
+| `attributeQuillsBreakdown` | `GET /quills/{workspaceId}/support/reporting/attribute-breakdown?key&from&to` (at most 400 days) | teammate | read | `conversations`, `principal` | - | contract, `support-reporting.test.ts` |
+
+Merged: `getConversationPresenceFn` (the widget twin `widgetGetConversationPresenceFn` was already
+`getQuillsWidgetPresence`, which now reports `agentsOnline`), `getEmbedPreviewFn` (one route for each
+customer audience), `getEmailChannelStatusFn`, `attributeBreakdownFn`.
+
+- Presence: the heartbeat writes `support:presence:{principalId}` with a 90-second expiry, one row for
+  each teammate. `agentsOnline` is true while one live row names a teammate whose chat availability is
+  `online`. A heartbeat in workspace B never counts in A (RLS on `kv_store`).
+- Embed preview: `kind` is `post`, `changelog`, `article` or `ticket`; `id` is the record ID, or the
+  article slug as in the source. The portal and widget switches and the private-portal gate answer
+  404 or 403 first, as on every customer route. Then each kind applies its own customer rule:
+  `portal/feedback/viewer.ts#postVisible` (board view tier, no project link, published or own
+  pending, no test customer), `portal/feedback/changelog.ts#entryVisible`,
+  `content/public/help-center/visibility.ts#visibleArticles` and the requester rule of
+  `customer/tickets.ts`. A miss of any kind, a closed help center and a closed tickets surface answer
+  `{ unavailable: true }`. The answer is one closed object with one card set, because the contract's
+  strict-response check reads no unions. Card URLs use `portal/feedback/feeds.ts#portalUrl`.
+- Email channel status: `provider`, `fromAddress` (`EMAIL_FROM`), `inboundConfigured` (the inbound
+  route's own switch, `framework/signed.ts#resendInbound`) and `inboundDomain`. No credential, key or
+  secret is read into the answer. A route module may not import `@kaneo/email`, so `outboundProvider`
+  repeats the provider rules; `support-settings.test.ts` compares it with
+  `@kaneo/email/quills/provider#resolveEmailProvider` for every combination of the variables.
+- Attribute breakdown: the window, the workspace (RLS) and the test-customer rule
+  (`conversation-model.ts#notTestConversation`) filter the rows before the counts. A value inside a
+  `{ v, src }` envelope and a bare imported value count the same.
+
+### Differences from the source
+
+- Presence: `agentsOnline` stays a boolean, as in the source and in the existing widget answer. The
+  heartbeat comes from an HTTP route, not from a live SSE stream, so an agent who closes the inbox
+  shows online for up to 90 seconds. The source drops a stream at once on disconnect. There is no
+  sign-off route; add one if the inbox needs an immediate offline.
+- Presence: the portal route is closed while the portal or its support switch is off (404). The
+  source answers every caller.
+- Embed preview: a closed portal or widget is 404 and a denied private portal is 403, as on every
+  customer route. The source answers `{ unavailable: true }` for both.
+- Embed preview: no teammate route. A teammate reads posts, entries, articles and tickets through
+  the teammate routes; on a customer route a teammate is a customer (the contract checks it).
+- Embed preview: the post card has no tags, author or avatar, and the ticket card has the public
+  stage label but no status color or priority. The excerpt is 140 characters, not 160.
+- Email channel status: `customDomains` is left out. Kaneo records a custom sending domain but never
+  verifies it with a provider (`TICKETS.md`), so the source's answer would always be "unavailable".
+  `provider` is null when more than one provider is configured; the source throws.
+- Attribute breakdown: SQL counts instead of reading every row into memory, at most 100 values with
+  `truncated`, and a key that matches the attribute key pattern (`^[a-z0-9_.-]+$`, at most 64).
+  A conversation counts once for a value that its multi-select repeats.
+
 ### Blocked: needs a framework seam
 
 `framework/boundaries.test.ts` lets a route module import only the packages and `framework/` modules
@@ -261,6 +319,29 @@ on its list. `framework/**` belongs to lane X1, so this lane does not add to it.
 | `unfurlQuillsLink` (`unfurlLinkFn`) | not built | A route that fetches a URL must reach `import/guarded-fetch.ts#createGuardedFetch`, and a route module may not import it. Lanes B1 and C1 need the same seam. |
 | `readQuillsTogether` (`readTogetherFn`) | not built | To run each element through its own route's handler and checks, the batch must read the route declarations in `framework/registry.ts`, and a route module may not import it. |
 
+Smallest seams that would unblock them (lane X1 or lane Z decides):
+
+1. Unfurl: a trusted `framework/outbound.ts` (like `framework/integration-config.ts`) that wraps
+   `createGuardedFetch` with a byte cap, a timeout and the redirect limit, plus its entry in the
+   `allowedImport` list of `framework/boundaries.test.ts`. The route then fetches in `call`, outside
+   any transaction, and caches by workspace and URL in `kv_store`.
+2. Read batch: an export from `framework/define-route.ts` that runs a registered teammate GET
+   declaration (no path parameters, no `native`, `project`, `load`, `after` or `prepare`) with the
+   caller's `db`, `actor` and `actions`: it checks the declaration's `action` and `alsoRequires`
+   against `actions`, parses the query with the declaration's schema and the result with its
+   response schema, and runs each element in a savepoint.
+
+### Edits outside the lane's own files
+
+- `quills/index.ts`: mounts `support/presence.ts` (one line and its import).
+- `widget/support/presence.ts`: reads `agentsOnline` and the office hours from `support/presence.ts`.
+  `withinOfficeHours` moved there unchanged.
+- `widget/support/index.ts`, `support/customer/portal.ts`: mount the embed and presence routes.
+- `support/customer/index.fixture.ts`: the embed fixtures and the presence fixture export, so the
+  contract suite and the portal-off test find them.
+- `support/customer/customer.test.ts`: imports `withinOfficeHours` from its new module.
+- `support/customer/ROUTES.md`, `support/TICKETS.md`: rows that pointed at these entry points.
+
 ## Not ported in this slice
 
 | Source capability | State | Reason |
@@ -270,11 +351,10 @@ on its list. `framework/**` belongs to lane X1, so this lane does not add to it.
 | `fetchQuillsAssistantInboxCounts`, `getQuillsConversationAssistantActivity` | deferred (P8) | Assistant involvement. |
 | `draftQuillsAttributeDescriptions`, `previewQuillsAttributeDetection` | deferred (P8) | AI authoring. |
 | `fetchQuillsCustomerContext` | deferred (P7) | Calls connected integrations. |
-| `unfurlQuillsLink`, `getQuillsEmbedPreview` | deferred (audience wave) | Portal audience. Needs a safe outbound fetch, a rate limit and a cache, and help center and ticket embeds. |
-| `readQuillsTogether` | not ported | Client read batching; the typed client sends reads in parallel. |
+| `unfurlQuillsLink`, `readQuillsTogether` | blocked | See "RFC 0001 lane S1" above. `getQuillsEmbedPreview` is built there. |
 | `getQuillsConversationTicketLink` | out of scope | Ticket links (tickets slice). |
-| `attributeQuillsBreakdown`, `supportQuillsReporting` | deferred | Support reporting, not conversations. |
-| `sendQuillsConversationTyping`, `getQuillsConversationPresence` | deferred | Realtime only, no plain write; portal or public audience. |
+| `supportQuillsReporting` | in `TICKETS.md` | Support reporting, not conversations. `attributeQuillsBreakdown` is built in lane S1 above. |
+| `sendQuillsConversationTyping` | in `customer/ROUTES.md` | Typing markers. `getQuillsConversationPresence` is built in lane S1 above. |
 | `captureQuillsVisitorContactEmail` changelog auto-subscribe | part | The address is stored; the changelog subscription side effect waits for a handler. |
 
 Partly ported behavior: replies and notes are plain text without attachments; mentions come from

@@ -218,11 +218,11 @@ Total: 71 routes for 82 source capabilities.
 | Ticket issue status sync (`updateTicketStatusMappingsFn`) | Inbound issue events update post links only. The ticket links below exist for it. |
 | `suggestQuillsTicketFieldValues` | AI suggestion (P8). |
 | `sendQuillsTestEmail` | Sends mail. Needs a P4 mail handler with retry and deduplication. |
-| `getQuillsEmailChannelStatus` | Reports the outbound provider and inbound domain of the mail transport, which Kaneo has not ported. A fixed answer would be a stub. |
+| `getQuillsEmailChannelStatus` | Built in RFC 0001 lane S1 (`CONVERSATIONS.md`): the mail transport is ported now. |
 | `removeQuillsConversationSla` | Mutates a conversation's applied SLA; the SLA clock engine and conversations are not in this slice. |
-| `attributeQuillsBreakdown` | Groups conversations by attribute definitions that the conversations slice owns. |
+| `attributeQuillsBreakdown` | Built in RFC 0001 lane S1 (`CONVERSATIONS.md`) as `GET /support/reporting/attribute-breakdown`. |
 | Workflow effectiveness inside `supportQuillsReporting` | Workflows are not ported. The route returns the four SLA parts only. |
-| `readQuillsTogether` | A dashboard read multiplexer, not a resource route. |
+| `readQuillsTogether` | Blocked in RFC 0001 lane S1 (`CONVERSATIONS.md`): it needs a framework seam. |
 | `getQuillsConversationTicketLink`, `assignQuillsConversationTeam` | Inbox and conversation slices. |
 | CSAT settings or reporting for teammates | The source has no teammate CSAT read; its CSAT rows are portal and public routes. |
 
