@@ -213,11 +213,16 @@ export type QuillsRouteDeclaration<
   errors?: E;
   /** Response keys that match the contract's forbidden names on purpose. */
   allowKeys?: string[];
-  /** Required for a mutation. `none` records why the route writes no outbox event. */
+  /**
+   * Required for a mutation. `none` records why the route writes no outbox event. `raw` is the
+   * handler's return value before the response schema parsed it: it can hold keys that the response
+   * leaves out, for example a settings receipt for the audit row. Only `result` goes to the caller.
+   */
   event?:
     | ((
         input: QuillsRouteInput<P, Q, B>,
         result: z.output<R>,
+        raw: unknown,
       ) =>
         | z.input<typeof changeSchema>
         | z.input<typeof changeSchema>[]
@@ -603,17 +608,17 @@ export function buildQuillsRoute<
       const result = await open(async (db, input, credential) => {
         if (!(await recordDelivery(db, verifier.name, located.deliveryId)))
           return REPLAY;
-        const result = d.response.parse(
-          await handle({
-            ...input,
-            db,
-            credential,
-            located,
-            called,
-            request: requestMeta(c.req.raw.headers),
-          }),
-        ) as z.output<R>;
-        const change = typeof d.event === "function" && d.event(input, result);
+        const raw = await handle({
+          ...input,
+          db,
+          credential,
+          located,
+          called,
+          request: requestMeta(c.req.raw.headers),
+        });
+        const result = d.response.parse(raw) as z.output<R>;
+        const change =
+          typeof d.event === "function" && d.event(input, result, raw);
         // A machine caller is no teammate and no customer: the audit row records a system change,
         // unless the credential names a teammate (an OAuth redirect started by one).
         const principalId = d.actor ? await d.actor(db, located) : null;
@@ -792,18 +797,17 @@ export function buildQuillsRoute<
             throw new HTTPException(409, {
               message: "The caller changed during the request; retry",
             });
-          const result = d.response.parse(
-            await handle({
-              ...scoped,
-              db,
-              caller,
-              called,
-              acceptLanguage: c.req.header("accept-language") ?? null,
-              request: requestMeta(c.req.raw.headers),
-            }),
-          ) as z.output<R>;
+          const raw = await handle({
+            ...scoped,
+            db,
+            caller,
+            called,
+            acceptLanguage: c.req.header("accept-language") ?? null,
+            request: requestMeta(c.req.raw.headers),
+          });
+          const result = d.response.parse(raw) as z.output<R>;
           const change =
-            typeof d.event === "function" && d.event(scoped, result);
+            typeof d.event === "function" && d.event(scoped, result, raw);
           for (const one of [change || []].flat())
             await recordQuillsChange(db, callerActor(caller), one);
           return result;
@@ -926,10 +930,17 @@ export function buildQuillsRoute<
     }
     const result = await withQuillsRequest(c, access, async (db, actor) => {
       const appId = await gate(db);
-      const result = d.response.parse(
-        await handle({ ...input, db, actor, loaded, actions, called }),
-      ) as z.output<R>;
-      const change = typeof d.event === "function" && d.event(input, result);
+      const raw = await handle({
+        ...input,
+        db,
+        actor,
+        loaded,
+        actions,
+        called,
+      });
+      const result = d.response.parse(raw) as z.output<R>;
+      const change =
+        typeof d.event === "function" && d.event(input, result, raw);
       // Every change that an app request records names the app.
       for (const one of [change || []].flat())
         await recordQuillsChange(

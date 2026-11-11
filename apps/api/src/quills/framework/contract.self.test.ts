@@ -414,6 +414,38 @@ const teammateMeta = defineQuillsRoute({
   responseDescription: "Metadata",
   handler: async (input) => ({ present: "request" in input }),
 });
+// Event probes: the handler returns a key that the response schema leaves out; the event reads it.
+const eventRaw = { changed: true, receipt: "before:after" };
+const eventFromRaw =
+  (entityId: string) => (_input: unknown, _result: unknown, raw: unknown) => ({
+    type: "board.project_linked" as const,
+    entityType: "board" as const,
+    entityId,
+    payload: { receipt: (raw as typeof eventRaw).receipt },
+  });
+const teammateEventRaw = defineQuillsRoute({
+  method: "put",
+  path: "/probe/event-raw",
+  operationId: "probeTeammateEventRaw",
+  summary: "Records a key that the response leaves out",
+  action: "update",
+  response: changed,
+  responseDescription: "Changed",
+  event: eventFromRaw("probe-event-raw-teammate"),
+  handler: async () => eventRaw,
+});
+const publicEventRaw = defineQuillsRoute({
+  audience: "public",
+  method: "post",
+  path: "/probe/event-raw",
+  operationId: "probePublicEventRaw",
+  summary: "Records a key that the response leaves out",
+  action: "create",
+  response: changed,
+  responseDescription: "Changed",
+  event: eventFromRaw("probe-event-raw-public"),
+  handler: async () => eventRaw,
+});
 
 // Broken on purpose: a route declared raw, mounted by hand, that answers JSON with a private value.
 const rawAsJson: AnyQuillsRoute = {
@@ -536,6 +568,7 @@ const anyVisitor = defineQuillsRoute({
 const app = contractApp(
   apiRouter<BaseVariables & { workspaceId: string }>()
     .openapi(...teammateMeta)
+    .openapi(...teammateEventRaw)
     .openapi(
       createRoute({
         method: "put",
@@ -583,6 +616,7 @@ const app = contractApp(
     .openapi(...publicDeletedBoard)
     .openapi(...unverified)
     .openapi(...publicMeta)
+    .openapi(...publicEventRaw)
     .openapi(...signedMeta)
     .openapi(...rawLeak)
     .openapi(...textProbe)
@@ -927,6 +961,31 @@ describe.skipIf(!url)("Quills route contract self-test", () => {
         "cross-workspace: the fixture declares no workspace B requests",
       ]),
     );
+  });
+  it("gives an event the handler's raw result, and the caller only the parsed response", async () => {
+    const env = contractEnv();
+    for (const [method, path, headers, target] of [
+      [
+        "PUT",
+        `/quills/${env.a}/probe/event-raw`,
+        { "x-test-user": env.owner },
+        "probe-event-raw-teammate",
+      ],
+      [
+        "POST",
+        `/quills-public/${env.a}/probe/event-raw`,
+        {},
+        "probe-event-raw-public",
+      ],
+    ] as const) {
+      const res = await app.request(path, { method, headers });
+      expect(await res.json()).toEqual({ changed: true });
+      const { rows } = await pool.query(
+        "SELECT metadata->>'receipt' AS receipt FROM quills.audit_log WHERE workspace_id=$1 AND target_id=$2",
+        [env.a, target],
+      );
+      expect(rows).toEqual([{ receipt: "before:after" }]);
+    }
   });
   it("gives public and signed handlers request metadata, and teammates none", async () => {
     const env = contractEnv();

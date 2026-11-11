@@ -231,6 +231,8 @@ export async function outboxIssues(
       },
       // The JSON body, not a parse with the server schema: dates arrive as strings.
       body,
+      // The handler's own return value is not visible here; the response body stands in for it.
+      body,
     );
   // A route may record several changes; the first is checked by type, entity and actor.
   const changes = [declared || []].flat();
@@ -306,8 +308,8 @@ export async function rollbackIssues(
     ...(typeof event === "function"
       ? [
           {
-            event: (input: any, result: any) => {
-              const change = event(input, result);
+            event: (input: any, result: any, raw: unknown) => {
+              const change = event(input, result, raw);
               return (
                 change &&
                 [change].flat().map((one) => ({ ...one, entityId: "" }))
