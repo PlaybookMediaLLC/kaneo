@@ -13,14 +13,18 @@ import {
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as kaneo from "../../database/schema";
+import { apiRouter, type BaseVariables } from "../../openapi";
 import { retryStorageCleanup } from "../../storage/cleanup-queue";
-import { deleteS3Object } from "../../storage/s3";
+import { deleteS3Object, verifyTaskAssetUpload } from "../../storage/s3";
 import {
   contractApp,
   startContract,
   stopContract,
   type ContractEnv,
 } from "../framework/contract";
+import { buildQuillsRoute } from "../framework/define-route";
+import { verifyUpload } from "../framework/files";
+import { registry } from "../framework/registry";
 import quillsRouter from "../index";
 import {
   brandColor,
@@ -33,16 +37,16 @@ import {
 // No request leaves this machine. DNS answers come from the table below, and every request that
 // passes the guard goes to the stub, which records it. A guard failure would show as a recorded request.
 
-const stub = vi.hoisted(() => ({ port: 0, sent: [] as string[] }));
+const stub = vi.hoisted(() => ({ port: 0 }));
 vi.mock("node:dns/promises", () => ({
   lookup: vi.fn(async (host: string) => {
     const address = (
       {
         "brand.example": "93.184.216.34",
-        "race.example": "93.184.216.34",
         "redirect.example": "93.184.216.34",
         "metadata.example": "93.184.216.34",
         "rebind.example": "93.184.216.34",
+        "port.example": "93.184.216.34",
         "example.test": "93.184.216.34",
         "internal.example": "10.0.0.7",
       } as Record<string, string>
@@ -55,7 +59,6 @@ vi.mock("node:dns/promises", () => ({
 // The socket step after the guard: send the request to the stub and name the host it was for.
 vi.mock("../../import/destination-fetch", () => ({
   destinationFetch: async (input: string, init?: RequestInit) => {
-    stub.sent.push(input);
     const url = new URL(input);
     const headers = new Headers(init?.headers);
     headers.set("x-test-host", url.hostname);
@@ -92,6 +95,11 @@ vi.mock("../../storage/s3", async (original) => ({
   ),
   deleteS3Object: vi.fn(async () => {}),
 }));
+// The real verification, wrapped so one test can let its deadline pass before the handler runs.
+vi.mock("../framework/files", async (original) => {
+  const files = await original<typeof import("../framework/files")>();
+  return { ...files, verifyUpload: vi.fn(files.verifyUpload) };
+});
 
 /** A PNG header that declares `side` x `side` pixels. */
 function png(side: number) {
@@ -110,6 +118,7 @@ const page = `<html><head><title>Acme</title>
 
 /** Requests the stub received, as `METHOD host/path`. */
 const received: string[] = [];
+/** Runs while the stub holds a home page request, before it answers. */
 let beforePage: (() => Promise<void>) | undefined;
 let server: Server;
 type Answer = {
@@ -119,16 +128,18 @@ type Answer = {
   body?: string | Buffer;
 };
 const respond = async (host: string, path: string): Promise<Answer> => {
-  const local = `http://127.0.0.1:${stub.port}`;
   const redirects: Record<string, string> = {
-    "redirect.example": `${local}/secret`,
+    // Port 80: only the guard refuses this hop, not the standard-port rule.
+    "redirect.example": "http://127.0.0.1/secret",
     "metadata.example": "http://169.254.169.254/latest/meta-data/",
     "rebind.example": "http://internal.example/",
+    // A public host on another port: only the standard-port rule refuses this hop.
+    "port.example": "https://brand.example:8443/",
   };
   if (path === "/" && redirects[host])
     return { status: 302, headers: { location: redirects[host] } };
   if (path === "/") {
-    if (host === "race.example") await beforePage?.();
+    await beforePage?.();
     return { status: 200, type: "text/html; charset=utf-8", body: page };
   }
   if (path === "/icon.png")
@@ -139,8 +150,13 @@ const respond = async (host: string, path: string): Promise<Answer> => {
 const url = process.env.QUILLS_TEST_DATABASE_URL;
 const app = contractApp(quillsRouter);
 let env: ContractEnv;
-const call = async (method: "GET" | "POST", path: string, body?: unknown) => {
-  const res = await app.request(
+const send = async (
+  target: typeof app,
+  method: "GET" | "POST",
+  path: string,
+  body?: unknown,
+) => {
+  const res = await target.request(
     `/quills/${env.a}/settings/website-branding${path}`,
     {
       method,
@@ -153,20 +169,29 @@ const call = async (method: "GET" | "POST", path: string, body?: unknown) => {
   );
   return { status: res.status, body: await res.json() };
 };
+const call = (method: "GET" | "POST", path: string, body?: unknown) =>
+  send(app, method, path, body);
 const row = async () =>
   (
     await pool.query(
-      "SELECT logo_key, branding_config, metadata FROM quills.settings WHERE workspace_id=$1",
+      "SELECT logo_key, branding_config, custom_css, metadata FROM quills.settings WHERE workspace_id=$1",
       [env.a],
     )
   ).rows[0] as {
     logo_key: string | null;
     branding_config: string | null;
+    custom_css: string | null;
     metadata: string | null;
   };
-const offerKey = async () =>
-  JSON.parse((await row()).metadata ?? "{}").brandingLookup?.offer
-    ?.logoKey as string;
+const state = async () =>
+  JSON.parse((await row()).metadata ?? "{}").brandingLookup;
+const offerKey = async () => (await state())?.offer?.logoKey as string;
+/** The key of the one logo the stub received in this test. */
+const putKey = () => {
+  const puts = received.filter((line) => line.startsWith("PUT"));
+  expect(puts).toHaveLength(1);
+  return puts[0]!.slice("PUT /quills-website/".length);
+};
 const fileRows = async (key: string) =>
   (
     await pool.query(
@@ -205,6 +230,14 @@ async function drain(key: string) {
     await retryStorageCleanup();
   expect(await queued(key)).toBe(false);
 }
+/** No lookup state, no logo and the default theme, as a teammate could set by hand. */
+const reset = () =>
+  pool.query(
+    `UPDATE quills.settings SET logo_key=NULL, branding_config=NULL, custom_css=NULL,
+       metadata=(coalesce(nullif(metadata, ''), '{}')::jsonb - 'brandingLookup')::text
+     WHERE workspace_id=$1`,
+    [env.a],
+  );
 
 beforeAll(async () => {
   server = createServer((req, res) => {
@@ -230,7 +263,7 @@ afterAll(() => new Promise<void>((done) => server.close(() => done())));
 beforeEach(() => {
   vi.stubEnv("KANEO_ALLOW_PRIVATE_WEBHOOK_DESTINATIONS", "");
   received.length = 0;
-  stub.sent.length = 0;
+  beforePage = undefined;
 });
 
 describe("website fetch", () => {
@@ -247,19 +280,18 @@ describe("website fetch", () => {
       "http://internal.example/",
     ])
       expect(await fetchWebsiteBranding(new URL(site))).toBeNull();
-    expect(stub.sent).toEqual([]);
     expect(received).toEqual([]);
   });
 
-  it.each(["redirect.example", "metadata.example", "rebind.example"])(
-    "refuses a redirect from %s to a private address",
-    async (host) => {
-      expect(await fetchWebsiteBranding(new URL(`https://${host}`))).toBeNull();
-      // Only the first hop left the guard; the private target got nothing.
-      expect(stub.sent).toEqual([`https://${host}/`]);
-      expect(received).toEqual([`GET ${host}/`]);
-    },
-  );
+  it.each([
+    "redirect.example",
+    "metadata.example",
+    "rebind.example",
+    "port.example",
+  ])("refuses a redirect from %s after the first hop", async (host) => {
+    expect(await fetchWebsiteBranding(new URL(`https://${host}`))).toBeNull();
+    expect(received).toEqual([`GET ${host}/`]);
+  });
 
   it("reads the best icon and a safe theme color from a public page", async () => {
     const logo = await fetchWebsiteBranding(new URL("https://brand.example"));
@@ -287,9 +319,42 @@ describe("website fetch", () => {
     expect(brandColor("#2563eb")).toBe("#2563EB");
     expect(brandColor("#555")).toBeNull();
     expect(brandColor("#FFE4E1")).toBeNull();
-    expect(imageSize(png(64), "image/png")).toEqual({ width: 64, height: 64 });
-    expect(imageSize(png(64), "image/jpeg")).toBeNull();
-    expect(imageSize(png(64).subarray(0, 20), "image/png")).toBeNull();
+
+    const gif = Buffer.from("GIF89a\x40\x00\x20\x00", "latin1");
+    const webp = Buffer.alloc(30);
+    webp.write("RIFF", 0, "ascii");
+    webp.write("WEBPVP8X", 8, "ascii");
+    webp.writeUIntLE(63, 24, 3);
+    webp.writeUIntLE(31, 27, 3);
+    // SOI, an APP0 segment of 4 bytes, then a SOF0 frame header: height 32, width 64.
+    const jpeg = Buffer.from(
+      "ffd8ffe000040000ffc0001108002000400300000000",
+      "hex",
+    );
+    for (const [bytes, type] of [
+      [png(64).subarray(0, 24), "image/png"],
+      [gif, "image/gif"],
+      [webp, "image/webp"],
+      [jpeg, "image/jpeg"],
+    ] as const) {
+      const size = imageSize(bytes, type);
+      expect(size).toEqual(
+        type === "image/png"
+          ? { width: 64, height: 64 }
+          : { width: 64, height: 32 },
+      );
+      // Bytes of another type, or cut short, are not that image.
+      expect(
+        imageSize(bytes, type === "image/png" ? "image/gif" : "image/png"),
+      ).toBeNull();
+      expect(imageSize(bytes.subarray(0, 9), type)).toBeNull();
+    }
+  });
+
+  it("parses a hostile head in linear time", () => {
+    const started = performance.now();
+    readHead("<meta <link ".repeat(16_000), "https://acme.example/");
+    expect(performance.now() - started).toBeLessThan(1000);
   });
 
   it("keeps the trusted fetch module off the database and the request helpers", () => {
@@ -347,7 +412,33 @@ describe.skipIf(!url)("website branding routes", () => {
     expect((await call("POST", "/decline")).status).toBe(200);
   });
 
+  it("keeps the lookup that another request recorded during start", async () => {
+    await reset();
+    const other = {
+      version: 1,
+      status: "failed",
+      domain: "example.test",
+      completedAt: new Date().toISOString(),
+    };
+    beforePage = async () => {
+      await pool.query(
+        "UPDATE quills.settings SET metadata=$2 WHERE workspace_id=$1",
+        [env.a, JSON.stringify({ brandingLookup: other })],
+      );
+    };
+    const res = await call("POST", "/start");
+    expect(res.body).toMatchObject({
+      started: false,
+      branding: { status: "failed" },
+    });
+    expect(await state()).toEqual(other);
+    const key = putKey();
+    expect(await fileRows(key)).toBe(0);
+    expect(await queued(key)).toBe(true);
+  });
+
   it("offers, applies and undoes a website logo through the storage lifecycle", async () => {
+    await reset();
     const found = await call("POST", "/lookup", { site: "brand.example" });
     expect(found.status).toBe(200);
     expect(found.body.branding).toMatchObject({
@@ -362,9 +453,7 @@ describe.skipIf(!url)("website branding routes", () => {
       new RegExp(`^workspace/${env.a}/quills/logo/[a-z0-9]+\\.png$`),
     );
     // Written once, verified under the shared lease, and held by a files row.
-    expect(received.filter((line) => line.startsWith("PUT"))).toEqual([
-      `PUT /quills-website/${key}`,
-    ]);
+    expect(putKey()).toBe(key);
     expect(await leased(key)).toBe(true);
     expect(await fileRows(key)).toBe(1);
     expect(await queued(key)).toBe(false);
@@ -406,7 +495,38 @@ describe.skipIf(!url)("website branding routes", () => {
     expect(await events("branding.auto_undone")).toBe(1);
   });
 
+  it("keeps an administrator's theme and restores only the logo", async () => {
+    await reset();
+    const custom = JSON.stringify({ light: { primary: "#111111" } });
+    await pool.query(
+      "UPDATE quills.settings SET branding_config=$2 WHERE workspace_id=$1",
+      [env.a, custom],
+    );
+    await call("POST", "/lookup", { site: "brand.example" });
+    const applied = await call("POST", "/accept");
+    expect(applied.body.branding).toMatchObject({ colorApplied: false });
+    expect((await row()).branding_config).toBe(custom);
+    expect((await call("POST", "/undo")).status).toBe(200);
+    expect(await row()).toMatchObject({
+      logo_key: null,
+      branding_config: custom,
+    });
+
+    // Custom CSS also keeps the theme.
+    await reset();
+    await pool.query(
+      "UPDATE quills.settings SET custom_css='.portal { color: red; }' WHERE workspace_id=$1",
+      [env.a],
+    );
+    await call("POST", "/lookup", { site: "brand.example" });
+    expect((await call("POST", "/accept")).body.branding).toMatchObject({
+      colorApplied: false,
+    });
+    expect((await row()).branding_config).toBeNull();
+  });
+
   it("keeps an undo off a theme that changed after accept", async () => {
+    await reset();
     await call("POST", "/lookup", { site: "brand.example" });
     expect((await call("POST", "/accept")).status).toBe(200);
     const edited = JSON.stringify({ light: { primary: "#000000" } });
@@ -418,14 +538,31 @@ describe.skipIf(!url)("website branding routes", () => {
     expect((await call("POST", "/undo")).status).toBe(409);
     expect(await row()).toEqual(before);
     expect((await call("GET", "")).body.branding).toBeNull();
-    // Clear the logo by hand, as a teammate would, for the next test.
-    await pool.query(
-      "UPDATE quills.settings SET logo_key=NULL, branding_config=NULL WHERE workspace_id=$1",
-      [env.a],
-    );
+  });
+
+  it("keeps an accept that commits while a later lookup fetches", async () => {
+    await reset();
+    await call("POST", "/lookup", { site: "brand.example" });
+    const offered = await offerKey();
+    beforePage = async () => {
+      beforePage = undefined;
+      expect((await call("POST", "/accept")).status).toBe(200);
+    };
+    received.length = 0;
+    const res = await call("POST", "/lookup", { site: "brand.example" });
+    expect(res.body.branding).toMatchObject({ status: "applied" });
+    expect(await state()).toMatchObject({
+      status: "applied",
+      receipt: { logoKey: { before: null, after: offered } },
+    });
+    const late = putKey();
+    expect(await fileRows(late)).toBe(0);
+    expect(await queued(late)).toBe(true);
+    expect((await call("POST", "/undo")).status).toBe(200);
   });
 
   it("drops a replaced and a declined offer", async () => {
+    await reset();
     await call("POST", "/lookup", { site: "brand.example" });
     const first = await offerKey();
     await call("POST", "/lookup", { site: "brand.example" });
@@ -440,31 +577,128 @@ describe.skipIf(!url)("website branding routes", () => {
     await drain(first);
     expect(deleteS3Object).toHaveBeenCalledWith(first);
 
+    const before = await events("branding.offer_declined");
     const declined = await call("POST", "/decline");
     expect(declined.body.branding).toMatchObject({ status: "declined" });
     expect(await fileRows(second)).toBe(0);
     expect(await queued(second)).toBe(true);
     expect((await call("POST", "/accept")).status).toBe(409);
     expect((await call("POST", "/decline")).status).toBe(409);
-    expect(await events("branding.offer_declined")).toBe(2);
+    expect(await events("branding.offer_declined")).toBe(before + 1);
+  });
+
+  it("refuses an offer whose files row is gone", async () => {
+    await reset();
+    await call("POST", "/lookup", { site: "brand.example" });
+    const key = await offerKey();
+    await pool.query(
+      "DELETE FROM quills.files WHERE workspace_id=$1 AND storage_key=$2",
+      [env.a, key],
+    );
+    const before = await row();
+    expect((await call("POST", "/accept")).status).toBe(409);
+    expect(await row()).toEqual(before);
   });
 
   it("records a refused redirect as failed with nothing stored", async () => {
-    const before = (
-      await pool.query("SELECT count(*)::int n FROM quills.files")
-    ).rows[0].n;
+    await reset();
     const res = await call("POST", "/lookup", { site: "redirect.example" });
     expect(res.status).toBe(200);
     expect(res.body.branding).toMatchObject({ status: "failed" });
     expect(received).toEqual(["GET redirect.example/"]);
-    expect(
-      (await pool.query("SELECT count(*)::int n FROM quills.files")).rows[0].n,
-    ).toBe(before);
-    for (const site of ["http://127.0.0.1:8080", "ftp://brand.example", "a b"])
+    for (const site of [
+      "http://127.0.0.1:8080",
+      "ftp://brand.example",
+      "a b",
+      `${"a".repeat(60)}.`.repeat(5) + "com",
+    ])
       expect((await call("POST", "/lookup", { site })).status).toBe(400);
   });
 
+  it("queues a logo that storage did not verify", async () => {
+    await reset();
+    vi.mocked(verifyTaskAssetUpload).mockRejectedValueOnce(
+      new Error("storage is down"),
+    );
+    const res = await call("POST", "/lookup", { site: "brand.example" });
+    expect(res.body.branding).toMatchObject({ status: "failed" });
+    const key = putKey();
+    expect(await fileRows(key)).toBe(0);
+    expect(await leased(key)).toBe(false);
+    expect(await queued(key)).toBe(true);
+  });
+
+  it("commits no reference after the verification deadline passes", async () => {
+    await reset();
+    const files =
+      await vi.importActual<typeof import("../framework/files")>(
+        "../framework/files",
+      );
+    vi.mocked(verifyUpload).mockImplementationOnce((async (
+      ...args: Parameters<typeof files.verifyUpload>
+    ) => ({
+      ...(await files.verifyUpload(...args)),
+      deadline: Date.now() - 1,
+    })) as never);
+    const before = await row();
+    const res = await call("POST", "/lookup", { site: "brand.example" });
+    expect(res.status).toBe(503);
+    expect(await fileRows(putKey())).toBe(0);
+    expect(await row()).toEqual(before);
+  });
+
+  it("rolls back the offer and the queued key of a failed lookup", async () => {
+    await reset();
+    await call("POST", "/lookup", { site: "brand.example" });
+    const previous = await offerKey();
+    const d = [...registry.keys()].find(
+      (r) => r.operationId === "lookupQuillsWebsiteBranding",
+    )!;
+    const failing = contractApp(
+      apiRouter<BaseVariables & { workspaceId: string }>().openapi(
+        ...buildQuillsRoute({
+          ...d,
+          handler: async (input) => {
+            await d.handler(input);
+            throw new Error("Injected failure after the write");
+          },
+        }),
+      ),
+    );
+    const before = await row();
+    received.length = 0;
+    const res = await send(failing, "POST", "/lookup", {
+      site: "brand.example",
+    });
+    expect(res.status).toBe(500);
+    expect(await row()).toEqual(before);
+    expect(await fileRows(previous)).toBe(1);
+    expect(await queued(previous)).toBe(false);
+    expect(await fileRows(putKey())).toBe(0);
+  });
+
+  it("refuses a lookup while the workspace has a logo, and a second lookup at once", async () => {
+    await reset();
+    let second: Awaited<ReturnType<typeof call>> | undefined;
+    beforePage = async () => {
+      beforePage = undefined;
+      second = await call("POST", "/lookup", { site: "brand.example" });
+    };
+    expect(
+      (await call("POST", "/lookup", { site: "brand.example" })).status,
+    ).toBe(200);
+    expect(second).toMatchObject({ status: 409 });
+    await pool.query(
+      "UPDATE quills.settings SET logo_key=$2 WHERE workspace_id=$1",
+      [env.a, `workspace/${env.a}/quills/logo/manual.png`],
+    );
+    expect(
+      (await call("POST", "/lookup", { site: "brand.example" })).status,
+    ).toBe(409);
+  });
+
   it("queues the logo when the workspace gets a logo during the fetch", async () => {
+    await reset();
     const manual = `workspace/${env.a}/quills/logo/manual.png`;
     beforePage = async () => {
       await pool.query(
@@ -472,19 +706,11 @@ describe.skipIf(!url)("website branding routes", () => {
         [env.a, manual],
       );
     };
-    try {
-      const res = await call("POST", "/lookup", { site: "race.example" });
-      expect(res.body.branding).toMatchObject({ status: "skipped" });
-    } finally {
-      beforePage = undefined;
-    }
-    const put = received.find((line) => line.startsWith("PUT"))!;
-    const key = put.slice("PUT /quills-website/".length);
+    const res = await call("POST", "/lookup", { site: "brand.example" });
+    expect(res.body.branding).toMatchObject({ status: "skipped" });
+    const key = putKey();
     expect(await fileRows(key)).toBe(0);
     expect(await queued(key)).toBe(true);
     expect((await row()).logo_key).toBe(manual);
-    expect(
-      (await call("POST", "/lookup", { site: "brand.example" })).status,
-    ).toBe(409);
   });
 });
