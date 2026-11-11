@@ -5,6 +5,7 @@ import { discord } from "./discord";
 import { github } from "./github";
 import { gitlab } from "./gitlab";
 import { slack } from "./slack";
+import { teams } from "./teams";
 
 // The OAuth and key providers, one file each. To add a provider, add its file, its import above and
 // one entry below. The key is the integration type. The catalog entry, the connect route (oauth.ts)
@@ -17,6 +18,7 @@ export const oauthProviders = {
   gitlab,
   slack,
   discord,
+  teams,
 } satisfies Record<string, OAuthProvider>;
 type Registry = typeof oauthProviders;
 export const oauthProvider = (type: string): OAuthProvider | undefined =>
