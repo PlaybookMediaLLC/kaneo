@@ -118,6 +118,8 @@ describe.skipIf(!url)("Quills agent presence", () => {
         .where(eq(kvStore.key, rows[0]!.key)),
     );
     expect(await widgetPresence()).toMatchObject({ agentsOnline: false });
+    await heartbeat(env.a, env.owner);
+    expect(await widgetPresence()).toMatchObject({ agentsOnline: true });
   });
 
   it("does not count a teammate who is set to away", async () => {

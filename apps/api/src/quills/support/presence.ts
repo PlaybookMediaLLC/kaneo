@@ -1,5 +1,4 @@
-import { and, eq, gt, inArray, isNotNull, like, sql } from "drizzle-orm";
-import { isValidTypeId, type PrincipalId } from "@kaneo/ids";
+import { and, eq, gt, inArray, isNotNull, sql } from "drizzle-orm";
 import { apiRouter, z, type BaseVariables } from "../../openapi";
 import { principal } from "../../database/quills/schema/auth";
 import { kvStore } from "../../database/quills/schema/kv";
@@ -18,35 +17,36 @@ const PRESENCE_TTL_SECONDS = 90;
 /**
  * True while a teammate has a live heartbeat and has not set themselves away
  * (setQuillsAgentAvailability). Workspace RLS keeps every row in the caller's workspace.
+ * The widget polls this, so both reads use an index: the teammates by (workspace_id,
+ * kaneo_user_id), then their own keys by the kv_store primary key. A LIKE on the key prefix
+ * would scan every widget session, because the key column does not use the C collation.
  */
-export async function agentsOnline(db: Database) {
-  const rows = await db
+async function agentsOnline(db: Database) {
+  const teammates = await db
+    .select({ id: principal.id })
+    .from(principal)
+    .where(
+      and(
+        isNotNull(principal.kaneoUserId),
+        eq(principal.chatAvailability, "online"),
+      ),
+    );
+  if (!teammates.length) return false;
+  const [live] = await db
     .select({ key: kvStore.key })
     .from(kvStore)
     .where(
       and(
         eq(kvStore.workspaceKey, "_"),
-        like(kvStore.key, `${PRESENCE}%`),
+        inArray(
+          kvStore.key,
+          teammates.map((teammate) => `${PRESENCE}${teammate.id}`),
+        ),
         gt(kvStore.expiresAt, sql`now()`),
       ),
     )
-    .limit(1000);
-  const ids = rows
-    .map((row) => row.key.slice(PRESENCE.length))
-    .filter((id): id is PrincipalId => isValidTypeId(id, "principal"));
-  if (!ids.length) return false;
-  const [agent] = await db
-    .select({ id: principal.id })
-    .from(principal)
-    .where(
-      and(
-        inArray(principal.id, ids),
-        isNotNull(principal.kaneoUserId),
-        eq(principal.chatAvailability, "online"),
-      ),
-    )
     .limit(1);
-  return Boolean(agent);
+  return Boolean(live);
 }
 
 /** The weekday (0 = Sunday), date and HH:MM of `now` in `timeZone`. */
