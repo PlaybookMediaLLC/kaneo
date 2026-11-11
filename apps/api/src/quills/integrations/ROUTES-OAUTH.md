@@ -132,7 +132,30 @@ Filled by lane P1.
 
 ### Asana
 
-Filled by lane P2.
+| Source | Route | operationId |
+|---|---|---|
+| `getAsanaConnectUrl` | `GET /oauth/asana/connect` | `startQuillsAsanaOAuthConnect` |
+| `fetchAsanaProjectsFn` | `GET /integrations/{integrationId}/destinations` | `listQuillsIntegrationDestinations` |
+
+- Boundary: the map at the top of this file. Both routes need `manage_settings`. The provider calls
+  only `app.asana.com`, with no transaction open.
+- Connect: the callback exchanges the code at `/-/oauth_token`, then reads `/api/1.0/users/me`. It
+  stores the first Asana workspace of the account in `config.workspaceGid`. The sealed secrets are
+  `accessToken`, `refreshToken` and `expiresAt`.
+- Destinations: one kind, the projects of that workspace (one page of 100, `archived=false`). The
+  route keeps only IDs of 1 to 30 letters and digits.
+- Refresh: an access token that is due within a minute is refreshed first. Asana keeps the refresh
+  token. A refused refresh (400) is 409: reconnect.
+- Tests: `providers/asana.test.ts` (local provider server): connect with sealed tokens, the limit of
+  200 and the ID filter, refresh, refused refresh, malformed answers (400 and 502 with fixed text),
+  and a refused `kind`.
+
+| Difference from the source | Reason |
+|---|---|
+| A connect without an Asana workspace, or with a failed profile read, fails. The source stored `unknown` and the name "Asana". | The project list needs the workspace. |
+| Asana filters archived projects (`archived=false`). The source filtered them after the call. | A page of 100 holds only active projects. |
+| The refresh also sends `redirect_uri`. | Asana's token endpoint documents it for both grants. |
+| No task creation, status sync, webhook or token revoke at disconnect. | Delivery and status sync are out of scope for #131. |
 
 ### ClickUp
 
