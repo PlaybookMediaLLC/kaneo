@@ -12,6 +12,7 @@ import {
 } from "vite-plus/test";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
+import { settings } from "../../database/quills/schema/auth";
 import * as kaneo from "../../database/schema";
 import quillsRouter from "../index";
 import publicRouter from "../public";
@@ -66,7 +67,7 @@ const routes: Record<
     send: (
       status: number,
       headers: Record<string, string>,
-      body?: string,
+      body?: string | Buffer,
     ) => void,
   ) => void
 > = {
@@ -79,6 +80,16 @@ const routes: Record<
   "/to-ipv6-loopback": (send) => send(307, { location: "http://[::1]/" }),
   "/loop": (send) => send(302, { location: "/loop" }),
   "/json": (send) => send(200, { "content-type": "application/json" }, "{}"),
+  "/latin1": (send) =>
+    send(
+      200,
+      { "content-type": "text/html; charset=windows-1252" },
+      Buffer.from([
+        ...Buffer.from("<title>Caf"),
+        0xe9,
+        ...Buffer.from("</title>"),
+      ]),
+    ),
   "/error": (send) =>
     send(500, { "content-type": "text/html" }, "Internal secret stack trace"),
   "/big": (send) =>
@@ -94,7 +105,9 @@ const viaStub = (async (input: string, init?: RequestInit) =>
   fetch(`${base}${new URL(input).pathname}`, {
     ...init,
     redirect: "manual",
-  })) as unknown as Parameters<typeof fetchHtmlPage>[1];
+  })) as unknown as NonNullable<
+  Parameters<typeof fetchHtmlPage>[1]
+>["baseFetch"];
 const PUBLIC = "http://93.184.216.34";
 
 describe("link preview parser", () => {
@@ -118,6 +131,12 @@ describe("link preview parser", () => {
     });
     expect(parsePreview("<html><body>No head</body></html>", "u")).toBeNull();
     expect(
+      parsePreview(
+        '<meta property="og:title" content=""><title>Fallback</title>',
+        "u",
+      )?.title,
+    ).toBe("Fallback");
+    expect(
       parsePreview(`<title>${"t".repeat(5000)}</title>`, "u")?.title,
     ).toHaveLength(200);
   });
@@ -132,6 +151,9 @@ describe("link preview parser", () => {
       `<meta name=x content="${"&#1".repeat(100_000)}">`,
       "<meta name=a content=b>".repeat(30_000),
       `<head${"<".repeat(300_000)}`,
+      `<meta ${"a=".repeat(90_000)}>`,
+      `<meta content="${"x".repeat(150_000)}">`,
+      `<meta ${"= ".repeat(90_000)}>`,
     ];
     for (const page of hostile) {
       const started = performance.now();
@@ -160,7 +182,7 @@ describe("link fetch guard", () => {
     hits.length = 0;
   });
 
-  it("is the only importer of the guard and reaches no database", () => {
+  it("imports only the guard and its address rules", () => {
     const source = readFileSync(
       new URL("./link-fetch.ts", import.meta.url),
       "utf8",
@@ -169,7 +191,10 @@ describe("link fetch guard", () => {
       [...source.matchAll(/from "([^"]+)"|import\("([^"]+)"\)/g)].map(
         (match) => match[1] ?? match[2],
       ),
-    ).toEqual(["../../import/guarded-fetch"]);
+    ).toEqual([
+      "../../import/guarded-fetch",
+      "../../utils/assert-public-destination",
+    ]);
     // Not a route module either: framework/boundaries.test.ts would scan a route module's imports.
     expect(source).not.toMatch(
       /define-route|apiRouter|withQuills|process\.env/,
@@ -178,19 +203,45 @@ describe("link fetch guard", () => {
 
   it("refuses private, loopback, link-local and metadata addresses before connecting", async () => {
     vi.stubEnv("KANEO_ALLOW_PRIVATE_WEBHOOK_DESTINATIONS", "");
+    // Through the real socket path: the local stub never sees a request.
     for (const target of [
       `${base}/page`,
       `http://localhost:${new URL(base).port}/page`,
+    ])
+      expect([target, await fetchHtmlPage(target)]).toEqual([target, null]);
+    expect(hits).toEqual([]);
+    // A spy in place of the connection: the guard refuses before it is ever called.
+    const spy = vi.fn(viaStub);
+    for (const target of [
       "http://169.254.169.254/latest/meta-data/",
       "http://10.1.2.3/",
       "http://192.168.1.1/",
       "http://100.64.0.1/",
+      "http://0x7f.1/",
       "http://[::1]/",
       "http://[fd00::1]/",
       "http://[::ffff:127.0.0.1]/",
+      "http://[::ffff:a9fe:a9fe]/",
     ])
-      expect([target, await fetchHtmlPage(target)]).toEqual([target, null]);
+      expect([
+        target,
+        await fetchHtmlPage(target, { baseFetch: spy as never }),
+      ]).toEqual([target, null]);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("never reaches a private address for a customer, also when the instance allows it", async () => {
+    vi.stubEnv("KANEO_ALLOW_PRIVATE_WEBHOOK_DESTINATIONS", "true");
+    expect(await fetchHtmlPage(`${base}/page`, { strict: true })).toBeNull();
     expect(hits).toEqual([]);
+    // A teammate follows the instance switch, as imports and webhooks do.
+    expect((await fetchHtmlPage(`${base}/page`))?.html).toBe(PAGE);
+  });
+
+  it("decodes the charset that the content type names", async () => {
+    vi.stubEnv("KANEO_ALLOW_PRIVATE_WEBHOOK_DESTINATIONS", "true");
+    const page = await fetchHtmlPage(`${base}/latin1`);
+    expect(parsePreview(page!.html, page!.url)?.title).toBe("Caf\u00e9");
   });
 
   it("refuses a redirect to a private, loopback or metadata address after one hop", async () => {
@@ -202,32 +253,59 @@ describe("link fetch guard", () => {
       "/to-ipv6-loopback",
     ]) {
       hits.length = 0;
-      expect(await fetchHtmlPage(`${PUBLIC}${path}`, viaStub)).toBeNull();
+      expect(
+        await fetchHtmlPage(`${PUBLIC}${path}`, { baseFetch: viaStub }),
+      ).toBeNull();
       expect(hits).toEqual([path]);
     }
   });
 
   it("bounds redirects, size, type and status, and returns no error text", async () => {
     vi.stubEnv("KANEO_ALLOW_PRIVATE_WEBHOOK_DESTINATIONS", "");
-    expect(await fetchHtmlPage(`${PUBLIC}/loop`, viaStub)).toBeNull();
+    expect(
+      await fetchHtmlPage(`${PUBLIC}/loop`, { baseFetch: viaStub }),
+    ).toBeNull();
     expect(hits).toHaveLength(4);
-    expect(await fetchHtmlPage(`${PUBLIC}/json`, viaStub)).toBeNull();
-    expect(await fetchHtmlPage(`${PUBLIC}/error`, viaStub)).toBeNull();
-    const big = await fetchHtmlPage(`${PUBLIC}/big`, viaStub);
+    expect(
+      await fetchHtmlPage(`${PUBLIC}/json`, { baseFetch: viaStub }),
+    ).toBeNull();
+    expect(
+      await fetchHtmlPage(`${PUBLIC}/error`, { baseFetch: viaStub }),
+    ).toBeNull();
+    const big = await fetchHtmlPage(`${PUBLIC}/big`, { baseFetch: viaStub });
     expect(big?.html.length).toBe(512 * 1024);
-    expect((await fetchHtmlPage(`${PUBLIC}/page`, viaStub))?.html).toBe(PAGE);
+    expect(
+      (await fetchHtmlPage(`${PUBLIC}/page`, { baseFetch: viaStub }))?.html,
+    ).toBe(PAGE);
   });
 
-  it("gives up after 5 seconds", async () => {
+  it("answers within 5 seconds also when a step ignores the abort, and caps previews at 2", async () => {
+    // A stuck step, like a DNS lookup: it takes no signal and does not end at the deadline.
+    const release: ((response: Response) => void)[] = [];
+    const stuck = (() =>
+      new Promise<Response>((resolve) => release.push(resolve))) as never;
     const started = Date.now();
-    const never = ((_input: string, init?: RequestInit) =>
-      new Promise((_resolve, reject) =>
-        init?.signal?.addEventListener("abort", () =>
-          reject(init.signal?.reason),
-        ),
-      )) as unknown as Parameters<typeof fetchHtmlPage>[1];
-    expect(await fetchHtmlPage(`${PUBLIC}/slow`, never)).toBeNull();
-    expect(Date.now() - started).toBeGreaterThanOrEqual(4900);
+    const first = fetchHtmlPage(`${PUBLIC}/one`, { baseFetch: stuck });
+    const second = fetchHtmlPage(`${PUBLIC}/two`, { baseFetch: stuck });
+    // Two previews hold their slots: a third answers null at once, with no request.
+    const spy = vi.fn(viaStub);
+    expect(
+      await fetchHtmlPage(`${PUBLIC}/page`, { baseFetch: spy as never }),
+    ).toBeNull();
+    expect(spy).not.toHaveBeenCalled();
+    expect(await Promise.all([first, second])).toEqual([null, null]);
+    const elapsed = Date.now() - started;
+    expect(elapsed).toBeGreaterThanOrEqual(4900);
+    expect(elapsed).toBeLessThan(6000);
+    // The slots stay taken until the stuck steps end.
+    expect(
+      await fetchHtmlPage(`${PUBLIC}/page`, { baseFetch: spy as never }),
+    ).toBeNull();
+    for (const resolve of release) resolve(new Response("", { status: 500 }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(
+      (await fetchHtmlPage(`${PUBLIC}/page`, { baseFetch: viaStub }))?.html,
+    ).toBe(PAGE);
   }, 10_000);
 });
 
@@ -300,8 +378,9 @@ describe.skipIf(!url)("Quills link preview routes", () => {
     expect(JSON.stringify(broken.body)).not.toContain("secret");
   });
 
-  it("serves the widget composer only while its messenger is on", async () => {
-    vi.stubEnv("KANEO_ALLOW_PRIVATE_WEBHOOK_DESTINATIONS", "");
+  it("serves the widget composer only while its messenger is on, and never a private page", async () => {
+    // The instance allows private destinations; a customer route still refuses them.
+    vi.stubEnv("KANEO_ALLOW_PRIVATE_WEBHOOK_DESTINATIONS", "true");
     const env = contractEnv();
     const visitor = await env.widgetVisitor(env.a);
     const path = `/quills-public/${env.a}/widget/link-preview?url=${encodeURIComponent(`${base}/page?widget`)}`;
@@ -312,5 +391,35 @@ describe.skipIf(!url)("Quills link preview routes", () => {
       body: { preview: null },
     });
     expect((await send(path)).status).toBe(401);
+    await env.scoped(env.a, (db) =>
+      db.update(settings).set({
+        widgetConfig: JSON.stringify({
+          enabled: true,
+          tabs: { messenger: false, tickets: true },
+        }),
+      }),
+    );
+    expect((await send(path, auth)).status).toBe(404);
+    expect(hits).toEqual([]);
+  });
+
+  it("serves the portal composer only while its support pages are on", async () => {
+    vi.stubEnv("KANEO_ALLOW_PRIVATE_WEBHOOK_DESTINATIONS", "");
+    const env = contractEnv();
+    const path = `/quills-public/${env.a}/support/link-preview?url=${encodeURIComponent(`${base}/page?portal`)}`;
+    const portal = (config: object) =>
+      env.scoped(env.a, (db) =>
+        db.update(settings).set({ portalConfig: JSON.stringify(config) }),
+      );
+    await portal({ enabled: true });
+    expect(await send(path, { "x-test-user": env.customerA })).toEqual({
+      status: 200,
+      body: { preview: null },
+    });
+    await portal({ enabled: true, support: { enabled: false } });
+    expect((await send(path, { "x-test-user": env.customerA })).status).toBe(
+      404,
+    );
+    expect(hits).toEqual([]);
   });
 });

@@ -3,7 +3,7 @@ import { enablePortal } from "../portal/customer-seed.fixture";
 import { callerOf, sharedRows } from "./customer/seed.fixture";
 
 // A loopback URL: the guard refuses it before any connection, so a contract run never leaves the
-// machine. support/link-preview.test.ts covers the fetch, the cache and the refusals.
+// machine. support/link-preview.test.ts covers the fetch and the refusals.
 const query = { url: "http://127.0.0.1:9/contract" };
 const hidden = (rows: Awaited<ReturnType<typeof sharedRows>>) => [
   rows.otherName,

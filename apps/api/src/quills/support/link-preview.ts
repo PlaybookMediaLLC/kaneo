@@ -9,7 +9,6 @@ import { fetchHtmlPage } from "./link-fetch";
 // is no cache: the contract forbids a read to write rows. Customer routes have a rate limit.
 
 const MAX_SCAN = 200 * 1024;
-const MAX_TAGS = 500;
 const MAX_VALUE = 2000;
 
 const previewSchema = z.object({
@@ -103,9 +102,9 @@ export function parsePreview(html: string, url: string): Preview | null {
   const meta = new Map<string, string>();
   let title: string | undefined;
   const tag = /<(meta|title)\b/gi;
-  for (let seen = 0, match = tag.exec(head); match; match = tag.exec(head)) {
+  for (let match = tag.exec(head); match; match = tag.exec(head)) {
     const end = head.indexOf(">", tag.lastIndex);
-    if (end === -1 || ++seen > MAX_TAGS) break;
+    if (end === -1) break;
     tag.lastIndex = end + 1;
     if (match[1]!.toLowerCase() === "title") {
       if (title !== undefined) continue;
@@ -124,12 +123,12 @@ export function parsePreview(html: string, url: string): Preview | null {
   const preview = {
     url,
     title: clean(
-      meta.get("og:title") ?? meta.get("twitter:title") ?? title,
+      meta.get("og:title") || meta.get("twitter:title") || title,
       200,
     ),
     description: clean(
-      meta.get("og:description") ??
-        meta.get("twitter:description") ??
+      meta.get("og:description") ||
+        meta.get("twitter:description") ||
         meta.get("description"),
       500,
     ),
@@ -139,26 +138,26 @@ export function parsePreview(html: string, url: string): Preview | null {
 }
 
 /** The fetch and parse. Runs in `call`, with no transaction open. */
-async function unfurl(url: string) {
-  const page = await fetchHtmlPage(new URL(url).href);
+async function unfurl(url: string, strict: boolean) {
+  const page = await fetchHtmlPage(url, { strict });
   return page && parsePreview(page.html, page.url);
 }
 const description =
-  "A private, loopback, link-local or metadata address, a redirect to one, more than 3 redirects, more than 5 seconds, a body that is not HTML or any failure answers preview: null.";
+  "A private, loopback, link-local or metadata address, a redirect to one, more than 3 redirects, more than 5 seconds, a body that is not HTML, more than 2 previews at once in the API process, or any failure answers preview: null.";
 
 const teammate = defineQuillsRoute({
   method: "get",
   path: "/support/link-preview",
   operationId: "unfurlQuillsLink",
   summary: "Get a link preview for a web page",
-  description,
+  description: `${description} The instance switch KANEO_ALLOW_PRIVATE_WEBHOOK_DESTINATIONS lets teammates preview private addresses, as for imports and webhooks.`,
   action: "read",
   query,
   response,
   responseDescription: "The preview, or null",
   // The permission checks run first; the fetch waits until no transaction holds a connection.
   prepare: async () => undefined,
-  call: (_prepared, { query }) => unfurl(query.url),
+  call: (_prepared, { query }) => unfurl(query.url, false),
   handler: async ({ called }) => ({ preview: called }),
 });
 
@@ -173,7 +172,7 @@ const customer = (audience: Customer) =>
         ? "unfurlQuillsWidgetLink"
         : "unfurlQuillsPortalLink",
     summary: "Get a link preview for a web page",
-    description: `${description} Needs the ${audience === "widget" ? "widget and its messenger" : "portal and its support pages"}. At most 30 requests a minute for each client address.`,
+    description: `${description} Needs the ${audience === "widget" ? "widget and its messenger" : "portal and its support pages"}. At most 30 requests a minute for each client address. A private address is always refused here, also when the instance allows private destinations.`,
     action: "read",
     rateLimit: { limit: 30, windowSeconds: 60 },
     query,
@@ -182,7 +181,7 @@ const customer = (audience: Customer) =>
     errors: { 404: "Support surface not found" },
     prepare: ({ db, caller }) =>
       requireSurface(db, audience, caller, "messenger"),
-    call: (_prepared, { query }) => unfurl(query.url),
+    call: (_prepared, { query }) => unfurl(query.url, true),
     handler: async ({ called }) => ({ preview: called }),
   });
 
