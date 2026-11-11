@@ -6297,7 +6297,7 @@
             "properties": {
               "enabled": {
                 "type": "boolean",
-                "description": "Stored only: a publish records the request, and no translation runs in Kaneo yet"
+                "description": "Stored only: a publish records the request, and no translation runs yet"
               },
               "protectedTerms": {
                 "type": "array",
@@ -10370,6 +10370,82 @@
         }
       }
     },
+    "/quills-public/signed/chat/email/events": {
+      "post": {
+        "operationId": "receiveQuillsEmailDeliveryEvent",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Record a delivery event for a sent mail (Resend webhook)",
+        "description": "404 until EMAIL_EVENTS_SIGNING_SECRET (or EMAIL_INBOUND_SIGNING_SECRET) is set, and for a mail that carries no signed workspace tags. email.bounced and email.complained mark the mail's log row. The caller signs the raw request body; the body is parsed only after the signature check.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Whether the event changed the mail's log row. Every verified event is acknowledged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "recorded",
+                        "ignored",
+                        "duplicate"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid signature",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not configured, or no workspace owns the credential",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/quills-public/{workspace}/portal/config": {
       "get": {
         "operationId": "getQuillsPublicPortalConfig",
@@ -10644,7 +10720,7 @@
           "Quills"
         ],
         "summary": "Get the caller's customer profile",
-        "description": "linked is false until the account first acts in this workspace; name and email then come from the Kaneo account.",
+        "description": "linked is false until the account first acts in this workspace; name and email then come from the account.",
         "security": [],
         "parameters": [
           {
@@ -10877,7 +10953,7 @@
           "Quills"
         ],
         "summary": "Unlink the caller's customer profile",
-        "description": "Removes the link between the Kaneo account and its customer profile here. The profile, its history and the Kaneo account stay.",
+        "description": "Removes the link between the account and its customer profile here. The profile, its history and the account stay.",
         "security": [],
         "parameters": [
           {
@@ -11647,7 +11723,7 @@
           "Quills"
         ],
         "summary": "Get the caller's language preference",
-        "description": "Null until set. A teammate's language is the Kaneo account locale, not this value.",
+        "description": "Null until set. A teammate's language is the account locale, not this value.",
         "security": [],
         "parameters": [
           {
@@ -12666,6 +12742,11 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 8192
+                  },
+                  "previousToken": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
                   }
                 },
                 "required": [
@@ -12688,6 +12769,12 @@
                     },
                     "principalId": {
                       "type": "string"
+                    },
+                    "mergedPrincipalId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "user": {
                       "type": "object",
@@ -12731,6 +12818,7 @@
                   "required": [
                     "sessionToken",
                     "principalId",
+                    "mergedPrincipalId",
                     "user",
                     "canPortalHandoff",
                     "votedPostIds"
@@ -12761,6 +12849,458 @@
           },
           "409": {
             "description": "The email belongs to another customer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/widget/contact-email": {
+      "get": {
+        "operationId": "getQuillsEmailChangeState",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get the anonymous visitor's contact address and change state",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The contact address and a pending change",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "currentEmail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "requiresCurrentCode": {
+                      "type": "boolean"
+                    },
+                    "pendingEmail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "currentEmail",
+                    "requiresCurrentCode",
+                    "pendingEmail"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Valid widget session required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an anonymous widget visitor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "requestQuillsEmailChange",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Request a contact address change",
+        "description": "Mails a code to the new address after this request commits. With an address set, `currentCode` (from the current-code step) must be right first; it works once.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "maxLength": 320
+                  },
+                  "currentCode": {
+                    "type": "string",
+                    "maxLength": 16
+                  }
+                },
+                "required": [
+                  "email"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Whether the code was requested",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "reason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "enum": [
+                        "current_code_required",
+                        "invalid_code",
+                        "same_email",
+                        null
+                      ]
+                    },
+                    "principalId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "reason",
+                    "principalId"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not an address the system sends to",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Valid widget session required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an anonymous widget visitor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/widget/contact-email/current-code": {
+      "post": {
+        "operationId": "sendQuillsCurrentAddressCode",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Mail a code to the current contact address",
+        "description": "The first step of a change when an address is set: the code proves the visitor holds it. The mail goes out after this request commits.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request was stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "reason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "enum": [
+                        "current_code_required",
+                        "invalid_code",
+                        "same_email",
+                        null
+                      ]
+                    },
+                    "principalId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "reason",
+                    "principalId"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Valid widget session required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an anonymous widget visitor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No contact address is set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/widget/contact-email/confirm": {
+      "post": {
+        "operationId": "confirmQuillsEmailChange",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Confirm a contact address change with its code",
+        "description": "Sets the contact address. A wrong code counts as a try; after 5, or 15 minutes, request a new code.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "maxLength": 320
+                  },
+                  "code": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 16
+                  }
+                },
+                "required": [
+                  "email",
+                  "code"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Whether the address changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "email": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "principalId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "email",
+                    "principalId"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Valid widget session required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an anonymous widget visitor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
             "content": {
               "application/json": {
                 "schema": {
@@ -16655,14 +17195,14 @@
         }
       }
     },
-    "/quills-public/{workspace}/changelog/feed": {
+    "/quills-public/{workspace}/changelog/rss.xml": {
       "get": {
         "operationId": "getQuillsPublicChangelogFeed",
         "tags": [
           "Quills"
         ],
-        "summary": "Get the changelog feed",
-        "description": "The 50 newest published entries that an anonymous visitor may see. The source's /changelog/rss and /changelog/rss.xml redirect here.",
+        "summary": "Get the changelog RSS feed",
+        "description": "RSS 2.0 with the 50 newest published entries that an anonymous visitor may see; empty on a private portal. Links point to the portal pages of the web app (/portal/{workspaceId}). The source's /changelog/feed, /changelog/rss and /changelog/rss.xml.",
         "security": [],
         "parameters": [
           {
@@ -16680,47 +17220,11 @@
         ],
         "responses": {
           "200": {
-            "description": "The feed",
+            "description": "The RSS document",
             "content": {
-              "application/json": {
+              "application/rss+xml": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "title": {
-                      "type": "string"
-                    },
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "title": {
-                            "type": "string"
-                          },
-                          "summary": {
-                            "type": "string"
-                          },
-                          "publishedAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "title",
-                          "summary",
-                          "publishedAt"
-                        ]
-                      }
-                    }
-                  },
-                  "required": [
-                    "title",
-                    "items"
-                  ]
+                  "type": "string"
                 }
               }
             }
@@ -16748,14 +17252,14 @@
         }
       }
     },
-    "/quills-public/{workspace}/sitemap": {
+    "/quills-public/{workspace}/sitemap.xml": {
       "get": {
         "operationId": "getQuillsPublicSitemap",
         "tags": [
           "Quills"
         ],
-        "summary": "Get the public pages for a sitemap",
-        "description": "Boards, posts and changelog entries that an anonymous visitor may see: at most 10,000 posts (newest created first) and 1,000 entries.",
+        "summary": "Get the portal sitemap",
+        "description": "Sitemap XML of the portal home, the boards, posts and changelog entries that an anonymous visitor may see: at most 10,000 posts (newest created first) and 1,000 entries. Empty on a private portal.",
         "security": [],
         "parameters": [
           {
@@ -16773,74 +17277,11 @@
         ],
         "responses": {
           "200": {
-            "description": "Sitemap entries",
+            "description": "The sitemap document",
             "content": {
-              "application/json": {
+              "application/xml": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "boards": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "slug": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "slug"
-                        ]
-                      }
-                    },
-                    "posts": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "boardSlug": {
-                            "type": "string"
-                          },
-                          "updatedAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "boardSlug",
-                          "updatedAt"
-                        ]
-                      }
-                    },
-                    "changelog": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "updatedAt": {
-                            "type": "string",
-                            "format": "date-time"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "updatedAt"
-                        ]
-                      }
-                    }
-                  },
-                  "required": [
-                    "boards",
-                    "posts",
-                    "changelog"
-                  ]
+                  "type": "string"
                 }
               }
             }
@@ -16875,7 +17316,7 @@
           "Quills"
         ],
         "summary": "Start an anonymous widget session",
-        "description": "Needs the widget on and a widget secret. Each call creates a new anonymous person; identify does not merge it into the identified person yet.",
+        "description": "Needs the widget on and a widget secret. Each call creates a new anonymous person. Identify with this token as previousToken (and as the Bearer token) moves its activity to the identified person.",
         "security": [],
         "parameters": [
           {
@@ -21163,14 +21604,14 @@
         }
       }
     },
-    "/quills-public/{workspace}/hc/sitemap": {
+    "/quills-public/{workspace}/hc/sitemap.xml": {
       "get": {
         "operationId": "getQuillsPublicHelpCenterSitemap",
         "tags": [
           "Quills"
         ],
-        "summary": "Get the public help-center sitemap entries",
-        "description": "Home pages, collections and articles in every enabled locale, with the other locales of each page as alternates. 404 when indexing or the sitemap is off. At most 50,000 entries.",
+        "summary": "Get the public help-center sitemap",
+        "description": "Sitemap XML of the home pages, collections and articles in every enabled locale, with the other locales of each page as hreflang alternates. 404 when indexing or the sitemap is off. At most 50,000 URLs.",
         "security": [],
         "parameters": [
           {
@@ -21188,57 +21629,11 @@
         ],
         "responses": {
           "200": {
-            "description": "Sitemap entries",
+            "description": "The sitemap document",
             "content": {
-              "application/json": {
+              "application/xml": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "entries": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "path": {
-                            "type": "string"
-                          },
-                          "lastModified": {
-                            "type": [
-                              "string",
-                              "null"
-                            ],
-                            "format": "date-time"
-                          },
-                          "alternates": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "locale": {
-                                  "type": "string"
-                                },
-                                "path": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "locale",
-                                "path"
-                              ]
-                            }
-                          }
-                        },
-                        "required": [
-                          "path",
-                          "lastModified",
-                          "alternates"
-                        ]
-                      }
-                    }
-                  },
-                  "required": [
-                    "entries"
-                  ]
+                  "type": "string"
                 }
               }
             }
@@ -21848,14 +22243,14 @@
         }
       }
     },
-    "/quills-public/{workspace}/status/feed": {
+    "/quills-public/{workspace}/status/rss.xml": {
       "get": {
         "operationId": "listQuillsPublicStatusFeed",
         "tags": [
           "Quills"
         ],
-        "summary": "List the status feed items",
-        "description": "Open incidents and maintenance, then recently resolved items, by latest activity. The framework answers JSON; a reader-facing RSS document is rendered from these items.",
+        "summary": "Get the status RSS feed",
+        "description": "RSS 2.0: one item per update of open incidents and maintenance and of recently resolved items, newest first, at most `limit` items. The newest item of each open incident always stays. Links point to the portal pages of the web app (/portal/{workspaceId}).",
         "security": [],
         "parameters": [
           {
@@ -21884,46 +22279,11 @@
         ],
         "responses": {
           "200": {
-            "description": "Feed items, latest activity first",
+            "description": "The RSS document",
             "content": {
-              "application/json": {
+              "application/rss+xml": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "allOf": [
-                          {
-                            "$ref": "#/components/schemas/QuillsPublicStatusIncident"
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "detailsEditedAt": {
-                                "type": [
-                                  "string",
-                                  "null"
-                                ],
-                                "format": "date-time"
-                              },
-                              "lastActivityAt": {
-                                "type": "string",
-                                "format": "date-time"
-                              }
-                            },
-                            "required": [
-                              "detailsEditedAt",
-                              "lastActivityAt"
-                            ]
-                          }
-                        ]
-                      }
-                    }
-                  },
-                  "required": [
-                    "items"
-                  ]
+                  "type": "string"
                 }
               }
             }
@@ -25743,7 +26103,7 @@
           "Quills"
         ],
         "summary": "Get the team's messenger availability",
-        "description": "withinOfficeHours follows the workspace office hours. agentsOnline is null: Kaneo keeps no live agent presence, so it is unknown.",
+        "description": "withinOfficeHours follows the workspace office hours. agentsOnline is null: the API keeps no live agent presence, so it is unknown.",
         "security": [],
         "parameters": [
           {
@@ -28588,6 +28948,998 @@
           },
           "404": {
             "description": "Ticket, conversation, ticket type or tickets surface not found; Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/portal/uploads": {
+      "post": {
+        "operationId": "createQuillsPortalUpload",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Request an upload URL for a portal attachment or avatar",
+        "description": "Returns a presigned PUT for a key in the caller's own namespace. Register an attachment with POST /portal/files and an avatar with PUT /user/avatar; an unregistered upload is not a reference.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "purpose": {
+                    "type": "string",
+                    "enum": [
+                      "customer_file",
+                      "customer_image",
+                      "customer_avatar"
+                    ]
+                  },
+                  "filename": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "contentType": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]*\\/[a-z0-9][a-z0-9!#$&^_.+-]*$"
+                  },
+                  "size": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1073741824
+                  }
+                },
+                "required": [
+                  "purpose",
+                  "filename",
+                  "contentType",
+                  "size"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Presigned upload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string"
+                    },
+                    "uploadUrl": {
+                      "type": "string"
+                    },
+                    "headers": {
+                      "type": "object",
+                      "properties": {
+                        "Content-Type": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "Content-Type"
+                      ]
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "uploadUrl",
+                    "headers",
+                    "expiresAt"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unsupported type or size",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No customer profile, or portal access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The caller changed during the request; retry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/portal/files": {
+      "post": {
+        "operationId": "createQuillsPortalFiles",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Register a portal attachment",
+        "description": "Verifies an object that the caller uploaded with POST /portal/uploads and registers it. Idempotent per key.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "contentType": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]*\\/[a-z0-9][a-z0-9!#$&^_.+-]*$"
+                  },
+                  "size": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1073741824
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255,
+                    "pattern": "^[^\\\\/\\p{Cc}]+$/u"
+                  }
+                },
+                "required": [
+                  "key",
+                  "contentType",
+                  "size",
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Registered file",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "contentType": {
+                      "type": "string"
+                    },
+                    "size": {
+                      "type": "number"
+                    },
+                    "family": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "contentType",
+                    "size",
+                    "family",
+                    "createdAt",
+                    "created"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No customer profile, or portal access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Upload not found; Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The file for this upload was removed; The caller changed during the request; retry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/widget/uploads": {
+      "post": {
+        "operationId": "createQuillsWidgetUpload",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Request an upload URL for a widget attachment",
+        "description": "Returns a presigned PUT for a key in the visitor's own namespace. Register it with POST /widget/files. Needs the messenger or tickets tab and a visitor that the host app identified.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "purpose": {
+                    "type": "string",
+                    "enum": [
+                      "customer_file",
+                      "customer_image"
+                    ]
+                  },
+                  "filename": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "contentType": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]*\\/[a-z0-9][a-z0-9!#$&^_.+-]*$"
+                  },
+                  "size": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1073741824
+                  }
+                },
+                "required": [
+                  "purpose",
+                  "filename",
+                  "contentType",
+                  "size"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Presigned upload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string"
+                    },
+                    "uploadUrl": {
+                      "type": "string"
+                    },
+                    "headers": {
+                      "type": "object",
+                      "properties": {
+                        "Content-Type": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "Content-Type"
+                      ]
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "uploadUrl",
+                    "headers",
+                    "expiresAt"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unsupported type or size",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Valid widget session required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Anonymous visitor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Widget attachments are off; Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The caller changed during the request; retry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/widget/files": {
+      "post": {
+        "operationId": "createQuillsWidgetFiles",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Register a widget attachment",
+        "description": "Verifies an object that the visitor uploaded with POST /widget/uploads and registers it. Idempotent per key.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "contentType": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]*\\/[a-z0-9][a-z0-9!#$&^_.+-]*$"
+                  },
+                  "size": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1073741824
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255,
+                    "pattern": "^[^\\\\/\\p{Cc}]+$/u"
+                  }
+                },
+                "required": [
+                  "key",
+                  "contentType",
+                  "size",
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Registered file",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "contentType": {
+                      "type": "string"
+                    },
+                    "size": {
+                      "type": "number"
+                    },
+                    "family": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "contentType",
+                    "size",
+                    "family",
+                    "createdAt",
+                    "created"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Valid widget session required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Anonymous visitor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Upload not found, or widget attachments are off; Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The file for this upload was removed; The caller changed during the request; retry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/user/avatar": {
+      "put": {
+        "operationId": "saveQuillsCustomerAvatar",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Set the caller's avatar to an uploaded image",
+        "description": "Verifies an image that the caller uploaded with POST /portal/uploads (purpose customer_avatar). The previous uploaded avatar is queued for cleanup.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "contentType": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]*\\/[a-z0-9][a-z0-9!#$&^_.+-]*$"
+                  },
+                  "size": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1073741824
+                  }
+                },
+                "required": [
+                  "key",
+                  "contentType",
+                  "size"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The caller's avatar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "changed": {
+                      "type": "boolean"
+                    },
+                    "principalId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "avatarUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "changed",
+                    "principalId",
+                    "avatarUrl"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No customer profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Upload not found; Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The caller changed during the request; retry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteQuillsCustomerAvatar",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Remove the caller's uploaded avatar",
+        "description": "The uploaded image is queued for cleanup. An avatar from the sign-in provider stays.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The caller's avatar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "changed": {
+                      "type": "boolean"
+                    },
+                    "principalId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "avatarUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "changed",
+                    "principalId",
+                    "avatarUrl"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/track": {
+      "post": {
+        "operationId": "createQuillsTrack",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Record a portal or widget page view",
+        "description": "Anonymous beacon. The body may be sent as text/plain (sendBeacon). 404 while the surface (portal or widget) is off. Do Not Track, Global Privacy Control, a bot, a widget with visitor analytics off, a URL that is not http(s) and a day with no page-view partition store nothing; the answer is the same. Only the page's origin and path, the referrer's host, the CDN country, coarse device fields and a daily-salted visitor hash are stored with the view. As in the source, the rate limit counts per client IP in rate_bucket until retention removes the expired window.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "referrer": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "surface": {
+                    "type": "string",
+                    "enum": [
+                      "portal",
+                      "widget"
+                    ]
+                  },
+                  "device": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                },
+                "required": [
+                  "url",
+                  "surface"
+                ]
+              }
+            },
+            "text/plain": {
+              "schema": {
+                "type": "string",
+                "maxLength": 8192,
+                "description": "The same JSON document as text/plain, as sendBeacon sends it"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
             "content": {
               "application/json": {
                 "schema": {
@@ -47950,7 +49302,7 @@
           "Quills"
         ],
         "summary": "Delete a Quills team",
-        "description": "Soft delete. The Kaneo team and its members stay.",
+        "description": "Soft delete. The linked workspace team and its members stay.",
         "parameters": [
           {
             "schema": {
@@ -48033,7 +49385,7 @@
           "Quills"
         ],
         "summary": "List customers and leads",
-        "description": "Customers only. Kaneo teammates, test customers and service principals are never listed.",
+        "description": "Customers only. Teammates, test customers and service principals are never listed.",
         "parameters": [
           {
             "schema": {
@@ -55368,7 +56720,7 @@
           "Quills"
         ],
         "summary": "List teammates",
-        "description": "The Quills actors of current workspace members, with their Kaneo role. Manage the roster in Kaneo.",
+        "description": "The Quills actors of current workspace members, with their workspace role. Manage the roster in the workspace member settings.",
         "parameters": [
           {
             "schema": {
@@ -55738,7 +57090,7 @@
           "Quills"
         ],
         "summary": "Get the workspace settings overview",
-        "description": "The name and slug are Kaneo's and read-only here. Secrets are never included; each area has its own route.",
+        "description": "The name and slug belong to the workspace and are read-only here. Secrets are never included; each area has its own route.",
         "parameters": [
           {
             "schema": {
@@ -60050,7 +61402,7 @@
           "Quills"
         ],
         "summary": "Delete a feedback board",
-        "description": "Soft delete. Its posts leave every list. Its project links are removed, because no route can read or unlink a deleted board.",
+        "description": "Soft delete. Its posts leave every list. Its project links are removed, because no route can read or unlink a deleted board. Every live post merged into a post on the board is unmerged, so it can be voted on and merged again. `unmerged` and the outbox events name only the posts that the caller can see.",
         "parameters": [
           {
             "schema": {
@@ -60085,11 +61437,30 @@
                     "deletedAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "unmerged": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "postId": {
+                            "type": "string"
+                          },
+                          "canonicalPostId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "postId",
+                          "canonicalPostId"
+                        ]
+                      }
                     }
                   },
                   "required": [
                     "id",
-                    "deletedAt"
+                    "deletedAt",
+                    "unmerged"
                   ]
                 }
               }
@@ -65331,6 +66702,7 @@
                         "workspace.imported",
                         "user.created",
                         "user.identified",
+                        "user.contact_email_code_requested",
                         "user.updated",
                         "user.deleted",
                         "user.lead_merged",
@@ -65512,6 +66884,9 @@
                         "ticket.tracker_linked",
                         "ticket.tracker_unlinked",
                         "ticket.conversation_linked",
+                        "ticket.external_linked",
+                        "ticket.external_unlinked",
+                        "ticket.issue_requested",
                         "ticket_status.created",
                         "ticket_status.updated",
                         "ticket_status.deleted",
@@ -65858,6 +67233,7 @@
                         "workspace.imported",
                         "user.created",
                         "user.identified",
+                        "user.contact_email_code_requested",
                         "user.updated",
                         "user.deleted",
                         "user.lead_merged",
@@ -66039,6 +67415,9 @@
                         "ticket.tracker_linked",
                         "ticket.tracker_unlinked",
                         "ticket.conversation_linked",
+                        "ticket.external_linked",
+                        "ticket.external_unlinked",
+                        "ticket.issue_requested",
                         "ticket_status.created",
                         "ticket_status.updated",
                         "ticket_status.deleted",
@@ -75882,7 +77261,7 @@
           "Quills"
         ],
         "summary": "Rank visitor search terms in a trailing window",
-        "description": "Terms are grouped after trimming, collapsing spaces and lower-casing. `zeroResultSearches` shows the content gaps.",
+        "description": "Terms are grouped after trimming, collapsing spaces and lower-casing. `zeroResultSearches` shows the content gaps. The window is `days`, at most the search log retention (QUILLS_LOG_RETENTION_DAYS, 90 by default); the response's `days` is the window used.",
         "parameters": [
           {
             "schema": {
@@ -75925,6 +77304,9 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "days": {
+                      "type": "number"
+                    },
                     "terms": {
                       "type": "array",
                       "items": {
@@ -75958,6 +77340,7 @@
                     }
                   },
                   "required": [
+                    "days",
                     "terms"
                   ]
                 }
@@ -78779,7 +80162,7 @@
           "Quills"
         ],
         "summary": "Publish an incident, schedule maintenance or log a past incident",
-        "description": "An incident is public when created. Publishing records status.incident_published for the subscriber mail handler; a backfill records status.incident_created and never notifies. Maintenance automation at the window bounds is stored but needs a scheduler that Kaneo does not run yet.",
+        "description": "An incident is public when created. Publishing records status.incident_published for the subscriber mail handler; a backfill records status.incident_created and never notifies. Maintenance automation at the window bounds is stored but needs a scheduler that does not run yet.",
         "parameters": [
           {
             "schema": {
@@ -84683,7 +86066,7 @@
           "Quills"
         ],
         "summary": "List the portal and help center custom domains",
-        "description": "A domain serves only when `active` is true. `entitled` is false when the workspace's Kaneo Cloud plan is not active.",
+        "description": "A domain serves only when `active` is true. `entitled` is false when the workspace's cloud plan is not active.",
         "parameters": [
           {
             "schema": {
@@ -84825,7 +86208,7 @@
           "Quills"
         ],
         "summary": "Set the portal custom domain",
-        "description": "A new domain starts inactive with a new TXT value. Sending the current domain again changes nothing. Returns 402 when the workspace's Kaneo Cloud plan is not active.",
+        "description": "A new domain starts inactive with a new TXT value. Sending the current domain again changes nothing. Returns 402 when the workspace's cloud plan is not active.",
         "parameters": [
           {
             "schema": {
@@ -85063,7 +86446,7 @@
           "Quills"
         ],
         "summary": "Check the portal custom domain's TXT record",
-        "description": "Queues a DNS check of the stored domain; the list shows the result after the worker runs. Returns 402 when the workspace's Kaneo Cloud plan is not active.",
+        "description": "Queues a DNS check of the stored domain; the list shows the result after the worker runs. Returns 402 when the workspace's cloud plan is not active.",
         "parameters": [
           {
             "schema": {
@@ -85200,7 +86583,7 @@
           "Quills"
         ],
         "summary": "Set the help center custom domain",
-        "description": "A new domain starts inactive with a new TXT value. Sending the current domain again changes nothing. Returns 402 when the workspace's Kaneo Cloud plan is not active.",
+        "description": "A new domain starts inactive with a new TXT value. Sending the current domain again changes nothing. Returns 402 when the workspace's cloud plan is not active.",
         "parameters": [
           {
             "schema": {
@@ -85438,7 +86821,7 @@
           "Quills"
         ],
         "summary": "Check the help center custom domain's TXT record",
-        "description": "Queues a DNS check of the stored domain; the list shows the result after the worker runs. Returns 402 when the workspace's Kaneo Cloud plan is not active.",
+        "description": "Queues a DNS check of the stored domain; the list shows the result after the worker runs. Returns 402 when the workspace's cloud plan is not active.",
         "parameters": [
           {
             "schema": {
@@ -85814,7 +87197,7 @@
           "Quills"
         ],
         "summary": "Show or hide the \"Powered by\" badge",
-        "description": "Hiding the badge returns 402 when the workspace's Kaneo Cloud plan is not active.",
+        "description": "Hiding the badge returns 402 when the workspace's cloud plan is not active.",
         "parameters": [
           {
             "schema": {
@@ -85896,7 +87279,7 @@
           "Quills"
         ],
         "summary": "Wipe the workspace's Quills data",
-        "description": "`confirm` must equal the workspace slug, or the request returns 400. A background job then deletes all of the workspace's Quills data and cannot be undone: feedback, support, help center, status page and customer data, and also Quills configuration such as webhooks, integrations, Quills API keys and OAuth clients, Quills teams (with their Kaneo team bindings), sending domains, workflows, macros, SLA policies and ticket types. It keeps the Kaneo workspace and its members, teammate actors, Quills settings, the default statuses and roles, custom domains and the audit history.",
+        "description": "`confirm` must equal the workspace slug, or the request returns 400. A background job then deletes all of the workspace's Quills data and cannot be undone: feedback, support, help center, status page and customer data, and also Quills configuration such as webhooks, integrations, Quills API keys and OAuth clients, Quills teams (with their workspace team bindings), sending domains, workflows, macros, SLA policies and ticket types. It keeps the workspace and its members, teammate actors, Quills settings, the default statuses and roles, custom domains and the audit history.",
         "parameters": [
           {
             "schema": {
@@ -89162,6 +90545,535 @@
           },
           "409": {
             "description": "The link is not allowed or already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/tickets/{ticketId}/external-links": {
+      "get": {
+        "operationId": "listQuillsTicketExternalLinks",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "List a ticket's linked tracker issues",
+        "description": "The ticket's active links, oldest first (at most 100), and the connected issue trackers with the channels an issue can be linked in or created in.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "ticketId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Links and linkable trackers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "links": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "integrationType": {
+                            "type": "string"
+                          },
+                          "externalId": {
+                            "type": "string"
+                          },
+                          "externalDisplayId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "externalUrl": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "integrationType",
+                          "externalId",
+                          "externalDisplayId",
+                          "externalUrl",
+                          "createdAt"
+                        ]
+                      }
+                    },
+                    "trackers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "integrationId": {
+                            "type": "string"
+                          },
+                          "integrationType": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "channels": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "integrationId",
+                          "integrationType",
+                          "name",
+                          "channels"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "links",
+                    "trackers"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The issue reference does not name an issue in this connection's channels",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ticket, connection or link not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      },
+      "put": {
+        "operationId": "linkQuillsTicketIssue",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Link a ticket to an existing tracker issue",
+        "description": "GitHub: `owner/repo#12` or the issue URL; GitLab: `<project ID>#12`. The repository or project must be one of the connection's channels. Linking the same issue again changes nothing. No provider call: the reference is not checked remotely.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "ticketId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "integrationId": {
+                    "type": "string"
+                  },
+                  "issue": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "integrationId",
+                  "issue"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The link",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "integrationType": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "externalDisplayId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "externalUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "changed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "integrationType",
+                    "externalId",
+                    "externalDisplayId",
+                    "externalUrl",
+                    "createdAt",
+                    "changed"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The issue reference does not name an issue in this connection's channels",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ticket, connection or link not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/tickets/{ticketId}/external-links/issue": {
+      "post": {
+        "operationId": "createQuillsTicketIssue",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Create a tracker issue from a ticket",
+        "description": "Queues the issue for the integration worker, which creates it after this request commits and then links it. One create per ticket and channel: asking again returns the same operation. Follow it in the connection's sync history.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "ticketId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "integrationId": {
+                    "type": "string"
+                  },
+                  "target": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  }
+                },
+                "required": [
+                  "integrationId",
+                  "target"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The queued operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "operationId": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "changed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "operationId",
+                    "state",
+                    "changed"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The issue reference does not name an issue in this connection's channels",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ticket, connection or link not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/tickets/{ticketId}/external-links/{linkId}": {
+      "delete": {
+        "operationId": "unlinkQuillsTicketIssue",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Remove a ticket's tracker issue link",
+        "description": "The issue itself stays in the tracker.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "ticketId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "linkId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Whether a link was removed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "changed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "changed"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The issue reference does not name an issue in this connection's channels",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ticket, connection or link not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -94431,7 +96343,7 @@
           "Quills"
         ],
         "summary": "Set the email auto-acknowledgement setting",
-        "description": "Records the setting only. Kaneo sends no auto-acknowledgement until inbound email is ported.",
+        "description": "Records the setting only. The API sends no auto-acknowledgement yet.",
         "parameters": [
           {
             "schema": {
@@ -95654,7 +97566,7 @@
           "Quills"
         ],
         "summary": "Add or move a sending address",
-        "description": "Adding an address again moves it to the new module. Its domain is recorded as a pending sending domain when it is new; Kaneo does not yet create provider identities or check DNS for it.",
+        "description": "Adding an address again moves it to the new module. Its domain is recorded as a pending sending domain when it is new; the API does not yet create provider identities or check DNS for it.",
         "parameters": [
           {
             "schema": {
@@ -109339,8 +111251,8 @@
         "tags": [
           "Quills"
         ],
-        "summary": "List the inbox",
-        "description": "The conversation filters, with a triage facet in place of the status: open, waiting (snoozed), closed or all. Items carry their kind; only conversations are listed until tickets join.",
+        "summary": "List the inbox: conversations and tickets",
+        "description": "Conversations and tickets in one page, newest activity first (a conversation's last message, a ticket's last change). `facet` maps to a conversation status (waiting = snoozed) and a ticket status category (waiting = pending). A customer ticket with a linked conversation lists as that conversation. A conversation-only filter (visitor, tag, channel, source, waitingOnly or a view) lists conversations only. Pass `nextCursor` as `cursor` for the next page.",
         "parameters": [
           {
             "schema": {
@@ -109471,30 +111383,6 @@
           },
           {
             "schema": {
-              "type": "string",
-              "enum": [
-                "recent",
-                "oldest",
-                "created",
-                "waiting",
-                "priority"
-              ],
-              "default": "recent"
-            },
-            "required": false,
-            "name": "sort",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "cursor",
-            "in": "query"
-          },
-          {
-            "schema": {
               "type": "integer",
               "minimum": 1,
               "maximum": 100,
@@ -109518,6 +111406,43 @@
             "required": false,
             "name": "facet",
             "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "conversation",
+                "ticket"
+              ]
+            },
+            "required": false,
+            "name": "kind",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "recent",
+                "oldest",
+                "created",
+                "priority"
+              ],
+              "default": "recent"
+            },
+            "required": false,
+            "name": "sort",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            },
+            "required": false,
+            "name": "cursor",
+            "in": "query"
           }
         ],
         "responses": {
@@ -109536,7 +111461,8 @@
                           "kind": {
                             "type": "string",
                             "enum": [
-                              "conversation"
+                              "conversation",
+                              "ticket"
                             ]
                           },
                           "conversation": {
@@ -109740,11 +111666,13 @@
                               "visitorLastReadAt",
                               "tags"
                             ]
+                          },
+                          "ticket": {
+                            "$ref": "#/components/schemas/QuillsTicket"
                           }
                         },
                         "required": [
-                          "kind",
-                          "conversation"
+                          "kind"
                         ]
                       }
                     },
@@ -109820,7 +111748,7 @@
           "Quills"
         ],
         "summary": "Count the open inbox queues",
-        "description": "Open conversations assigned to the caller and unassigned ones, without test and spam conversations. They match the list with facet=open and assignee=mine or unassigned.",
+        "description": "Open conversations assigned to the caller and unassigned ones; open tickets by type, where the customer count includes open conversations paired with a customer ticket (a pair counts once, as in the list); and test conversations in any status. Test customers' threads and spam are not counted in the queues.",
         "parameters": [
           {
             "schema": {
@@ -109846,11 +111774,35 @@
                     },
                     "unassigned": {
                       "type": "number"
+                    },
+                    "ticketsByType": {
+                      "type": "object",
+                      "properties": {
+                        "customer": {
+                          "type": "number"
+                        },
+                        "back_office": {
+                          "type": "number"
+                        },
+                        "tracker": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "customer",
+                        "back_office",
+                        "tracker"
+                      ]
+                    },
+                    "test": {
+                      "type": "number"
                     }
                   },
                   "required": [
                     "mine",
-                    "unassigned"
+                    "unassigned",
+                    "ticketsByType",
+                    "test"
                   ]
                 }
               }
@@ -110663,7 +112615,7 @@
           "Quills"
         ],
         "summary": "Invite one email address to the portal",
-        "description": "Gives the address portal access after its owner signs in with a Kaneo account that has this verified email. It never adds a workspace member. The mail is sent after commit. One address per request; the source's batch of 50 is a client loop.",
+        "description": "Gives the address portal access after its owner signs in with an account that has this verified email. It never adds a workspace member. The mail is sent after commit. One address per request; the source's batch of 50 is a client loop.",
         "parameters": [
           {
             "schema": {
@@ -119194,7 +121146,7 @@
           "Quills"
         ],
         "summary": "Publish or re-enable a workflow",
-        "description": "Makes the workflow live and records the caller as the teammate it acts as. Each run checks that teammate's current Kaneo role; a run they may not do fails as denied.",
+        "description": "Makes the workflow live and records the caller as the teammate it acts as. Each run checks that teammate's current workspace role; a run they may not do fails as denied.",
         "parameters": [
           {
             "schema": {
@@ -127256,6 +129208,7 @@
                             "workspace.imported",
                             "user.created",
                             "user.identified",
+                            "user.contact_email_code_requested",
                             "user.updated",
                             "user.deleted",
                             "user.lead_merged",
@@ -127437,6 +129390,9 @@
                             "ticket.tracker_linked",
                             "ticket.tracker_unlinked",
                             "ticket.conversation_linked",
+                            "ticket.external_linked",
+                            "ticket.external_unlinked",
+                            "ticket.issue_requested",
                             "ticket_status.created",
                             "ticket_status.updated",
                             "ticket_status.deleted",
