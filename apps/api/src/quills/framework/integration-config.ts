@@ -1,5 +1,9 @@
 import { HTTPException } from "hono/http-exception";
-import { encryptSecret } from "../../notification-preferences/secrets";
+import {
+  decryptSecret,
+  encryptSecret,
+  isEncryptedSecret,
+} from "../../notification-preferences/secrets";
 import { withoutOutboundTelemetry } from "../../utils/sensitive-outbound";
 
 // Trusted for Quills route modules: no database access and no event delivery.
@@ -17,6 +21,75 @@ export function sealCredentials(values: Record<string, string>) {
         "Set NOTIFICATION_SECRET_ENCRYPTION_KEY to connect an integration.",
     });
   return encryptSecret(JSON.stringify(values))!;
+}
+
+/** Credentials sealed by `sealCredentials`, or undefined when they cannot be read (another key, damage). */
+export function openCredentials(
+  sealed: string | null,
+): Record<string, string> | undefined {
+  if (!isEncryptedSecret(sealed)) return undefined;
+  try {
+    const value: unknown = JSON.parse(decryptSecret(sealed) ?? "");
+    return value && typeof value === "object"
+      ? Object.fromEntries(
+          Object.entries(value).filter(
+            (entry): entry is [string, string] => typeof entry[1] === "string",
+          ),
+        )
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The OAuth provider hosts that a `call` step may reach. Fixed hosts: no DNS check of user input. */
+const OAUTH_PROVIDER_HOST =
+  /^(github\.com|api\.github\.com|gitlab\.com|slack\.com|discord\.com|api\.resend\.com)$/;
+
+/** A provider call that did not succeed. `status` null: no answer arrived, so the outcome is unknown. */
+export class ProviderCallError extends Error {
+  constructor(readonly status: number | null) {
+    super(status ? `Provider answered ${status}` : "Provider did not answer");
+  }
+}
+
+/**
+ * One request to a fixed OAuth provider host: HTTPS, no redirect, no retry, a 10-second timeout and no
+ * HTTP telemetry (tokens travel in headers). Returns the JSON answer. Provider text never reaches a caller.
+ */
+export async function providerJson(
+  url: string,
+  init: {
+    method?: "GET" | "POST";
+    headers?: Record<string, string>;
+    body?: string;
+  } = {},
+): Promise<unknown> {
+  const target = new URL(url);
+  if (
+    target.protocol !== "https:" ||
+    target.username ||
+    target.password ||
+    !OAUTH_PROVIDER_HOST.test(target.hostname)
+  )
+    throw new Error("Provider host not allowed");
+  let response: Response;
+  try {
+    response = await withoutOutboundTelemetry(() =>
+      fetch(target, {
+        ...init,
+        redirect: "error",
+        signal: AbortSignal.timeout(10_000),
+      }),
+    );
+  } catch {
+    throw new ProviderCallError(null);
+  }
+  if (!response.ok) {
+    void response.body?.cancel().catch(() => {});
+    throw new ProviderCallError(response.status);
+  }
+  return response.json().catch(() => null);
 }
 
 /** The provider API hosts a request may reach. A Freshdesk subdomain is one DNS label. */

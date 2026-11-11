@@ -162,6 +162,11 @@ prunes attempts and results of finished operations after 90 days; that pruning i
 
 ## Deferred or not implemented
 
+P7b (`ROUTES-OAUTH.md`) built the platform credentials, `searchQuillsExternalItems`,
+`fetchQuillsIntegrationDestinations` (as a post-commit provider call), the GitHub, GitLab, Slack and
+Discord OAuth providers, the OAuth connect and callback routes and the inbound status webhook.
+The rows below keep their P7a reasons; `ROUTES-OAUTH.md` lists what is still deferred.
+
 | Source rows | Reason |
 |---|---|
 | `saveQuillsPlatformCredentials`, `fetchQuillsPlatformCredentialsMasked`, `deleteQuillsPlatformCredentials` | No provider in this build declares platform (OAuth app) credentials, so no request can succeed. They come with the first OAuth provider. |

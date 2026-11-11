@@ -166,7 +166,18 @@ export async function drainQuillsWorkspace(
   return { processed, failed, degraded: failed > 0 };
 }
 let cursor = "";
-export async function runQuillsJobs() {
+let pass: Promise<{ degraded: boolean }> | undefined;
+/**
+ * One pass over runnable workspaces. The scheduler and the internal job waker share a pass that is
+ * already running, so passes never overlap on this instance or race on the cursor.
+ */
+export function runQuillsJobs() {
+  pass ??= runPass().finally(() => {
+    pass = undefined;
+  });
+  return pass;
+}
+async function runPass() {
   const page = await db.execute<{ workspaceId: string }>(
     sql`SELECT quills.runnable_workspaces(${cursor}) AS "workspaceId"`,
   );

@@ -41,6 +41,8 @@ export async function checkRoute(
   f: Fixture | undefined,
 ): Promise<Finding[]> {
   if (!f) return [{ check: "no-fixture", detail: d.operationId }];
+  if (d.audience === "signed") return checkSignedRoute(app, d, f);
+  if (d.audience === "internal") return checkInternalRoute(app, d, f);
   if ((d.audience ?? "teammate") !== "teammate")
     return checkAudienceRoute(app, d, f);
   const findings: Finding[] = [];
@@ -464,5 +466,247 @@ async function checkAudienceRoute(
 
   for (const issue of await rollbackIssues(d, f, caller))
     fail("rollback", issue);
+  return findings;
+}
+
+/** Shared by the signed and internal tables: the route is mounted through defineQuillsRoute with bounded inputs. */
+function registration(app: App, d: AnyQuillsRoute) {
+  const findings: Finding[] = [];
+  const handler = registry.get(d);
+  if (
+    !handler ||
+    !app.routes.some(
+      (r) => r.handler === handler && r.method === d.method.toUpperCase(),
+    )
+  )
+    findings.push({
+      check: "registered",
+      detail: "the route is not mounted through defineQuillsRoute",
+    });
+  for (const issue of boundedInputIssues(d))
+    findings.push({ check: "bounded-inputs", detail: issue });
+  return findings;
+}
+
+/**
+ * Contract checks for a signed route: a machine caller with no session. A forged signature is 401
+ * and changes nothing; workspace B's credential never changes A; a replayed delivery is a no-op;
+ * no response contains a secret.
+ */
+async function checkSignedRoute(
+  app: App,
+  d: AnyQuillsRoute,
+  f: Fixture,
+): Promise<Finding[]> {
+  const findings = registration(app, d);
+  const fail = (check: string, detail: string) =>
+    findings.push({ check, detail });
+  const call = (input: ContractInput) => send(app, d, input, "");
+  const both = async () =>
+    `${await fingerprint(env.a)}${await fingerprint(env.b)}`;
+  const ids = await f.seed(env, users.owner);
+  const input = f.valid(ids);
+  if (!f.hidden) fail("hidden", "a signed fixture declares no secret values");
+  const leaks = (check: string, res: Sent, values: string[]) => {
+    const text = JSON.stringify(res.body);
+    const leaked = values.filter((value) => text.includes(value));
+    if (leaked.length)
+      fail(check, `the response contains ${leaked.join(", ")}`);
+  };
+  const hidden = f.hidden?.(ids) ?? [];
+
+  if (!f.forged)
+    fail("bad-signature", "the fixture declares no forged requests");
+  for (const forged of f.forged?.(ids) ?? []) {
+    const before = await both();
+    const res = await call(forged);
+    if (res.status !== 401)
+      fail(
+        "bad-signature",
+        `expected 401, got ${res.status} ${JSON.stringify(res.body)}`,
+      );
+    leaks("hidden", res, hidden);
+    if (before !== (await both()))
+      fail("bad-signature", "a forged request changed rows");
+  }
+
+  if (!f.crossed)
+    fail("cross-workspace", "the fixture declares no workspace B requests");
+  for (const crossed of f.crossed?.(ids) ?? []) {
+    const before = await fingerprint(env.a);
+    const res = await call(crossed);
+    if (![200, 401, 403, 404].includes(res.status))
+      fail("cross-workspace", `got ${res.status} ${JSON.stringify(res.body)}`);
+    leaks("cross-workspace", res, hidden);
+    if (before !== (await fingerprint(env.a)))
+      fail("cross-workspace", "workspace B's credential changed a row in A");
+  }
+
+  for (const bad of badInputs(d, input)) {
+    const res = await call(bad);
+    if (res.status !== 400)
+      fail(
+        "schema-400",
+        `expected 400, got ${res.status} ${JSON.stringify(res.body)}`,
+      );
+  }
+
+  const freshIds = await f.seed(env, users.owner);
+  const fresh = f.valid(freshIds);
+  const since: string = (
+    await pool.query("SELECT clock_timestamp()::text AS t")
+  ).rows[0].t;
+  const domain = await fingerprint(env.a, "domain");
+  const ok = await call(fresh);
+  if (ok.status !== 200)
+    fail("authorized", `got ${ok.status} ${JSON.stringify(ok.body)}`);
+  else {
+    const issues = [
+      ...looseness(d.response, ok.body),
+      ...new Set(
+        keyNames(ok.body)
+          .filter(
+            (key) => forbiddenKey.test(key) && !d.allowKeys?.includes(key),
+          )
+          .map((key) => `the response has a key named ${key}`),
+      ),
+    ];
+    for (const issue of issues) fail("strict-response", issue);
+    leaks("hidden", ok, f.hidden?.(freshIds) ?? []);
+    // A machine caller records a system change: no principal.
+    for (const issue of await outboxIssues(d, fresh, ok.body, since, domain, {
+      principalId: f.actor ? await f.actor(env, freshIds, ok.body) : null,
+    }))
+      fail("outbox", issue);
+    // The same delivery again: the declared replay answer, and no row changes anywhere.
+    const before = await both();
+    const again = await call(fresh);
+    if (again.status !== 200)
+      fail(
+        "replay",
+        `expected 200, got ${again.status} ${JSON.stringify(again.body)}`,
+      );
+    else if (JSON.stringify(again.body) !== JSON.stringify(d.replay))
+      fail(
+        "replay",
+        `expected the replay answer, got ${JSON.stringify(again.body)}`,
+      );
+    if (before !== (await both()))
+      fail("replay", "a replayed delivery changed rows");
+    // Each header changed in turn: a signed header fails the check (401); an unsigned one must not
+    // make the same signed bytes count as a new delivery.
+    for (const [name, value] of Object.entries(fresh.headers ?? {})) {
+      const prior = await both();
+      const res = await call({
+        ...fresh,
+        headers: { ...fresh.headers, [name]: `${value}x` },
+      });
+      if (
+        !(
+          res.status === 401 ||
+          (res.status === 200 &&
+            JSON.stringify(res.body) === JSON.stringify(d.replay))
+        )
+      )
+        fail(
+          "replay",
+          `a changed ${name} header made a new delivery: ${res.status} ${JSON.stringify(res.body)}`,
+        );
+      if (prior !== (await both()))
+        fail("replay", `a changed ${name} header changed rows`);
+    }
+  }
+
+  // A workspace archived after it issued the credential.
+  const archived = f.valid(await f.seed(env, users.owner));
+  await pool.query(
+    "UPDATE public.workspace SET archived_at=now() WHERE id=$1",
+    [env.a],
+  );
+  try {
+    const before = await both();
+    const res = await call(archived);
+    if (![401, 403, 404].includes(res.status))
+      fail("archived-workspace", `expected 401, 403 or 404, got ${res.status}`);
+    if (before !== (await both())) fail("archived-workspace", "rows changed");
+  } finally {
+    await pool.query(
+      "UPDATE public.workspace SET archived_at=NULL WHERE id=$1",
+      [env.a],
+    );
+  }
+
+  // A correctly signed body that the schema rejects: 400 and no change.
+  if (d.body && !f.invalid)
+    fail("schema-400", "the fixture declares no signed invalid bodies");
+  // Fresh rows: a later seed may replace the first one (for example, a reconnect).
+  const invalidIds = f.invalid && (await f.seed(env, users.owner));
+  for (const invalid of f.invalid?.(invalidIds) ?? []) {
+    const before = await both();
+    const res = await call(invalid);
+    if (res.status !== 400)
+      fail(
+        "schema-400",
+        `signed invalid body: expected 400, got ${res.status} ${JSON.stringify(res.body)}`,
+      );
+    if (before !== (await both()))
+      fail("schema-400", "a signed invalid body changed rows");
+  }
+
+  for (const issue of await deletedObjectIssues(f, call))
+    fail("deleted-object", issue);
+  for (const issue of await rollbackIssues(d, f, "")) fail("rollback", issue);
+  return findings;
+}
+
+/**
+ * Contract checks for the internal caller: 404 while QUILLS_INTERNAL_TOKEN is unset, 401 without the
+ * token or with a wrong one, 200 with it, and no response contains the token.
+ */
+async function checkInternalRoute(
+  app: App,
+  d: AnyQuillsRoute,
+  f: Fixture,
+): Promise<Finding[]> {
+  const findings = registration(app, d);
+  const fail = (check: string, detail: string) =>
+    findings.push({ check, detail });
+  const call = (input: ContractInput) => send(app, d, input, "");
+  const input = f.valid(await f.seed(env, users.owner));
+  const token = process.env.QUILLS_INTERNAL_TOKEN;
+  if (!token)
+    fail("internal-token", "the fixture sets no QUILLS_INTERNAL_TOKEN");
+  delete process.env.QUILLS_INTERNAL_TOKEN;
+  try {
+    const res = await call(input);
+    if (res.status !== 404)
+      fail(
+        "internal-disabled",
+        `expected 404 without the variable, got ${res.status}`,
+      );
+  } finally {
+    if (token) process.env.QUILLS_INTERNAL_TOKEN = token;
+  }
+  const { authorization: _, ...rest } = input.headers ?? {};
+  for (const authorization of [undefined, "Bearer wrong", `Basic ${token}`]) {
+    const res = await call({
+      ...input,
+      headers: authorization ? { ...rest, authorization } : rest,
+    });
+    if (res.status !== 401)
+      fail(
+        "internal-token",
+        `expected 401 for ${authorization ? authorization.split(" ")[0] : "no token"}, got ${res.status}`,
+      );
+  }
+  const ok = await call(input);
+  if (ok.status !== 200)
+    fail("authorized", `got ${ok.status} ${JSON.stringify(ok.body)}`);
+  else {
+    for (const issue of looseness(d.response, ok.body))
+      fail("strict-response", issue);
+    if (token && JSON.stringify(ok.body).includes(token))
+      fail("hidden", "the response contains the internal token");
+  }
   return findings;
 }

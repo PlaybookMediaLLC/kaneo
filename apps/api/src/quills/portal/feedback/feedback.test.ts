@@ -129,11 +129,10 @@ describe.skipIf(!url)("Quills customer feedback", () => {
       "createQuillsUnsubscribe",
       "processQuillsUnsubscribeToken",
     ]);
+    // Signed and internal routes are machine callers, not portal pages: they never follow the portal flag.
     const routes = [...registry.keys()].filter(
       (d: AnyQuillsRoute) =>
-        d.audience &&
-        d.audience !== "teammate" &&
-        d.audience !== "widget" &&
+        (d.audience === "portal" || d.audience === "public") &&
         !d.path.startsWith("/widget/") &&
         !alwaysOn.has(d.operationId),
     );

@@ -25,6 +25,7 @@ import { unbounded } from "./bounded-inputs";
 import {
   checkRoute,
   contractApp,
+  contractEnv,
   contractSession,
   empty,
   fixture,
@@ -34,6 +35,7 @@ import {
 } from "./contract";
 import { defineQuillsRoute, type AnyQuillsRoute } from "./define-route";
 import { registry } from "./registry";
+import type { SignedVerifier } from "./signed";
 
 let pool: Pool;
 vi.mock("../../database/index", () => ({
@@ -261,8 +263,105 @@ const publicDeletedBoard = defineQuillsRoute({
   handler: ({ db, params }) => anyBoard(db, params.boardId),
 });
 
+// Broken on purpose: a signed route whose verifier skips verification. It takes the workspace from
+// the path and accepts any signature, so a forged or crossed request creates boards.
+const skipsVerification: SignedVerifier = {
+  name: "broken-skips-verification",
+  locate: ({ params, headers }) => ({
+    scope: { workspace: params.workspace ?? "" },
+    deliveryId: headers.get("x-delivery") ?? crypto.randomUUID(),
+  }),
+};
+const unverified = defineQuillsRoute({
+  audience: "signed",
+  verifier: skipsVerification,
+  method: "post",
+  path: "/broken/{workspace}/boards",
+  operationId: "brokenUnverifiedSigned",
+  summary: "Broken signed route without a signature check",
+  action: "create",
+  params: z.object({ workspace: z.string().max(200) }),
+  body: z.object({ name: z.string().max(100) }),
+  response: z.object({ created: z.boolean() }),
+  responseDescription: "Created",
+  replay: { created: false },
+  event: { none: "Broken on purpose" },
+  handler: async ({ db, body }) => {
+    await db
+      .insert(boards)
+      .values({ name: body.name, slug: `broken-${crypto.randomUUID()}` });
+    return { created: true };
+  },
+});
+// Broken on purpose: an internal route mounted by hand, without the token check.
+const brokenInternal: AnyQuillsRoute = {
+  audience: "internal",
+  method: "post",
+  path: "/broken/wake",
+  operationId: "brokenInternalNoToken",
+  summary: "Broken internal route without a token check",
+  action: "manage_settings",
+  response: z.object({ ran: z.boolean() }),
+  responseDescription: "Ran",
+  event: { none: "Broken on purpose" },
+  handler: async () => ({ ran: true }),
+};
+// A signed probe: a signed handler gets request metadata too.
+const signedMeta = defineQuillsRoute({
+  audience: "signed",
+  verifier: skipsVerification,
+  method: "get",
+  path: "/probe/{workspace}/request-meta",
+  operationId: "probeSignedRequestMeta",
+  summary: "Reports whether a signed handler gets request metadata",
+  action: "read",
+  params: z.object({ workspace: z.string().max(200) }),
+  response: z.object({ present: z.boolean() }),
+  responseDescription: "Metadata",
+  replay: { present: false },
+  event: { none: "A probe" },
+  handler: async (input) => ({ present: Object.isFrozen(input.request) }),
+});
+// Request metadata probes: a public route reports it, a teammate route has none.
+const publicMeta = defineQuillsRoute({
+  audience: "public",
+  method: "get",
+  path: "/probe/request-meta",
+  operationId: "probePublicRequestMeta",
+  summary: "Reports the request metadata a public handler gets",
+  action: "read",
+  response: z.object({
+    present: z.boolean(),
+    ip: z.string().nullable(),
+    userAgent: z.string().nullable(),
+    country: z.string().nullable(),
+    doNotTrack: z.boolean(),
+    keys: z.array(z.string()),
+  }),
+  responseDescription: "Metadata",
+  handler: async (input) => {
+    const { request } = input;
+    return {
+      present: Object.isFrozen(request),
+      ...request,
+      keys: Object.keys(request).sort(),
+    };
+  },
+});
+const teammateMeta = defineQuillsRoute({
+  method: "get",
+  path: "/probe/request-meta",
+  operationId: "probeTeammateRequestMeta",
+  summary: "Reports whether a teammate handler gets request metadata",
+  action: "read",
+  response: z.object({ present: z.boolean() }),
+  responseDescription: "Metadata",
+  handler: async (input) => ({ present: "request" in input }),
+});
+
 const app = contractApp(
   apiRouter<BaseVariables & { workspaceId: string }>()
+    .openapi(...teammateMeta)
     .openapi(
       createRoute({
         method: "put",
@@ -289,7 +388,18 @@ const app = contractApp(
     .openapi(...teammateData)
     .openapi(...anyToken)
     .openapi(...unboundedPortal)
-    .openapi(...publicDeletedBoard),
+    .openapi(...publicDeletedBoard)
+    .openapi(...unverified)
+    .openapi(...publicMeta)
+    .openapi(...signedMeta)
+    .openapi(
+      createRoute({
+        method: "post",
+        path: "/internal/broken/wake",
+        responses: { 200: jsonResponse("Ran", z.object({ ran: z.boolean() })) },
+      }),
+      (c) => c.json({ ran: true }, 200),
+    ),
 );
 const declared = (operationId: string) =>
   [...registry.keys()].find((d) => d.operationId === operationId)!;
@@ -309,8 +419,10 @@ describe.skipIf(!url)("Quills route contract self-test", () => {
   afterAll(() => stopContract());
 
   it("reports a route without a permission check", async () => {
+    // The second one is the broken internal route below.
     expect(unregisteredRoutes(app)).toEqual([
       "PUT /quills/:workspaceId/broken/no-permission",
+      "POST /quills-public/internal/broken/wake",
     ]);
     const found = await checks(noPermission);
     for (const check of ["registered", "denied-action", "api-key-scope"])
@@ -455,6 +567,132 @@ describe.skipIf(!url)("Quills route contract self-test", () => {
       expect(await checks(declared(operationId), onBoard)).toContainEqual(
         expect.stringMatching(/^deleted-object: expected 404, got 200/),
       );
+  });
+  it("reports a signed route that skips verification", async () => {
+    const raw = JSON.stringify({ name: "Forged" });
+    const found = await checks(
+      declared("brokenUnverifiedSigned"),
+      fixture({
+        seed: async (env) => ({ a: env.a, b: env.b }),
+        valid: (ids) => ({
+          params: { workspace: ids.a },
+          raw,
+          headers: { "x-signature": "good" },
+        }),
+        forged: (ids) => [
+          {
+            params: { workspace: ids.a },
+            raw,
+            headers: { "x-signature": "forged" },
+          },
+        ],
+        // Signed for B, aimed at A.
+        crossed: (ids) => [
+          {
+            params: { workspace: ids.a },
+            raw,
+            headers: { "x-signature": "signed-by-b" },
+          },
+        ],
+        hidden: () => ["good"],
+      }),
+    );
+    expect(found).toContainEqual(
+      expect.stringMatching(/^bad-signature: expected 401, got 200/),
+    );
+    expect(found).toContain("bad-signature: a forged request changed rows");
+    expect(found).toContain(
+      "cross-workspace: workspace B's credential changed a row in A",
+    );
+  });
+  it("reports a signed fixture without forged, crossed or secret values", async () => {
+    const found = await checks(
+      declared("brokenUnverifiedSigned"),
+      fixture({
+        seed: async (env) => ({ a: env.a }),
+        valid: (ids) => ({
+          params: { workspace: ids.a },
+          raw: JSON.stringify({ name: "x" }),
+        }),
+      }),
+    );
+    expect(found).toEqual(
+      expect.arrayContaining([
+        "hidden: a signed fixture declares no secret values",
+        "bad-signature: the fixture declares no forged requests",
+        "cross-workspace: the fixture declares no workspace B requests",
+      ]),
+    );
+  });
+  it("gives public and signed handlers request metadata, and teammates none", async () => {
+    const env = contractEnv();
+    const meta = await app.request(
+      `/quills-public/${env.a}/probe/request-meta`,
+      {
+        headers: {
+          "user-agent": "x".repeat(600),
+          "cf-ipcountry": "de",
+          dnt: "1",
+          "x-kaneo-client-ip": "203.0.113.9",
+          cookie: "secret=1",
+        },
+      },
+    );
+    expect(await meta.json()).toEqual({
+      present: true,
+      ip: "203.0.113.9",
+      userAgent: "x".repeat(512),
+      country: "DE",
+      doNotTrack: true,
+      keys: ["country", "doNotTrack", "ip", "userAgent"],
+    });
+    const unknown = await app.request(
+      `/quills-public/${env.a}/probe/request-meta`,
+      { headers: { "cf-ipcountry": "XX", "sec-gpc": "1" } },
+    );
+    expect(await unknown.json()).toMatchObject({
+      country: null,
+      doNotTrack: true,
+      userAgent: null,
+    });
+    const teammate = await app.request(`/quills/${env.a}/probe/request-meta`, {
+      headers: { "x-test-user": env.owner },
+    });
+    expect(await teammate.json()).toEqual({ present: false });
+    const signed = await app.request(
+      `/quills-public/signed/probe/${env.a}/request-meta`,
+      { headers: { "x-delivery": crypto.randomUUID() } },
+    );
+    expect(await signed.json()).toEqual({ present: true });
+  });
+  it("reports an internal route without the token check", async () => {
+    const previous = process.env.QUILLS_INTERNAL_TOKEN;
+    process.env.QUILLS_INTERNAL_TOKEN = "self-test-token";
+    try {
+      const found = await checks(
+        brokenInternal,
+        fixture({
+          seed: async () => ({}),
+          valid: () => ({
+            headers: { authorization: "Bearer self-test-token" },
+          }),
+        }),
+      );
+      expect(found).toContain(
+        "registered: the route is not mounted through defineQuillsRoute",
+      );
+      expect(found).toContain(
+        "internal-disabled: expected 404 without the variable, got 200",
+      );
+      expect(found).toContainEqual(
+        expect.stringMatching(
+          /^internal-token: expected 401 for no token, got 200/,
+        ),
+      );
+    } finally {
+      if (previous === undefined) delete process.env.QUILLS_INTERNAL_TOKEN;
+      else process.env.QUILLS_INTERNAL_TOKEN = previous;
+    }
   });
 });
 

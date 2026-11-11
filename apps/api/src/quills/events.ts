@@ -261,6 +261,13 @@ export const changeSchema = z.object({
     "portal.invite_accepted",
     "settings.widget_hero_image_updated",
     "settings.widget_hero_image_removed",
+    // P7b: OAuth integrations, status sync and inbound mail.
+    "integration.platform_credentials_saved",
+    "integration.platform_credentials_deleted",
+    "integration.status_sync_enabled",
+    "integration.status_sync_disabled",
+    "integration.status_mappings_updated",
+    "conversation.email_received",
   ]),
   entityType: z.enum([
     "board",

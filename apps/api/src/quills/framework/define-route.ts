@@ -4,10 +4,12 @@ import { HTTPException } from "hono/http-exception";
 import {
   QuillsWorkspaceUnavailable,
   withQuillsAudience,
+  withQuillsSigned,
   type Database,
   type QuillsActor,
 } from "../../database/quills/client";
 import { validationError } from "../../errors/validation-error";
+import { boundedRequestBody } from "../../utils/bounded-request-body";
 import {
   createRoute,
   errorResponse,
@@ -28,11 +30,22 @@ import {
   callerActor,
   enforceRateLimit,
   readCredentials,
+  requestMeta,
   resolveCaller,
   type QuillsAudience,
   type QuillsCaller,
+  type RequestMeta,
 } from "./audience";
 import { registry } from "./registry";
+import {
+  deliverySeen,
+  internalTokenValid,
+  recordDelivery,
+  unauthorized,
+  type Located,
+  type SignedRequest,
+  type SignedVerifier,
+} from "./signed";
 
 export type { Database, QuillsActor };
 
@@ -42,11 +55,20 @@ type Env = { Variables: BaseVariables & { workspaceId: string } };
 type RouteEnv<A> = [A] extends ["teammate"]
   ? Env
   : { Variables: BaseVariables };
-type Errors = Partial<Record<403 | 404 | 409, string>>;
-type Audience = "teammate" | QuillsAudience;
+type Errors = Partial<Record<400 | 403 | 404 | 409 | 502, string>>;
+/** "signed": a machine caller that a verifier in signed.ts checks. "internal": the instance's own job waker. */
+type Audience = "teammate" | QuillsAudience | "signed" | "internal";
 /** The path parameter that names the workspace: an authorized ID for teammates, an ID or slug otherwise. */
 type Scope<A> = [A] extends ["teammate"] ? "workspaceId" : "workspace";
+/** Signed and internal routes name no workspace in the path: the credential (or nothing) decides it. */
+type MachinePath<A, Path extends string> = [A] extends ["signed"]
+  ? `/signed${Path}`
+  : [A] extends ["internal"]
+    ? `/internal${Path}`
+    : `/{${Scope<A>}}${Path}`;
 type Output<S> = S extends z.ZodType ? z.output<S> : undefined;
+/** Signed routes read at most this much body: the bytes are kept for the signature check. */
+const SIGNED_BODY_BYTES = 1_048_576;
 
 export type QuillsRouteInput<P, Q, B> = {
   params: Output<P>;
@@ -65,13 +87,45 @@ export type QuillsRouteDeclaration<
   E extends Errors,
   L,
   A extends Audience = "teammate",
+  V = unknown,
+  H = undefined,
+  C = undefined,
 > = {
   /**
    * Who calls the route. "teammate" (default) runs through withQuillsRequest under /quills.
    * "portal", "widget" and "public" mount under /quills-public through withQuillsAudience;
-   * framework/audience.ts resolves their caller.
+   * framework/audience.ts resolves their caller. "signed" mounts under /quills-public/signed
+   * through withQuillsSigned after `verifier` checks the caller. "internal" mounts under
+   * /quills-public/internal, opens no transaction and is hidden from the OpenAPI document.
    */
   audience?: A;
+  /** Signed: checks the machine caller and names the credential's workspace (framework/signed.ts). */
+  verifier?: SignedVerifier<V>;
+  /** Signed: the teammate principal that the verified credential names, for the audit row. */
+  actor?: (
+    db: Database,
+    located: Located,
+  ) => Promise<QuillsActor["principalId"] | null>;
+  /** Signed: the response to a delivery that was already processed. Nothing else runs. */
+  replay?: z.input<NoInfer<R>>;
+  /**
+   * Teammate and signed: a read in its own scoped transaction, before `call`. It must not write.
+   * The handler then runs in a new scoped transaction with the call's result as `called`.
+   */
+  prepare?: (
+    input: QuillsRouteInput<P, Q, B> & { db: Database } & ([A] extends [
+        "teammate",
+      ]
+        ? { actor: QuillsActor; loaded: L }
+        : { credential: V; located: Located }),
+  ) => Promise<H>;
+  /** The provider call, with no database transaction open. Required with `prepare`. */
+  call?: (prepared: H, input: QuillsRouteInput<P, Q, B>) => Promise<C>;
+  /**
+   * Teammate: the provider failure to answer after the handler's transaction commits, for example
+   * when a refreshed token must be kept although the call after the refresh failed.
+   */
+  failure?: (called: C) => HTTPException | null | undefined;
   /** Portal and widget: false lets a caller without a session in. Default true. */
   signIn?: boolean;
   /** Portal: create the caller's customer profile and principal when missing. */
@@ -112,18 +166,38 @@ export type QuillsRouteDeclaration<
     | ((
         input: QuillsRouteInput<P, Q, B>,
         result: z.output<R>,
-      ) => z.input<typeof changeSchema> | false)
+      ) =>
+        | z.input<typeof changeSchema>
+        | z.input<typeof changeSchema>[]
+        | false)
     | { none: string };
   handler: (
-    input: QuillsRouteInput<P, Q, B> & { db: Database } & ([A] extends [
-        "teammate",
-      ]
+    // Teammate first: `any` (AnyQuillsRoute) resolves to the teammate shape.
+    input: QuillsRouteInput<P, Q, B> &
+      ([A] extends ["teammate"]
         ? {
+            db: Database;
             actor: QuillsActor;
             loaded: L;
             actions: ReadonlySet<QuillsAction>;
+            called: C;
           }
-        : { caller: QuillsCaller; acceptLanguage: string | null }),
+        : [A] extends ["signed"]
+          ? {
+              db: Database;
+              credential: V;
+              located: Located;
+              called: C;
+              request: RequestMeta;
+            }
+          : [A] extends ["internal"]
+            ? {}
+            : {
+                db: Database;
+                caller: QuillsCaller;
+                request: RequestMeta;
+                acceptLanguage: string | null;
+              }),
   ) => Promise<z.input<R>>;
   /** Read-only shaping after commit, for example a visibility filter over public tables. */
   after?: (
@@ -133,7 +207,20 @@ export type QuillsRouteDeclaration<
 };
 
 export type AnyQuillsRoute = Omit<
-  QuillsRouteDeclaration<any, any, any, any, any, any, any, any, any>,
+  QuillsRouteDeclaration<
+    any,
+    any,
+    any,
+    any,
+    any,
+    any,
+    any,
+    any,
+    any,
+    any,
+    any,
+    any
+  >,
   "handler"
 > & {
   // Any audience's handler input; `db` stays typed for helpers that read it from here.
@@ -156,18 +243,23 @@ type QuillsRoute<
   A,
 > = {
   method: M;
-  path: `/{${Scope<A>}}${Path}`;
+  path: MachinePath<A, Path>;
   operationId: string;
   tags: string[];
   summary: string;
   description?: string;
   middleware?: MiddlewareHandler[];
   request: {
-    params: z.ZodObject<{ [K in Scope<A>]: z.ZodString } & P["shape"]>;
+    params: [A] extends ["signed" | "internal"]
+      ? P
+      : z.ZodObject<{ [K in Scope<A>]: z.ZodString } & P["shape"]>;
     query: Q;
-    body: B extends z.ZodType
-      ? { content: { "application/json": { schema: B } } }
-      : undefined;
+    // Signed routes read and verify the raw body before parsing it, so no validator reads it first.
+    body: [A] extends ["signed"]
+      ? undefined
+      : B extends z.ZodType
+        ? { content: { "application/json": { schema: B } } }
+        : undefined;
   };
   responses: {
     200: {
@@ -176,7 +268,14 @@ type QuillsRoute<
     };
   } & Record<
     // Non-teammate routes may also return 401 (sign-in), 403 (blocked) and 429 (rate limit).
-    ([A] extends ["teammate"] ? 401 | 403 : 401 | 403 | 404 | 429) | keyof E,
+    | ([A] extends ["teammate"]
+        ? 401 | 403
+        : [A] extends ["signed"]
+          ? 400 | 401 | 404 | 413
+          : [A] extends ["internal"]
+            ? 401 | 404
+            : 401 | 403 | 404 | 429)
+    | keyof E,
     ReturnType<typeof errorResponse>
   >;
 };
@@ -184,6 +283,19 @@ type QuillsRoute<
 // Without a JSON content type, @hono/zod-openapi passes an optional body through as an unvalidated {}.
 function emptyBody(schema: z.ZodType) {
   const result = schema.safeParse({});
+  if (!result.success) throw validationError(result.error.issues, "json");
+  return result.data;
+}
+
+/** A signed route's JSON body, read from the verified raw bytes. 400 when it does not match. */
+function parseRawBody(schema: z.ZodType, raw: string) {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new HTTPException(400, { message: "Invalid JSON" });
+  }
+  const result = schema.safeParse(value);
   if (!result.success) throw validationError(result.error.issues, "json");
   return result.data;
 }
@@ -199,10 +311,18 @@ export function buildQuillsRoute<
   E extends Errors = {},
   L = undefined,
   A extends Audience = "teammate",
->(d: QuillsRouteDeclaration<M, Path, P, Q, B, R, E, L, A>) {
-  if ((d.method === "get") === Boolean(d.event))
+  V = unknown,
+  H = undefined,
+  C = undefined,
+>(d: QuillsRouteDeclaration<M, Path, P, Q, B, R, E, L, A, V, H, C>) {
+  // A signed route always writes (at least its delivery receipt), even an OAuth redirect's GET.
+  if (
+    d.audience === "signed"
+      ? !d.event
+      : (d.method === "get") === Boolean(d.event)
+  )
     throw new Error(
-      `${d.operationId}: a mutation declares an event or { none: reason }; a read declares no event`,
+      `${d.operationId}: a mutation or a signed route declares an event or { none: reason }; a read declares no event`,
     );
   if (d.after && d.method !== "get")
     throw new Error(
@@ -215,7 +335,193 @@ export function buildQuillsRoute<
   type Route = QuillsRoute<M, Path, P, Q, B, R, E, A>;
   // The handler's input type depends on the audience; each branch below passes its own shape.
   const handle = d.handler as (input: object) => Promise<z.input<R>>;
+  const prepare = d.prepare as ((input: object) => Promise<H>) | undefined;
   const audience: Audience = d.audience ?? "teammate";
+  if (Boolean(d.prepare) !== Boolean(d.call))
+    throw new Error(`${d.operationId}: prepare and call come together`);
+  if (d.prepare && !["teammate", "signed"].includes(audience))
+    throw new Error(
+      `${d.operationId}: prepare and call are for teammate and signed routes`,
+    );
+  if (d.actor && audience !== "signed")
+    throw new Error(`${d.operationId}: only a signed route names its actor`);
+  if ((audience === "signed") !== Boolean(d.verifier))
+    throw new Error(
+      `${d.operationId}: a signed route, and only one, names a verifier`,
+    );
+  if ((audience === "signed") !== (d.replay !== undefined))
+    throw new Error(
+      `${d.operationId}: a signed route, and only one, declares its replay response`,
+    );
+  if (audience === "signed" || audience === "internal") {
+    if (
+      d.native ||
+      d.project ||
+      d.load ||
+      d.after ||
+      d.callerActions ||
+      d.signIn !== undefined ||
+      d.ensureCustomer ||
+      d.rateLimit
+    )
+      throw new Error(
+        `${d.operationId}: signed and internal routes take none of the session or customer options`,
+      );
+    const signed = audience === "signed";
+    if (!signed && (d.params || d.query || d.body))
+      throw new Error(
+        `${d.operationId}: an internal route takes no input from its caller`,
+      );
+    // The replay answer must satisfy the response contract too; a bad one fails at startup.
+    if (signed) d.response.parse(d.replay);
+    const route = createRoute({
+      method: d.method,
+      path: `/${audience}${d.path}`,
+      operationId: d.operationId,
+      tags: ["Quills"],
+      summary: d.summary,
+      description: [
+        d.description,
+        signed &&
+          "The caller signs the raw request body; the body is parsed only after the signature check.",
+      ]
+        .filter(Boolean)
+        .join(" "),
+      // The internal job waker is not part of the public API.
+      hide: !signed,
+      security: [],
+      middleware: signed ? [boundedRequestBody(SIGNED_BODY_BYTES)] : [],
+      // Signed routes read and verify the raw body before parsing it, so no validator reads it first.
+      request: { params: d.params, query: d.query },
+      responses: {
+        200: jsonResponse(d.responseDescription, d.response),
+        401: errorResponse(signed ? "Invalid signature" : "Invalid token"),
+        ...(signed &&
+          d.body && {
+            400: errorResponse("Invalid request body"),
+            413: errorResponse("Request body is too large"),
+          }),
+        ...Object.fromEntries(
+          Object.entries(d.errors ?? {}).map(([status, text]) => [
+            status,
+            errorResponse(text),
+          ]),
+        ),
+        404: errorResponse(
+          [
+            d.errors?.[404],
+            signed
+              ? "Not configured, or no workspace owns the credential"
+              : "Not configured",
+          ]
+            .filter(Boolean)
+            .join("; "),
+        ),
+      },
+    } as unknown as Route);
+    if (!signed) {
+      const handler = (async (
+        c: Context<{ Variables: BaseVariables }, string, any>,
+      ) => {
+        const valid = internalTokenValid(c.req.raw.headers);
+        if (valid === undefined)
+          throw new HTTPException(404, { message: "Not found" });
+        if (!valid) throw new HTTPException(401, { message: "Invalid token" });
+        const result = d.response.parse(
+          await handle({ params: {}, workspaceId: "" }),
+        );
+        return c.json(result, 200);
+      }) as unknown as RouteHandler<typeof route, RouteEnv<A>>;
+      return [route, handler] as const;
+    }
+    const verifier = d.verifier!;
+    const handler = (async (
+      c: Context<{ Variables: BaseVariables }, string, any>,
+    ) => {
+      if (verifier.disabled?.())
+        throw new HTTPException(404, { message: "Not found" });
+      const request: SignedRequest = {
+        raw: await c.req.text(),
+        headers: c.req.raw.headers,
+        params: d.params
+          ? (c.req.valid("param") as Record<string, string>)
+          : {},
+        query: d.query ? (c.req.valid("query") as Record<string, string>) : {},
+      };
+      const located = await verifier.locate(request);
+      let body: unknown;
+      const open = <T>(
+        work: (
+          db: Database,
+          input: QuillsRouteInput<P, Q, B>,
+          credential: V,
+        ) => Promise<T>,
+      ) =>
+        withQuillsSigned(located.scope, async (db, workspace) => {
+          const credential = verifier.verify
+            ? await verifier.verify(db, request, located)
+            : (located.claims as V);
+          // Parsed once, after the first signature check: a forged request never reaches the schema.
+          if (d.body && body === undefined)
+            body = parseRawBody(d.body, request.raw);
+          const input = {
+            params: request.params,
+            query: d.query && request.query,
+            body,
+            workspaceId: workspace.id,
+          } as QuillsRouteInput<P, Q, B>;
+          return work(db, input, credential);
+        }).catch((error) => {
+          if (error instanceof QuillsWorkspaceUnavailable)
+            // An integration ID is a selector: an unknown one looks like a bad signature.
+            throw "integration" in located.scope
+              ? unauthorized()
+              : new HTTPException(404, { message: "Not found" });
+          throw error;
+        });
+      const REPLAY = Symbol("replay");
+      let called = undefined as C;
+      if (prepare) {
+        const first = await open(async (db, input, credential) =>
+          (await deliverySeen(db, verifier.name, located.deliveryId))
+            ? REPLAY
+            : {
+                input,
+                prepared: await prepare({ ...input, db, credential, located }),
+              },
+        );
+        if (first === REPLAY) return c.json(d.replay, 200);
+        called = await d.call!(first.prepared, first.input);
+      }
+      const result = await open(async (db, input, credential) => {
+        if (!(await recordDelivery(db, verifier.name, located.deliveryId)))
+          return REPLAY;
+        const result = d.response.parse(
+          await handle({
+            ...input,
+            db,
+            credential,
+            located,
+            called,
+            request: requestMeta(c.req.raw.headers),
+          }),
+        ) as z.output<R>;
+        const change = typeof d.event === "function" && d.event(input, result);
+        // A machine caller is no teammate and no customer: the audit row records a system change,
+        // unless the credential names a teammate (an OAuth redirect started by one).
+        const principalId = d.actor ? await d.actor(db, located) : null;
+        for (const one of [change || []].flat())
+          await recordQuillsChange(
+            db,
+            principalId ? { principalId, actorType: "user" } : null,
+            one,
+          );
+        return result;
+      });
+      return c.json(result === REPLAY ? d.replay : result, 200);
+    }) as unknown as RouteHandler<typeof route, RouteEnv<A>>;
+    return [route, handler] as const;
+  }
   if (audience !== "teammate") {
     if (d.native || d.project || d.load || d.after || d.callerActions)
       throw new Error(
@@ -315,11 +621,13 @@ export function buildQuillsRoute<
               db,
               caller,
               acceptLanguage: c.req.header("accept-language") ?? null,
+              request: requestMeta(c.req.raw.headers),
             }),
           ) as z.output<R>;
           const change =
             typeof d.event === "function" && d.event(scoped, result);
-          if (change) await recordQuillsChange(db, callerActor(caller), change);
+          for (const one of [change || []].flat())
+            await recordQuillsChange(db, callerActor(caller), one);
           return result;
         },
       ).catch((error) => {
@@ -383,33 +691,41 @@ export function buildQuillsRoute<
     const { load, project, callerActions } = d;
     let loaded = undefined as L;
     let actions: ReadonlySet<QuillsAction> = new Set();
-    const result = await withQuillsRequest(
-      c,
-      {
-        action: d.action,
-        // A function project ID runs after the permission checks, so `load` and the action set run there too.
-        projectId:
-          (load || project || callerActions) &&
-          (async () => {
-            if (callerActions) actions = await quillsActions(c);
-            if (load)
-              loaded = await load({ ...input, userId: c.get("userId") });
-            if (!project) return undefined;
-            const projectId = await project(input);
-            if (!projectId)
-              throw new HTTPException(404, { message: "Project not found" });
-            return projectId;
-          }),
-      },
-      async (db, actor) => {
-        const result = d.response.parse(
-          await handle({ ...input, db, actor, loaded, actions }),
-        ) as z.output<R>;
-        const change = typeof d.event === "function" && d.event(input, result);
-        if (change) await recordQuillsChange(db, actor, change);
-        return result;
-      },
-    );
+    const access = {
+      action: d.action,
+      // A function project ID runs after the permission checks, so `load` and the action set run there too.
+      projectId:
+        (load || project || callerActions) &&
+        (async () => {
+          if (callerActions) actions = await quillsActions(c);
+          if (load) loaded = await load({ ...input, userId: c.get("userId") });
+          if (!project) return undefined;
+          const projectId = await project(input);
+          if (!projectId)
+            throw new HTTPException(404, { message: "Project not found" });
+          return projectId;
+        }),
+    };
+    // Read, release the connection, call the provider, then write in a new scoped transaction.
+    // The second transaction checks the permissions again.
+    let called = undefined as C;
+    if (prepare) {
+      const prepared = await withQuillsRequest(c, access, (db, actor) =>
+        prepare({ ...input, db, actor, loaded }),
+      );
+      called = await d.call!(prepared, input);
+    }
+    const result = await withQuillsRequest(c, access, async (db, actor) => {
+      const result = d.response.parse(
+        await handle({ ...input, db, actor, loaded, actions, called }),
+      ) as z.output<R>;
+      const change = typeof d.event === "function" && d.event(input, result);
+      for (const one of [change || []].flat())
+        await recordQuillsChange(db, actor, one);
+      return result;
+    });
+    const failed = d.failure?.(called);
+    if (failed) throw failed;
     const body = d.after
       ? d.response.parse(
           await d.after(result, { ...input, userId: c.get("userId") }),
@@ -423,6 +739,6 @@ export function buildQuillsRoute<
 /** Declares one Quills route. Mount the result with `router.openapi(...defineQuillsRoute({ ... }))`. */
 export const defineQuillsRoute: typeof buildQuillsRoute = (d) => {
   const built = buildQuillsRoute(d);
-  registry.set(d as AnyQuillsRoute, built[1]);
+  registry.set(d as unknown as AnyQuillsRoute, built[1]);
   return built;
 };

@@ -1,5 +1,5 @@
 import { initializeQuillsWorkspace } from "./initialize-workspace";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, type SQL } from "drizzle-orm";
 import { hasInstanceAdminRole } from "../../utils/instance-admin-role";
 import {
   drizzle,
@@ -167,11 +167,66 @@ export async function withQuillsAudience<T>(
   ) => Promise<T>,
 ): Promise<T> {
   if (!context.workspace) throw new QuillsWorkspaceUnavailable();
+  return audienceTransaction(namedWorkspace(context.workspace), context, work);
+}
+
+/** Where a signed caller's credential lives. framework/signed.ts documents each kind. */
+export type SignedScope = { integration: string } | { workspace: string };
+
+/**
+ * Trusted entry point for signed machine callers. Its only caller is
+ * src/quills/framework/define-route.ts (routes with `audience: "signed"`), after a verifier in
+ * src/quills/framework/signed.ts located the credential.
+ *
+ * Caller model: a machine (a provider webhook, the mail provider, an OAuth redirect) with no
+ * session, no customer principal and no teammate principal. The workspace comes from the
+ * credential, never from a body, query or path copy of a workspace:
+ * - `{ integration }` (a UUID): the workspace of that integrations row, read by the security-definer
+ *   function quills.integration_workspace, which only the application credential may execute.
+ *   The verifier then reads the row's secret under that workspace's RLS and checks the signature.
+ * - `{ workspace }` (an ID or slug): named by a credential that the verifier already checked before
+ *   any database access, for example an instance-signed OAuth state or the mail provider signature
+ *   over the receiving address.
+ * Like withQuillsAudience, it authorizes nothing else, never reads workspace_member and rejects a
+ * missing, archived or uninitialized workspace. It always locks the workspace row: signed routes write.
+ */
+export async function withQuillsSigned<T>(
+  scope: SignedScope,
+  work: (
+    db: Database,
+    workspace: { id: string; name: string; slug: string },
+  ) => Promise<T>,
+): Promise<T> {
+  const lookup =
+    "integration" in scope
+      ? {
+          where: sql`id = quills.integration_workspace(${scope.integration}::uuid)`,
+        }
+      : scope.workspace
+        ? namedWorkspace(scope.workspace)
+        : undefined;
+  if (!lookup) throw new QuillsWorkspaceUnavailable();
+  return audienceTransaction(lookup, { lock: true }, work);
+}
+
+/** An ID or a slug; an ID match wins. */
+const namedWorkspace = (workspace: string) => ({
+  where: sql`(id = ${workspace} OR slug = ${workspace})`,
+  order: sql`ORDER BY id = ${workspace} DESC`,
+});
+
+async function audienceTransaction<T>(
+  lookup: { where: SQL; order?: SQL },
+  context: { kaneoUserId?: string; lock?: boolean },
+  work: (
+    db: Database,
+    workspace: { id: string; name: string; slug: string },
+  ) => Promise<T>,
+): Promise<T> {
   return scopedTransaction(async (tx) => {
     const result = await tx.execute<{ id: string; name: string; slug: string }>(
       sql`SELECT id, name, slug FROM public.workspace
-          WHERE (id = ${context.workspace} OR slug = ${context.workspace}) AND archived_at IS NULL
-          ORDER BY id = ${context.workspace} DESC LIMIT 1 ${context.lock ? sql`FOR SHARE` : sql``}`,
+          WHERE archived_at IS NULL AND ${lookup.where} ${lookup.order ?? sql``} LIMIT 1 ${context.lock ? sql`FOR SHARE` : sql``}`,
     );
     const workspace = result.rows[0];
     if (!workspace) throw new QuillsWorkspaceUnavailable();

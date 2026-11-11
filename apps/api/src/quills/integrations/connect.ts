@@ -64,6 +64,8 @@ export type Connection = {
   secrets: string;
   workspaceName: string;
   account: string | null;
+  /** Non-secret provider IDs, for example a Slack team or a Discord server. */
+  config?: Record<string, string>;
 };
 
 /** Creates the connection or replaces it. A new `connectedAt` starts a new installation; mappings stay. */
@@ -78,6 +80,7 @@ export async function connect(
     status: "active",
     secrets: connection.secrets,
     config: {
+      ...connection.config,
       workspaceName: connection.workspaceName,
       account: connection.account,
     },

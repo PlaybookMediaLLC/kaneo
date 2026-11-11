@@ -78,6 +78,8 @@ export const integrations = quillsSchema
       ),
       // CHECK constraint to ensure error count is never negative
       check("error_count_non_negative", sql`error_count >= 0`),
+      // quills.integration_workspace: a signed webhook names an integration by ID alone.
+      index("integrations_id_idx").on(table.id),
       primaryKey({ columns: [table.workspaceId, table.id] }),
       foreignKey({
         columns: [table.workspaceId, table.connectedByPrincipalId],

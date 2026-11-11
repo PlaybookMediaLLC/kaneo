@@ -33,6 +33,10 @@ export type ContractInput = {
   body?: unknown;
   /** Widget routes: the widget session token of the valid caller. */
   bearer?: string;
+  /** Signed and internal routes: the exact body bytes, sent instead of `body`. */
+  raw?: string;
+  /** Signed and internal routes: signature, delivery or token headers. */
+  headers?: Record<string, string>;
 };
 type WidgetVisitor = {
   token: string;
@@ -80,8 +84,18 @@ export type Fixture<T = any> = {
   own?: (ids: T) => string[];
   /** Portal: a snapshot of customer A's records; another caller's request must not change it. */
   probe?: (env: ContractEnv, ids: T) => Promise<unknown>;
-  /** Widget: requests with a forged credential, for example a wrong HMAC. Each is rejected. */
+  /**
+   * Widget: requests with a forged credential, for example a wrong HMAC. Each is rejected.
+   * Signed: a bad or missing signature, a stale timestamp. Each is 401 and changes nothing.
+   */
   forged?: (ids: T) => ContractInput[];
+  /**
+   * Signed: requests that workspace B's credential signs, aimed at A's credential and at B's own.
+   * None may change a row in A or return A's data.
+   */
+  crossed?: (ids: T) => ContractInput[];
+  /** Signed: correctly signed requests whose body the schema rejects. Each is 400 and changes nothing. */
+  invalid?: (ids: T) => ContractInput[];
   /** The principal that the audit row of the authorized request names, when the audience default does not apply. */
   actor?: (env: ContractEnv, ids: T, body: any) => Promise<string | null>;
   /** The target is soft-deletable: soft-delete the target of `valid(ids)` in A. The request must then return 404. */

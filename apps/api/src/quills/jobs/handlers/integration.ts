@@ -15,6 +15,7 @@ import {
 } from "../../../database/quills/schema/integration-sync";
 import {
   integrationEventMappings as mappings,
+  integrationPlatformCredentials as platformCredentials,
   integrations,
 } from "../../../database/quills/schema/integrations";
 import type { JobQueueRow } from "../../../database/quills/schema/job-queue";
@@ -22,6 +23,7 @@ import { postComments, posts } from "../../../database/quills/schema/posts";
 import { postStatuses } from "../../../database/quills/schema/statuses";
 import {
   decryptSecret,
+  encryptSecret,
   isEncryptedSecret,
 } from "../../../notification-preferences/secrets";
 import {
@@ -31,6 +33,7 @@ import {
   syncError,
   type DeliveredEvent,
 } from "../../integrations/catalog";
+import { tokenFields } from "../../integrations/oauth-providers";
 import { loadEvent, type DeliveryEvent } from "../fanout";
 import { enqueueQuillsJob, finishQuillsJob } from "../queue";
 import {
@@ -503,6 +506,19 @@ async function claimOperation(db: Database, id: string): Promise<Claim> {
     delivery: {
       provider: integration.type,
       credentials,
+      // OAuth providers: the workspace's OAuth app (a GitLab refresh, the Discord bot token).
+      app: ["gitlab", "discord"].includes(integration.type)
+        ? unseal(
+            (
+              await db
+                .select({ secrets: platformCredentials.secrets })
+                .from(platformCredentials)
+                .where(
+                  eq(platformCredentials.integrationType, integration.type),
+                )
+            )[0]?.secrets ?? null,
+          )
+        : undefined,
       target: op.destinationKey,
       type: trigger,
       occurredAt: op.createdAt,
@@ -516,6 +532,32 @@ async function claimOperation(db: Database, id: string): Promise<Claim> {
 async function settle(db: Database, claim: Claimed, outcome: Outcome) {
   const now = new Date();
   const result = outcome.result ?? null;
+  // A GitLab token refreshed before the call: kept unless the connection changed meanwhile.
+  if (outcome.refreshed && isTypeId(claim.op.integrationId, "integration")) {
+    const [live] = await db
+      .select({
+        id: integrations.id,
+        connectedAt: integrations.connectedAt,
+        secrets: integrations.secrets,
+      })
+      .from(integrations)
+      .where(eq(integrations.id, claim.op.integrationId))
+      .for("update");
+    // Only the token fields change: a status-sync secret set or removed meanwhile stays as it is.
+    if (live && installationOf(live) === claim.op.installation)
+      await db
+        .update(integrations)
+        .set({
+          secrets: encryptSecret(
+            JSON.stringify({
+              ...unseal(live.secrets),
+              ...tokenFields(outcome.refreshed),
+            }),
+          )!,
+          updatedAt: now,
+        })
+        .where(eq(integrations.id, live.id));
+  }
   await db
     .update(attempts)
     .set({

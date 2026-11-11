@@ -274,6 +274,44 @@ export async function resolveCaller(
   return caller;
 }
 
+/**
+ * Read-only request metadata for portal, widget, public and signed handlers. Never the raw headers
+ * or cookies. Teammate handlers do not get it.
+ */
+export type RequestMeta = Readonly<{
+  /** The client IP through the trusted-proxy rules, or null. */
+  ip: string | null;
+  userAgent: string | null;
+  /** ISO 3166-1 alpha-2 from a CDN header, or null. */
+  country: string | null;
+  /** `DNT: 1` or `Sec-GPC: 1`. */
+  doNotTrack: boolean;
+}>;
+
+/** CDN country headers, first valid value wins. `XX` and `T1` (Tor) mean unknown. */
+const COUNTRY_HEADERS = [
+  "cf-ipcountry",
+  "x-vercel-ip-country",
+  "fly-client-ip-country",
+  "x-country-code",
+];
+
+export function requestMeta(headers: Headers): RequestMeta {
+  const country = COUNTRY_HEADERS.map((name) =>
+    headers.get(name)?.trim().toUpperCase(),
+  ).find(
+    (code) => code && /^[A-Z]{2}$/.test(code) && code !== "XX" && code !== "T1",
+  );
+  return Object.freeze({
+    ip: readClientIp(headers) ?? null,
+    userAgent: headers.get("user-agent")?.slice(0, 512) || null,
+    country: country ?? null,
+    doNotTrack:
+      headers.get("dnt")?.trim() === "1" ||
+      headers.get("sec-gpc")?.trim() === "1",
+  });
+}
+
 export const callerActor = (caller: QuillsCaller): ChangeActor => ({
   principalId: caller.principalId,
   actorType: caller.principalId ? "customer" : "anonymous",
