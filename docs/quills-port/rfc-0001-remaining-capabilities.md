@@ -76,6 +76,19 @@ Rules that follow from D11:
 - Undo finds the receipt by its audit row ID in the caller's workspace. It refuses when a later write changed the same setting.
 - Undo writes a new audit row (`settings.undone`). It does not edit the receipt row: audit history is append-only.
 
+### Decisions for lane X1 (design review, 2026-11-11)
+
+The design step found that decision D9 does not fit the current schema. The owner decided these four points.
+
+| # | Question | Decision |
+|---|---|---|
+| D12 | `apps.oauth_client_id` is `NOT NULL` with a foreign key to `oauth_client`. How does an app row bind to an API key? | **Add a nullable column `apps.api_key_id`**, with a partial unique index on `(workspace_id, api_key_id)`. Make `oauth_client_id` nullable. Add `apps` to `OMITTED_TABLES` in `transfer/archive.ts`. This is the one migration of this RFC. |
+| D13 | No route creates, binds or disables an app. | **Lane X1 adds three teammate routes** with `manage_settings`: list, create and update, under `/app-registrations`. They are outside the 7 entry points of #131. |
+| D14 | No product path creates an API key with `quills` scopes. | **The create route mints the scoped key** and returns its secret one time. Kaneo's general API-key flow does not change. |
+| D15 | A bound key could still call teammate routes within its scopes. | **Confine it.** A teammate route refuses a key that has an active app binding in the path workspace (403 `APP_KEY_CONFINED`). |
+
+The full design is in `apps/api/src/quills/apps/ROUTES.md` on the X1 branch.
+
 Not decided here: the widget handoff. It stays with #129.
 
 ## 4. Lanes
@@ -187,7 +200,9 @@ Entry points: `routes/api/v1/apps/{boards,link,linked,posts,search,suggest,unlin
 Target: new folder `apps/` (routes and fixtures); a new `app` audience in `framework/audience.ts`; contract checks in `framework/contract-checks.ts`.
 Path:
 - Decision D9: the caller presents a Kaneo API key with `quills` scopes, bound to one `apps` row. Ignore the source column `oauth_client_id` as an authority.
-- Write the audience design first, as a section in `apps/ROUTES.md`. Stop for owner review before route code.
+- The audience design is reviewed (decisions D12 to D15). Put it in `apps/ROUTES.md` and implement it.
+- Write the Drizzle schema change for `apps.api_key_id`. Do not generate SQL: lane Z does that.
+- An app route refuses an unscoped key and a session with no key.
 - The source tests `link-permission.test.ts` and `boards-actor.test.ts` become contract cases.
 - The app audience needs its own checks: a disabled app, an app of workspace B, a scope that the app does not hold, and a link target that the app cannot see.
 Risk: this lane is the only one that edits `framework/`. It must not weaken an existing check. `contract.self.test.ts` must still fail on a broken route.
@@ -233,7 +248,7 @@ Risks: a public profile must expose only public fields and must respect the port
 | Step | Action |
 |---|---|
 | 1 | Merge the lane branches in the order of section 8. Rebase each one on `staging` first. |
-| 2 | Confirm that no lane changed `src/database/quills/schema`. If a lane reported a schema need, stop and ask the owner. |
+| 2 | Generate the Quills migration for D12 with `pnpm --filter @kaneo/api db:generate:quills`. Inspect the SQL. Confirm that no other lane changed `src/database/quills/schema`. |
 | 3 | Run `pnpm openapi:check:fix` after each merge. Inspect the new operations. |
 | 4 | Mark each closed ledger row in `docs/quills-port/ledger/overrides.json`. Rebuild with `node scripts/quills-port/build-ledger.mjs ../quackback`. |
 | 5 | Update the parity numbers in `docs/quills-port/README.md` and in issue #131. |
@@ -260,12 +275,13 @@ No lane adds a seam in an upstream file. If a lane needs one, it stops and repor
 
 ## 6. Migrations
 
-This RFC plans no migration.
+This RFC plans one migration: `apps.api_key_id` (decision D12).
 
-- The tables `apps`, `connectors`, `channel_accounts`, `slack`, `kv_store` and `audit_log` exist.
-- Decision D8 uses `kv_store`. Decision D11 uses the audit row of the settings write.
-- The Quills migration history is linear, so no lane runs `db:generate:quills`.
-- A lane that finds a schema need stops and reports. It does not add a table.
+- Lane X1 writes the Drizzle schema change. It does not generate SQL.
+- Lane Z generates, inspects and tests the migration: fresh startup, concurrent runners, drift rejection.
+- The Quills migration history is linear, so no other lane runs `db:generate:quills`.
+- Decision D8 uses `kv_store`. Decision D11 uses the audit row of the settings write. Neither needs a migration.
+- A lane that finds another schema need stops and reports. It does not add a table.
 
 ## 7. Events that lane S0 registers
 
@@ -276,7 +292,7 @@ Lane S0 adds these names to the `events.ts` enums. A lane that needs another nam
 | C1 | `assistant_connector.created`, `assistant_connector.updated`, `assistant_connector.refreshed`, `assistant_connector.connected` |
 | G1 | `slack_agent.settings_updated`, `github_inbox.settings_updated`, `github_inbox.message_retried`, `integration.hook_received`, `user.identified` (exists) |
 | G2 | `conversation.agent_started` |
-| X1 | `app.post_linked`, `app.post_unlinked`, `app.post_created` |
+| X1 | `app.post_linked`, `app.post_unlinked`, `app.post_created`, `app.registered`, `app.updated`; entity type `app` |
 | B1 | `branding.auto_started`, `branding.offer_accepted`, `branding.offer_declined`, `branding.auto_undone` |
 | M1 | `settings.undone`, `conversation.test_deleted`. The settings writes keep their existing event types; only the audit metadata gains the receipt. |
 | S1 | `presence.heartbeat` uses no event: declare `event: false` with the reason "expiring marker". |
@@ -289,7 +305,7 @@ S0 ──► P1  P2  P3  P4
    ├─► C1
    ├─► G1
    ├─► G2
-   ├─► X1                  (design review before route code)
+   ├─► X1
    ├─► S1
    ├─► B1
    └─► M1
