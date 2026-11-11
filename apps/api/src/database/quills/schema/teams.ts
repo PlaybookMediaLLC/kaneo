@@ -89,6 +89,9 @@ export const teams = quillsSchema
         .on(table.id)
         .where(sql`is_default = true AND deleted_at IS NULL`),
       primaryKey({ columns: [table.workspaceId, table.id] }),
+      index("teams_rr_cursor_principal_id_fk_idx")
+        .on(table.workspaceId, table.rrCursorPrincipalId)
+        .where(sql`${table.rrCursorPrincipalId} IS NOT NULL`),
       workspacePolicy(table.workspaceId),
     ],
   )

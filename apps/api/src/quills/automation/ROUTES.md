@@ -187,7 +187,7 @@ Entity: `workflow`. Payloads carry IDs only.
 
 ## Migration
 
-`drizzle/quills/0013_workflow_runs_sweeps.sql` (custom), no table changes:
+`drizzle/quills/0016_workflow_runs_sweeps.sql` (custom), no table changes:
 
 1. Pauses every live workflow, workspace by workspace (row security applies). No route could
    publish one before this release, so each came from an import; it runs again only after a

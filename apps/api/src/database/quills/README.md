@@ -85,9 +85,9 @@ caller is `defineQuillsRoute` (routes with `audience: "signed"`, mounted at
 2. The workspace comes from the credential, never from a body, query or path copy:
    - `{ integration }`: the workspace of that `integrations` row, read by the
      security-definer function `quills.integration_workspace(uuid)` (migration
-     `0015_signed_integration_workspace`). Only the application credential may
+     `0018_signed_integration_workspace`). Only the application credential may
      execute it; `PUBLIC` and `quills_runtime` may not. Migration
-     `0016_integrations_id_index` indexes `integrations (id)` for this lookup. The verifier
+     `0019_integrations_id_index` indexes `integrations (id)` for this lookup. The verifier
      then reads the row's sealed secret under the workspace's RLS and checks the signature.
    - `{ workspace }`: an ID or slug that an instance credential named before any
      database access: the instance-signed OAuth state, or the mail provider
@@ -306,6 +306,16 @@ days, and email/AI logs after 90 days, in batches of 1,000 per table/workspace.
 It retains audit history, pending work, failed jobs with unpublished events, and
 current-month billing logs. Expired export keys enter the existing storage-cleanup
 flow. Archived workspaces receive retention but do not execute feature jobs.
+With the log retention (90 days by default) it also removes help-center search
+queries, finished integration sync attempts, and portal invites that are not
+accepted and expired before that time. The sync operation row, its operation key and
+its result stay: the key stops a second external create. Unsubscribe tokens go 30
+days after they expired or were used. Anonymous widget visitors (a principal and its
+customer profile) go eight days after creation when no widget session is live, they
+hold only what the session route wrote (no name, email, contact email, company,
+block, external ID or attributes), and no foreign key references them. Every foreign
+key to `principal` and `customer_identity` is read from the catalog. A cursor in
+`kv_store` moves past the visitors that stay. Audit rows and events keep their text IDs.
 Configure days (1–3650) with `QUILLS_EVENT_RETENTION_DAYS`,
 `QUILLS_JOB_RETENTION_DAYS` and `QUILLS_LOG_RETENTION_DAYS`.
 
@@ -541,5 +551,5 @@ Without `QUILLS_AI_BASE_URL` and `QUILLS_AI_MODEL`, every AI route returns 409
 finishes with no work. Provider calls run outside every database transaction and time out
 after 60 seconds. A failure returns a fixed message; the provider's text and the key never
 reach a response, a log row or a run. Each call writes one `ai_usage_log` row in its
-workspace. The `quills.ai` queue (migration `0013_assistant_queue`) runs the background work;
+workspace. The `quills.ai` queue (migration `0017_assistant_queue`) runs the background work;
 `apps/api/src/quills/assistant/ROUTES.md` lists the routes and the work for each event.

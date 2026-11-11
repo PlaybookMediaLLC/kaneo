@@ -35,6 +35,10 @@ export const slackUserLinks = quillsSchema
         columns: [table.workspaceId, table.principalId],
         foreignColumns: [principal.workspaceId, principal.id],
       }).onDelete("cascade"),
+      index("slack_user_links_principal_id_fk_idx").on(
+        table.workspaceId,
+        table.principalId,
+      ),
       workspacePolicy(table.workspaceId),
     ],
   )

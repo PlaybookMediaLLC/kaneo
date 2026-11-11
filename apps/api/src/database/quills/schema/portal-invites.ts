@@ -70,6 +70,9 @@ export const portalInvites = quillsSchema
         columns: [table.workspaceId, table.invitedByPrincipalId],
         foreignColumns: [principal.workspaceId, principal.id],
       }).onDelete("set null"),
+      index("portal_invites_invited_by_principal_id_fk_idx")
+        .on(table.workspaceId, table.invitedByPrincipalId)
+        .where(sql`${table.invitedByPrincipalId} IS NOT NULL`),
       workspacePolicy(table.workspaceId),
     ],
   )

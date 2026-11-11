@@ -79,6 +79,9 @@ export const postViews = quillsSchema
         .on(table.isShared)
         .where(sql`"deleted_at" IS NULL`),
       primaryKey({ columns: [table.workspaceId, table.id] }),
+      index("post_views_created_by_principal_id_fk_idx")
+        .on(table.workspaceId, table.createdByPrincipalId)
+        .where(sql`${table.createdByPrincipalId} IS NOT NULL`),
       workspacePolicy(table.workspaceId),
     ],
   )

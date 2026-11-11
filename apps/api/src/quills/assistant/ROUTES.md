@@ -190,7 +190,7 @@ call after three minutes, so it ends inside its lease.
 
 ## Migration
 
-`drizzle/quills/0013_assistant_queue.sql` adds `quills.ai` to `quills.runnable_workspaces`.
+`drizzle/quills/0017_assistant_queue.sql` adds `quills.ai` to `quills.runnable_workspaces`.
 No table changes.
 
 ## Not ported, or ported in part

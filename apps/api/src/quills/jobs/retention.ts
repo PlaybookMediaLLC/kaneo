@@ -6,6 +6,7 @@ import {
   type Database,
 } from "../../database/quills/client";
 import { refreshVisitorAnalytics } from "../../database/quills/visitor-rollup";
+import { pruneAnonymousVisitors } from "./anonymous-visitors";
 const days = z.coerce.number().int().min(1).max(3650);
 export const retentionSchema = z.object({
   events: days.default(90),
@@ -32,12 +33,21 @@ export async function pruneQuillsWorkspace(
     // codes and rate-limit windows. Both indexes on expiry back these batches.
     sql`DELETE FROM quills.kv_store WHERE (workspace_id,workspace_key,key) IN (SELECT workspace_id,workspace_key,key FROM quills.kv_store WHERE expires_at<=now() LIMIT 1000)`,
     sql`DELETE FROM quills.rate_bucket WHERE (workspace_id,workspace_key,key) IN (SELECT workspace_id,workspace_key,key FROM quills.rate_bucket WHERE window_expires_at<=now() LIMIT 1000)`,
+    sql`DELETE FROM quills.kb_search_queries WHERE (workspace_id,id) IN (SELECT workspace_id,id FROM quills.kb_search_queries WHERE created_at<now()-${policy.logs}*interval '1 day' ORDER BY created_at LIMIT 1000)`,
+    // A token stops working when it expires or is used; least() skips a NULL used_at.
+    sql`DELETE FROM quills.unsubscribe_tokens WHERE (workspace_id,id) IN (SELECT workspace_id,id FROM quills.unsubscribe_tokens WHERE least(expires_at,used_at)<now()-interval '30 days' ORDER BY least(expires_at,used_at) LIMIT 1000)`,
+    // Attempts and their results go; the operation row stays, as its operation_key stops a second
+    // external create, and keeps the remote link the sync history shows.
+    sql`DELETE FROM quills.integration_sync_attempts WHERE (workspace_id,id) IN (SELECT workspace_id,id FROM quills.integration_sync_attempts WHERE finished_at<now()-${policy.logs}*interval '1 day' ORDER BY finished_at LIMIT 1000)`,
+    // Expired, canceled and pending-but-expired invites. An accepted invite grants portal access.
+    sql`DELETE FROM quills.portal_invites WHERE (workspace_id,id) IN (SELECT workspace_id,id FROM quills.portal_invites WHERE status<>'accepted' AND expires_at<now()-${policy.logs}*interval '1 day' LIMIT 1000)`,
   ];
   let removed = 0;
   for (const statement of statements)
     removed += (await tx.execute(statement)).rowCount ?? 0;
-  return removed;
+  return removed + (await pruneAnonymousVisitors(tx));
 }
+
 export async function runQuillsRetention() {
   const policy = retentionSchema.parse({
     events: process.env.QUILLS_EVENT_RETENTION_DAYS,
