@@ -52,6 +52,8 @@ const allowedImport = (file: string, specifier: string) => {
         "framework/internal",
         // Static widget page and bundles: reads files, never the database (see the module).
         "widget/host",
+        // Website branding: a guarded site fetch and a logo upload, never the database (see the module).
+        "settings/website-fetch",
         "../openapi",
       ].includes(target) ||
       target.startsWith("../database/quills/schema/"))
