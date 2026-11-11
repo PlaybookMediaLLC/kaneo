@@ -200,6 +200,56 @@ because the contract's strict-response check reads no unions. The `waiting` sort
 have no wait clock. Post routes use `feedback/visibility.ts`: a board linked to projects the caller
 cannot open hides its posts.
 
+## Assistant surface and outbound start (RFC 0001, lane G2)
+
+Module: `support/conversation-assistant.ts`. Feature tests: `support/conversation-assistant.test.ts`.
+
+```
+Tables and owning schema:  quills: conversations, conversation_messages, principal, user,
+                           assistant_involvements (read), posts and boards (read, for cited posts),
+                           events, audit_log, job_queue. public (read only, through
+                           framework/platform-reads.ts): project access (`loadProjects`).
+Actor and workspace:       authenticated context (helper). The target customer comes from the body
+                           and is checked against this workspace (`isCustomer`, row security).
+Permissions:               workspace:read + quills:read (counts, activity); quills:update (start, the
+                           source's CONVERSATION_REPLY). No native permissions.
+Persisted relationships:   assistant_involvements.conversation_id; board_projects for a cited post.
+Transaction:               one scoped transaction per request. The start writes the conversation, the
+                           first message and two outbox events together; any failure rolls all back.
+External effects:          none in a request. `conversation.agent_started` makes the delivery worker
+                           mail the first message (jobs/handlers/support-mail.ts, ledger-deduplicated).
+Completion checks:         authenticated endpoint, tenant/object access, mutation, read/search/export.
+```
+
+Visibility: the counts use the inbox list's rule before they count: real conversations (no test
+customer) that are not spam, in the caller's workspace. The activity of one conversation follows
+`getQuillsConversation`: any conversation of the workspace, 404 otherwise. A cited post shows only
+when it is on a board that the caller can see (`feedback/visibility.ts`).
+
+| operationId | Route | Action | Tables | Event |
+|---|---|---|---|---|
+| `startQuillsAgentConversation` | `POST /conversations` (`targetPrincipalId`: an identified customer with a mail address; plain text ≤ 10000) | update | `conversations`, `conversation_messages`, `principal`, `user` | `conversation.agent_started` and `message.created` |
+| `fetchQuillsAssistantInboxCounts` | `GET /inbox/assistant-counts` (resolved, escalated, pending) | read | `assistant_involvements`, `conversations`, `principal` | - |
+| `getQuillsConversationAssistantActivity` | `GET /conversations/{conversationId}/assistant-activity` | read | `assistant_involvements`, `conversations`, `posts`, `boards` | - |
+
+Differences from the source, on purpose:
+
+- The start takes plain text only, like the reply. It accepts no rich document and no attachments.
+- The start refuses a lead (409), a customer with no real mail address (409) and a blocked customer
+  (409). The source refuses the first two; a blocked customer would get no mail here, so the start
+  fails instead of reporting a delivery that cannot happen.
+- A teammate, a test customer or a customer of another workspace is "Customer not found" (404). The
+  source answers a teammate with a validation error.
+- The start does not check the `supportInbox` flag. No Kaneo teammate route checks a product flag.
+- The start records `conversation.agent_started` (the mail) and `message.created` (the customer's live
+  channel and webhooks), not `conversation.created`. It sends no SLA or workflow trigger of its own.
+- The counts count distinct conversations, as the list would show them. The source counts involvement
+  rows and also counts spam conversations.
+- The activity leaves out a cited post on a board that the caller cannot see, and returns at most 50
+  sources. The source returns every stored source.
+- Nothing in Kaneo writes `assistant_involvements` yet (the customer agent is not ported). The counts
+  and the activity read imported rows and rows that a later agent writes.
+
 ## Event catalogue additions
 
 Types: `conversation.status_changed`, `conversation.assigned`, `conversation.priority_changed`,
@@ -219,9 +269,7 @@ Entities: `conversation`, `conversation_message`, `conversation_tag`, `conversat
 
 | Source capability | State | Reason |
 |---|---|---|
-| `startQuillsAgentConversation` | deferred | The first message must reach the customer by mail; no conversation mail handler exists yet (P4 follow-up). |
 | `translateQuillsConversationMessages` | deferred (P8) | Needs the AI provider. The toggles are ported. |
-| `fetchQuillsAssistantInboxCounts`, `getQuillsConversationAssistantActivity` | deferred (P8) | Assistant involvement. |
 | `draftQuillsAttributeDescriptions`, `previewQuillsAttributeDetection` | deferred (P8) | AI authoring. |
 | `fetchQuillsCustomerContext` | deferred (P7) | Calls connected integrations. |
 | `unfurlQuillsLink`, `getQuillsEmbedPreview` | deferred (audience wave) | Portal audience. Needs a safe outbound fetch, a rate limit and a cache, and help center and ticket embeds. |
