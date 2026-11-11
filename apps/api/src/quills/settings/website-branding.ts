@@ -58,10 +58,13 @@ const stored = z.object({
         .nullable(),
     })
     .optional(),
-  /** The values before and after accept. Undo writes `before` back while the row holds `after`. */
+  /**
+   * The values before and after accept. Undo writes `before` back while the row holds `after`. Accept
+   * runs only with no logo, so undo never writes a stored key back.
+   */
   receipt: z
     .object({
-      logoKey: z.object({ before: z.string().nullable(), after: z.string() }),
+      logoKey: z.object({ before: z.null(), after: z.string() }),
       brandingConfig: z
         .object({ before: z.string().nullable(), after: z.string() })
         .optional(),
@@ -73,15 +76,7 @@ type Lookup = z.output<typeof stored>;
 const branding = z
   .object({
     domain: z.string(),
-    status: z.enum([
-      "eligible",
-      "offered",
-      "applied",
-      "declined",
-      "undone",
-      "skipped",
-      "failed",
-    ]),
+    status: z.enum(["eligible", ...stored.shape.status.options]),
     logoUrl: z.string().nullable().openapi({
       description:
         "A short-lived URL of the logo, while it is offered or applied",
@@ -107,15 +102,23 @@ const readRow = async (db: Database, lock = false) => {
   return row;
 };
 
-/** `attempted`: the key exists, so `start` never runs again (also for a value this code cannot read). */
+/**
+ * `attempted`: the key exists, so `start` never runs again (also for a value this code cannot read).
+ * Metadata that is not a JSON object also counts: no lookup result could be saved there.
+ */
 function readLookup(row: Row) {
   const bag = parseBag(row.metadata);
   const parsed = stored.safeParse(bag?.[KEY]);
   return {
-    attempted: Boolean(bag && Object.hasOwn(bag, KEY)),
+    attempted: !bag || Object.hasOwn(bag, KEY),
     lookup: parsed.success ? parsed.data : null,
   };
 }
+
+const malformed = () =>
+  new HTTPException(409, {
+    message: "Stored settings are not a JSON object; they were left unchanged",
+  });
 
 /** Writes the lookup, and the column values, in one update of the locked row. */
 async function save(
@@ -125,11 +128,7 @@ async function save(
   columns: Partial<Pick<Row, "logoKey" | "brandingConfig">> = {},
 ) {
   const bag = parseBag(row.metadata);
-  if (!bag)
-    throw new HTTPException(409, {
-      message:
-        "Stored settings are not a JSON object; they were left unchanged",
-    });
+  if (!bag) throw malformed();
   const [updated] = await db
     .update(settings)
     .set({
@@ -196,19 +195,35 @@ async function present(
 
 type Found = Awaited<ReturnType<typeof storeLogo>> & { color: string | null };
 
-/** Reads the site and stores its logo, with no transaction open. Null when nothing usable was found. */
+// ponytail: an in-process cap, one lookup for each workspace and at most 4 on each API instance. A
+// cap across instances needs a lease row.
+const MAX_LOOKUPS = 4;
+const running = new Set<string>();
+
+/**
+ * Reads the site and stores its logo, with no transaction open. Null when nothing was stored. A
+ * result that is not `verified` must be released.
+ */
 async function find(workspaceId: string, site: URL): Promise<Found | null> {
-  const logo = await fetchWebsiteBranding(site);
-  if (!logo) return null;
+  if (running.has(workspaceId) || running.size >= MAX_LOOKUPS)
+    throw new HTTPException(409, {
+      message: "A website lookup is already running. Try again soon.",
+    });
+  running.add(workspaceId);
   try {
-    return { ...(await storeLogo(workspaceId, logo)), color: logo.color };
+    const logo = await fetchWebsiteBranding(site);
+    return (
+      logo && { ...(await storeLogo(workspaceId, logo)), color: logo.color }
+    );
   } catch (error) {
-    // The site gave a logo, but storage refused it: tell the operator, record the lookup as failed.
+    // Storage refused the upload before any object was written.
     console.warn(
       "Website branding: the logo was not stored:",
       (error as Error).message,
     );
     return null;
+  } finally {
+    running.delete(workspaceId);
   }
 }
 
@@ -248,9 +263,15 @@ async function record(
   found: Found | null,
   skipped: boolean,
 ) {
+  const previous = readLookup(row).lookup;
+  // An accept that committed during the fetch keeps its state and its undo receipt.
+  if (row.logoKey && previous?.status === "applied") {
+    if (found) await release(db, actor, found);
+    return present(row, previous);
+  }
   const status =
-    row.logoKey || skipped ? "skipped" : found ? "offered" : "failed";
-  await dropOffer(db, readLookup(row).lookup);
+    row.logoKey || skipped ? "skipped" : found?.verified ? "offered" : "failed";
+  await dropOffer(db, previous);
   if (found && status !== "offered") await release(db, actor, found);
   if (found && status === "offered") {
     // Row lock first, then the object lock: the order of the storage trigger.
@@ -338,7 +359,7 @@ const lookup = defineQuillsRoute({
   responseDescription: "The recorded lookup",
   errors: {
     400: "Not a website address",
-    409: "The workspace has a logo, or file storage is not configured",
+    409: "The workspace has a logo, file storage is not configured, or a lookup is running",
   },
   prepare: async ({ db, body }) => {
     const site = parseWebsiteInput(body.site);
@@ -346,8 +367,9 @@ const lookup = defineQuillsRoute({
       throw new HTTPException(400, {
         message: "Enter a website, like acme.com.",
       });
-    if (!isQuillsStorageConfigured() || (await readRow(db)).logoKey)
-      throw unavailable();
+    const row = await readRow(db);
+    if (!parseBag(row.metadata)) throw malformed();
+    if (!isQuillsStorageConfigured() || row.logoKey) throw unavailable();
     return site;
   },
   call: async (site, { workspaceId }) => ({
@@ -381,6 +403,7 @@ const start = defineQuillsRoute({
     }),
   }),
   responseDescription: "The recorded lookup",
+  errors: { 409: "A lookup is running" },
   load: callerDomain,
   prepare: async ({ db, loaded }) => {
     const row = await readRow(db);
@@ -397,7 +420,8 @@ const start = defineQuillsRoute({
   event: ({ workspaceId }, result) =>
     result.started && started(workspaceId, "email", result),
   handler: async ({ db, actor, called }) => {
-    const row = await readRow(db, true);
+    // Lock only when this request has a result to write.
+    const row = await readRow(db, Boolean(called));
     const { attempted, lookup } = readLookup(row);
     if (called && !attempted)
       return {
@@ -482,7 +506,7 @@ const accept = defineQuillsRoute({
       status: "applied",
       completedAt: new Date().toISOString(),
       receipt: {
-        logoKey: { before: row.logoKey, after: offer.logoKey },
+        logoKey: { before: null, after: offer.logoKey },
         ...(theme && {
           brandingConfig: { before: row.brandingConfig, after: theme },
         }),
@@ -558,7 +582,7 @@ const undo = defineQuillsRoute({
       completedAt: new Date().toISOString(),
     };
     const updated = await save(db, row, next, {
-      logoKey: receipt.logoKey.before,
+      logoKey: null,
       ...(receipt.brandingConfig && {
         brandingConfig: receipt.brandingConfig.before,
       }),

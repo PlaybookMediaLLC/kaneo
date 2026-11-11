@@ -46,7 +46,8 @@ Completion checks:             authenticated endpoint, mutation (rollback), read
 
 Each response is `{ branding }`: the status that the source returns, or null when there is nothing
 to show. `start` also returns `started`, which is true when the request recorded a lookup.
-A 409 means that the offer or the undo is no longer available, or that the branding changed since.
+A 409 means that the offer or the undo is no longer available, that the branding changed since, or
+that a lookup is running. Each API instance runs one lookup for each workspace and at most 4 in all.
 
 ## State and undo
 
@@ -54,7 +55,9 @@ The lookup state lives in `quills.settings.metadata` under the key `brandingLook
 It holds the status, the domain, the offer (the logo key and a color) and, after accept, a receipt:
 the previous and the applied values of `logo_key` and `branding_config`. Undo writes the previous
 values back exactly, but only while both columns still hold the applied values. Undo is possible
-once. A key under `brandingLookup`, also a failed one, stops `start` from running again.
+once. Accept runs only when the workspace has no logo, so the previous logo is always null and undo
+never writes a stored key back. A key under `brandingLookup`, also a failed one, stops `start` from
+running again. A lookup that finishes after an accept keeps the applied state and its receipt.
 
 Decision D11 puts the receipt of a settings write in its audit row. This state is not a settings
 receipt of lane M1: the source keeps it with the lookup, and an audit value holds at most 500
@@ -70,13 +73,15 @@ characters, which a stored theme can exceed.
    that replaces an offer, delete the files row. Undo clears `logo_key`. In each case the existing
    trigger queues the released key in the same transaction, and the cleanup worker deletes the
    object only when no column references it and no lease is live.
-4. When the handler does not keep a written logo (the workspace got a logo, or another request
-   recorded the lookup first), it inserts and deletes a files row in its transaction. The trigger
-   queues the key, so the object does not stay behind.
+4. When the handler does not keep a written logo (the workspace got a logo, another request recorded
+   the lookup first, or the write or its verification failed), it inserts and deletes a files row in
+   its transaction. The trigger queues the key, so the object does not stay behind.
+5. A verification deadline that passed before the handler locks the object gives 503 and commits
+   no reference.
 
-Known gap: a failure between the PUT and the commit (for example a lost database connection, or a
-permission that was removed during the fetch) leaves an object that nothing references or queues.
-A presigned upload that is never registered has the same gap (`files/ROUTES.md`).
+Known gap: a request that fails after the PUT and before its handler commits (a lost database
+connection, a permission removed during the fetch, or the 503 above) leaves an object that nothing
+references or queues. A presigned upload that is never registered has the same gap (`files/ROUTES.md`).
 
 ## Differences from the source
 
@@ -84,7 +89,7 @@ A presigned upload that is never registered has the same gap (`files/ROUTES.md`)
 |---|---|---|
 | Server functions with no path | Six routes under `/settings/website-branding` | Kaneo routes. |
 | A teammate without the permission gets `null` | 403 | `manage_settings` is the route action, as for the other settings areas. |
-| A `pending` claim before the fetch, 409 `WEBSITE_BRANDING_BUSY` for a second lookup | No pending state. Two lookups can run together; the last one to commit keeps its offer, and the other logo is queued for cleanup. | `prepare` must not write, and no fetch runs in a transaction. |
+| A `pending` claim before the fetch, 409 `WEBSITE_BRANDING_BUSY` for a second lookup | No pending state. 409 for a second lookup of the workspace on the same API instance; at most 4 lookups on an instance. Lookups on two instances can run together: the last one to commit keeps its offer, and the other logo is queued for cleanup. | `prepare` must not write, and no fetch runs in a transaction. |
 | `DISABLE_AUTOMATIC_BRANDING` operator switch | None. Storage must be configured. | No new configuration. A teammate with `manage_settings` starts each fetch. |
 | Launch window: 14 days after setup completion | 14 days after Kaneo initialized Quills for the workspace (`settings.created_at`) | Kaneo has no Quills setup flow. |
 | Offered logo stored under `logos/` with no reference | A `files` row holds the key until accept or decline | The storage probe, deletion and transfer see only columns. |
