@@ -10280,7 +10280,7 @@
           "Quills"
         ],
         "summary": "Complete a connector's OAuth authorization",
-        "description": "The authorization server redirects the browser here. The signed state must be unexpired, unused, for this connector and for the signed-in account, which must still hold quills:manage_settings in the state's workspace. Exchanges the code, then refreshes the connector's tools. The caller signs the raw request body; the body is parsed only after the signature check.",
+        "description": "The authorization server redirects the browser here. The signed state must be unexpired, unused, for this connector and for the signed-in account, which must still hold quills:manage_settings in the state's workspace. Exchanges the code, then refreshes the connector's tools. `connected` means that the authorization is complete; the connector's own status tells whether its tools were read. The caller signs the raw request body; the body is parsed only after the signature check.",
         "security": [],
         "parameters": [
           {
