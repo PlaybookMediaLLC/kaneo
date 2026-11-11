@@ -496,16 +496,17 @@ const searchItems = defineQuillsRoute({
   },
 });
 
-export default apiRouter<BaseVariables & { workspaceId: string }>()
+// One connect route per provider in the registry, in registry order. The path type of a connect route
+// names every provider, so the first mount types all of them for the client.
+const [firstType, ...otherTypes] = oauthTypes;
+const router = apiRouter<BaseVariables & { workspaceId: string }>()
   .openapi(...saveCredentials)
   .openapi(...getCredentials)
   .openapi(...deleteCredentials)
-  .openapi(...startConnect("github"))
-  .openapi(...startConnect("gitlab"))
-  .openapi(...startConnect("slack"))
-  .openapi(...startConnect("discord"))
-  .openapi(...listDestinations)
-  .openapi(...searchItems);
+  .openapi(...startConnect(firstType));
+for (const type of otherTypes) router.openapi(...startConnect(type));
+
+export default router.openapi(...listDestinations).openapi(...searchItems);
 
 /** The signed OAuth callback, mounted from quills/public.ts. */
 export const oauthCallback = apiRouter().openapi(...callback);
