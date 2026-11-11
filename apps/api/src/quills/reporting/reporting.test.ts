@@ -242,42 +242,37 @@ describe.skipIf(!url)("Reporting aggregates", () => {
 
   it("lists the most viewed published changelog entries up to changelogLimit", async () => {
     const day = 86_400_000;
+    const published = new Date(Date.now() - day);
+    const read = (title: string, viewCount: number) => ({
+      title,
+      content: "-",
+      viewCount,
+      publishedAt: published,
+    });
     await world.scoped(world.a, world.users.owner, (db) =>
       db.insert(changelogEntries).values([
-        {
-          title: "Most read",
-          content: "-",
-          viewCount: 30,
-          publishedAt: new Date(Date.now() - day),
-        },
-        {
-          title: "Less read",
-          content: "-",
-          viewCount: 20,
-          publishedAt: new Date(Date.now() - day),
-        },
-        {
-          title: "Least read",
-          content: "-",
-          viewCount: 10,
-          publishedAt: new Date(Date.now() - day),
-        },
+        read("Read 60", 60),
+        read("Read 50", 50),
+        read("Read 40", 40),
+        read("Read 30", 30),
+        read("Read 20", 20),
+        read("Read 10", 10),
         { title: "Draft entry", content: "-", viewCount: 99 },
         {
-          title: "Scheduled entry",
-          content: "-",
-          viewCount: 98,
+          ...read("Scheduled entry", 98),
           publishedAt: new Date(Date.now() + day),
         },
-        {
-          title: "Deleted entry",
-          content: "-",
-          viewCount: 97,
-          publishedAt: new Date(Date.now() - day),
-          deletedAt: new Date(),
-        },
+        { ...read("Deleted entry", 97), deletedAt: new Date() },
       ]),
     );
+    const titles = async (query: string) =>
+      (
+        await world.request(
+          world.users.member,
+          "GET",
+          `/reporting/analytics?period=7d${query}`,
+        )
+      ).body.changelog.topEntries.map((e: { title: string }) => e.title);
     const res = await world.request(
       world.users.member,
       "GET",
@@ -286,20 +281,21 @@ describe.skipIf(!url)("Reporting aggregates", () => {
     expect(res.status).toBe(200);
     expect(res.body.changelog.topEntries).toEqual([
       expect.objectContaining({
-        title: "Most read",
-        viewCount: 30,
-        publishedAt: expect.any(String),
+        title: "Read 60",
+        viewCount: 60,
+        publishedAt: published.toISOString(),
       }),
-      expect.objectContaining({ title: "Less read", viewCount: 20 }),
+      expect.objectContaining({ title: "Read 50", viewCount: 50 }),
     ]);
-    const defaults = await world.request(
-      world.users.member,
-      "GET",
-      "/reporting/analytics?period=7d",
-    );
-    expect(
-      defaults.body.changelog.topEntries.map((e: { title: string }) => e.title),
-    ).toEqual(["Most read", "Less read", "Least read"]);
+    // The default stays five, as before the limit existed.
+    expect(await titles("")).toEqual([
+      "Read 60",
+      "Read 50",
+      "Read 40",
+      "Read 30",
+      "Read 20",
+    ]);
+    expect(await titles("&changelogLimit=20")).toHaveLength(6);
     for (const limit of ["0", "21"])
       expect(
         (

@@ -337,10 +337,13 @@ describe.skipIf(!url)("Quills directory", () => {
     });
   });
 
-  it("counts a company's activity without test data, deleted tickets or workspace B", async () => {
+  it("counts a company's activity without test data, deleted tickets, other companies or workspace B", async () => {
     const env = contractEnv();
     const companyId = await company(env, env.a);
+    const otherCompany = await company(env, env.a);
     const person = await customer(env, env.a, { companyId });
+    const otherPerson = await customer(env, env.a, { companyId: otherCompany });
+    const loner = await customer(env, env.a);
     const tester = await customer(env, env.a, { companyId });
     // Any principal can own a test customer; a fresh owner keeps the owner's own tester free.
     const testOwner = await customer(env, env.a);
@@ -362,7 +365,7 @@ describe.skipIf(!url)("Quills directory", () => {
       const [, test] = await db
         .insert(conversations)
         .values(
-          [person, tester].map((visitor) => ({
+          [person, tester, otherPerson, loner].map((visitor) => ({
             visitorPrincipalId: visitor as never,
             channel: "messenger" as const,
           })),
@@ -385,6 +388,11 @@ describe.skipIf(!url)("Quills directory", () => {
           ticket({ deletedAt: new Date() }),
           ticket({ requesterPrincipalId: tester as never }),
           ticket({ type: "back_office" }),
+          ticket({
+            companyId: otherCompany as never,
+            requesterPrincipalId: otherPerson as never,
+          }),
+          ticket({ companyId: null, requesterPrincipalId: loner as never }),
         ])
         .returning({ id: tickets.id });
       // A back-office ticket linked to the test thread is test data too.
@@ -398,6 +406,9 @@ describe.skipIf(!url)("Quills directory", () => {
     const res = await call("GET", `/companies/${companyId}/activity`);
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ conversations: 1, tickets: 1 });
+    expect(
+      (await call("GET", `/companies/${otherCompany}/activity`)).body,
+    ).toEqual({ conversations: 1, tickets: 1 });
     expect(
       (await call("GET", `/companies/${foreignCompany}/activity`)).status,
     ).toBe(404);
