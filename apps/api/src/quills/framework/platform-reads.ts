@@ -312,6 +312,31 @@ export async function memberQuillsActions(workspaceId: string, userId: string) {
   return held;
 }
 
+/**
+ * The Kaneo user ID of the one current, unbanned member of this workspace whose verified account email
+ * is `email`, or null. It names an account for an external identity (a Slack profile email); the
+ * caller still checks that account's Quills actions with memberQuillsActions.
+ */
+export async function memberByVerifiedEmail(
+  workspaceId: string,
+  email: string,
+) {
+  const rows = await platformDb
+    .select({ userId: userTable.id })
+    .from(workspaceUserTable)
+    .innerJoin(userTable, eq(userTable.id, workspaceUserTable.userId))
+    .where(
+      and(
+        eq(workspaceUserTable.workspaceId, workspaceId),
+        sql`lower(${userTable.email}) = ${email.trim().toLowerCase()}`,
+        eq(userTable.emailVerified, true),
+        sql`coalesce(${userTable.banned},false)=false`,
+      ),
+    )
+    .limit(2);
+  return rows.length === 1 ? rows[0]!.userId : null;
+}
+
 /** Whether Kaneo's plan check passes, for a read that shows an upgrade prompt. */
 export async function hasWorkspaceEntitlement(workspaceId: string) {
   try {
