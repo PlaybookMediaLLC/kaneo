@@ -159,7 +159,30 @@ Filled by lane P1.
 
 ### ClickUp
 
-Filled by lane P2.
+| Source | Route | operationId |
+|---|---|---|
+| `getClickUpConnectUrl` | `GET /oauth/clickup/connect` | `startQuillsClickupOAuthConnect` |
+| `fetchClickUpSpacesFn` | `GET /integrations/{integrationId}/destinations` (default kind, or `?kind=space`) | `listQuillsIntegrationDestinations` |
+| `fetchClickUpListsFn` | `GET /integrations/{integrationId}/destinations?kind=list&parent=<space ID>` | `listQuillsIntegrationDestinations` |
+
+- Boundary: the map at the top of this file. Both routes need `manage_settings`. The provider calls
+  only `app.clickup.com` and `api.clickup.com`, with no transaction open.
+- Connect: the callback exchanges the code at `/api/v2/oauth/token`, then reads `/api/v2/team`. It
+  stores the first ClickUp workspace (a team in the API) in `config.teamId`. The sealed secret is
+  `accessToken`; ClickUp tokens do not expire.
+- Destinations: `destinationKinds: { space: {}, list: { parent: "space" } }`. Spaces come from the
+  stored team. Lists are the folderless lists of one space. The route lists the team's spaces first
+  and refuses a space that is not among them (404), so the token never reads another team's space.
+  The route keeps only IDs of 1 to 30 letters and digits.
+- Tests: `providers/clickup.test.ts` (local provider server): connect with a sealed token, spaces by
+  default and by kind, lists with the limit of 200, a foreign space refused before the list call,
+  refused kind and parent values, and malformed answers (400 and 502 with fixed text).
+
+| Difference from the source | Reason |
+|---|---|
+| A connect without a ClickUp team fails. The source stored `unknown`. | The space list needs the team. |
+| A list request names a space of the stored team. The source listed any space ID it got. | Authorization: the token may reach more teams. |
+| No task creation, status sync or webhook. | Delivery and status sync are out of scope for #131. |
 
 ### Trello
 

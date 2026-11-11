@@ -2,6 +2,7 @@
 import { ProviderCallError } from "../../framework/integration-config";
 import type { OAuthConnect, OAuthProvider } from "../oauth-providers";
 import { asana } from "./asana";
+import { clickup } from "./clickup";
 import { discord } from "./discord";
 import { github } from "./github";
 import { gitlab } from "./gitlab";
@@ -19,6 +20,7 @@ export const oauthProviders = {
   slack,
   discord,
   asana,
+  clickup,
 } satisfies Record<string, OAuthProvider>;
 type Registry = typeof oauthProviders;
 export const oauthProvider = (type: string): OAuthProvider | undefined =>
