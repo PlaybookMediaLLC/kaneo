@@ -108,11 +108,15 @@ before the call (never retried; a rejected refresh is `auth_required`) and the n
 with the outcome.
 
 Each provider is one file in `providers/`. `providers/index.ts` collects them in one registry.
+`providers/README.md` gives the steps to add a provider and the rules. It also describes the
+destination kinds (`kind` and `parent` on the destinations route) and the connect fields (query
+values of a connect route, carried in the signed state).
 
 ## Providers in RFC 0001
 
 Decision D7 (RFC 0001) puts these providers in scope. Each provider lane fills only its own heading:
-the boundary map, the routes, the tests and the differences from the source.
+the boundary map, the routes, the tests and the differences from the source. Follow
+`providers/README.md`.
 
 ### Jira
 
@@ -136,7 +140,8 @@ Filled by lane P2.
 
 ### Trello
 
-Filled by lane P2.
+Filled by lane P2. The connect is deferred: the token returns in a URL fragment, and no page reads it
+yet. The design and what is missing are in `providers/README.md` ("Trello").
 
 ### Monday
 
