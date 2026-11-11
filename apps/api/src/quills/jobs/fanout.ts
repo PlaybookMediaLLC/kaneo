@@ -22,6 +22,7 @@ import { boardProjects } from "../../database/quills/schema/platform-links";
 import { postComments, posts } from "../../database/quills/schema/posts";
 import { postStatuses } from "../../database/quills/schema/statuses";
 import { webhooks } from "../../database/quills/schema/webhooks";
+import { enqueueWorkflowRuns } from "../automation/engine";
 import { seesBoard } from "../feedback/visibility";
 import {
   accessibleProjectIds,
@@ -42,6 +43,7 @@ export type DeliveryEvent = Pick<
   | "entityType"
   | "entityId"
   | "actorId"
+  | "actorType"
   | "payload"
   | "context"
   | "occurredAt"
@@ -186,6 +188,7 @@ export async function loadEvent(db: Database, eventId: string) {
       entityType: events.entityType,
       entityId: events.entityId,
       actorId: events.actorId,
+      actorType: events.actorType,
       payload: events.payload,
       context: events.context,
       occurredAt: events.occurredAt,
@@ -231,6 +234,7 @@ export async function fanOut(workspaceId: string, eventId: string) {
       return undefined;
     const queue = eventQueues[event.type];
     if (queue) await enqueueQuillsJob(db, queue, { eventId }, eventId, 3);
+    await enqueueWorkflowRuns(db, event);
     // Private comments stay inside the workspace. A board filter applies only to events about a board.
     const { boardId, isPrivate } = await placeOf(db, event);
     const hooks = isPrivate

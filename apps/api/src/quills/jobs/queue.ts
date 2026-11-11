@@ -12,6 +12,8 @@ export const LEASE_SECONDS = 300;
 /** Queues the worker executes. A row in any other queue is never claimed. Keep in step with quills.runnable_workspaces. */
 export const QUILLS_QUEUES = [
   "quills.event",
+  // Short database work; it must not wait behind slow webhook and mail backlogs.
+  "quills.workflow",
   "quills.webhook",
   "quills.mail",
   "quills.notification",

@@ -1,3 +1,4 @@
+import automation from "./automation/index";
 import content from "./content/index";
 import delivery from "./delivery";
 import directory from "./directory/index";
@@ -72,4 +73,5 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", operations)
   .route("/", supportTickets)
   .route("/", supportConversations)
+  .route("/", automation)
   .openapi(...context);

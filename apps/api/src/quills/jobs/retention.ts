@@ -25,6 +25,8 @@ export async function pruneQuillsWorkspace(
     sql`DELETE FROM quills.email_log WHERE (workspace_id,id) IN (SELECT workspace_id,id FROM quills.email_log WHERE created_at<least(now()-${policy.logs}*interval '1 day',date_trunc('month',now())) ORDER BY created_at LIMIT 1000)`,
     sql`DELETE FROM quills.ai_usage_log WHERE (workspace_id,id) IN (SELECT workspace_id,id FROM quills.ai_usage_log WHERE created_at<least(now()-${policy.logs}*interval '1 day',date_trunc('month',now())) ORDER BY created_at LIMIT 1000)`,
     sql`UPDATE quills.export_runs SET s3_key=NULL WHERE expires_at<=now() AND s3_key IS NOT NULL`,
+    // Finished workflow runs, with their events (cascade), after the event retention.
+    sql`DELETE FROM quills.workflow_runs WHERE (workspace_id,id) IN (SELECT workspace_id,id FROM quills.workflow_runs WHERE state IN ('done','interrupted') AND started_at<now()-${policy.events}*interval '1 day' ORDER BY started_at LIMIT 1000)`,
     // Rows that anonymous portal and widget traffic creates: expired widget sessions, install
     // codes and rate-limit windows. Both indexes on expiry back these batches.
     sql`DELETE FROM quills.kv_store WHERE (workspace_id,workspace_key,key) IN (SELECT workspace_id,workspace_key,key FROM quills.kv_store WHERE expires_at<=now() LIMIT 1000)`,

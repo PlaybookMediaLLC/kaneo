@@ -13,7 +13,9 @@ import { runDomainCheckJob } from "./handlers/domain-check";
 import { runMailJob } from "./handlers/mail";
 import { runNotificationJob } from "./handlers/notification";
 import { runWebhookJob } from "./handlers/webhook";
+import { runQuillsSweeps } from "./handlers/sweeps";
 import { runWipeJob } from "./handlers/wipe";
+import { runWorkflowJob } from "./handlers/workflow";
 import {
   claimQuillsJob,
   enqueueQuillsEvent,
@@ -36,6 +38,7 @@ const handlers: Record<
   "quills.notification": runNotificationJob,
   "quills.domain_check": runDomainCheckJob,
   "quills.wipe": runWipeJob,
+  "quills.workflow": runWorkflowJob,
 };
 
 export async function deliverQuillsChange(
@@ -179,6 +182,8 @@ export async function runQuillsJobs() {
   for (const row of page.rows) {
     if (Date.now() >= deadline) break;
     try {
+      // Timed work first (snooze wakes, scheduled publishes, maintenance bounds): it can queue jobs.
+      degraded = (await runQuillsSweeps(row.workspaceId)).degraded || degraded;
       degraded =
         (await drainQuillsWorkspace(row.workspaceId)).degraded || degraded;
     } catch {
