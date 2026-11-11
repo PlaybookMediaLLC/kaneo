@@ -120,7 +120,39 @@ the boundary map, the routes, the tests and the differences from the source. Fol
 
 ### Jira
 
-Filled by lane P1.
+```
+Tables and owning schema:  quills: integrations, integration_platform_credentials, principal, kv_store
+                           (state nonce), events, job_queue, audit_log. public: none.
+Actor and workspace:       connect and destinations: authenticated context. Callback: the signed state.
+Permissions:               workspace:read + quills:manage_settings (callback: the session account still holds it).
+Transactions:              read, call Atlassian with no transaction open, then write in a new one.
+External effects:          token exchange and refresh (auth.atlassian.com), accessible resources,
+                           project and issue type lists (api.atlassian.com). No issue is created.
+```
+
+| Source function | operationId | Route | Action | Tests |
+|---|---|---|---|---|
+| `getJiraConnectUrl` | `startQuillsJiraOAuthConnect` | `GET /oauth/jira/connect` | manage_settings | contract; `providers/jira.test.ts` |
+| `fetchJiraProjectsFn` | `listQuillsIntegrationDestinations` | `GET /integrations/{integrationId}/destinations?kind=project` (or no `kind`) | manage_settings | contract (GitHub); `providers/jira.test.ts` |
+| `fetchJiraIssueTypesFn` | `listQuillsIntegrationDestinations` | `GET /integrations/{integrationId}/destinations?kind=issue-type&parent=<project ID>` | manage_settings | `providers/jira.test.ts` |
+
+- The callback stores the cloud ID of the first site in `accessible-resources` in `config.cloudId`. A cloud
+  ID that is not a UUID refuses the connect (400). Each list checks the stored cloud ID again before it
+  builds `https://api.atlassian.com/ex/jira/<cloudId>/…`; a bad value answers 409 with no call.
+- Project and issue type IDs are numeric; the route drops any other ID. An issue type list needs a project
+  that the project list contains (404 otherwise, with no issue type call).
+- Access tokens expire after one hour. A due token is refreshed before the call; Atlassian rotates the
+  refresh token. A rejected refresh (400 or 403) answers 409 "Reconnect".
+- Tests against the local provider server: exchange, both kinds, a foreign project, a bad stored cloud
+  ID, refresh and rejected refresh, a malformed `accessible-resources` (400) and project list (502).
+
+| Difference from the source | Reason |
+|---|---|
+| Scope `read:jira-work offline_access`, not `write:jira-work manage:jira-webhook` | Issue #131 lists projects and issue types only. Delivery and status sync add their scopes and a reconnect. |
+| No `events` and no status sync | Out of scope for #131. |
+| A connect with no valid cloud ID fails; the source stored `unknown` | The cloud ID enters every API path. |
+| `siteUrl` is the connection's `account`, not a `config` value | Only the issue links of delivery use it. |
+| A malformed list answer is 502, not an empty list or a raw error | Provider text never reaches a response. |
 
 ### Linear
 
