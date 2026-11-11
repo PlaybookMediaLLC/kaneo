@@ -177,6 +177,13 @@ export const [
   getQuillsWidgetConversationLinkedTicket,
   getQuillsConversationLinkedTicket,
 ] = both((audience) => onConversation(audience));
+/** The caller's own ticket: customer B, another visitor and a teammate get unavailable. */
+export const [getQuillsWidgetEmbedPreview, getQuillsEmbedPreview] = both(
+  (audience) =>
+    customerFixture(audience, (w) => ({
+      query: { kind: "ticket", id: w.ticket.ticketId },
+    })),
+);
 
 /** A fresh rating token for a new conversation of a widget visitor in A. */
 const csatWorld = async (env: ContractEnv) => {
