@@ -26172,7 +26172,7 @@
           "Quills"
         ],
         "summary": "Get an embed preview card for the portal",
-        "description": "`id` is the post, changelog entry or ticket ID, or the article slug. A record the caller may not see, or that does not exist, answers unavailable: true. A ticket shows only to its requester.",
+        "description": "`id` is the post, changelog entry or ticket ID, or the article slug (visible ASCII). A record the caller may not see, or that does not exist, answers unavailable: true. A ticket shows only to its requester.",
         "security": [],
         "parameters": [
           {
@@ -26205,7 +26205,8 @@
             "schema": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 200
+              "maxLength": 200,
+              "pattern": "^[\\x21-\\x7e]+$"
             },
             "required": true,
             "name": "id",
@@ -29315,7 +29316,7 @@
           "Quills"
         ],
         "summary": "Get an embed preview card for the widget",
-        "description": "`id` is the post, changelog entry or ticket ID, or the article slug. A record the caller may not see, or that does not exist, answers unavailable: true. A ticket shows only to its requester.",
+        "description": "`id` is the post, changelog entry or ticket ID, or the article slug (visible ASCII). A record the caller may not see, or that does not exist, answers unavailable: true. A ticket shows only to its requester.",
         "security": [],
         "parameters": [
           {
@@ -29348,7 +29349,8 @@
             "schema": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 200
+              "maxLength": 200,
+              "pattern": "^[\\x21-\\x7e]+$"
             },
             "required": true,
             "name": "id",
