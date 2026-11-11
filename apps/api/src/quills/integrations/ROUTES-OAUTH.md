@@ -214,7 +214,27 @@ yet. The design and what is missing are in `providers/README.md` ("Trello").
 
 ### Notion
 
-Filled by lane P2.
+| Source | Route | operationId |
+|---|---|---|
+| `getNotionConnectUrl` | `GET /oauth/notion/connect` | `startQuillsNotionOAuthConnect` |
+| `fetchNotionDatabasesFn` | `GET /integrations/{integrationId}/destinations` | `listQuillsIntegrationDestinations` |
+
+- Boundary: the map at the top of this file. Both routes need `manage_settings`. The provider calls
+  only `api.notion.com`, with no transaction open.
+- Connect: the callback exchanges the code at `/v1/oauth/token`. The OAuth app authenticates with
+  HTTP Basic, so the client secret is never in the body. The answer names the workspace and the
+  owner. The sealed secret is `accessToken`; Notion tokens do not expire.
+- Destinations: one kind, the databases that the teammate shared with the integration
+  (`POST /v1/search`, one page of 100, `Notion-Version: 2022-06-28`). The route keeps only UUID IDs.
+- Tests: `providers/notion.test.ts` (local provider server): connect with HTTP Basic and a sealed
+  token, the limit of 200, UUID filter and titles, a refused `kind`, and malformed answers (400 and
+  502 with fixed text).
+
+| Difference from the source | Reason |
+|---|---|
+| The Notion workspace ID is not stored. | No route uses it. |
+| The account label is the owner's name. The source stored no account label. | The integration summary shows `account`. |
+| No page creation. | Delivery is out of scope for #131. |
 
 ### HubSpot
 
