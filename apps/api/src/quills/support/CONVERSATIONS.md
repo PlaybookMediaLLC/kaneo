@@ -135,6 +135,38 @@ Merged: 1 (`bulkQuillsUpdateConversations`, split by action: `delete_forever` ne
 action). All or nothing: one missing ID, one blocked close or one invalid assignee returns 404 or 409
 and changes nothing. The `macro` action belongs to the macros slice.
 
+## Test conversations (RFC 0001, lane M1)
+
+`test-conversations.ts`.
+
+```
+Tables and owning schema:  quills: conversations and their cascades (messages, tags, participants,
+                           summaries), principal (read), ticket_conversations (read), tickets
+                           (the pair tickets of the deleted threads). public: none.
+Actor and workspace:       authenticated context (helper).
+Permissions:               workspace:read + quills:delete. No native permissions.
+Persisted relationships:   principal.test_owner_principal_id marks a test customer;
+                           ticket_conversations finds the pair ticket of a thread.
+Transaction:               one scoped transaction: the pair tickets, the conversations and the
+                           outbox event commit together or not at all.
+External effects:          none. Attachment cleanup is queued by the storage triggers.
+Completion checks:         authenticated endpoint, tenant/object access, mutation or batch.
+```
+
+| operationId | Route | Action | Tables | Event | Tests |
+|---|---|---|---|---|---|
+| `deleteQuillsTestConversations` | `DELETE /test-conversations` | delete | `conversations`, `principal`, `ticket_conversations`, `tickets` | `conversation.test_deleted` (entity `workspace`, `count`) when one or more were deleted | contract, rollback, `test-conversations.test.ts` |
+
+Merged: `test-customer.ts#deleteTestConversationsFn`.
+
+- Only a conversation whose visitor is a test customer is deleted. Workspace row security keeps
+  the delete in the caller's workspace.
+- The pair ticket of a deleted thread goes with it when a test customer requested it, as in the
+  source. Another ticket of a test customer stays.
+- Differences from the source: the route is `DELETE` (the source is a server function), and it
+  records an outbox event so caches refresh. Every teammate sees every conversation (D2), so
+  every test customer's threads go, not only the caller's.
+
 ## Tags
 
 | operationId | Route | Action | Tables | Event |

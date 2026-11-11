@@ -85,6 +85,58 @@ Merged: `portal-access.ts#evaluateMyPortalAccessFn`; `portal-access.ts#recordPor
 
 Merged: `portal-access.ts#updatePortalAccessFn`.
 
+## Public profiles (RFC 0001, lane M1)
+
+`public-profile.ts`. A profile is a leak path, so it shows only public fields and only activity
+that the caller can see.
+
+```
+Tables and owning schema:      quills: principal, settings, boards, board_projects, posts,
+                               post_comments, post_statuses (public profile); principal,
+                               customer_identity, companies, segments, user_segments,
+                               visitor_devices (team context). public: none.
+Actor and workspace source:    public profile: the portal resolver (Kaneo session, sign-in
+                               optional); workspace from the path. Team context: the teammate
+                               helper (authenticated context).
+Permissions:                   public profile: none of Kaneo's; the portal flag and the
+                               private-portal gate (viewer.ts). Team context: workspace:read +
+                               quills:read.
+Persisted relationships:       posts.principal_id, post_comments.principal_id, posts.board_id
+                               and the board view tiers and project links (viewer.ts).
+Transaction:                   one scoped read transaction per request.
+External effects:              none.
+Completion checks:             authenticated endpoint, tenant/object access, read/search.
+```
+
+| operationId | Route | Audience | Action | Tables | Event | Tests |
+|---|---|---|---|---|---|---|
+| `getQuillsPublicUserProfile` | `GET /portal/profiles/{principalId}` | portal, sign-in optional | read | `principal`, `boards`, `board_projects`, `posts`, `post_comments`, `post_statuses` | - | contract, `public-profile.test.ts` |
+| `getQuillsProfileTeamContext` | `GET /profiles/{principalId}/team-context` (path under `/quills/{workspaceId}`) | teammate | read | `principal`, `customer_identity`, `companies`, `segments`, `user_segments`, `visitor_devices` | - | contract, `public-profile.test.ts` |
+
+Merged: `public-profile.ts#getPublicUserProfileFn`; `public-profile.ts#getProfileTeamContextFn`.
+
+Rules of the public profile:
+
+- A profile resolves only for a principal of type `user` with a portal role, that is not blocked
+  and not a test customer. Anything else is 404 `Profile not found`, the same answer as an
+  unknown ID or an ID of another workspace.
+- Activity uses the customer view of `feedback/viewer.ts`: visible boards, live posts, public
+  comments, no held content of other people and no test data. A profile with no activity that
+  the caller can see is 404, so the route does not confirm that an account exists.
+- The response holds the display name, an http(s) avatar URL, `isTeamMember`, the join date, two
+  counts and two lists of at most 100 items. It never holds an email, a company, segments or a
+  last-seen time; the team context has those.
+
+| Item | Source | Here | Reason |
+|---|---|---|---|
+| Portal off, private portal denied | `null` (404) | 404 while the portal is off; 403 `Portal access required` on a private portal, as every portal route | one gate for every portal route (`viewer.ts`) |
+| Upvotes | list and `voteCount` | not returned | P3b keeps voter names private; a list of upvoted posts names the voter |
+| Blocked person | resolves | 404 | a blocked person is out of the portal |
+| Avatar | uploaded image, account image or principal avatar | the principal's http(s) avatar, as the portal post list | one avatar rule for the portal |
+| Team context `lastSeenAt` | latest session or device | latest visitor device | sessions are Kaneo's |
+| Team context email of a teammate | account email | null | a teammate's email is Kaneo's; `getQuillsPrincipal` has the roster |
+| Links to profiles | author names link to `/u/{principalId}` | portal lists name no author principal IDs (P3b) | a client reaches a profile by an ID it already has, for example its own from `GET /user/profile`; exposing author IDs needs an owner decision |
+
 ## Not built in this slice
 
 | Source | Reason |
