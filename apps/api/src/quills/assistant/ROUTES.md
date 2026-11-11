@@ -229,6 +229,11 @@ normalised under 1. Ties go to the newest update, then kind and ID. Each kind re
 A "contains" match needs 3 characters; a query of 2 characters uses full text only, and a shorter
 query returns nothing.
 
+Known limit, as in the source and the inbox search: the `@@` and `ILIKE` operators are not leakproof,
+so under row security no text index serves them. A search without `kind` reads the workspace's live
+messages twice (conversations and tickets) and every subject and title; a `kind` narrows the work to
+one query. The excerpt of a message match is read by primary key for the kept rows only.
+
 Differences from the source, on purpose:
 
 - Every kind needs only `quills:read`: Kaneo has no `changelog.view_draft`, `help_center.manage`,

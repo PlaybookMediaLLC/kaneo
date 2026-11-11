@@ -40,12 +40,21 @@ export function textOrTitle(text: string, tsq: SQL, vector: SQL, title: SQL) {
   };
 }
 
-/** Best score first, then the newest update (none last), then the ID. */
+/**
+ * Best score first, then the newest update (none last), then the ID. The update time is cut to
+ * milliseconds, as the JavaScript dates of the merge, so both sort a kind's rows the same way.
+ */
 export const bestFirst = (
   score: SQL,
-  updatedAt: SQL | AnyColumn,
+  updatedAt: SQL | AnyColumn | null,
   id: SQL | AnyColumn,
-) => [sql`${score} desc`, sql`${updatedAt} desc nulls last`, sql`${id}`];
+) => [
+  sql`${score} desc`,
+  ...(updatedAt
+    ? [sql`date_trunc('milliseconds', ${updatedAt}) desc nulls last`]
+    : []),
+  sql`${id}`,
+];
 
 const EXCERPT_CHARS = 200;
 

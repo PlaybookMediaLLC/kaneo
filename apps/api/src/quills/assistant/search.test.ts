@@ -2,10 +2,18 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import type { TypeId } from "@kaneo/ids";
+import { eq, inArray } from "drizzle-orm";
+import { principal } from "../../database/quills/schema/auth";
 import { boards } from "../../database/quills/schema/boards";
+import { changelogEntries } from "../../database/quills/schema/changelog";
 import { conversationMessages } from "../../database/quills/schema/conversation";
+import {
+  helpCenterArticles,
+  helpCenterCategories,
+} from "../../database/quills/schema/kb";
 import { boardProjects } from "../../database/quills/schema/platform-links";
 import { posts } from "../../database/quills/schema/posts";
+import { tickets, ticketStatuses } from "../../database/quills/schema/tickets";
 import * as kaneo from "../../database/schema";
 import type { Database, QuillsActor } from "../framework/define-route";
 import { startFeature } from "../feedback/harness.fixture";
@@ -108,6 +116,67 @@ async function side(
     spamReason: "manual",
     resolvedAt: new Date(),
   });
+  // Matched only through a deleted message: never found, and its text never shows.
+  const quiet = await conversation(db, actor.principalId, visitor, {
+    subject: "Quiet",
+  });
+  await db.insert(conversationMessages).values({
+    conversationId: quiet.conversationId,
+    principalId: actor.principalId,
+    senderType: "agent",
+    content: "the zebra secret",
+    deletedAt: new Date(),
+  });
+  const [status] = await db
+    .select({ id: ticketStatuses.id })
+    .from(ticketStatuses)
+    .where(eq(ticketStatuses.isDefault, true))
+    .limit(1);
+  const ticket = async (
+    title: string,
+    values: Partial<typeof tickets.$inferInsert> = {},
+  ) =>
+    (
+      await db
+        .insert(tickets)
+        .values({
+          title,
+          statusId: status!.id,
+          requesterPrincipalId: visitor,
+          ...values,
+        })
+        .returning({ id: tickets.id })
+    )[0]!.id;
+  const [category] = await db
+    .insert(helpCenterCategories)
+    .values({ name: "Search", slug: `search-${Date.now()}-${Math.random()}` })
+    .returning({ id: helpCenterCategories.id });
+  const article = async (title: string, deletedAt?: Date) =>
+    (
+      await db
+        .insert(helpCenterArticles)
+        .values({
+          categoryId: category!.id,
+          title,
+          slug: `article-${Date.now()}-${Math.random()}`,
+          content: title,
+          principalId: actor.principalId,
+          deletedAt,
+        })
+        .returning({ id: helpCenterArticles.id })
+    )[0]!.id;
+  const entry = async (title: string, deletedAt?: Date) =>
+    (
+      await db
+        .insert(changelogEntries)
+        .values({
+          title,
+          content: title,
+          principalId: actor.principalId,
+          deletedAt,
+        })
+        .returning({ id: changelogEntries.id })
+    )[0]!.id;
   return {
     visitor,
     tester,
@@ -118,12 +187,23 @@ async function side(
     byMessage: byMessage.conversationId,
     test: test.conversationId,
     spam: spam.conversationId,
+    quiet: quiet.conversationId,
+    ticket: await ticket("Zebra ticket"),
+    goneTicket: await ticket("Zebra ticket gone", { deletedAt: new Date() }),
+    testTicket: await ticket("Zebra ticket test", {
+      requesterPrincipalId: tester,
+    }),
+    article: await article("Zebra guide"),
+    goneArticle: await article("Zebra guide gone", new Date()),
+    entry: await entry("Zebra release"),
+    goneEntry: await entry("Zebra release gone", new Date()),
   };
 }
 
 describe.skipIf(!url)("Workspace search visibility", () => {
   let a: Awaited<ReturnType<typeof side>>;
   let b: Awaited<ReturnType<typeof side>>;
+  let formerTeammate: string;
 
   beforeAll(async () => {
     pool = new Pool({ connectionString: url, max: 5 });
@@ -143,6 +223,53 @@ describe.skipIf(!url)("Workspace search visibility", () => {
     b = await world.scoped(world.b, users.outsider, (db, actor) =>
       side(db, actor),
     );
+    // A third member, so three teammates tie on the "starts with" tier, and a former member whose
+    // actor stays for history. world.stop() removes both accounts.
+    const prefix = users.owner.replace(/_owner$/, "");
+    const extra = `${prefix}_extra`;
+    const former = `${prefix}_former`;
+    await world.db.insert(kaneo.userTable).values(
+      [extra, former].map((id) => ({
+        id,
+        name: id,
+        email: `${id}@example.test`,
+      })),
+    );
+    Object.assign(users, { extra, former });
+    await world.db.insert(kaneo.workspaceUserTable).values(
+      [extra, former].map((userId) => ({
+        workspaceId: world.a,
+        userId,
+        role: "member",
+        joinedAt: new Date(),
+      })),
+    );
+    for (const user of [users.member, extra])
+      await world.scoped(world.a, user, async () => {});
+    // Actors get random IDs. Give the lowest ID the oldest time, so a tie order by age would
+    // disagree with the merge's order by ID.
+    await world.scoped(world.a, users.owner, async (db) => {
+      const mates = await db
+        .select({ id: principal.id })
+        .from(principal)
+        .where(
+          inArray(principal.kaneoUserId, [users.owner, users.member, extra]),
+        )
+        .orderBy(principal.id);
+      for (const [index, mate] of mates.entries())
+        await db
+          .update(principal)
+          .set({ createdAt: new Date(Date.now() - (3 - index) * 60000) })
+          .where(eq(principal.id, mate.id));
+    });
+    formerTeammate = await world.scoped(
+      world.a,
+      former,
+      async (_db, actor) => actor.principalId,
+    );
+    await world.db
+      .delete(kaneo.workspaceUserTable)
+      .where(eq(kaneo.workspaceUserTable.userId, former));
   }, 120000);
   afterAll(() => world?.stop());
 
@@ -173,18 +300,35 @@ describe.skipIf(!url)("Workspace search visibility", () => {
     const found = await search(member, "q=zebra&limit=50");
     const foundIds = ids(found);
     expect(foundIds).toEqual(
-      expect.arrayContaining([a.openPost, a.real, a.byMessage]),
+      expect.arrayContaining([
+        a.openPost,
+        a.real,
+        a.byMessage,
+        a.ticket,
+        a.article,
+        a.entry,
+      ]),
     );
     for (const id of [
       ...a.hiddenPosts,
       a.test,
       a.spam,
+      a.quiet,
+      a.goneTicket,
+      a.testTicket,
+      a.goneArticle,
+      a.goneEntry,
       ...b.hiddenPosts,
       b.openPost,
       b.real,
       b.byMessage,
+      b.ticket,
+      b.article,
+      b.entry,
     ])
       expect(foundIds).not.toContain(id);
+    // A deleted message's text never reaches an excerpt.
+    expect(JSON.stringify(found)).not.toContain("secret");
     // The owner sees the hidden board, never workspace B.
     const ownerIds = ids(await search(owner, "q=zebra&limit=50"));
     expect(ownerIds).toEqual(expect.arrayContaining(a.hiddenPosts));
@@ -210,7 +354,33 @@ describe.skipIf(!url)("Workspace search visibility", () => {
       await search(member, `q=${prefix}&kind=teammate&limit=50`),
     );
     expect(teammates).toContain(a.teammate);
-    expect(teammates).not.toContain(b.teammate);
+    for (const id of [b.teammate, formerTeammate])
+      expect(teammates).not.toContain(id);
+  });
+
+  it("pages each kind without a repeat or a gap", async () => {
+    const { owner } = world.users;
+    // Four posts: three tie on score and update time, so the ID decides their order.
+    const first = await search(owner, "q=zebra&kind=post&limit=1");
+    expect(first.hasMore).toBe(true);
+    const rest = await search(owner, "q=zebra&kind=post&offset=1&limit=3");
+    expect(rest.hasMore).toBe(false);
+    const posts = [...ids(first), ...ids(rest)];
+    expect(new Set(posts).size).toBe(4);
+    expect(posts.sort()).toEqual([...a.hiddenPosts, a.openPost].sort());
+    // Three current teammates tie on the "starts with" tier.
+    const prefix = owner.replace(/_owner$/, "");
+    const teammates: string[] = [];
+    for (const offset of [0, 1, 2])
+      teammates.push(
+        ...ids(
+          await search(
+            owner,
+            `q=${prefix}&kind=teammate&limit=1&offset=${offset}`,
+          ),
+        ),
+      );
+    expect(new Set(teammates).size).toBe(3);
   });
 
   it("finds nothing for a one-character query and stops at 100", async () => {

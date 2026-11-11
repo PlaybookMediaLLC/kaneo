@@ -93,7 +93,7 @@ const excerptOf = (column: SQL | AnyColumn) =>
 
 /**
  * Each parent's best live message that matches the query (internal notes too, as the inbox search),
- * as `best(parent_id, rank, content)`. `parent` names the message's parent record.
+ * as `best(parent_id, rank, message_id)`. `parent` names the message's parent record.
  */
 function bestMessages(db: Database, s: Search, parent: SQL, paired = false) {
   const rank = sql`ts_rank(${conversationMessages.searchVector}, ${s.tsq}, 32)`;
@@ -101,7 +101,7 @@ function bestMessages(db: Database, s: Search, parent: SQL, paired = false) {
     .selectDistinctOn([parent], {
       parentId: sql<string>`${parent}`.as("parent_id"),
       rank: sql<number>`${rank}`.as("rank"),
-      content: excerptOf(conversationMessages.content).as("content"),
+      messageId: sql<string>`${conversationMessages.id}`.as("message_id"),
     })
     .from(conversationMessages)
     .$dynamic();
@@ -128,6 +128,11 @@ function bestMessages(db: Database, s: Search, parent: SQL, paired = false) {
     .orderBy(parent, sql`${rank} desc`, desc(conversationMessages.createdAt))
     .as("best");
 }
+/** The kept message's text, read by primary key for the result rows only. */
+const matchedText = (messageId: SQL.Aliased) =>
+  sql<
+    string | null
+  >`(select left(m.content, 2000) from ${conversationMessages} m where m.id = ${messageId})`;
 
 const searchers: Record<Kind, (db: Database, s: Search) => Promise<Row[]>> = {
   post: async (db, s) => {
@@ -173,7 +178,7 @@ const searchers: Record<Kind, (db: Database, s: Search) => Promise<Row[]>> = {
         title: sql<
           string | null
         >`coalesce(${conversations.subject}, ${principal.displayName})`,
-        content: best.content,
+        content: matchedText(best.messageId),
         updatedAt: conversations.updatedAt,
         score,
       })
@@ -208,7 +213,7 @@ const searchers: Record<Kind, (db: Database, s: Search) => Promise<Row[]>> = {
       .select({
         id: tickets.id,
         title: tickets.title,
-        content: best.content,
+        content: matchedText(best.messageId),
         updatedAt: tickets.updatedAt,
         score,
       })
@@ -327,13 +332,12 @@ const searchers: Record<Kind, (db: Database, s: Search) => Promise<Row[]>> = {
         .where(
           and(
             // The teammate principal of a current member, as listQuillsPrincipals.
-            isNotNull(principal.kaneoUserId),
-            inArray(principal.kaneoUserId, [...s.members, ""]),
+            inArray(principal.kaneoUserId, s.members),
             contains,
           ),
         )
-        // A principal has no update time; the newest teammate breaks a tie.
-        .orderBy(...bestFirst(score, principal.createdAt, principal.id))
+        // A principal has no update time: the ID breaks a tie, as in the merge.
+        .orderBy(...bestFirst(score, null, principal.id))
         .limit(s.depth)
     );
   },
@@ -373,12 +377,16 @@ const result = z.object({
 });
 type Result = z.output<typeof result>;
 
-/** Best first: score, then the newest update, then kind and ID, so pages never repeat a row. */
+const order = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+/**
+ * Best first: score, then the newest update, then kind and ID. Within a kind this is the order of
+ * its SQL (`bestFirst`), so a deeper page never repeats or skips a row.
+ */
 const compare = (a: Result, b: Result) =>
   b.score - a.score ||
   (b.updatedAt?.getTime() ?? 0) - (a.updatedAt?.getTime() ?? 0) ||
-  a.kind.localeCompare(b.kind) ||
-  a.id.localeCompare(b.id);
+  order(a.kind, b.kind) ||
+  order(a.id, b.id);
 
 const search = defineQuillsRoute({
   method: "get",
