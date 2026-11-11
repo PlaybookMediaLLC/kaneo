@@ -107,6 +107,9 @@ export async function runQuillsMigrations(
     const manifest = await client.query(
       "SELECT to_regclass('quills_migrations.schema_manifest') AS name",
     );
+    // Operational indexes that the saved manifest does not list: the migration that added one
+    // committed, and its first build after the migrations did not finish.
+    let unrecorded: typeof CONCURRENT_INDEX_SPECS = [];
     if (manifest.rows[0].name) {
       const saved = await client.query<{
         tables: Record<string, { indexes: Record<string, string> | null }>;
@@ -123,8 +126,23 @@ export async function runQuillsMigrations(
         client,
         CONCURRENT_INDEX_SPECS.filter((spec) => recordedIndexes.has(spec.name)),
       );
+      // An unrecorded one may exist as an invalid or a finished build. The comparison leaves it out;
+      // ensureQuillsIndexes builds it below, and verifyQuillsPostconditions checks its definition.
+      unrecorded = CONCURRENT_INDEX_SPECS.filter(
+        (spec) => !recordedIndexes.has(spec.name),
+      );
       const match = await client.query(
-        "SELECT definition=quills_migrations.current_schema_manifest() AS matches FROM quills_migrations.schema_manifest WHERE id=true",
+        `SELECT definition=(quills_migrations.current_schema_manifest()${unrecorded
+          .map((_, i) => ` #- $${i + 1}::text[]`)
+          .join(
+            "",
+          )}) AS matches FROM quills_migrations.schema_manifest WHERE id=true`,
+        unrecorded.map((spec) => [
+          "tables",
+          / ON quills\.([a-z_]+)/.exec(spec.ddl)?.[1] ?? "",
+          "indexes",
+          spec.name,
+        ]),
       );
       if (match.rows[0]?.matches !== true)
         throw new Error(
@@ -166,7 +184,7 @@ export async function runQuillsMigrations(
       await client.query("GRANT quills_runtime TO CURRENT_USER");
     await client.query(`GRANT USAGE ON SCHEMA quills TO ${grantee}`);
     await client.query(
-      `GRANT EXECUTE ON FUNCTION quills.storage_references(), quills.storage_keys_for_workspace(text), quills.storage_object_is_referenced(text), quills.runnable_workspaces(text) TO ${grantee}`,
+      `GRANT EXECUTE ON FUNCTION quills.storage_references(), quills.storage_keys_for_workspace(text), quills.storage_object_is_referenced(text), quills.runnable_workspaces(text), quills.integration_workspace(uuid) TO ${grantee}`,
     );
     await client.query("GRANT USAGE ON SCHEMA quills TO quills_runtime");
     await client.query(
@@ -183,7 +201,10 @@ export async function runQuillsMigrations(
     );
     await ensurePageViewPartitions(client);
     await ensureQuillsIndexes(client);
-    if (appliedCount < readMigrationFiles({ migrationsFolder }).length)
+    if (
+      appliedCount < readMigrationFiles({ migrationsFolder }).length ||
+      unrecorded.length
+    )
       await client.query("SELECT quills_migrations.capture_schema_manifest()");
     await verifyQuillsPostconditions(client);
     if (!(await getMigrationStatus(client, migrationsFolder)).upToDate)

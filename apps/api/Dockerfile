@@ -22,6 +22,7 @@ COPY packages/libs/package.json ./packages/libs/
 COPY packages/permissions/package.json ./packages/permissions/
 COPY packages/importers/package.json ./packages/importers/
 COPY packages/mcp/package.json ./packages/mcp/
+COPY packages/widget/package.json ./packages/widget/
 COPY apps/api/package.json ./apps/api/
 
 # Install dependencies
@@ -36,6 +37,7 @@ COPY packages/libs ./packages/libs
 COPY packages/permissions ./packages/permissions
 COPY packages/importers ./packages/importers
 COPY packages/mcp ./packages/mcp
+COPY packages/widget ./packages/widget
 COPY i18n ./i18n
 COPY apps/api ./apps/api
 
@@ -50,6 +52,10 @@ RUN pnpm run build
 # Build importers package
 WORKDIR /app/packages/importers
 RUN pnpm run build
+
+# Build the widget page and browser SDK that the API serves (Quills)
+WORKDIR /app/packages/widget
+RUN pnpm exec tsup
 
 # Fix TypeScript config and build API
 WORKDIR /app/apps/api
@@ -108,6 +114,7 @@ COPY --from=builder --chown=appuser:appuser /app/packages/logger ./packages/logg
 COPY --from=builder --chown=appuser:appuser /app/packages/permissions ./packages/permissions
 COPY --from=builder --chown=appuser:appuser /app/packages/importers/dist ./packages/importers/dist
 COPY --from=builder --chown=appuser:appuser /app/packages/mcp/dist ./packages/mcp/dist
+COPY --from=builder --chown=appuser:appuser /app/packages/widget/dist ./packages/widget/dist
 
 # Fail the build early if the runtime dependency layout is broken on the target architecture
 RUN cd /app/apps/api && node -e "const fs=require('fs');for(const m of ['bcryptjs','hono','pg','drizzle-orm','better-auth','ioredis','valibot','octokit','@modelcontextprotocol/sdk']){fs.accessSync('node_modules/'+m+'/package.json')}for(const m of ['email','permissions','importers']){fs.accessSync('node_modules/@kaneo/'+m+'/dist/index.js')}" && \

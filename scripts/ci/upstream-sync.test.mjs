@@ -92,19 +92,19 @@ test("an already integrated upstream branch creates no PR", async () => {
   assert.match(f.messages[0], /nothing to sync/);
 });
 
-test("new commits create a review PR directly from upstream main into develop", async () => {
+test("new commits create a review PR directly from upstream main into staging", async () => {
   const f = fixture({ ahead: 2 });
   await f.run();
   assert.deepEqual(
     f.calls.map((call) => call.method),
     ["compare", "list", "create"],
   );
-  assert.equal(f.calls[0].args.basehead, "develop...usekaneo:main");
+  assert.equal(f.calls[0].args.basehead, "staging...usekaneo:main");
   const created = f.calls[2].args;
   assert.equal(created.owner, "PlaybookMediaLLC");
   assert.equal(created.repo, "kaneo");
   assert.equal(created.head, "usekaneo:main");
-  assert.equal(created.base, "develop");
+  assert.equal(created.base, "staging");
   assert.equal(created.maintainer_can_modify, false);
   assert.match(created.body, /public-branding checks/);
 });
@@ -121,7 +121,7 @@ test("an existing upstream PR is reused without duplicate writes", async () => {
     ["compare", "list"],
   );
   assert.equal(f.calls[1].args.head, "usekaneo:main");
-  assert.equal(f.calls[1].args.base, "develop");
+  assert.equal(f.calls[1].args.base, "staging");
 });
 
 test("a concurrent PR creation is accepted only when the same PR exists", async () => {

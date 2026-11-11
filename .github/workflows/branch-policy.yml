@@ -3,7 +3,7 @@ name: Branch policy
 on:
   pull_request:
     types: [opened, synchronize, reopened, edited]
-    branches: [develop, main]
+    branches: [staging, main]
 
 permissions:
   contents: read
@@ -20,11 +20,11 @@ jobs:
           HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
           BASE_REPOSITORY: ${{ github.repository }}
         run: |
-          if [[ "$BASE_REF" == "develop" ]]; then
+          if [[ "$BASE_REF" == "staging" ]]; then
             exit 0
           fi
-          if [[ "$BASE_REF" == "main" && "$HEAD_REF" == "develop" && "$HEAD_REPOSITORY" == "$BASE_REPOSITORY" ]]; then
+          if [[ "$BASE_REF" == "main" && "$HEAD_REF" == "staging" && "$HEAD_REPOSITORY" == "$BASE_REPOSITORY" ]]; then
             exit 0
           fi
-          echo "Work pull requests must target develop. Only this repository's develop branch may target main."
+          echo "Work pull requests must target staging. Only this repository's staging branch may target main."
           exit 1

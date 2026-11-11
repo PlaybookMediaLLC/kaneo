@@ -78,6 +78,9 @@ export const agentSkills = quillsSchema
         columns: [table.workspaceId, table.createdByPrincipalId],
         foreignColumns: [principal.workspaceId, principal.id],
       }).onDelete("set null"),
+      index("agent_skills_created_by_principal_id_fk_idx")
+        .on(table.workspaceId, table.createdByPrincipalId)
+        .where(sql`${table.createdByPrincipalId} IS NOT NULL`),
       workspacePolicy(table.workspaceId),
     ],
   )

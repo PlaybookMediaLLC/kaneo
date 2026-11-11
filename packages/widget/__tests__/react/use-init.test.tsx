@@ -42,7 +42,7 @@ describe("useQuackbackInit", () => {
   it("inits the widget on mount and destroys on unmount", () => {
     const destroy = vi.spyOn(Quackback, "destroy");
     function C() {
-      useQuackbackInit({ instanceUrl: ORIGIN });
+      useQuackbackInit({ instanceUrl: ORIGIN, workspace: "acme" });
       return null;
     }
     const { unmount } = render(<C />);
@@ -58,6 +58,7 @@ describe("useQuackbackInit", () => {
     function C({ user }: { user: { id: string; email: string } | null }) {
       useQuackbackInit({
         instanceUrl: ORIGIN,
+        workspace: "acme",
         identity: user ? { id: user.id, email: user.email } : undefined,
       });
       return null;
@@ -73,7 +74,11 @@ describe("useQuackbackInit", () => {
 
   it("does not init when shouldInitialize is false", () => {
     function C() {
-      useQuackbackInit({ instanceUrl: ORIGIN, shouldInitialize: false });
+      useQuackbackInit({
+        instanceUrl: ORIGIN,
+        workspace: "acme",
+        shouldInitialize: false,
+      });
       return null;
     }
     render(<C />);
@@ -82,7 +87,11 @@ describe("useQuackbackInit", () => {
 
   it("inits later when shouldInitialize flips to true", () => {
     function C({ enabled }: { enabled: boolean }) {
-      useQuackbackInit({ instanceUrl: ORIGIN, shouldInitialize: enabled });
+      useQuackbackInit({
+        instanceUrl: ORIGIN,
+        workspace: "acme",
+        shouldInitialize: enabled,
+      });
       return null;
     }
     const { rerender, unmount } = render(<C enabled={false} />);
@@ -106,7 +115,11 @@ describe("useQuackbackInit", () => {
       }),
     );
     function C() {
-      useQuackbackInit({ instanceUrl: ORIGIN, initializeDelay: 500 });
+      useQuackbackInit({
+        instanceUrl: ORIGIN,
+        workspace: "acme",
+        initializeDelay: 500,
+      });
       return null;
     }
     const { unmount } = render(<C />);
@@ -127,6 +140,7 @@ it("changes user A to B to anonymous before readiness", () => {
   function C({ id }: { id?: string }) {
     useQuackbackInit({
       instanceUrl: ORIGIN,
+      workspace: "acme",
       identity: id ? { id, email: `${id}@test.example` } : undefined,
     });
     return null;
@@ -158,6 +172,7 @@ it("delayed startup uses the latest identity and ignores changes until initializ
   }) {
     useQuackbackInit({
       instanceUrl: url,
+      workspace: "acme",
       shouldInitialize: enabled,
       initializeDelay: 500,
       identity: id ? { id, email: `${id}@test.example` } : undefined,
@@ -196,7 +211,11 @@ it("Strict Mode leaves one instance and cancels a delayed unmount", () => {
   vi.stubGlobal("requestIdleCallback", undefined);
   const init = vi.spyOn(Quackback, "init");
   function C({ delay = 0 }: { delay?: number }) {
-    useQuackbackInit({ instanceUrl: ORIGIN, initializeDelay: delay });
+    useQuackbackInit({
+      instanceUrl: ORIGIN,
+      workspace: "acme",
+      initializeDelay: delay,
+    });
     return null;
   }
   const mounted = render(

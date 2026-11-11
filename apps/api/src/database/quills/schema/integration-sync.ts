@@ -148,6 +148,10 @@ export const integrationSyncActions = quillsSchema
         name: "integration_sync_action_operation_fk",
       }).onDelete("cascade"),
       primaryKey({ columns: [t.workspaceId, t.id] }),
+      index("integration_sync_actions_operation_id_fk_idx").on(
+        t.workspaceId,
+        t.operationId,
+      ),
       workspacePolicy(t.workspaceId),
     ],
   )

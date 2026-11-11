@@ -71,6 +71,90 @@
 			"when": 1794269224964,
 			"tag": "0009_full_index_manifest",
 			"breakpoints": true
+		},
+		{
+			"idx": 10,
+			"version": "7",
+			"when": 1794339022525,
+			"tag": "0010_delivery_queues",
+			"breakpoints": true
+		},
+		{
+			"idx": 11,
+			"version": "7",
+			"when": 1794350125126,
+			"tag": "0011_customer_portal_link",
+			"breakpoints": true
+		},
+		{
+			"idx": 12,
+			"version": "7",
+			"when": 1794352433336,
+			"tag": "0012_ops_domains_wipe",
+			"breakpoints": true
+		},
+		{
+			"idx": 13,
+			"version": "7",
+			"when": 1794355813511,
+			"tag": "0013_portal_invites_hero_image",
+			"breakpoints": true
+		},
+		{
+			"idx": 14,
+			"version": "7",
+			"when": 1794357064537,
+			"tag": "0014_posts_vote_sort_index",
+			"breakpoints": true
+		},
+		{
+			"idx": 15,
+			"version": "7",
+			"when": 1794360370389,
+			"tag": "0015_transfer_queue",
+			"breakpoints": true
+		},
+		{
+			"idx": 16,
+			"version": "7",
+			"when": 1794361227240,
+			"tag": "0016_workflow_runs_sweeps",
+			"breakpoints": true
+		},
+		{
+			"idx": 17,
+			"version": "7",
+			"when": 1794363409253,
+			"tag": "0017_assistant_queue",
+			"breakpoints": true
+		},
+		{
+			"idx": 18,
+			"version": "7",
+			"when": 1794366359164,
+			"tag": "0018_signed_integration_workspace",
+			"breakpoints": true
+		},
+		{
+			"idx": 19,
+			"version": "7",
+			"when": 1794366360803,
+			"tag": "0019_integrations_id_index",
+			"breakpoints": true
+		},
+		{
+			"idx": 20,
+			"version": "7",
+			"when": 1794367443469,
+			"tag": "0020_foreign_key_indexes",
+			"breakpoints": true
+		},
+		{
+			"idx": 21,
+			"version": "7",
+			"when": 1794372909423,
+			"tag": "0021_integration_sync_purge_scope",
+			"breakpoints": true
 		}
 	]
 }

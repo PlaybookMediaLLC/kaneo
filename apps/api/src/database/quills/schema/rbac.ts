@@ -154,6 +154,9 @@ export const principalRoleAssignments = quillsSchema
         columns: [table.workspaceId, table.roleId],
         foreignColumns: [roles.workspaceId, roles.id],
       }).onDelete("cascade"),
+      index("principal_role_assignments_granted_by_principal_id_fk_idx")
+        .on(table.workspaceId, table.grantedByPrincipalId)
+        .where(sql`${table.grantedByPrincipalId} IS NOT NULL`),
       workspacePolicy(table.workspaceId),
     ],
   )

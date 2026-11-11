@@ -62,6 +62,9 @@ export const assistantGuidanceRules = quillsSchema
         columns: [table.workspaceId, table.createdById],
         foreignColumns: [principal.workspaceId, principal.id],
       }).onDelete("set null"),
+      index("assistant_guidance_rules_created_by_id_fk_idx")
+        .on(table.workspaceId, table.createdById)
+        .where(sql`${table.createdById} IS NOT NULL`),
       workspacePolicy(table.workspaceId),
     ],
   )

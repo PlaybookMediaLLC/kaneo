@@ -21,6 +21,8 @@ export const OMITTED_TABLES = [
   "import_runs",
   "export_runs",
   "onboarding_emails",
+  // A domain points at this instance and belongs to one workspace; the target sets and verifies its own.
+  "custom_domains",
 ] as const;
 export const portableTables = Object.values(schema)
   .filter((value) => is(value, PgTable))
@@ -107,6 +109,7 @@ export const STORAGE_FIELDS: Record<string, string[]> = {
     "favicon_key",
     "header_logo_key",
     "portal_og_image_key",
+    "widget_hero_key",
   ],
   customer_identity: ["image_key"],
   principal: ["avatar_key"],

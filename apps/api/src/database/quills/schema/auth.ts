@@ -291,6 +291,9 @@ export const settings = quillsSchema
       headerLogoKey: text("header_logo_key"),
       // Portal social share (OG) image - S3 storage key
       portalOgImageKey: text("portal_og_image_key"),
+      // Widget Home hero image - S3 storage key. A column, not widget_config JSON, so the
+      // storage lifecycle (probe, cleanup trigger, deletion listing, transfer) sees it.
+      widgetHeroKey: text("widget_hero_key"),
       createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
       metadata: text("metadata"),
       /**
@@ -511,6 +514,8 @@ export const settings = quillsSchema
        * lost-update on concurrent writes.
        */
       authConfigVersion: integer("auth_config_version").notNull().default(0),
+      /** Whether the portal, widget and branded mail show the "Powered by" badge. */
+      showPoweredBy: boolean("show_powered_by").notNull().default(true),
     },
     (table) => [
       primaryKey({ columns: [table.workspaceId, table.id] }),
@@ -896,6 +901,9 @@ export const oauthClient = quillsSchema
         columns: [table.workspaceId, table.userId],
         foreignColumns: [user.workspaceId, user.id],
       }).onDelete("cascade"),
+      index("oauth_client_user_id_fk_idx")
+        .on(table.workspaceId, table.userId)
+        .where(sql`${table.userId} IS NOT NULL`),
       workspacePolicy(table.workspaceId),
     ],
   )

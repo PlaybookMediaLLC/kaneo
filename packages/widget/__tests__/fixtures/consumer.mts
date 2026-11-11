@@ -49,10 +49,12 @@ export function useConsumer() {
   const sdk: typeof Quackback = useQuackback();
   sdk.init({
     instanceUrl: "https://feedback.example.com",
+    workspace: "acme",
     identity: { id: "a", email: "a@example.com" },
   });
   useQuackbackInit({
     instanceUrl: "https://feedback.example.com",
+    workspace: "acme",
     shouldInitialize: false,
   });
   useQuackbackEvent("vote", (payload: EventMap["vote"]) => {

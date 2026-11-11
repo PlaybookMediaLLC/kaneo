@@ -3,9 +3,11 @@ import { is } from "drizzle-orm";
 import { PgTable, getTableConfig } from "drizzle-orm/pg-core";
 import * as schema from "./schema";
 const tables = Object.values(schema).filter((value) => is(value, PgTable));
+/** Unique across workspaces on purpose: one custom domain belongs to one workspace. */
+const globalUnique = { custom_domains_domain_unique: "domain" };
 describe("Quills schema ownership", () => {
   it("keeps every feature table tenant-scoped and outside Kaneo's namespace", () => {
-    expect(tables.length).toBe(147);
+    expect(tables.length).toBe(149);
     for (const table of tables) {
       const config = getTableConfig(table);
       expect(config.schema, config.name).toBe("quills");
@@ -24,11 +26,16 @@ describe("Quills schema ownership", () => {
       for (const index of config.indexes.filter(
         (entry) => entry.config.unique,
       )) {
-        const first = index.config.columns[0];
-        expect(
-          first && "name" in first ? first.name : undefined,
-          index.config.name,
-        ).toBe("workspace_id");
+        const names = index.config.columns.map((column) =>
+          "name" in column ? column.name : undefined,
+        );
+        const name = index.config.name ?? "";
+        // The exception covers exactly its declared column; every other unique index starts with workspace_id.
+        if (name in globalUnique)
+          expect(names, name).toEqual([
+            globalUnique[name as keyof typeof globalUnique],
+          ]);
+        else expect(names[0], name).toBe("workspace_id");
       }
       for (const fk of config.foreignKeys) {
         const ref = fk.reference();

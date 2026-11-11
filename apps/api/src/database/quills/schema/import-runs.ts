@@ -85,6 +85,10 @@ export const importRuns = quillsSchema
       index("import_runs_status_idx").on(table.status),
       index("import_runs_created_at_idx").on(table.createdAt),
       primaryKey({ columns: [table.workspaceId, table.id] }),
+      index("import_runs_initiated_by_principal_id_fk_idx").on(
+        table.workspaceId,
+        table.initiatedByPrincipalId,
+      ),
       workspacePolicy(table.workspaceId),
     ],
   )
