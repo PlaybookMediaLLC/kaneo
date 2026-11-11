@@ -19,6 +19,7 @@ COPY packages/libs/package.json ./packages/libs/
 COPY packages/permissions/package.json ./packages/permissions/
 COPY packages/importers/package.json ./packages/importers/
 COPY packages/mcp/package.json ./packages/mcp/
+COPY packages/widget/package.json ./packages/widget/
 COPY apps/api/package.json ./apps/api/
 
 RUN pnpm install --frozen-lockfile
@@ -31,6 +32,7 @@ COPY packages/libs ./packages/libs
 COPY packages/permissions ./packages/permissions
 COPY packages/importers ./packages/importers
 COPY packages/mcp ./packages/mcp
+COPY packages/widget ./packages/widget
 COPY i18n ./i18n
 COPY apps/api ./apps/api
 
@@ -42,6 +44,10 @@ RUN pnpm run build
 
 WORKDIR /app/packages/importers
 RUN pnpm run build
+
+# The widget page and browser SDK that the API serves (Quills)
+WORKDIR /app/packages/widget
+RUN pnpm exec tsup
 
 WORKDIR /app/apps/api
 RUN pnpm run build
@@ -79,6 +85,7 @@ COPY --from=api-builder /app/packages/logger ./packages/logger
 COPY --from=api-builder /app/packages/permissions ./packages/permissions
 COPY --from=api-builder /app/packages/importers/dist ./packages/importers/dist
 COPY --from=api-builder /app/packages/mcp/dist ./packages/mcp/dist
+COPY --from=api-builder /app/packages/widget/dist ./packages/widget/dist
 
 FROM --platform=$BUILDPLATFORM node:24.22.2-alpine AS web-builder
 

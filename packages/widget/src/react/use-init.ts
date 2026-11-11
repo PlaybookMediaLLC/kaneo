@@ -13,11 +13,17 @@ export interface UseQuackbackInitOptions extends Omit<InitOptions, "identity"> {
 /**
  * Boots the Quackback widget when the host component mounts, and tears it
  * down on unmount. Identity changes (by structural equality via JSON key) fire
- * a follow-up `identify` call. Instance URL, enablement, and delay changes restart initialization. Other
+ * a follow-up `identify` call. Instance URL, workspace, enablement, and delay changes restart initialization. Other
  * options are read when startup runs. Identity removal selects anonymous mode.
  */
 export function useQuackbackInit(options: UseQuackbackInitOptions): void {
-  const { identity, shouldInitialize, initializeDelay, instanceUrl } = options;
+  const {
+    identity,
+    shouldInitialize,
+    initializeDelay,
+    instanceUrl,
+    workspace,
+  } = options;
   const shouldInit = shouldInitialize !== false;
   const startedRef = useRef(false);
   const appliedIdentity = useRef<string | null>(null);
@@ -58,7 +64,7 @@ export function useQuackbackInit(options: UseQuackbackInitOptions): void {
       startedRef.current = false;
       if (started) Quackback.destroy();
     };
-  }, [instanceUrl, shouldInit, initializeDelay]);
+  }, [instanceUrl, workspace, shouldInit, initializeDelay]);
 
   // Structural key for identity — a stable-shape object won't retrigger even
   // if the reference changes each render.

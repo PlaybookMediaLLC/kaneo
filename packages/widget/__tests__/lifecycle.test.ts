@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
 import { createSDK } from "../src/core/sdk";
 
 const ORIGIN = "https://feedback.example.com";
+const WORKSPACE = "acme";
 let sdk: ReturnType<typeof createSDK>;
 let idle: (() => void)[];
 let responses: ((value: unknown) => void)[];
@@ -46,21 +47,28 @@ function message(data: unknown) {
 }
 
 it("stale fetches and reveal timers cannot apply any state to a later init", async () => {
-  sdk.dispatch("init", { instanceUrl: ORIGIN });
+  sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
   await vi.advanceTimersByTimeAsync(1000);
-  sdk.dispatch("init", { instanceUrl: ORIGIN, placement: "right" });
+  sdk.dispatch("init", {
+    instanceUrl: ORIGIN,
+    workspace: WORKSPACE,
+    placement: "right",
+  });
   expect(signals[0].aborted).toBe(true);
   await vi.advanceTimersByTimeAsync(800);
   expect(button().style.opacity).toBe("0");
   responses[0]({
     ok: true,
     json: async () => ({
-      position: "left",
-      launcherLabel: "Old",
-      launcherGreeting: "Stale",
-      theme: { lightPrimary: "#ff0000" },
-      visitorAnalytics: true,
-      visitorDeviceTracking: true,
+      enabled: true,
+      config: {
+        position: "left",
+        launcherLabel: "Old",
+        launcherGreeting: "Stale",
+        theme: { lightPrimary: "#ff0000" },
+        visitorAnalytics: true,
+        visitorDeviceTracking: true,
+      },
     }),
   });
   await vi.advanceTimersByTimeAsync(0);
@@ -68,19 +76,22 @@ it("stale fetches and reveal timers cannot apply any state to a later init", asy
   expect(button().style.right).toBe("20px");
   expect(button().style.opacity).toBe("0");
   expect(localStorage.getItem("quackback:device-id")).toBeNull();
-  responses[1]({ ok: true, json: async () => ({ launcherLabel: "Current" }) });
+  responses[1]({
+    ok: true,
+    json: async () => ({ enabled: true, config: { launcherLabel: "Current" } }),
+  });
   await vi.advanceTimersByTimeAsync(0);
   expect(button().getAttribute("aria-label")).toBe("Current");
   expect(button().style.opacity).toBe("1");
 });
 
 it("destroy invalidates callbacks, aborts fetches and leaves no owned timers", async () => {
-  sdk.dispatch("init", { instanceUrl: ORIGIN });
+  sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
   const oldIdle = idle[0];
   sdk.dispatch("destroy");
   expect(signals[0].aborted).toBe(true);
   expect(vi.getTimerCount()).toBe(0);
-  sdk.dispatch("init", { instanceUrl: ORIGIN });
+  sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
   oldIdle();
   expect(document.querySelector("iframe")).toBeNull();
   sdk.dispatch("open", { articleId: "article_saved" });
@@ -100,7 +111,10 @@ it("destroy invalidates callbacks, aborts fetches and leaves no owned timers", a
   sdk.dispatch("destroy");
   expect(vi.getTimerCount()).toBe(0);
   responses.forEach((resolve) =>
-    resolve({ ok: true, json: async () => ({ launcherLabel: "Old" }) }),
+    resolve({
+      ok: true,
+      json: async () => ({ enabled: true, config: { launcherLabel: "Old" } }),
+    }),
   );
   await vi.advanceTimersByTimeAsync(0);
   expect(document.querySelector(".quackback-launcher")).toBeNull();
@@ -109,11 +123,11 @@ it("destroy invalidates callbacks, aborts fetches and leaves no owned timers", a
 it.each([
   null,
   {},
-  { instanceUrl: ORIGIN, tracking: "true" },
-  { instanceUrl: ORIGIN, identity: { id: 4 } },
-  { instanceUrl: ORIGIN, placement: "center" },
+  { instanceUrl: ORIGIN, workspace: WORKSPACE, tracking: "true" },
+  { instanceUrl: ORIGIN, workspace: WORKSPACE, identity: { id: 4 } },
+  { instanceUrl: ORIGIN, workspace: WORKSPACE, placement: "center" },
 ])("invalid re-init keeps the working instance: %j", (options) => {
-  sdk.dispatch("init", { instanceUrl: ORIGIN });
+  sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
   const existing = button();
   expect(() => sdk.dispatch("init", options)).toThrow();
   expect(button()).toBe(existing);
@@ -126,7 +140,9 @@ it.each([
   { visitorAnalytics: true, launcherLabel: 3 },
 ])("invalid baked config fails closed: %j", (baked) => {
   Object.assign(window, { __QUACKBACK_CONFIG__: baked });
-  expect(() => sdk.dispatch("init", { instanceUrl: ORIGIN })).not.toThrow();
+  expect(() =>
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE }),
+  ).not.toThrow();
   expect(button().style.opacity).toBe("1");
   expect(localStorage.getItem("quackback:device-id")).toBeNull();
 });
@@ -137,7 +153,7 @@ it("does not apply a baked config from another instance", () => {
     visitorAnalytics: true,
     visitorDeviceTracking: true,
   };
-  sdk.dispatch("init", { instanceUrl: ORIGIN });
+  sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
   expect(responses).toHaveLength(1);
   expect(localStorage.getItem("quackback:device-id")).toBeNull();
 });
@@ -145,6 +161,7 @@ it("does not apply a baked config from another instance", () => {
 it("keeps only the latest identity before readiness and serializes later changes", () => {
   sdk.dispatch("init", {
     instanceUrl: ORIGIN,
+    workspace: WORKSPACE,
     identity: { id: "a", email: "a@test.example" },
   });
   sdk.dispatch("identify", { id: "b", email: "b@test.example" });
@@ -193,21 +210,21 @@ it("subscriptions survive re-init until their owner unsubscribes", () => {
   const handler = vi.fn();
   const unsubscribe = sdk.dispatch("on", "ready", handler) as () => void;
   for (let i = 0; i < 2; i++) {
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     sdk.dispatch("open");
     message({ type: "quackback:ready" });
     sdk.dispatch("destroy");
   }
   expect(handler).toHaveBeenCalledTimes(2);
   unsubscribe();
-  sdk.dispatch("init", { instanceUrl: ORIGIN });
+  sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
   sdk.dispatch("open");
   message({ type: "quackback:ready" });
   expect(handler).toHaveBeenCalledTimes(2);
 });
 
 it("a failed identity send does not block later identity changes or logout", () => {
-  sdk.dispatch("init", { instanceUrl: ORIGIN });
+  sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
   sdk.dispatch("open");
   const post = vi
     .spyOn(document.querySelector("iframe")!.contentWindow!, "postMessage")

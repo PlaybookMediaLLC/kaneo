@@ -12,6 +12,7 @@ import { createSDK } from "../src/core/sdk";
 let sdk: ReturnType<typeof createSDK> | undefined;
 
 const ORIGIN = "https://feedback.acme.com";
+const WORKSPACE = "acme";
 
 function stubIframe() {
   const postMessage = vi.fn();
@@ -63,7 +64,7 @@ describe("sdk", () => {
 
   it("init creates a launcher and iframe", () => {
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     expect(
       document.querySelector('button[aria-label="Open feedback widget"]'),
     ).not.toBeNull();
@@ -74,7 +75,11 @@ describe("sdk", () => {
 
   it("init with { launcher: false } does not create a button", () => {
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, launcher: false });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      launcher: false,
+    });
     expect(
       document.querySelector('button[aria-label="Open feedback widget"]'),
     ).toBeNull();
@@ -83,11 +88,15 @@ describe("sdk", () => {
   it("a repeat init re-applies launcher: false", () => {
     stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     expect(
       document.querySelector('button[aria-label="Open feedback widget"]'),
     ).not.toBeNull();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, launcher: false });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      launcher: false,
+    });
     expect(
       document.querySelector('button[aria-label="Open feedback widget"]'),
     ).toBeNull();
@@ -96,8 +105,12 @@ describe("sdk", () => {
   it("a repeat init moves an existing launcher to the new placement", () => {
     stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
-    sdk.dispatch("init", { instanceUrl: ORIGIN, placement: "left" });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      placement: "left",
+    });
     const btn = document.querySelector(
       'button[aria-label="Open feedback widget"]',
     ) as HTMLButtonElement;
@@ -108,8 +121,10 @@ describe("sdk", () => {
   it("a repeat init that throws leaves the existing instance intact", () => {
     stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
-    expect(() => sdk.dispatch("init", { instanceUrl: "not a url" })).toThrow();
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    expect(() =>
+      sdk.dispatch("init", { instanceUrl: "not a url", workspace: WORKSPACE }),
+    ).toThrow();
     // The good first instance is untouched.
     expect(
       document.querySelector("iframe.quackback-widget-iframe"),
@@ -119,7 +134,7 @@ describe("sdk", () => {
   it("init defaults identity to anonymous once iframe is ready", () => {
     const { postMessage, spy } = stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     fireReady();
     expect(postMessage).toHaveBeenCalledWith(
       { type: "quackback:identify", data: { anonymous: true } },
@@ -133,6 +148,7 @@ describe("sdk", () => {
     sdk = createSDK();
     sdk.dispatch("init", {
       instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
       identity: { id: "u1", email: "a@b.c", name: "Ada" },
     });
     fireReady();
@@ -149,7 +165,7 @@ describe("sdk", () => {
   it("identify sends the payload after ready", () => {
     const { postMessage, spy } = stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     fireReady();
     window.dispatchEvent(
       new MessageEvent("message", {
@@ -170,7 +186,7 @@ describe("sdk", () => {
   it("logout sends null identify and keeps the launcher visible", () => {
     const { spy } = stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     fireReady();
     sdk.dispatch("logout");
     const launcher = document.querySelector(
@@ -184,7 +200,7 @@ describe("sdk", () => {
   it("keeps the closed panel out of the tab order and names the frame", () => {
     stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     const iframe = document.querySelector(
       "iframe.quackback-widget-iframe",
     ) as HTMLIFrameElement;
@@ -199,7 +215,11 @@ describe("sdk", () => {
 
   it("names the frame in the visitor language", () => {
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, locale: "de" });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      locale: "de",
+    });
     expect(
       (
         document.querySelector(
@@ -213,7 +233,7 @@ describe("sdk", () => {
     stubIframe();
     window.__QUACKBACK_CONFIG__ = {};
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     sdk.dispatch("open");
     const launcher = document.querySelector<HTMLButtonElement>(
       ".quackback-launcher",
@@ -229,13 +249,15 @@ describe("sdk", () => {
     sdk.dispatch("open");
     fireReady();
     expect(document.querySelector(".quackback-panel-close")).toBeNull();
-    expect(document.querySelector("iframe")!.src).toContain("showClose=1");
+    expect(document.querySelector("iframe")!.src).toBe(
+      `${ORIGIN}/api/quills-public/acme/widget?showClose=1`,
+    );
   });
 
   it("isOpen tracks panel state", () => {
     stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     expect(sdk.isOpen()).toBe(false);
     sdk.dispatch("open");
     expect(sdk.isOpen()).toBe(true);
@@ -246,7 +268,7 @@ describe("sdk", () => {
   it("getUser / isIdentified reflect identify-result messages", () => {
     stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     expect(sdk.getUser()).toBeNull();
     expect(sdk.isIdentified()).toBe(false);
     fireReady();
@@ -273,7 +295,7 @@ describe("sdk", () => {
   it("open emits an open event with view context", () => {
     stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     const seen: unknown[] = [];
     sdk.dispatch("on", "open", (payload: unknown) => seen.push(payload));
     sdk.dispatch("open", { view: "new-post", title: "Bug:" });
@@ -284,7 +306,7 @@ describe("sdk", () => {
   it("open passes deep-link fields to the iframe", () => {
     const { postMessage, spy } = stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     fireReady();
     sdk.dispatch("open", { postId: "post_01h" });
     expect(postMessage).toHaveBeenCalledWith(
@@ -315,7 +337,7 @@ describe("sdk", () => {
   it("open forwards the messages and tickets views to the iframe", () => {
     const { postMessage, spy } = stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     fireReady();
     sdk.dispatch("open", { view: "messages" });
     expect(postMessage).toHaveBeenLastCalledWith(
@@ -333,7 +355,7 @@ describe("sdk", () => {
   it("open event carries the messages and tickets views", () => {
     stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     const seen: Array<{ view?: string }> = [];
     sdk.dispatch("on", "open", (payload: { view?: string }) =>
       seen.push(payload),
@@ -349,7 +371,7 @@ describe("sdk", () => {
   it("metadata merges and sends to iframe", () => {
     const { postMessage, spy } = stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     fireReady();
     sdk.dispatch("metadata", { page: "/settings", app_version: "2.4.1" });
     expect(postMessage).toHaveBeenCalledWith(
@@ -370,7 +392,7 @@ describe("sdk", () => {
   it("hideLauncher hides the button; showLauncher shows it again", () => {
     stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     const launcher = () =>
       document.querySelector(
         'button[aria-label="Open feedback widget"]',
@@ -394,7 +416,7 @@ describe("sdk", () => {
       ),
     );
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     const btn = document.querySelector(
       'button[aria-label="Open feedback widget"]',
     ) as HTMLButtonElement;
@@ -419,7 +441,7 @@ describe("sdk", () => {
       launcherGreeting: "Hi there!",
     };
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     const btn = document.querySelector(
       'button[aria-label="Open feedback widget"]',
     ) as HTMLButtonElement;
@@ -440,7 +462,7 @@ describe("sdk", () => {
       }),
     );
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     expect(document.querySelector("iframe.quackback-widget-iframe")).toBeNull();
     sdk.dispatch("open");
     expect(
@@ -461,7 +483,7 @@ describe("sdk", () => {
       vi.fn(() => new Promise(() => {})),
     ); // never resolves
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     const btn = document.querySelector(
       'button[aria-label="Open feedback widget"]',
     ) as HTMLButtonElement;
@@ -474,21 +496,35 @@ describe("sdk", () => {
   it("init throws on non-http(s) instanceUrl (javascript: scheme)", () => {
     sdk = createSDK();
     expect(() =>
-      sdk.dispatch("init", { instanceUrl: "javascript:alert(1)" }),
+      sdk.dispatch("init", {
+        instanceUrl: "javascript:alert(1)",
+        workspace: WORKSPACE,
+      }),
     ).toThrow(/instanceUrl must be an http/);
   });
 
   it("init throws on malformed instanceUrl", () => {
     sdk = createSDK();
-    expect(() => sdk.dispatch("init", { instanceUrl: "not a url" })).toThrow(
-      /instanceUrl must be an http/,
-    );
+    expect(() =>
+      sdk.dispatch("init", { instanceUrl: "not a url", workspace: WORKSPACE }),
+    ).toThrow(/instanceUrl must be an http/);
   });
+
+  it.each([undefined, "", "../acme", "acme/widget", "a b"])(
+    "init throws on an invalid workspace: %j",
+    (workspace) => {
+      sdk = createSDK();
+      expect(() =>
+        sdk!.dispatch("init", { instanceUrl: ORIGIN, workspace }),
+      ).toThrow();
+      expect(document.querySelector("iframe")).toBeNull();
+    },
+  );
 
   it("navigate opens http(s) URLs with noopener,noreferrer", () => {
     stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
     window.dispatchEvent(
       new MessageEvent("message", {
@@ -510,7 +546,7 @@ describe("sdk", () => {
   it("navigate ignores javascript: URLs", () => {
     stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
     window.dispatchEvent(
       new MessageEvent("message", {
@@ -528,7 +564,7 @@ describe("sdk", () => {
   it("destroy removes the iframe and launcher", () => {
     stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     expect(
       document.querySelector("iframe.quackback-widget-iframe"),
     ).not.toBeNull();
@@ -541,7 +577,7 @@ describe("sdk", () => {
 
   it("an iframe unread count drives the launcher badge and unread subscribers", () => {
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     const handler = vi.fn();
     sdk.dispatch("on", "unread", handler);
 
@@ -596,7 +632,11 @@ describe("sdk server-driven launcher config", () => {
       launcherLabel: "Chat with us",
     };
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, placement: "right" });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      placement: "right",
+    });
     const btn = document.querySelector(
       'button[aria-label="Chat with us"]',
     ) as HTMLButtonElement;
@@ -612,11 +652,14 @@ describe("sdk server-driven launcher config", () => {
       "fetch",
       vi.fn(async () => ({
         ok: true,
-        json: async () => ({ position: "left", launcherLabel: "Feedback" }),
+        json: async () => ({
+          enabled: true,
+          config: { position: "left", launcherLabel: "Feedback" },
+        }),
       })),
     );
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     await new Promise((r) => setTimeout(r, 0));
     const btn = document.querySelector(
       'button[aria-label="Feedback"]',
@@ -629,7 +672,11 @@ describe("sdk server-driven launcher config", () => {
     stubIframe();
     window.__QUACKBACK_CONFIG__ = { theme: {} };
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, placement: "left" });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      placement: "left",
+    });
     const btn = document.querySelector(
       'button[aria-label="Open feedback widget"]',
     ) as HTMLButtonElement;

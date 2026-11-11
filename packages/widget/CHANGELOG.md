@@ -1,6 +1,8 @@
 # @quackback/widget
 
 ## Unreleased
+- Kaneo: `init` requires `workspace` (a workspace ID or slug). The SDK reads `/api/quills-public/{workspace}/widget/config.json` and opens the iframe at `/api/quills-public/{workspace}/widget`. A script-tag install reads both values from its `sdk.js` URL. Host-page pageview analytics stay off: Kaneo has no pageview route yet.
+- The iframe page (`dist/host.js`, `dist/host.css`) connects the React view to the Kaneo Quills routes. `WidgetView` takes `onOpenItem` (load details when one opens) and `navigation` (move the mounted view, for deep links).
 - `tracking: false` on `init` keeps host-page visitor analytics off (no pageview beacons, no new device id), and `Quackback.tracking(true | false)` switches it at runtime, so a site can wait for analytics consent while the launcher stays available. `tracking(false)` also removes the stored device id. A withdrawal made before `init` holds, and `init` without the option keeps the last choice.
 - `Quackback.open` types now include `{ view: 'messages' }` and `{ view: 'tickets' }`, the two views the iframe already accepts, and the `open` event's `view` type includes `chat`, `messages` and `tickets`.
 

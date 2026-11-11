@@ -50,6 +50,8 @@ const allowedImport = (file: string, specifier: string) => {
         "framework/audience",
         "framework/signed",
         "framework/internal",
+        // Static widget page and bundles: reads files, never the database (see the module).
+        "widget/host",
         "../openapi",
       ].includes(target) ||
       target.startsWith("../database/quills/schema/"))
@@ -127,6 +129,13 @@ describe("Quills module boundaries", () => {
         .filter((file) => !/audience:\s*"internal"/.test(file.source))
         .map((file) => file.path),
     ).toEqual([]);
+  });
+
+  it("keeps the exempt static widget module to files: no database, no request helpers", () => {
+    const host = quills.find((file) => file.path === "widget/host.ts")!;
+    expect(
+      [...host.source.matchAll(/from "([^"]+)"/g)].map((match) => match[1]),
+    ).toEqual(["node:crypto", "node:fs", "node:path", "node:url", "hono"]);
   });
 
   it("does not spread request bodies into writes", () => {

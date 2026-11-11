@@ -135,6 +135,14 @@ export interface WidgetViewProps {
   teamMember?: WidgetPerson;
   /** The host resizes its container or sends the existing quackback:expand message. */
   onExpandedChange?: (expanded: boolean) => void;
+  /** A detail opened; the host can load what its list leaves out (comments, article text). */
+  onOpenItem?: (tab: WidgetTab, id: string) => void;
+  /** Each new object moves the mounted view, for example to a host deep link. */
+  navigation?: {
+    tab: WidgetTab;
+    detail?: string;
+    composer?: "message" | "feedback";
+  };
   /** Opt in only when submission callbacks process SubmissionOptions.attachments. */
   attachmentsEnabled?: boolean;
   onCaptureScreenshot?: (signal: AbortSignal) => Promise<File | null>;

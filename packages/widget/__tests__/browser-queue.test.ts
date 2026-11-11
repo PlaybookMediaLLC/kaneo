@@ -33,6 +33,16 @@ function mockSDK(): unknown[][] {
   return dispatched;
 }
 
+/** Runs the bundle as if Kaneo served it at this URL (document.currentScript.src). */
+function servedFrom(src: string): void {
+  const script = document.createElement("script");
+  script.src = src;
+  Object.defineProperty(document, "currentScript", {
+    configurable: true,
+    get: () => script,
+  });
+}
+
 function installQueueStub(): void {
   const q: IArguments[] = [];
   const queueFn = function (this: void) {
@@ -63,6 +73,7 @@ describe("browser-queue", () => {
   });
 
   afterEach(() => {
+    delete (document as { currentScript?: unknown }).currentScript;
     window.Quackback?.("destroy");
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
@@ -200,7 +211,9 @@ describe("browser-queue", () => {
       "fetch",
       vi.fn(async () => ({ ok: true, json: async () => ({ theme: {} }) })),
     );
-    window.__QUACKBACK_URL__ = "https://feedback.acme.com";
+    servedFrom(
+      "https://feedback.acme.com/api/quills-public/acme/widget/sdk.js",
+    );
 
     await import("../src/browser-queue");
     // Let the deferred fallback fire first.
@@ -229,7 +242,9 @@ describe("browser-queue", () => {
       "fetch",
       vi.fn(async () => ({ ok: true, json: async () => ({ theme: {} }) })),
     );
-    window.__QUACKBACK_URL__ = "https://feedback.acme.com";
+    servedFrom(
+      "https://feedback.acme.com/api/quills-public/acme/widget/sdk.js",
+    );
 
     await import("../src/browser-queue");
 
@@ -244,6 +259,56 @@ describe("browser-queue", () => {
       document.getElementById("quackback-widget-styles")?.textContent ?? "";
     expect(styles).toContain("left:16px");
     expect(styles).not.toContain("right:16px");
+  });
+
+  it("derives the instance URL and workspace from the served sdk.js URL", async () => {
+    const dispatched = mockSDK();
+    servedFrom(
+      "https://kaneo.acme.com/sub/api/quills-public/acme-team/widget/sdk.js?v=1",
+    );
+    installQueueStub();
+    window.Quackback!("init", { launcher: false });
+
+    await import("../src/browser-queue");
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(dispatched).toEqual([
+      [
+        "init",
+        {
+          launcher: false,
+          instanceUrl: "https://kaneo.acme.com/sub",
+          workspace: "acme-team",
+        },
+        undefined,
+      ],
+    ]);
+  });
+
+  it("an explicit workspace wins over the served one", async () => {
+    const dispatched = mockSDK();
+    servedFrom("https://kaneo.acme.com/api/quills-public/acme/widget/sdk.js");
+
+    await import("../src/browser-queue");
+    window.Quackback!("init", { workspace: "other" });
+
+    expect(dispatched[0]).toEqual([
+      "init",
+      { instanceUrl: "https://kaneo.acme.com", workspace: "other" },
+      undefined,
+    ]);
+  });
+
+  it("ignores a script URL that is not the served sdk.js", async () => {
+    const dispatched = mockSDK();
+    servedFrom(
+      "https://cdn.example.com/api/quills-public/acme/widget/other.js",
+    );
+
+    await import("../src/browser-queue");
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(dispatched).toEqual([]);
   });
 
   it("does not auto-init if the queue already contains an init call", async () => {

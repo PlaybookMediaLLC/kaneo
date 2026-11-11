@@ -5,11 +5,12 @@
  * pushes every call into a queue. This module replaces that stub with a live
  * dispatcher backed by `createSDK`, then replays anything already queued.
  *
- * The server-generated `/api/widget/sdk.js` prepends a line that sets
- * `window.__QUACKBACK_URL__` (and `window.__QUACKBACK_CONFIG__`, the baked
- * server config that lets the SDK skip the config fetch — see core/sdk.ts).
- * Script-tag installs therefore omit `instanceUrl` from their init options —
- * we fold the baked URL into every init that doesn't carry one of its own. If
+ * Kaneo serves this file verbatim at `/api/quills-public/{workspace}/widget/sdk.js`,
+ * so the instance URL and workspace come from the script's own URL. A server
+ * may instead prepend `window.__QUACKBACK_URL__` (and `window.__QUACKBACK_CONFIG__`,
+ * the baked server config that lets the SDK skip the config fetch — see core/sdk.ts).
+ * Script-tag installs therefore omit `instanceUrl` and `workspace` from their init
+ * options — we fold the baked values into every init that doesn't carry its own. If
  * no init happens at all (a bare `<script src>` with no `Quackback("init")`
  * call), we auto-dispatch one so the widget still boots.
  */
@@ -26,7 +27,14 @@ declare global {
 
 const sdk = createSDK();
 const w = window;
-const bakedUrl = w.__QUACKBACK_URL__;
+// Kaneo serves this bundle at {instanceUrl}/api/quills-public/{workspace}/widget/sdk.js, so a
+// script-tag install carries both values in its own URL.
+const served =
+  /^(https?:\/\/[^/]+(?:\/[^?#]*?)?)\/api\/quills-public\/([A-Za-z0-9_-]+)\/widget\/sdk\.js(?:[?#]|$)/.exec(
+    (document.currentScript as HTMLScriptElement | null)?.src ?? "",
+  );
+const bakedUrl = w.__QUACKBACK_URL__ ?? served?.[1];
+const bakedWorkspace = served?.[2];
 
 // Suppresses the deferred fallback once the host has taken explicit control:
 // either by initializing (their options take precedence) or by destroying
@@ -39,7 +47,11 @@ function dispatch(command: unknown, a?: unknown, b?: unknown): unknown {
   if (command === "init" && bakedUrl) {
     const opts =
       a && typeof a === "object" ? (a as Record<string, unknown>) : {};
-    if (!opts.instanceUrl) options = { ...opts, instanceUrl: bakedUrl };
+    options = {
+      ...opts,
+      ...(!opts.instanceUrl && { instanceUrl: bakedUrl }),
+      ...(!opts.workspace && bakedWorkspace && { workspace: bakedWorkspace }),
+    };
   }
   return sdk.dispatch(command as "init", options, b);
 }

@@ -20,7 +20,7 @@ export default defineConfig([
     clean: true,
     external: ["react", "react/jsx-runtime"],
   },
-  // Browser IIFE — served verbatim by /api/widget/sdk.js
+  // Browser IIFE — served verbatim by /api/quills-public/{workspace}/widget/sdk.js
   {
     entry: { browser: "src/browser-queue.ts" },
     format: ["iife"],
@@ -28,6 +28,23 @@ export default defineConfig([
     noExternal: [/^zod(?:\/|$)/],
     minify: true,
     // Keeps the license notice on the served sdk.js (a different license from the server).
+    banner: {
+      js: "/*! @quackback/widget | Copyright (c) 2026 Quackback Ltd | MIT License: https://github.com/QuackbackIO/quackback/blob/main/packages/widget/LICENSE */",
+    },
+    sourcemap: false,
+    target: "es2020",
+    outExtension: () => ({ js: ".js" }),
+  },
+  // The iframe page — served with host.css by /api/quills-public/{workspace}/widget.
+  // React, the UI and the adapter are bundled; the font is inlined into host.css.
+  {
+    entry: { host: "src/adapter/host.tsx" },
+    format: ["iife"],
+    platform: "browser",
+    noExternal: [/./],
+    env: { NODE_ENV: "production" },
+    loader: { ".woff2": "dataurl" },
+    minify: true,
     banner: {
       js: "/*! @quackback/widget | Copyright (c) 2026 Quackback Ltd | MIT License: https://github.com/QuackbackIO/quackback/blob/main/packages/widget/LICENSE */",
     },
