@@ -11,6 +11,7 @@ import links from "./links";
 import portalAccessSettings from "./portal/access-settings";
 import operations from "./operations/index";
 import portalInvites from "./portal/invites";
+import { profileTeamContext } from "./portal/public-profile";
 import quillsSettings from "./settings/index";
 import reporting from "./reporting/index";
 import sharedTeams from "./teams";
@@ -81,6 +82,7 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", supportTyping)
   .route("/", testConversations)
   .route("/", portalInvites)
+  .route("/", profileTeamContext)
   .route("/", reporting)
   .route("/", automation)
   .route("/", assistant)
