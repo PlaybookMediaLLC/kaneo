@@ -156,7 +156,36 @@ External effects:          token exchange and refresh (auth.atlassian.com), acce
 
 ### Linear
 
-Filled by lane P1.
+```
+Tables and owning schema:  quills: integrations, integration_platform_credentials, principal, kv_store
+                           (state nonce), events, job_queue, audit_log. public: none.
+Actor and workspace:       connect and destinations: authenticated context. Callback: the signed state.
+Permissions:               workspace:read + quills:manage_settings (callback: the session account still holds it).
+Transactions:              read, call Linear with no transaction open, then write in a new one.
+External effects:          token exchange and refresh (api.linear.app/oauth/token), organization and team
+                           queries (api.linear.app/graphql). No issue is created.
+```
+
+| Source function | operationId | Route | Action | Tests |
+|---|---|---|---|---|
+| `getLinearConnectUrl` | `startQuillsLinearOAuthConnect` | `GET /oauth/linear/connect` | manage_settings | contract; `providers/linear.test.ts` |
+| `fetchLinearTeamsFn` | `listQuillsIntegrationDestinations` | `GET /integrations/{integrationId}/destinations` (one kind: teams) | manage_settings | contract (GitHub); `providers/linear.test.ts` |
+
+- The connection's name and account are the organization's name and URL key. No `config` value is stored.
+- A team ID has 1 to 64 letters, digits and `-`; the route drops any other ID. The route refuses a `kind`
+  or a `parent` (400): Linear has one kind.
+- A due token is refreshed before the call; Linear rotates the refresh token. A rejected refresh (400)
+  answers 409 "Reconnect".
+- Tests against the local provider server: exchange, the team list, a refused kind and parent, refresh
+  and rejected refresh, a token answer without a token (400) and a GraphQL answer without teams (502).
+
+| Difference from the source | Reason |
+|---|---|
+| Scope `read`, not `read,write,issues:create,admin` | Issue #131 lists teams only. Delivery and status sync add their scopes and a reconnect. |
+| No `events` and no status sync | Out of scope for #131. |
+| A failed organization query fails the connect; the source named it `Linear` | One rule for every call: a failure is a fixed error. |
+| `orgId` is not stored | Only the webhooks of status sync use it. |
+| A disconnect does not revoke the token | The shared disconnect route revokes no provider token. |
 
 ### Azure DevOps
 

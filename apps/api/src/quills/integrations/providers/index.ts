@@ -5,6 +5,7 @@ import { discord } from "./discord";
 import { github } from "./github";
 import { gitlab } from "./gitlab";
 import { jira } from "./jira";
+import { linear } from "./linear";
 import { slack } from "./slack";
 
 // The OAuth and key providers, one file each. To add a provider, add its file, its import above and
@@ -19,6 +20,7 @@ export const oauthProviders = {
   slack,
   discord,
   jira,
+  linear,
 } satisfies Record<string, OAuthProvider>;
 type Registry = typeof oauthProviders;
 export const oauthProvider = (type: string): OAuthProvider | undefined =>
