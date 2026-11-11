@@ -1,8 +1,9 @@
 # Quills port plan: Quackback capability in Kaneo's API
 
-Status: P0, P1, P2 (teammate routes), P4 (teammate routes) and the visibility cleanup are
-implemented in `apps/api/src/quills/`. P3, P5 to P10 are not done yet. The PR description lists
-what is missing.
+Status: all phases P0 to P10 are implemented in `apps/api/src/quills/` (679 route declarations),
+with the widget client in `packages/widget`. Each slice's route table (`ROUTES.md` next to its
+code) lists what it ported, what it deferred and why. The ledger rows are not yet marked closed in
+`ledger/overrides.json`.
 
 Goal: bring all of Quackback's feedback and support capability into Kaneo's API at
 `apps/api`, behind one shared route framework, with no added cost for upstream merges.
