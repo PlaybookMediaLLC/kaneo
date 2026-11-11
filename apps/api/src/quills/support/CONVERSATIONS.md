@@ -215,6 +215,52 @@ Types: `conversation.status_changed`, `conversation.assigned`, `conversation.pri
 Entities: `conversation`, `conversation_message`, `conversation_tag`, `conversation_attribute`,
 `conversation_view`. Payloads carry IDs and enum values only, never message text.
 
+## RFC 0001 lane S1: support extras
+
+Source rows: `embeds.ts#getEmbedPreviewFn`, `link-preview.ts#unfurlLinkFn`, `read-batch.ts#readTogetherFn`,
+`settings.ts#getEmailChannelStatusFn`, `support-reporting.ts#attributeBreakdownFn` and
+`conversation.ts#getConversationPresenceFn` (RFC 0001, lane S1, decision D8).
+
+### Boundary map
+
+```
+Tables and owning schema:  quills: kv_store (presence heartbeats; written by the heartbeat only),
+                           principal (chat availability, read), settings (office hours, portal,
+                           widget and changelog switches, read), conversations (attribute
+                           breakdown, read), boards, board_projects, posts, post_statuses,
+                           changelog_entries, changelog_entry_categories, changelog_categories,
+                           kb_articles, kb_article_translations, kb_categories, segments,
+                           user_segments, tickets, ticket_statuses, ticket_conversations
+                           (embed preview, read).
+                           public: none. No route reads a platform table.
+Actor and workspace:       teammate routes: authenticated context (helper). Portal: the Kaneo session,
+                           optional. Widget: the widget session Bearer. Never a body or query copy.
+Permissions:               heartbeat quills:update; attribute breakdown quills:read; email channel
+                           status quills:manage_settings. Portal and widget routes: none of Kaneo's;
+                           the portal switch and private-portal gate, the widget switch, and the
+                           customer visibility rule of each record kind.
+Persisted relationships:   embed preview: posts.board_id with the board's view tier, and no
+                           board_projects row (a board linked to a project never shows to a
+                           customer); changelog and article segment gates; tickets.requester_principal_id
+                           (a customer sees only an own customer ticket). Presence: the heartbeat
+                           key names the caller's own principal.
+Transaction:               one scoped transaction per request. The heartbeat upsert is the only write.
+External effects:          none. The email channel status reads process configuration, never a
+                           credential. No route fetches a URL (see "Blocked" below).
+Completion checks:         authenticated endpoint, tenant/object access, read (aggregate and
+                           customer visibility), mutation (heartbeat, no event: expiring marker).
+```
+
+### Blocked: needs a framework seam
+
+`framework/boundaries.test.ts` lets a route module import only the packages and `framework/` modules
+on its list. `framework/**` belongs to lane X1, so this lane does not add to it.
+
+| Source | State | What is missing |
+|---|---|---|
+| `unfurlQuillsLink` (`unfurlLinkFn`) | not built | A route that fetches a URL must reach `import/guarded-fetch.ts#createGuardedFetch`, and a route module may not import it. Lanes B1 and C1 need the same seam. |
+| `readQuillsTogether` (`readTogetherFn`) | not built | To run each element through its own route's handler and checks, the batch must read the route declarations in `framework/registry.ts`, and a route module may not import it. |
+
 ## Not ported in this slice
 
 | Source capability | State | Reason |
