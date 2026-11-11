@@ -7,7 +7,19 @@ Differences between this design and the P0 code:
 - The declaration has four more fields: `responseDescription`, `errors`, `allowKeys`, and `load`
   (a platform lookup that runs after the permission checks and before the transaction).
 - The fields `status` and `sourcePermission` are not built. Every route returns 200.
-- The checks `bounded-inputs` and `deleted-object` are not built. The check `native-permission` is added.
+- The declaration has the field `callerActions`. With it, the handler gets `actions`: every Quills action
+  that the caller holds, from the role and the API key's scope. The declared `action` is the minimum.
+  `deleteQuillsComment` and `deleteQuillsPostView` declare `update`: the caller's own record needs only
+  `update`, and another person's record also needs `delete`. `restoreQuillsComment` keeps `delete`,
+  because the source restores with a moderation permission.
+- The check `native-permission` is added.
+- The check `bounded-inputs` is static. A string input (also a TypeID, a paging number or an ISO datetime)
+  must reject a value of 100,001 characters, and a record must reject 10,001 entries. An array needs
+  `.max()`, and a `limit` page size needs a maximum. A schema type that the check does not know is a finding.
+- The check `deleted-object` runs when the fixture has a `softDelete(env, ids)` hook. The authorized request
+  on the soft-deleted target must return 404 and change no row.
+- Both checks run for every audience. `contract.ts` re-exports `contract-world.ts` (the test world) and
+  `contract-checks.ts` (the checks). The other check modules are `contract-probe.ts` and `bounded-inputs.ts`.
 - Fixtures are next to their route modules, for example `links.fixture.ts`.
 - `links.ts` is 175 lines after the formatter's line wrap, not about 135.
 - Team bind and update now return 403 before the team lookup, return only declared fields,

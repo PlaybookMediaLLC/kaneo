@@ -153,7 +153,14 @@ export const posts = quillsSchema
         .where(sql`"merged_by_principal_id" IS NOT NULL`),
       index("posts_tracked_by_principal_id_idx").on(table.trackedByPrincipalId),
       index("posts_created_at_idx").on(table.createdAt),
-      index("posts_vote_count_idx").on(table.voteCount),
+      // The post list's votes sort and cursor under the RLS workspace predicate (feedback/post-filters.ts).
+      // Built CONCURRENTLY after migrations (CONCURRENT_INDEX_SPECS).
+      index("posts_workspace_vote_count_idx").on(
+        table.workspaceId,
+        table.voteCount,
+        table.createdAt,
+        table.id,
+      ),
       index("posts_embedding_hnsw_idx")
         .using("hnsw", sql`${table.embedding} vector_cosine_ops`)
         .where(sql`${table.embedding} IS NOT NULL`),

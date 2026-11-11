@@ -1,10 +1,11 @@
 import { fixture } from "../framework/contract";
-import { seed, type Ids } from "./seed.fixture";
+import { seed, softDeleteBoard, type Ids } from "./seed.fixture";
 
 const board = fixture({
   seed,
   valid: ({ a }: Ids) => ({ params: { boardId: a.boardId } }),
   foreign: ({ b }: Ids) => ({ boardId: b.boardId }),
+  softDelete: softDeleteBoard,
 });
 
 export const listQuillsBoards = fixture({

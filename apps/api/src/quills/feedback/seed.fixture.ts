@@ -9,6 +9,7 @@ import {
 } from "../../database/quills/schema/posts";
 import { postStatuses } from "../../database/quills/schema/statuses";
 import type { ContractEnv } from "../framework/contract";
+import { softDeletes } from "./seeds.fixture";
 
 /** Feedback rows in one workspace: two boards, a post with a comment, a tag, a customer and two statuses. */
 export async function side(env: ContractEnv, workspaceId: string) {
@@ -92,6 +93,14 @@ export const seedWith =
     await env.scoped(env.a, (db, actor) => extra(db, actor, ids.a));
     return ids;
   };
+
+/** Fixture `softDelete` hooks for A's seeded board, post and comment. */
+export const softDeleteBoard = softDeletes("boards", ({ a }: Ids) => a.boardId);
+export const softDeletePost = softDeletes("posts", ({ a }: Ids) => a.postId);
+export const softDeleteComment = softDeletes(
+  "post_comments",
+  ({ a }: Ids) => a.commentId,
+);
 
 export const deletePost = seedWith((db, _actor, a) =>
   db.update(posts).set({ deletedAt: new Date() }).where(eq(posts.id, a.postId)),

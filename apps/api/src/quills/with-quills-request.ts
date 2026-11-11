@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
-import type { statement } from "@kaneo/permissions";
+import { statement } from "@kaneo/permissions";
 import db from "../database";
 import { projectTable } from "../database/schema";
 import {
@@ -10,10 +10,28 @@ import {
   type QuillsActor,
 } from "../database/quills/client";
 import { assertProjectAccess } from "../project-access/assert-project-access";
-import { requireWorkspacePermission } from "../utils/require-workspace-permission";
+import {
+  requireWorkspacePermission,
+  workspacePermissionChecker,
+} from "../utils/require-workspace-permission";
 import { validateWorkspaceAccess } from "../utils/validate-workspace-access";
 
 export type QuillsAction = (typeof statement.quills)[number];
+
+/**
+ * The Quills actions that the caller holds: the role's permissions within the API key's scope,
+ * as requireWorkspacePermission checks them. Call it after withQuillsRequest's permission checks.
+ */
+export async function quillsActions(
+  c: Context,
+): Promise<ReadonlySet<QuillsAction>> {
+  const can = await workspacePermissionChecker(c);
+  return new Set(
+    statement.quills.filter((action) =>
+      can({ workspace: ["read"], quills: [action] }),
+    ),
+  );
+}
 
 /**
  * Project IDs must come from the feature's persisted relationship, never a caller's substitute.

@@ -228,6 +228,37 @@ describe.skipIf(!url)("Quills completion", () => {
       );
     }
   }, 120000);
+  it("finishes a new operational index whose first build stopped before the manifest recorded it", async () => {
+    const index = "posts_workspace_vote_count_idx";
+    const create = `CREATE INDEX ${index} ON quills.posts (workspace_id, vote_count, created_at, id)`;
+    const invalid = `UPDATE pg_index SET indisvalid=false WHERE indexrelid='quills.${index}'::regclass`;
+    // The state after the migration that added the index committed its manifest, and the build failed
+    // (an invalid index) or the process stopped before the manifest was saved again (a valid one).
+    for (const stopped of [[create, invalid], [create]]) {
+      await pool.query(`DROP INDEX quills.${index}`);
+      await pool.query("SELECT quills_migrations.capture_schema_manifest()");
+      for (const statement of stopped) await pool.query(statement);
+      try {
+        await runQuillsMigrations(url!, resolve("drizzle/quills"));
+        const after = await pool.query(
+          `SELECT definition=quills_migrations.current_schema_manifest() AS matches,
+            definition->'tables'->'posts'->'indexes' ? $1 AS recorded,
+            (SELECT indisvalid FROM pg_index WHERE indexrelid=('quills.'||$1)::regclass) AS valid
+           FROM quills_migrations.schema_manifest WHERE id=true`,
+          [index],
+        );
+        expect(after.rows[0]).toEqual({
+          matches: true,
+          recorded: true,
+          valid: true,
+        });
+      } finally {
+        await pool.query(`DROP INDEX IF EXISTS quills.${index}`);
+        await pool.query(create);
+        await pool.query("SELECT quills_migrations.capture_schema_manifest()");
+      }
+    }
+  }, 120000);
   it("rejects restored defaults, disabled shared triggers and wrong operational index definitions", async () => {
     const client = await pool.connect();
     const { verifyQuillsPostconditions } = await import("./schema-ops");

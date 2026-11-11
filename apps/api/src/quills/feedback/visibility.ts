@@ -59,12 +59,6 @@ export const onVisibleBoard = (projects: string[]): SQL =>
 export const notTest = (principalId: SQLWrapper | TypeId<"principal">): SQL =>
   sql`not exists (select 1 from ${principal} where ${eq(principal.id, principalId)} and ${isNotNull(principal.testOwnerPrincipalId)})`;
 
-/** True for a real author: `notTest` with the signature that the P1a routes use. */
-export const notTestPrincipal = (
-  _db: Database,
-  id: SQLWrapper | TypeId<"principal">,
-) => notTest(id);
-
 /** A post that the caller may see in a list: not deleted, on a live and visible board, not test data. */
 export const visiblePost = (projects: string[]): SQL =>
   and(

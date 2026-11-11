@@ -3,7 +3,7 @@ import { changelogEntries } from "../../database/quills/schema/changelog";
 import { changelogCategories } from "../../database/quills/schema/changelog-categories";
 import { postStatuses } from "../../database/quills/schema/statuses";
 import { fixture, type ContractEnv } from "../framework/contract";
-import { postIn } from "./seeds.fixture";
+import { postIn, softDeletes } from "./seeds.fixture";
 
 /** A draft entry, a category and a shipped post, in one workspace. */
 async function entryIn(env: ContractEnv, workspaceId: string) {
@@ -43,6 +43,7 @@ const byEntry = (body?: object) =>
     seed,
     valid: ({ a }: Ids) => ({ params: { entryId: a.entryId }, body }),
     foreign: ({ b }: Ids) => ({ entryId: b.entryId }),
+    softDelete: softDeletes("changelog_entries", ({ a }: Ids) => a.entryId),
   });
 const byCategory = (body?: object) =>
   fixture({

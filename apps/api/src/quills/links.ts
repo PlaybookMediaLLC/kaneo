@@ -35,7 +35,7 @@ const boardLink = <M extends "put" | "delete">(method: M) =>
         : "Unlink a Quills board from a project",
     params: z.object({
       boardId: flexibleToTypeIdSchema("board"),
-      projectId: z.string().min(1),
+      projectId: z.string().min(1).max(200),
     }),
     project: ({ params }) => params.projectId,
     // The caller must also see the board: a hidden board must not become visible by a new link.
@@ -83,7 +83,7 @@ const postLink = <M extends "put" | "delete">(method: M) =>
         : "Unlink a Quills post from a task",
     params: z.object({
       postId: flexibleToTypeIdSchema("post"),
-      taskId: z.string().min(1),
+      taskId: z.string().min(1).max(200),
     }),
     // The task's stored project, never a project ID from the caller.
     project: ({ params, workspaceId }) =>

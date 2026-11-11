@@ -17,7 +17,7 @@ import { z } from "../../openapi";
 import { postTags } from "../../database/quills/schema/boards";
 import { posts, postTagAssignments } from "../../database/quills/schema/posts";
 import type { Database } from "../framework/define-route";
-import { boardVisible, notTestPrincipal } from "./visibility";
+import { boardVisible, notTest } from "./visibility";
 
 /** How long a deleted post stays restorable and listed with showDeleted. */
 export const RESTORE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -31,7 +31,7 @@ const idList = <P extends IdPrefix>(prefix: P) =>
     .openapi({ type: "string", description: "Comma-separated IDs, at most 50" })
     .optional();
 const day = z
-  .union([z.iso.date(), z.iso.datetime({ offset: true })])
+  .union([z.iso.date(), z.iso.datetime({ offset: true }).max(64)])
   .refine((value) => !value.startsWith("0000"), "Year 0 is not a date")
   .optional();
 /** A date-only `to` bound covers the whole day, as in the source. */
@@ -74,7 +74,7 @@ export function filterConditions(
         ? restorable()
         : isNull(posts.deletedAt),
     isNull(posts.canonicalPostId),
-    notTestPrincipal(db, posts.principalId),
+    notTest(posts.principalId),
     boardVisible(projects),
     omit !== "board" && f.boardIds?.length
       ? inArray(posts.boardId, f.boardIds)

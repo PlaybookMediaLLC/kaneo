@@ -17,6 +17,7 @@ import {
 } from "../framework/define-route";
 import { page, pageQuery } from "./schemas";
 import { readSettingsKey, writeSettingsKey } from "./settings-json";
+import { lockMergeTarget, recount } from "./thread-counts";
 import {
   boardVisible,
   loadProjects,
@@ -302,11 +303,14 @@ const rejectPost = defineQuillsRoute({
     payload: reasonPayload(input),
   }),
   handler: async ({ db, params: { postId }, loaded }) => {
+    // Before lockPendingPost, so the post and its canonical post lock in ID order.
+    const target = await lockMergeTarget(db, postId);
     await lockPendingPost(db, postId, loaded);
     await db
       .update(posts)
       .set({ deletedAt: new Date() })
       .where(eq(posts.id, postId));
+    if (target) await recount(db, target);
     return { id: postId };
   },
 });
@@ -334,22 +338,18 @@ const approveComment = defineQuillsRoute({
   }),
   handler: async ({ db, params: { commentId }, loaded }) => {
     const comment = await lockPendingComment(db, commentId, loaded);
+    const target = await lockMergeTarget(db, comment.postId);
     await db
       .update(postComments)
       .set({ moderationState: "published" })
       .where(eq(postComments.id, commentId));
     if (comment.counted) {
-      const [post] = await db
+      await db
         .update(posts)
         .set({ commentCount: sql`${posts.commentCount} + 1` })
-        .where(eq(posts.id, comment.postId))
-        .returning({ canonicalPostId: posts.canonicalPostId });
+        .where(eq(posts.id, comment.postId));
       // A merged post's comments also count on its canonical post.
-      if (post?.canonicalPostId)
-        await db
-          .update(posts)
-          .set({ commentCount: sql`${posts.commentCount} + 1` })
-          .where(eq(posts.id, post.canonicalPostId));
+      if (target) await recount(db, target);
     }
     return { id: commentId };
   },

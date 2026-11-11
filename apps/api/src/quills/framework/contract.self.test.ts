@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 import { eq, isNotNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
+import { HTTPException } from "hono/http-exception";
+import type { BoardId } from "@kaneo/ids";
 import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
 import { Pool } from "pg";
 import {
@@ -14,10 +16,12 @@ import {
   apiRouter,
   createRoute,
   jsonResponse,
+  pagingNumber,
   z,
   type BaseVariables,
 } from "../../openapi";
 import { workspaceAccess } from "../../utils/workspace-access-middleware";
+import { unbounded } from "./bounded-inputs";
 import {
   checkRoute,
   contractApp,
@@ -193,6 +197,70 @@ const noEvent = defineQuillsRoute({
   handler: async ({ db }) => ({ id: await insertBoard(db) }),
 });
 
+// Broken on purpose: a query string with no maximum.
+const unboundedQuery = defineQuillsRoute({
+  method: "get",
+  path: "/broken/unbounded",
+  operationId: "brokenUnboundedQuery",
+  summary: "Broken route with an unbounded query string",
+  action: "read",
+  query: z.object({ q: z.string().optional() }),
+  response: z.object({ length: z.number() }),
+  responseDescription: "Length",
+  handler: async ({ query }) => ({ length: query.q?.length ?? 0 }),
+});
+// Broken on purpose: a portal body array with no maximum.
+const unboundedPortal = defineQuillsRoute({
+  audience: "portal",
+  signIn: false,
+  method: "post",
+  path: "/broken/unbounded-ids",
+  operationId: "brokenUnboundedPortal",
+  summary: "Broken portal route with an unbounded array",
+  action: "create",
+  body: z.object({ ids: z.array(z.string().max(10)) }),
+  response: z.object({ count: z.number() }),
+  responseDescription: "Count",
+  event: { none: "Broken on purpose" },
+  handler: async ({ body }) => ({ count: body.ids.length }),
+});
+/** A board by ID, deleted or not: the deleted check is missing on purpose. */
+const anyBoard = async (db: Database, id: BoardId) => {
+  const [board] = await db
+    .select({ name: boards.name })
+    .from(boards)
+    .where(eq(boards.id, id));
+  if (!board) throw new HTTPException(404, { message: "Board not found" });
+  return board;
+};
+const boardParams = z.object({ boardId: flexibleToTypeIdSchema("board") });
+// Broken on purpose: a teammate route and a public route that serve a soft-deleted board.
+const deletedBoard = defineQuillsRoute({
+  method: "get",
+  path: "/broken/boards/{boardId}",
+  operationId: "brokenDeletedBoard",
+  summary: "Broken route that returns a deleted board",
+  action: "read",
+  params: boardParams,
+  response: z.object({ name: z.string() }),
+  responseDescription: "Board",
+  errors: { 404: "Board not found" },
+  handler: ({ db, params }) => anyBoard(db, params.boardId),
+});
+const publicDeletedBoard = defineQuillsRoute({
+  audience: "public",
+  method: "get",
+  path: "/broken/public-boards/{boardId}",
+  operationId: "brokenPublicDeletedBoard",
+  summary: "Broken public route that returns a deleted board",
+  action: "read",
+  params: boardParams,
+  response: z.object({ name: z.string() }),
+  responseDescription: "Board",
+  errors: { 404: "Board not found" },
+  handler: ({ db, params }) => anyBoard(db, params.boardId),
+});
+
 const app = contractApp(
   apiRouter<BaseVariables & { workspaceId: string }>()
     .openapi(
@@ -212,12 +280,16 @@ const app = contractApp(
       },
     )
     .openapi(...rawRow)
-    .openapi(...noEvent),
+    .openapi(...noEvent)
+    .openapi(...unboundedQuery)
+    .openapi(...deletedBoard),
   apiRouter()
     .openapi(...publicLeak)
     .openapi(...noOwnership)
     .openapi(...teammateData)
-    .openapi(...anyToken),
+    .openapi(...anyToken)
+    .openapi(...unboundedPortal)
+    .openapi(...publicDeletedBoard),
 );
 const declared = (operationId: string) =>
   [...registry.keys()].find((d) => d.operationId === operationId)!;
@@ -344,5 +416,87 @@ describe.skipIf(!url)("Quills route contract self-test", () => {
     expect(found).toContain(
       "widget-credential: a forged credential changed rows",
     );
+  });
+  it("reports a string or an array with no maximum, for a teammate and a portal route", async () => {
+    expect(await checks(declared("brokenUnboundedQuery"))).toContain(
+      "bounded-inputs: query.q accepts a string of 100001 characters",
+    );
+    const found = await checks(
+      declared("brokenUnboundedPortal"),
+      fixture({
+        seed: async () => ({}),
+        valid: () => ({ body: { ids: ["a"] } }),
+        own: () => [],
+      }),
+    );
+    expect(found).toContain("bounded-inputs: body.ids has no maximum length");
+  });
+  it("reports a teammate and a public route that serve a soft-deleted target", async () => {
+    const onBoard = fixture({
+      seed: async (env) => ({
+        a: await env.scoped(env.a, insertBoard),
+        b: await env.scoped(env.b, insertBoard),
+      }),
+      valid: (ids) => ({ params: { boardId: ids.a } }),
+      foreign: (ids) => ({ boardId: ids.b }),
+      hidden: () => [],
+      softDelete: (env, ids) =>
+        env.scoped(env.a, (db) =>
+          db
+            .update(boards)
+            .set({ deletedAt: new Date() })
+            .where(eq(boards.id, ids.a)),
+        ),
+    });
+    for (const operationId of [
+      "brokenDeletedBoard",
+      "brokenPublicDeletedBoard",
+    ])
+      expect(await checks(declared(operationId), onBoard)).toContainEqual(
+        expect.stringMatching(/^deleted-object: expected 404, got 200/),
+      );
+  });
+});
+
+// The bounded-inputs rules, without a database.
+describe("bounded-inputs schema rules", () => {
+  it("accepts TypeIDs, paging numbers, bounded strings, arrays and refined records", () => {
+    const bounded = z.object({
+      id: flexibleToTypeIdSchema("board"),
+      owner: z.union([z.literal("none"), flexibleToTypeIdSchema("principal")]),
+      limit: pagingNumber(1, 100, 20),
+      when: z.iso.date().optional(),
+      at: z.iso.datetime({ offset: true }).max(64).optional(),
+      tags: z.array(z.string().max(20)).max(10),
+      attributes: z
+        .record(z.string().max(64), z.string().max(100).nullable())
+        .refine((value) => Object.keys(value).length <= 50),
+      kind: z.enum(["a", "b"]),
+    });
+    expect(unbounded(bounded, "body")).toEqual([]);
+  });
+  it("reports each unbounded string, array, record and page size", () => {
+    const loose = z.object({
+      name: z.string().min(1),
+      email: z.email(),
+      slug: z.string().regex(/^[a-z]+$/),
+      at: z.iso.datetime({ offset: true }),
+      ids: z.array(flexibleToTypeIdSchema("board")),
+      attributes: z.record(z.string().max(64), z.boolean()),
+      limit: z.coerce.number().int().min(1),
+      extra: z.unknown(),
+      meta: z.looseObject({ kind: z.string().max(10) }),
+    });
+    expect(unbounded(loose, "body")).toEqual([
+      "body.name accepts a string of 100001 characters",
+      "body.email accepts a string of 100001 characters",
+      "body.slug accepts a string of 100001 characters",
+      "body.at accepts a string of 100001 characters",
+      "body.ids has no maximum length",
+      "body.attributes accepts 10001 entries",
+      "body.limit has no maximum",
+      "body.extra (unknown) has no maximum",
+      "body.meta.* (unknown) has no maximum",
+    ]);
   });
 });

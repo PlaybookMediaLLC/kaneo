@@ -52,10 +52,10 @@ const url = process.env.QUILLS_TEST_DATABASE_URL;
 const app = contractApp(quillsRouter);
 
 /** Two posts in A. Voters: one on both, one on each, a test customer on the duplicate. One public comment on the duplicate. */
-async function pair() {
+async function pair(duplicateValues: Parameters<typeof postIn>[2] = {}) {
   const env = contractEnv();
   const canonical = await postIn(env, env.a);
-  const duplicate = await postIn(env, env.a);
+  const duplicate = await postIn(env, env.a, duplicateValues);
   const shared = await customer(env);
   const first = await customer(env);
   const second = await customer(env);
@@ -74,8 +74,18 @@ async function pair() {
       content: "Me too",
     });
   });
-  return { canonical: canonical.postId, duplicate: duplicate.postId };
+  return {
+    canonical: canonical.postId,
+    duplicate: duplicate.postId,
+    canonicalBoard: canonical.boardId,
+    duplicateBoard: duplicate.boardId,
+  };
 }
+/** The canonical post's stored counts. */
+const counts = async (id: PostId) => {
+  const { voteCount, commentCount } = await state(id);
+  return { voteCount, commentCount };
+};
 const state = (id: PostId) =>
   contractEnv().scoped(contractEnv().a, async (db) => {
     const [row] = await db
@@ -295,5 +305,150 @@ describe.skipIf(!url)("Quills post merge", () => {
     ).toBe(404);
     expect((await state(duplicate)).canonicalPostId).toBe(hidden.postId);
     expect((await merge(member, canonical, testPost)).status).toBe(404);
+  });
+
+  describe("keeps the canonical post's counts when a merged post changes", () => {
+    const send = (method: string, path: string, body?: unknown) =>
+      call(app, contractEnv(), contractEnv().owner, method, path, body);
+    // Merged: three unique voters and one public comment. Without the duplicate: two voters, no comment.
+    const merged = { voteCount: 3, commentCount: 1 };
+    const alone = { voteCount: 2, commentCount: 0 };
+    const mergedPair = async (values?: Parameters<typeof pair>[0]) => {
+      const ids = await pair(values);
+      expect(
+        (await merge(contractEnv().owner, ids.duplicate, ids.canonical)).status,
+      ).toBe(200);
+      expect(await counts(ids.canonical)).toEqual(merged);
+      return ids;
+    };
+
+    it("when the merged post is deleted and restored", async () => {
+      const { canonical, duplicate } = await mergedPair();
+      expect((await send("DELETE", `/posts/${duplicate}`)).status).toBe(200);
+      expect(await counts(canonical)).toEqual(alone);
+      expect((await send("POST", `/posts/${duplicate}/restore`)).status).toBe(
+        200,
+      );
+      expect(await counts(canonical)).toEqual(merged);
+    });
+
+    it("when the merged post's comments are created, deleted and restored", async () => {
+      const { canonical, duplicate } = await mergedPair();
+      const created = await send("POST", `/posts/${duplicate}/comments`, {
+        content: "Same here",
+      });
+      expect(created.status).toBe(200);
+      expect((await counts(canonical)).commentCount).toBe(2);
+      const comment = `/comments/${created.body.id}`;
+      expect((await send("DELETE", comment)).status).toBe(200);
+      expect((await counts(canonical)).commentCount).toBe(1);
+      expect((await send("POST", `${comment}/restore`)).status).toBe(200);
+      expect((await counts(canonical)).commentCount).toBe(2);
+      // An internal comment counts nowhere.
+      const internal = await send("POST", `/posts/${duplicate}/comments`, {
+        content: "Internal",
+        isPrivate: true,
+      });
+      expect(internal.status).toBe(200);
+      expect(await counts(canonical)).toEqual({
+        voteCount: 3,
+        commentCount: 2,
+      });
+    });
+
+    it("when a held comment on the merged post is approved", async () => {
+      const { canonical, duplicate } = await mergedPair();
+      const [held] = await contractEnv().scoped(contractEnv().a, (db, actor) =>
+        db
+          .insert(postComments)
+          .values({
+            postId: duplicate,
+            principalId: actor.principalId,
+            content: "Held",
+            moderationState: "pending",
+          })
+          .returning({ id: postComments.id }),
+      );
+      expect(await counts(canonical)).toEqual(merged);
+      const res = await send(
+        "POST",
+        `/moderation/comments/${held!.id}/approve`,
+      );
+      expect(res.status).toBe(200);
+      expect((await counts(canonical)).commentCount).toBe(2);
+    });
+
+    it("when a held merged post is rejected", async () => {
+      const { canonical, duplicate } = await mergedPair({
+        moderationState: "pending",
+      });
+      const res = await send("POST", `/moderation/posts/${duplicate}/reject`, {
+        reason: "",
+      });
+      expect(res.status).toBe(200);
+      expect(await counts(canonical)).toEqual(alone);
+    });
+
+    it("when the merged post's board is deleted", async () => {
+      const { canonical, duplicateBoard } = await mergedPair();
+      expect((await send("DELETE", `/boards/${duplicateBoard}`)).status).toBe(
+        200,
+      );
+      expect(await counts(canonical)).toEqual(alone);
+    });
+
+    it("rolls back the delete and the recount together", async () => {
+      const env = contractEnv();
+      const { canonical, duplicate } = await mergedPair();
+      const declared = [...registry.keys()].find(
+        (d) => d.operationId === "deleteQuillsPost",
+      )!;
+      const failing = contractApp(
+        apiRouter<BaseVariables & { workspaceId: string }>().openapi(
+          ...buildQuillsRoute({
+            ...declared,
+            handler: async (input) => {
+              await declared.handler(input);
+              throw new Error("Injected failure after the recount");
+            },
+          }),
+        ),
+      );
+      const before = [await state(canonical), await state(duplicate)];
+      const res = await call(
+        failing,
+        env,
+        env.owner,
+        "DELETE",
+        `/posts/${duplicate}`,
+      );
+      expect(res.status).toBe(500);
+      // The counts, the activity entry and the event of the delete all roll back.
+      expect([await state(canonical), await state(duplicate)]).toEqual(before);
+      expect(await counts(canonical)).toEqual(merged);
+      // The same request without the failure deletes the post and moves the counts.
+      expect((await send("DELETE", `/posts/${duplicate}`)).status).toBe(200);
+      expect(await counts(canonical)).toEqual(alone);
+    });
+  });
+
+  it("does not unmerge from a canonical post on a deleted board", async () => {
+    const env = contractEnv();
+    const { canonical, duplicate, canonicalBoard } = await pair();
+    expect((await merge(env.owner, duplicate, canonical)).status).toBe(200);
+    const deleted = await call(
+      app,
+      env,
+      env.owner,
+      "DELETE",
+      `/boards/${canonicalBoard}`,
+    );
+    expect(deleted.status).toBe(200);
+    const before = await state(duplicate);
+    expect(
+      (await call(app, env, env.owner, "POST", `/posts/${duplicate}/unmerge`))
+        .status,
+    ).toBe(404);
+    expect(await state(duplicate)).toEqual(before);
   });
 });

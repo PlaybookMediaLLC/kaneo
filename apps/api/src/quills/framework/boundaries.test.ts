@@ -128,7 +128,8 @@ describe("Quills module boundaries", () => {
       matching(quills, /from "(\.\.\/)+database(\/index|\/schema)?"/),
     ).toEqual([
       // Test harness: seeds the platform rows that the contract checks need.
-      "framework/contract.ts",
+      "framework/contract-checks.ts",
+      "framework/contract-world.ts",
       // Storage lifecycle: the shared verification lease in public.job_lease.
       "framework/files.ts",
       "framework/platform-reads.ts",

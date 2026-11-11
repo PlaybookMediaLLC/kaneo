@@ -85,6 +85,13 @@
 			"when": 1794350125126,
 			"tag": "0011_customer_portal_link",
 			"breakpoints": true
+		},
+		{
+			"idx": 12,
+			"version": "7",
+			"when": 1794353625682,
+			"tag": "0012_posts_vote_sort_index",
+			"breakpoints": true
 		}
 	]
 }

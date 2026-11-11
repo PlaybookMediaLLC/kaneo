@@ -16,11 +16,12 @@ import {
   type QuillsActor,
 } from "../framework/define-route";
 import { recordActivity } from "./activity";
+import { lockMergeTarget } from "./thread-counts";
 import {
   findPost,
   loadProjects,
   notFound,
-  notTestPrincipal,
+  notTest,
   relatedPosts,
 } from "./visibility";
 
@@ -62,7 +63,7 @@ async function count(
     ? await db
         .update(posts)
         .set({ voteCount: sql`greatest(0, ${posts.voteCount} + ${delta})` })
-        .where(and(eq(posts.id, postId), notTestPrincipal(db, voter)))
+        .where(and(eq(posts.id, postId), notTest(voter)))
         .returning({ voteCount: posts.voteCount })
     : [];
   if (moved) return moved.voteCount;
@@ -80,6 +81,8 @@ async function addVote(
   voter: TypeId<"principal">,
   addedBy?: QuillsActor,
 ) {
+  // The merge link cannot change while the vote moves a count (thread-counts.ts).
+  await lockMergeTarget(db, postId);
   const post = await votedPost(db, postId, projects);
   const [existing] = await db
     .select({ id: postVotes.id })
@@ -188,7 +191,7 @@ const listVoters = defineQuillsRoute({
             postVotes.postId,
             relatedPosts(db, post.canonicalPostId ?? post.id, projects),
           ),
-          notTestPrincipal(db, postVotes.principalId),
+          notTest(postVotes.principalId),
         ),
       )
       .orderBy(desc(postVotes.createdAt), desc(postVotes.id))
@@ -269,6 +272,7 @@ const removeVote = defineQuillsRoute({
   load: loadProjects,
   handler: async ({ db, actor, params, loaded: projects }) => {
     const voter = await findVoter(db, params.principalId);
+    await lockMergeTarget(db, params.postId);
     const post = await votedPost(db, params.postId, projects);
     const removed = await db
       .delete(postVotes)

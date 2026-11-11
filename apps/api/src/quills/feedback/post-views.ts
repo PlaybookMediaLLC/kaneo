@@ -147,7 +147,10 @@ const deleteView = defineQuillsRoute({
   path: "/post-views/{viewId}",
   operationId: "deleteQuillsPostView",
   summary: "Delete a saved post view",
-  action: "delete",
+  description:
+    "Needs the update action; another teammate's shared view also needs the delete action.",
+  action: "update",
+  callerActions: true,
   params: z.object({ viewId: flexibleToTypeIdSchema("post_view") }),
   response: z.object({ id: z.string() }),
   responseDescription: "The deleted view",
@@ -157,7 +160,18 @@ const deleteView = defineQuillsRoute({
     entityType: "post_view",
     entityId: params.viewId,
   }),
-  handler: async ({ db, actor, params }) => {
+  handler: async ({ db, actor, params, actions }) => {
+    const [view] = await db
+      .select({ createdBy: postViews.createdByPrincipalId })
+      .from(postViews)
+      .where(
+        and(eq(postViews.id, params.viewId), visibleTo(actor.principalId)),
+      );
+    if (!view) throw new HTTPException(404, { message: "View not found" });
+    if (view.createdBy !== actor.principalId && !actions.has("delete"))
+      throw new HTTPException(403, {
+        message: "Deleting another teammate's view needs the delete action",
+      });
     const [row] = await db
       .update(postViews)
       .set({ deletedAt: new Date() })

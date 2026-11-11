@@ -43,6 +43,7 @@ import {
   type Facet,
 } from "./post-filters";
 import { loadPost, postSchema, selectPosts, withTags } from "./post-view";
+import { lockMergeTarget, recount } from "./thread-counts";
 import {
   findBoard,
   findPost,
@@ -357,6 +358,7 @@ const updatePost = defineQuillsRoute({
       content: z.string().trim().max(10000).optional(),
       eta: z.iso
         .datetime({ offset: true })
+        .max(64)
         .refine((value) => !value.startsWith("0000"), "Year 0 is not a date")
         .nullable()
         .optional(),
@@ -676,6 +678,7 @@ const deletePost = defineQuillsRoute({
   load: loadProjects,
   handler: async ({ db, actor, params, loaded: projects }) => {
     const post = await findPost(db, params.postId, projects);
+    const target = await lockMergeTarget(db, post.id);
     // The state in WHERE makes the second of two parallel deletes a 404, not a repeat.
     const [row] = await db
       .update(posts)
@@ -683,6 +686,7 @@ const deletePost = defineQuillsRoute({
       .where(and(eq(posts.id, post.id), isNull(posts.deletedAt)))
       .returning({ id: posts.id });
     if (!row) throw notFound("Post");
+    if (target) await recount(db, target);
     await recordActivity(db, actor, post.id, { type: "post.deleted" });
     return loadPost(db, post.id);
   },
@@ -712,12 +716,14 @@ const restorePost = defineQuillsRoute({
       throw new HTTPException(409, {
         message: "Posts can be restored within 30 days of deletion",
       });
+    const target = await lockMergeTarget(db, post.id);
     const [row] = await db
       .update(posts)
       .set({ deletedAt: null, deletedByPrincipalId: null })
       .where(and(eq(posts.id, post.id), isNotNull(posts.deletedAt)))
       .returning({ id: posts.id });
     if (!row) throw new HTTPException(409, { message: "Post is not deleted" });
+    if (target) await recount(db, target);
     await recordActivity(db, actor, post.id, { type: "post.restored" });
     return loadPost(db, post.id);
   },

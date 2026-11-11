@@ -1,16 +1,4 @@
-import {
-  and,
-  asc,
-  count,
-  countDistinct,
-  eq,
-  inArray,
-  isNull,
-  ne,
-  or,
-  sql,
-  type SQL,
-} from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, type SQL } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import type { PostId } from "@kaneo/ids";
 import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
@@ -24,82 +12,28 @@ import {
 import { postActivity } from "../../database/quills/schema/activity";
 import { principal } from "../../database/quills/schema/auth";
 import { boards } from "../../database/quills/schema/boards";
-import {
-  postComments,
-  postVotes,
-  posts,
-} from "../../database/quills/schema/posts";
+import { postVotes, posts } from "../../database/quills/schema/posts";
 import {
   defineQuillsRoute,
   type AnyQuillsRoute,
 } from "../framework/define-route";
 import { page, pageQuery } from "./schemas";
-import { loadProjects, notTest, visibleBoard, visiblePost } from "./visibility";
+import { recount, uniqueVoters } from "./thread-counts";
+import {
+  loadProjects,
+  notTest,
+  onVisibleBoard,
+  visiblePost,
+} from "./visibility";
 
 type Db = Parameters<AnyQuillsRoute["handler"]>[0]["db"];
 
 // Merge links a duplicate to its canonical post, as in Quackback's post.merge.ts:
-// votes and comments stay on the duplicate and count on the canonical post.
+// votes and comments stay on the duplicate and count on the canonical post (thread-counts.ts).
 
 const params = z.object({ postId: flexibleToTypeIdSchema("post") });
 const notFound = () => new HTTPException(404, { message: "Post not found" });
 const conflict = (message: string) => new HTTPException(409, { message });
-
-/** The post and the live posts merged into it, on live boards. */
-const threadIds = (db: Db, ...ids: PostId[]) =>
-  db
-    .select({ id: posts.id })
-    .from(posts)
-    .where(
-      or(
-        inArray(posts.id, ids),
-        and(
-          inArray(posts.canonicalPostId, ids),
-          isNull(posts.deletedAt),
-          sql`exists (select 1 from ${boards} where ${eq(boards.id, posts.boardId)} and ${isNull(boards.deletedAt)})`,
-        ),
-      ),
-    );
-
-/** Unique non-test voters across the threads. */
-async function uniqueVoters(db: Db, ...ids: PostId[]) {
-  const [row] = await db
-    .select({ n: countDistinct(postVotes.principalId) })
-    .from(postVotes)
-    .where(
-      and(
-        inArray(postVotes.postId, threadIds(db, ...ids)),
-        notTest(postVotes.principalId),
-      ),
-    );
-  return row!.n;
-}
-
-/** Stores the unique voter and public comment counts of a post's thread. */
-async function recount(db: Db, id: PostId, resetMergeCheck = false) {
-  const voteCount = await uniqueVoters(db, id);
-  const [comments] = await db
-    .select({ n: count() })
-    .from(postComments)
-    .where(
-      and(
-        inArray(postComments.postId, threadIds(db, id)),
-        isNull(postComments.deletedAt),
-        notTest(postComments.principalId),
-        eq(postComments.isPrivate, false),
-        ne(postComments.moderationState, "pending"),
-      ),
-    );
-  await db
-    .update(posts)
-    .set({
-      voteCount,
-      commentCount: comments!.n,
-      ...(resetMergeCheck && { mergeCheckedAt: null }),
-    })
-    .where(eq(posts.id, id));
-  return voteCount;
-}
 
 /** Locks the posts in ID order, so two merges over the same posts cannot deadlock. */
 const lockPosts = (db: Db, ids: PostId[], where: SQL) =>
@@ -289,11 +223,11 @@ const unmergePost = defineQuillsRoute({
     if (!merged) throw notFound();
     const canonicalPostId = merged.canonicalPostId;
     if (!canonicalPostId) throw conflict("This post is not merged");
-    // The canonical post may since be deleted; it must still be on a board the caller can see.
+    // The canonical post may since be deleted; it must still be on a live board the caller can see.
     const rows = await lockPosts(
       db,
       [postId, canonicalPostId],
-      visibleBoard(posts.boardId, loaded),
+      onVisibleBoard(loaded),
     );
     const post = rows.find((row) => row.id === postId);
     const canonical = rows.find((row) => row.id === canonicalPostId);

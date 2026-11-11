@@ -35,12 +35,13 @@ import {
   type QuillsActor,
 } from "../framework/define-route";
 import { recordActivity } from "./activity";
+import { lockMergeTarget, recount } from "./thread-counts";
 import {
   findComment,
   findPost,
   loadProjects,
   notFound,
-  notTestPrincipal,
+  notTest,
 } from "./visibility";
 
 const postParams = z.object({ postId: flexibleToTypeIdSchema("post") });
@@ -92,7 +93,7 @@ async function reactionsFor(
     .where(
       and(
         inArray(postCommentReactions.commentId, ids),
-        notTestPrincipal(db, postCommentReactions.principalId),
+        notTest(postCommentReactions.principalId),
       ),
     )
     .groupBy(postCommentReactions.commentId, postCommentReactions.emoji)
@@ -157,8 +158,9 @@ const loadComment = async (
 ) => (await loadComments(db, actor, eq(postComments.id, id))).items[0]!;
 
 /**
- * Moves the post's comment count. Private and held comments, and comments
- * by or on test customers, never count, as in the source.
+ * Moves the post's comment count, and recounts `target`, the post it is merged into, which the
+ * caller locked with lockMergeTarget before its first write. Private and held comments, and
+ * comments by or on test customers, never count, as in the source.
  */
 async function countComment(
   db: Database,
@@ -169,6 +171,7 @@ async function countComment(
     moderationState: string;
   },
   delta: 1 | -1,
+  target: TypeId<"post"> | null,
 ) {
   if (comment.isPrivate || comment.moderationState === "pending") return;
   await db
@@ -177,10 +180,11 @@ async function countComment(
     .where(
       and(
         eq(posts.id, comment.postId),
-        notTestPrincipal(db, posts.principalId),
-        notTestPrincipal(db, comment.principalId),
+        notTest(posts.principalId),
+        notTest(comment.principalId),
       ),
     );
+  if (target) await recount(db, target);
 }
 
 const commentEvent =
@@ -260,6 +264,8 @@ const createComment = defineQuillsRoute({
       ? await findComment(db, body.parentId, projects, true)
       : undefined;
     if (parent && parent.postId !== post.id) throw notFound("Parent comment");
+    // Before the insert, which takes a key-share lock on the post.
+    const target = await lockMergeTarget(db, post.id);
     const [comment] = await db
       .insert(postComments)
       .values({
@@ -271,7 +277,7 @@ const createComment = defineQuillsRoute({
         isPrivate: body.isPrivate || !!parent?.isPrivate,
       })
       .returning();
-    await countComment(db, comment!, 1);
+    await countComment(db, comment!, 1, target);
     return loadComment(db, actor, comment!.id);
   },
 });
@@ -319,16 +325,22 @@ const deleteComment = defineQuillsRoute({
   operationId: "deleteQuillsComment",
   summary: "Delete a comment",
   description:
-    "Soft delete. Needs the delete action, also for the caller's own comment. A pinned comment is unpinned.",
-  action: "delete",
+    "Soft delete. Needs the update action; another person's comment also needs the delete action. A pinned comment is unpinned.",
+  action: "update",
+  callerActions: true,
   params: commentParams,
   response: commentSchema,
   responseDescription: "Deleted comment",
   errors,
   event: commentEvent("comment.deleted"),
   load: loadProjects,
-  handler: async ({ db, actor, params, loaded: projects }) => {
+  handler: async ({ db, actor, params, loaded: projects, actions }) => {
     const comment = await findComment(db, params.commentId, projects);
+    if (comment.principalId !== actor.principalId && !actions.has("delete"))
+      throw new HTTPException(403, {
+        message: "Deleting another person's comment needs the delete action",
+      });
+    const target = await lockMergeTarget(db, comment.postId);
     // The state in WHERE makes the second of two parallel deletes a 404, so the count moves once.
     const [row] = await db
       .update(postComments)
@@ -347,7 +359,7 @@ const deleteComment = defineQuillsRoute({
           eq(posts.pinnedCommentId, comment.id),
         ),
       );
-    await countComment(db, comment, -1);
+    await countComment(db, comment, -1, target);
     await recordActivity(db, actor, comment.postId, {
       type:
         comment.principalId === actor.principalId
@@ -377,6 +389,7 @@ const restoreComment = defineQuillsRoute({
   load: loadProjects,
   handler: async ({ db, actor, params, loaded: projects }) => {
     const comment = await findComment(db, params.commentId, projects, true);
+    const target = await lockMergeTarget(db, comment.postId);
     const [row] = await db
       .update(postComments)
       .set({ deletedAt: null, deletedByPrincipalId: null })
@@ -386,7 +399,7 @@ const restoreComment = defineQuillsRoute({
       .returning({ id: postComments.id });
     if (!row)
       throw new HTTPException(409, { message: "Comment is not deleted" });
-    await countComment(db, comment, 1);
+    await countComment(db, comment, 1, target);
     await recordActivity(db, actor, comment.postId, {
       type: "comment.restored",
       metadata: {

@@ -35,7 +35,7 @@ const bindTeam = defineQuillsRoute({
   summary: "Bind a workspace team to Quills",
   action: "manage_settings",
   body: z.object({
-    kaneoTeamId: z.string().min(1),
+    kaneoTeamId: z.string().min(1).max(200),
     isDefault: z.boolean().default(false),
   }),
   response: team,
@@ -79,7 +79,7 @@ const updateBinding = defineQuillsRoute({
   action: "manage_settings",
   params: z.object({ teamId: flexibleToTypeIdSchema("team") }),
   body: z.object({
-    kaneoTeamId: z.string().min(1).nullable(),
+    kaneoTeamId: z.string().min(1).max(200).nullable(),
     isDefault: z.boolean().optional(),
   }),
   response: team,
