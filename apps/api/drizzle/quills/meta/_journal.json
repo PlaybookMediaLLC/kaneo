@@ -92,6 +92,13 @@
 			"when": 1794352433336,
 			"tag": "0012_ops_domains_wipe",
 			"breakpoints": true
+		},
+		{
+			"idx": 13,
+			"version": "7",
+			"when": 1794356527763,
+			"tag": "0013_assistant_queue",
+			"breakpoints": true
 		}
 	]
 }

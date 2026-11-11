@@ -22,6 +22,7 @@ import { boardProjects } from "../../database/quills/schema/platform-links";
 import { postComments, posts } from "../../database/quills/schema/posts";
 import { postStatuses } from "../../database/quills/schema/statuses";
 import { webhooks } from "../../database/quills/schema/webhooks";
+import { assistantWork } from "../assistant/engine/index";
 import { seesBoard } from "../feedback/visibility";
 import {
   accessibleProjectIds,
@@ -33,6 +34,10 @@ import { enqueueQuillsJob, type QuillsQueue } from "./queue";
 export const eventQueues: Partial<Record<string, QuillsQueue>> = {
   "custom_domain.verification_requested": "quills.domain_check",
   "workspace.wipe_requested": "quills.wipe",
+  // Assistant work (assistant/engine/index.ts). Without a provider the job finishes with no work.
+  ...Object.fromEntries(
+    Object.keys(assistantWork).map((type) => [type, "quills.ai" as const]),
+  ),
 };
 
 export type DeliveryEvent = Pick<

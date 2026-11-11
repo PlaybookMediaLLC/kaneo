@@ -17,6 +17,7 @@ export const QUILLS_QUEUES = [
   "quills.notification",
   "quills.domain_check",
   "quills.wipe",
+  "quills.ai",
 ] as const;
 export type QuillsQueue = (typeof QUILLS_QUEUES)[number];
 /** Enqueues once per queue and deduplication key; a repeat returns undefined. */
@@ -38,49 +39,53 @@ export async function enqueueQuillsEvent(db: Database, eventId: string) {
   const payload = eventPayloadSchema.parse({ eventId });
   return enqueueQuillsJob(db, "quills.event", payload, payload.eventId, 3);
 }
-export async function claimQuillsJob(db: Database) {
-  await db.execute(
-    sql`UPDATE quills.job_queue SET status=CASE WHEN attempts<max_attempts THEN 'pending' ELSE 'failed' END,run_at=now(),finished_at=CASE WHEN attempts>=max_attempts THEN now() ELSE NULL END,lease_token=NULL,locked_until=NULL,locked_by=NULL,last_error='Worker lease expired',updated_at=now() WHERE queue IN (${sql.join(
-      QUILLS_QUEUES.map((queue) => sql`${queue}`),
-      sql`,`,
-    )}) AND status='running' AND locked_until<=now()`,
-  );
-  // One indexed query per queue, in list order: cache invalidations never wait behind deliveries.
-  // ponytail: fixed priority; a constantly ready webhook backlog delays mail. Add a fair order if both grow.
-  let job: typeof jobQueue.$inferSelect | undefined;
-  for (const queue of QUILLS_QUEUES) {
-    [job] = await db
-      .select()
-      .from(jobQueue)
-      .where(
-        and(
-          eq(jobQueue.queue, queue),
-          sql`${jobQueue.status}='pending' AND ${jobQueue.runAt}<=now()`,
-        ),
-      )
-      .orderBy(jobQueue.runAt, jobQueue.id)
-      .for("update", { skipLocked: true })
-      .limit(1);
-    if (job) break;
-  }
-  if (!job) return;
-  const token = randomUUID();
-  const [claimed] = await db
-    .update(jobQueue)
-    .set({
-      status: "running",
-      attempts: job.attempts + 1,
-      leaseToken: token,
-      lockedUntil: sql`now()+${LEASE_SECONDS}*interval '1 second'`,
-      lockedBy: `api:${process.pid}`,
-      startedAt: new Date(),
-      updatedAt: new Date(),
-      finishedAt: null,
-    })
-    .where(eq(jobQueue.id, job.id))
-    .returning();
-  return claimed;
-}
+/** A claimer for the next due job of `queues`, in list order. */
+export const claimFrom =
+  (queues: readonly QuillsQueue[]) => async (db: Database) => {
+    await db.execute(
+      sql`UPDATE quills.job_queue SET status=CASE WHEN attempts<max_attempts THEN 'pending' ELSE 'failed' END,run_at=now(),finished_at=CASE WHEN attempts>=max_attempts THEN now() ELSE NULL END,lease_token=NULL,locked_until=NULL,locked_by=NULL,last_error='Worker lease expired',updated_at=now() WHERE queue IN (${sql.join(
+        queues.map((queue) => sql`${queue}`),
+        sql`,`,
+      )}) AND status='running' AND locked_until<=now()`,
+    );
+    // One indexed query per queue, in list order: cache invalidations never wait behind deliveries.
+    // ponytail: fixed priority; a constantly ready webhook backlog delays mail. Add a fair order if both grow.
+    let job: typeof jobQueue.$inferSelect | undefined;
+    for (const queue of queues) {
+      [job] = await db
+        .select()
+        .from(jobQueue)
+        .where(
+          and(
+            eq(jobQueue.queue, queue),
+            sql`${jobQueue.status}='pending' AND ${jobQueue.runAt}<=now()`,
+          ),
+        )
+        .orderBy(jobQueue.runAt, jobQueue.id)
+        .for("update", { skipLocked: true })
+        .limit(1);
+      if (job) break;
+    }
+    if (!job) return;
+    const token = randomUUID();
+    const [claimed] = await db
+      .update(jobQueue)
+      .set({
+        status: "running",
+        attempts: job.attempts + 1,
+        leaseToken: token,
+        lockedUntil: sql`now()+${LEASE_SECONDS}*interval '1 second'`,
+        lockedBy: `api:${process.pid}`,
+        startedAt: new Date(),
+        updatedAt: new Date(),
+        finishedAt: null,
+      })
+      .where(eq(jobQueue.id, job.id))
+      .returning();
+    return claimed;
+  };
+/** Claims the next due job of every executed queue. */
+export const claimQuillsJob = claimFrom(QUILLS_QUEUES);
 export async function finishQuillsJob(
   db: Database,
   jobId: bigint,
