@@ -81,12 +81,12 @@ export type OAuthProvider = Provider & {
   target?: (target: string) => boolean;
   /**
    * Gets new token fields for a due access token (freshSecrets in providers/index.ts calls it).
-   * Absent when the provider's tokens do not expire.
+   * Absent when the provider's tokens do not expire. The stores keep only these fields (tokenFields).
    */
   refresh?: (
     secrets: Record<string, string>,
     creds: Record<string, string>,
-  ) => Promise<Record<string, string>>;
+  ) => Promise<ReturnType<typeof tokenFields>>;
   /** CRM lookup by email (HubSpot, Intercom, Zendesk). Null when no record matches. */
   contact?: (
     secrets: Record<string, string>,

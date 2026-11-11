@@ -8,7 +8,10 @@ import { slack } from "./slack";
 
 // The OAuth and key providers, one file each. To add a provider, add its file, its import above and
 // one entry below. The key is the integration type. The catalog entry, the connect route (oauth.ts)
-// and the token refresh follow from this registry.
+// and the token refresh in routes follow from this registry. Deliveries do not: the worker
+// (jobs/handlers/integration-send.ts) sends only for the providers it names. Until it sends for a
+// new provider, keep that provider's `events` empty. Declare each provider with `satisfies
+// OAuthProvider`, not a type annotation: an annotated OAuth provider drops out of OAuthProviderType.
 export const oauthProviders = {
   github,
   gitlab,
@@ -25,7 +28,7 @@ export type OAuthProviderType = {
 }[keyof Registry];
 export const oauthTypes = (
   Object.keys(oauthProviders) as (keyof Registry)[]
-).filter((type) => "authorizeUrl" in oauthProviders[type]) as [
+).filter((type) => typeof oauthProvider(type)?.authorizeUrl === "function") as [
   OAuthProviderType,
   ...OAuthProviderType[],
 ];
