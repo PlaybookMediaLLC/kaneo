@@ -408,7 +408,7 @@ const feed = defineQuillsRoute({
   operationId: "listQuillsPublicStatusFeed",
   summary: "Get the status RSS feed",
   description:
-    "RSS 2.0: one item per update of open incidents and maintenance and of recently resolved items, newest first, at most `limit` items. The newest item of each open incident always stays. Links point to KANEO_CLIENT_URL/portal/{workspaceId}.",
+    "RSS 2.0: one item per update of open incidents and maintenance and of recently resolved items, newest first, at most `limit` items. The newest item of each open incident always stays. Links point to the portal pages of the web app (/portal/{workspaceId}).",
   action: "read",
   query: z.object({
     limit: z.coerce.number().int().min(1).max(100).default(50),

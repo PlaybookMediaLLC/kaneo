@@ -136,7 +136,7 @@ async function postJson(
         body: JSON.stringify(body),
         headers: {
           "content-type": "application/json",
-          "user-agent": "Kaneo-Quills-Integration/1.0",
+          "user-agent": "Quills-Integration/1.0",
           ...headers,
         },
       },
@@ -282,7 +282,7 @@ async function deliverOAuth(d: Delivery): Promise<Outcome> {
             authorization: `Bearer ${token}`,
             accept: "application/vnd.github+json",
             "content-type": "application/json",
-            "user-agent": "Kaneo-Quills",
+            "user-agent": "Quills",
           },
           body: JSON.stringify({
             title: clip(d.content.post.title, 256),

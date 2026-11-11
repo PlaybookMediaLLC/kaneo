@@ -89,7 +89,7 @@ describe.skipIf(!url)("Quills operations", () => {
         kind: "portal",
         domain: name,
         active: false,
-        record: { type: "TXT", name: `_kaneo-verification.${name}` },
+        record: { type: "TXT", name: `_quills-verification.${name}` },
       },
     });
 

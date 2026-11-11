@@ -279,7 +279,7 @@ describe("widget host page", () => {
           type: "quackback:identify-result",
           success: false,
           user: null,
-          error: "Kaneo identifies visitors only with a signed ssoToken",
+          error: "The API identifies visitors only with a signed ssoToken",
         },
         HOST,
       ),

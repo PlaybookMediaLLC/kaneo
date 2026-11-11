@@ -146,7 +146,7 @@ export function useWidgetSession(
         : {
             success: false,
             user: null,
-            error: "Kaneo identifies visitors only with a signed ssoToken",
+            error: "The API identifies visitors only with a signed ssoToken",
           };
     },
   };

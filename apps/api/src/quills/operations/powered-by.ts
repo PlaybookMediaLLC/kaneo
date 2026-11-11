@@ -33,7 +33,7 @@ const update = defineQuillsRoute({
   operationId: "setQuillsPoweredBy",
   summary: 'Show or hide the "Powered by" badge',
   description:
-    "Hiding the badge returns 402 when the workspace's Kaneo Cloud plan is not active.",
+    "Hiding the badge returns 402 when the workspace's cloud plan is not active.",
   action: "manage_settings",
   body: flag,
   load: async ({ body, workspaceId }) => {

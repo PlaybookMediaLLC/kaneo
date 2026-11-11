@@ -68,7 +68,7 @@ const formHeaders = {
 const githubHeaders = (token: string) => ({
   authorization: `Bearer ${token}`,
   accept: "application/vnd.github+json",
-  "user-agent": "Kaneo-Quills",
+  "user-agent": "Quills",
   "x-github-api-version": "2022-11-28",
 });
 const rejected = () =>

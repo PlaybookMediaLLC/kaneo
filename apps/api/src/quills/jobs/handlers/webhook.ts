@@ -87,7 +87,7 @@ async function send(
         body,
         headers: {
           "content-type": "application/json",
-          "user-agent": "Kaneo-Quills-Webhook/1.0",
+          "user-agent": "Quills-Webhook/1.0",
           "x-kaneo-timestamp": timestamp,
           "x-kaneo-signature": signature,
           "x-kaneo-event": event.type,

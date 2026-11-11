@@ -24,7 +24,7 @@ const getLanguage = defineQuillsRoute({
   operationId: "getQuillsMyLanguagePreference",
   summary: "Get the caller's language preference",
   description:
-    "Null until set. A teammate's language is the Kaneo account locale, not this value.",
+    "Null until set. A teammate's language is the account locale, not this value.",
   action: "read",
   response: z.object({ language }),
   responseDescription: "The caller's language preference",

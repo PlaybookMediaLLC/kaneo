@@ -174,7 +174,7 @@ const setAutoAck = defineQuillsRoute({
   operationId: "setQuillsEmailAutoAck",
   summary: "Set the email auto-acknowledgement setting",
   description:
-    "Records the setting only. Kaneo sends no auto-acknowledgement until inbound email is ported.",
+    "Records the setting only. The API sends no auto-acknowledgement yet.",
   action: "manage_settings",
   body: autoAckSchema,
   response: autoAckSchema,

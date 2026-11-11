@@ -13,7 +13,7 @@ const wipe = defineQuillsRoute({
   operationId: "wipeQuillsWorkspaceData",
   summary: "Wipe the workspace's Quills data",
   description:
-    "`confirm` must equal the workspace slug, or the request returns 400. A background job then deletes all of the workspace's Quills data and cannot be undone: feedback, support, help center, status page and customer data, and also Quills configuration such as webhooks, integrations, Quills API keys and OAuth clients, Quills teams (with their Kaneo team bindings), sending domains, workflows, macros, SLA policies and ticket types. It keeps the Kaneo workspace and its members, teammate actors, Quills settings, the default statuses and roles, custom domains and the audit history.",
+    "`confirm` must equal the workspace slug, or the request returns 400. A background job then deletes all of the workspace's Quills data and cannot be undone: feedback, support, help center, status page and customer data, and also Quills configuration such as webhooks, integrations, Quills API keys and OAuth clients, Quills teams (with their workspace team bindings), sending domains, workflows, macros, SLA policies and ticket types. It keeps the workspace and its members, teammate actors, Quills settings, the default statuses and roles, custom domains and the audit history.",
   action: "manage_settings",
   body: z.object({ confirm: z.string().min(1).max(200) }),
   response: z.object({ queued: z.boolean() }),

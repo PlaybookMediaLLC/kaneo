@@ -54,7 +54,7 @@ const listPrincipals = defineQuillsRoute({
   operationId: "listQuillsPrincipals",
   summary: "List teammates",
   description:
-    "The Quills actors of current workspace members, with their Kaneo role. Manage the roster in Kaneo.",
+    "The Quills actors of current workspace members, with their workspace role. Manage the roster in the workspace member settings.",
   action: "read",
   query: z.object({
     search: z.string().trim().max(200).optional(),

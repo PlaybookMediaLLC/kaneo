@@ -302,7 +302,7 @@ const publish = defineQuillsRoute({
   operationId: "publishQuillsWorkflow",
   summary: "Publish or re-enable a workflow",
   description:
-    "Makes the workflow live and records the caller as the teammate it acts as. Each run checks that teammate's current Kaneo role; a run they may not do fails as denied.",
+    "Makes the workflow live and records the caller as the teammate it acts as. Each run checks that teammate's current workspace role; a run they may not do fails as denied.",
   action: "manage_settings",
   // A version makes the caller the run's actor, and runs change conversations: a key scoped only
   // to manage_settings must not author work that acts with its owner's full role.

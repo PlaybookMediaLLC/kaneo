@@ -128,7 +128,7 @@ const feed = defineQuillsRoute({
   operationId: "getQuillsPublicChangelogFeed",
   summary: "Get the changelog RSS feed",
   description:
-    "RSS 2.0 with the 50 newest published entries that an anonymous visitor may see; empty on a private portal. Links point to KANEO_CLIENT_URL/portal/{workspaceId}. The source's /changelog/feed, /changelog/rss and /changelog/rss.xml.",
+    "RSS 2.0 with the 50 newest published entries that an anonymous visitor may see; empty on a private portal. Links point to the portal pages of the web app (/portal/{workspaceId}). The source's /changelog/feed, /changelog/rss and /changelog/rss.xml.",
   action: "read",
   rateLimit: { limit: 30, windowSeconds: 60 },
   raw: "application/rss+xml",

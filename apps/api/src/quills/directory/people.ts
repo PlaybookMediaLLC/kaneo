@@ -75,7 +75,7 @@ const listUsers = defineQuillsRoute({
   operationId: "listQuillsUsers",
   summary: "List customers and leads",
   description:
-    "Customers only. Kaneo teammates, test customers and service principals are never listed.",
+    "Customers only. Teammates, test customers and service principals are never listed.",
   action: "read",
   query: z.object({
     search: z.string().trim().max(200).optional(),

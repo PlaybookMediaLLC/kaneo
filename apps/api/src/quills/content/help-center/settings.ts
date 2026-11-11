@@ -39,7 +39,7 @@ const response = z
     autoTranslate: z.object({
       enabled: z.boolean().openapi({
         description:
-          "Stored only: a publish records the request, and no translation runs in Kaneo yet",
+          "Stored only: a publish records the request, and no translation runs yet",
       }),
       protectedTerms: z.array(z.string()),
     }),

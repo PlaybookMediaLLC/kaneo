@@ -65,7 +65,7 @@ const list = defineQuillsRoute({
   operationId: "listQuillsCustomDomains",
   summary: "List the portal and help center custom domains",
   description:
-    "A domain serves only when `active` is true. `entitled` is false when the workspace's Kaneo Cloud plan is not active.",
+    "A domain serves only when `active` is true. `entitled` is false when the workspace's cloud plan is not active.",
   action: "manage_settings",
   load: ({ workspaceId }) => hasWorkspaceEntitlement(workspaceId),
   response: z.object({ entitled: z.boolean(), domains: z.array(domainOut) }),
@@ -91,7 +91,7 @@ function kindRoutes(
     operationId: `setQuills${title}Domain`,
     summary: `Set the ${label} custom domain`,
     description:
-      "A new domain starts inactive with a new TXT value. Sending the current domain again changes nothing. Returns 402 when the workspace's Kaneo Cloud plan is not active.",
+      "A new domain starts inactive with a new TXT value. Sending the current domain again changes nothing. Returns 402 when the workspace's cloud plan is not active.",
     action: "manage_settings",
     body: z.object({
       domain: z
@@ -174,7 +174,7 @@ function kindRoutes(
     operationId: `verifyQuills${title}Domain`,
     summary: `Check the ${label} custom domain's TXT record`,
     description:
-      "Queues a DNS check of the stored domain; the list shows the result after the worker runs. Returns 402 when the workspace's Kaneo Cloud plan is not active.",
+      "Queues a DNS check of the stored domain; the list shows the result after the worker runs. Returns 402 when the workspace's cloud plan is not active.",
     action: "manage_settings",
     load: entitlement,
     response: domainOut,

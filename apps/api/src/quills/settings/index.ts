@@ -14,7 +14,7 @@ const overview = defineQuillsRoute({
   operationId: "listQuillsSettings",
   summary: "Get the workspace settings overview",
   description:
-    "The name and slug are Kaneo's and read-only here. Secrets are never included; each area has its own route.",
+    "The name and slug belong to the workspace and are read-only here. Secrets are never included; each area has its own route.",
   action: "read",
   response: z.object({
     name: z.string(),

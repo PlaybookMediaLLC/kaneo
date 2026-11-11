@@ -165,7 +165,7 @@ const deleteTeam = defineQuillsRoute({
   path: "/teams/{teamId}",
   operationId: "deleteQuillsTeam",
   summary: "Delete a Quills team",
-  description: "Soft delete. The Kaneo team and its members stay.",
+  description: "Soft delete. The linked workspace team and its members stay.",
   action: "manage_settings",
   params: teamParams,
   response: z.object({ id: z.string() }),

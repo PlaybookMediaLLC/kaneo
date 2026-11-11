@@ -3,7 +3,7 @@
 const RESERVED = [".test", ".example", ".invalid", ".localhost"];
 const LABEL = /^(?!-)[a-z0-9-]{1,63}(?<!-)$/;
 /**
- * Room for the TXT record name `_kaneo-verification.<domain>` (DNS allows 253 characters)
+ * Room for the TXT record name `_quills-verification.<domain>` (DNS allows 253 characters)
  * and for the domain as an outbox entity ID (200 characters).
  */
 export const MAX_DOMAIN_LENGTH = 200;

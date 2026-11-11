@@ -58,7 +58,7 @@ Merged: 7 (`getQuillsCloudCustomDomains`, `hasQuillsCustomDomainEntitlement`, `g
   `.localhost` are refused (400).
 - A new domain starts inactive with a new random TXT value. Sending the current domain again changes nothing.
   A domain is active only when `verified_at` is set, which only the domain check worker writes.
-- Verification proves control with a TXT record `_kaneo-verification.<domain>` that holds the value. The source
+- Verification proves control with a TXT record `_quills-verification.<domain>` that holds the value. The source
   also made an HTTPS request to the domain; this port makes no HTTP request.
 - Verify queues the check and returns the stored state. `custom_domain.checked` (a worker change, audited as
   `system`) invalidates client caches when the result is written.

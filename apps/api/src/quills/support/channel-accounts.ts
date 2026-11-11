@@ -323,7 +323,7 @@ const addAddress = defineQuillsRoute({
   operationId: "createQuillsSendingAddress",
   summary: "Add or move a sending address",
   description:
-    "Adding an address again moves it to the new module. Its domain is recorded as a pending sending domain when it is new; Kaneo does not yet create provider identities or check DNS for it.",
+    "Adding an address again moves it to the new module. Its domain is recorded as a pending sending domain when it is new; the API does not yet create provider identities or check DNS for it.",
   action: "manage_settings",
   body: z.object({
     address: z.string().trim().toLowerCase().email().max(320),

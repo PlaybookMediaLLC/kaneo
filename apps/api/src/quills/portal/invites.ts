@@ -74,7 +74,7 @@ const send = defineQuillsRoute({
   operationId: "sendQuillsPortalInvite",
   summary: "Invite one email address to the portal",
   description:
-    "Gives the address portal access after its owner signs in with a Kaneo account that has this verified email. It never adds a workspace member. The mail is sent after commit. One address per request; the source's batch of 50 is a client loop.",
+    "Gives the address portal access after its owner signs in with an account that has this verified email. It never adds a workspace member. The mail is sent after commit. One address per request; the source's batch of 50 is a client loop.",
   action: "manage_settings",
   body: z.object({
     email: z.string().trim().toLowerCase().email().max(320),

@@ -10,7 +10,7 @@ import { quillsSchema, workspaceColumn, workspacePolicy } from "../tenancy";
 
 /** The TXT record name that must hold `verification_value` for the domain. */
 export const verificationRecordName = (domain: string) =>
-  `_kaneo-verification.${domain}`;
+  `_quills-verification.${domain}`;
 
 /**
  * One custom domain per workspace and kind (portal or help center).

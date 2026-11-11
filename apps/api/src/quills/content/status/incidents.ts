@@ -224,7 +224,7 @@ const createIncident = defineQuillsRoute({
   operationId: "createQuillsStatusIncident",
   summary: "Publish an incident, schedule maintenance or log a past incident",
   description:
-    "An incident is public when created. Publishing records status.incident_published for the subscriber mail handler; a backfill records status.incident_created and never notifies. Maintenance automation at the window bounds is stored but needs a scheduler that Kaneo does not run yet.",
+    "An incident is public when created. Publishing records status.incident_published for the subscriber mail handler; a backfill records status.incident_created and never notifies. Maintenance automation at the window bounds is stored but needs a scheduler that does not run yet.",
   action: "create",
   body: z.object({
     kind,

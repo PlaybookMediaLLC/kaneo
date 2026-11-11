@@ -33,7 +33,7 @@ const getProfile = defineQuillsRoute({
   operationId: "getQuillsCustomerProfile",
   summary: "Get the caller's customer profile",
   description:
-    "linked is false until the account first acts in this workspace; name and email then come from the Kaneo account.",
+    "linked is false until the account first acts in this workspace; name and email then come from the account.",
   action: "read",
   response: profile,
   responseDescription: "The caller's customer profile",
@@ -111,7 +111,7 @@ const unlinkProfile = defineQuillsRoute({
   operationId: "unlinkQuillsCustomerProfile",
   summary: "Unlink the caller's customer profile",
   description:
-    "Removes the link between the Kaneo account and its customer profile here. The profile, its history and the Kaneo account stay.",
+    "Removes the link between the account and its customer profile here. The profile, its history and the account stay.",
   action: "delete",
   rateLimit: { limit: 30, windowSeconds: 600 },
   response: z.object({ changed: z.boolean() }),

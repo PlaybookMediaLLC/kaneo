@@ -77,7 +77,7 @@ const presence = defineQuillsRoute({
   operationId: "getQuillsWidgetPresence",
   summary: "Get the team's messenger availability",
   description:
-    "withinOfficeHours follows the workspace office hours. agentsOnline is null: Kaneo keeps no live agent presence, so it is unknown.",
+    "withinOfficeHours follows the workspace office hours. agentsOnline is null: the API keeps no live agent presence, so it is unknown.",
   action: "read",
   response: z.object({
     agentsOnline: z.boolean().nullable(),

@@ -144,7 +144,7 @@ async function register(
                 authorization: `Bearer ${token}`,
                 accept: "application/vnd.github+json",
                 "content-type": "application/json",
-                "user-agent": "Kaneo-Quills",
+                "user-agent": "Quills",
               },
               body: JSON.stringify({
                 name: "web",

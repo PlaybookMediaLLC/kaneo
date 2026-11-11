@@ -154,7 +154,7 @@ describe.skipIf(!url)("Quills custom domain check job", () => {
     await request(domain);
     await h.drain(h.a);
     expect(dns.resolveTxt).toHaveBeenCalledWith(
-      `_kaneo-verification.${domain}`,
+      `_quills-verification.${domain}`,
     );
     expect(await row()).toMatchObject({
       domain,
