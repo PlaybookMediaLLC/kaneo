@@ -33,7 +33,11 @@ import {
   stopContract,
   unregisteredRoutes,
 } from "./contract";
-import { defineQuillsRoute, type AnyQuillsRoute } from "./define-route";
+import {
+  buildQuillsRoute,
+  defineQuillsRoute,
+  type AnyQuillsRoute,
+} from "./define-route";
 import { registry } from "./registry";
 import type { SignedVerifier } from "./signed";
 
@@ -359,6 +363,124 @@ const teammateMeta = defineQuillsRoute({
   handler: async (input) => ({ present: "request" in input }),
 });
 
+// Broken on purpose: a route declared raw, mounted by hand, that answers JSON with a private value.
+const rawAsJson: AnyQuillsRoute = {
+  audience: "public",
+  method: "get",
+  path: "/broken/feed.xml",
+  operationId: "brokenRawAsJson",
+  summary: "Broken raw route that answers JSON",
+  action: "read",
+  raw: "application/rss+xml",
+  response: z.string(),
+  responseDescription: "Feed",
+  handler: async () => "",
+};
+// Broken on purpose: a route declared JSON, mounted by hand, that answers XML.
+const jsonAsXml: AnyQuillsRoute = {
+  audience: "public",
+  method: "get",
+  path: "/broken/feed.json",
+  operationId: "brokenJsonAsXml",
+  summary: "Broken JSON route that answers XML",
+  action: "read",
+  response: z.object({ items: z.array(z.string()) }),
+  responseDescription: "Feed",
+  handler: async () => ({ items: [] }),
+};
+// Broken on purpose: a raw XML route that lists every board, private ones included.
+const rawLeak = defineQuillsRoute({
+  audience: "public",
+  method: "get",
+  path: "/broken/boards.xml",
+  operationId: "brokenRawLeak",
+  summary: "Broken raw route that leaks private rows",
+  action: "read",
+  raw: "application/xml",
+  response: z.string(),
+  responseDescription: "Board names",
+  handler: async ({ db }) =>
+    `<boards>${(await db.select({ name: boards.name }).from(boards))
+      .map((board) => `<name>${board.name}</name>`)
+      .join("")}</boards>`,
+});
+// A text body probe: a textBody route reads text/plain as JSON; another route answers it with 415.
+const textBody = z.object({ n: z.number().max(10) });
+const textProbe = defineQuillsRoute({
+  audience: "public",
+  method: "post",
+  path: "/probe/text-body",
+  operationId: "probeTextBody",
+  summary: "Echoes a body that may come as text/plain",
+  action: "create",
+  textBody: true,
+  body: textBody,
+  response: z.object({ n: z.number() }),
+  responseDescription: "The body",
+  event: { none: "A probe" },
+  handler: async ({ body }) => ({ n: body.n }),
+});
+const jsonProbe = defineQuillsRoute({
+  audience: "public",
+  method: "post",
+  path: "/probe/json-body",
+  operationId: "probeJsonBody",
+  summary: "Echoes a JSON body",
+  action: "create",
+  body: textBody,
+  response: z.object({ n: z.number() }),
+  responseDescription: "The body",
+  event: { none: "A probe" },
+  handler: async ({ body }) => ({ n: body.n }),
+});
+// A prepare and call probe for a portal route. `between` runs in `call`, with no transaction open.
+let between: (() => Promise<unknown>) | undefined;
+const preparedProbe = defineQuillsRoute({
+  audience: "portal",
+  method: "post",
+  path: "/probe/prepared",
+  operationId: "probePortalPrepared",
+  summary: "Reports what prepare, call and the handler saw",
+  action: "update",
+  response: z.object({
+    called: z.string(),
+    caller: z.string().nullable(),
+    workspaceId: z.string(),
+  }),
+  responseDescription: "What each step saw",
+  event: { none: "A probe" },
+  prepare: async ({ caller, workspaceId }) =>
+    `${workspaceId}:${caller.principalId}`,
+  call: async (prepared) => {
+    await between?.();
+    return `called ${prepared}`;
+  },
+  handler: async ({ caller, called, workspaceId }) => ({
+    called,
+    caller: caller.principalId,
+    workspaceId,
+  }),
+});
+// Broken on purpose: a widget route that writes for any visitor's input, not the session's own record.
+const anyVisitor = defineQuillsRoute({
+  audience: "widget",
+  method: "post",
+  path: "/broken/claim",
+  operationId: "brokenWidgetClaim",
+  summary: "Broken widget route without an ownership check",
+  action: "create",
+  body: z.object({ label: z.string().max(100) }),
+  response: z.object({ claimed: z.boolean() }),
+  responseDescription: "Claimed",
+  event: { none: "Broken on purpose" },
+  handler: async ({ db, body }) => {
+    await db
+      .insert(boards)
+      .values({ name: body.label, slug: `claim-${crypto.randomUUID()}` });
+    return { claimed: true };
+  },
+});
+
 const app = contractApp(
   apiRouter<BaseVariables & { workspaceId: string }>()
     .openapi(...teammateMeta)
@@ -392,6 +514,32 @@ const app = contractApp(
     .openapi(...unverified)
     .openapi(...publicMeta)
     .openapi(...signedMeta)
+    .openapi(...rawLeak)
+    .openapi(...textProbe)
+    .openapi(...jsonProbe)
+    .openapi(...preparedProbe)
+    .openapi(...anyVisitor)
+    .openapi(
+      createRoute({
+        method: "get",
+        path: "/{workspace}/broken/feed.xml",
+        request: { params: z.object({ workspace: z.string() }) },
+        responses: { 200: jsonResponse("Feed", z.object({ x: z.string() })) },
+      }),
+      (c) => c.json({ x: "raw-private-value" }, 200),
+    )
+    .openapi(
+      createRoute({
+        method: "get",
+        path: "/{workspace}/broken/feed.json",
+        request: { params: z.object({ workspace: z.string() }) },
+        responses: { 200: jsonResponse("Feed", z.object({ x: z.string() })) },
+      }),
+      (c) =>
+        c.body("<items/>", 200, {
+          "content-type": "application/xml",
+        }) as never,
+    )
     .openapi(
       createRoute({
         method: "post",
@@ -419,9 +567,11 @@ describe.skipIf(!url)("Quills route contract self-test", () => {
   afterAll(() => stopContract());
 
   it("reports a route without a permission check", async () => {
-    // The second one is the broken internal route below.
+    // The others are the broken raw-response routes and the broken internal route below.
     expect(unregisteredRoutes(app)).toEqual([
       "PUT /quills/:workspaceId/broken/no-permission",
+      "GET /quills-public/:workspace/broken/feed.xml",
+      "GET /quills-public/:workspace/broken/feed.json",
       "POST /quills-public/internal/broken/wake",
     ]);
     const found = await checks(noPermission);
@@ -693,6 +843,203 @@ describe.skipIf(!url)("Quills route contract self-test", () => {
       if (previous === undefined) delete process.env.QUILLS_INTERNAL_TOKEN;
       else process.env.QUILLS_INTERNAL_TOKEN = previous;
     }
+  });
+  it("skips strict-response only for a raw route, and still checks its content type and leaks", async () => {
+    const leaky = fixture({
+      seed: async () => ({}),
+      valid: () => ({}),
+      hidden: () => ["raw-private-value"],
+    });
+    const asJson = await checks(rawAsJson, leaky);
+    expect(asJson).toContain(
+      "raw-response: expected a application/rss+xml document, got application/json",
+    );
+    expect(asJson).toContainEqual(
+      expect.stringMatching(/^hidden: the response contains raw-private-value/),
+    );
+    expect(await checks(jsonAsXml, leaky)).toContain(
+      "strict-response: expected application/json, got application/xml",
+    );
+    const found = await checks(
+      declared("brokenRawLeak"),
+      fixture({
+        seed: async (env) => {
+          const name = env.id("private-board");
+          await env.scoped(env.a, (db) =>
+            db.insert(boards).values({ name, slug: name }),
+          );
+          return { name };
+        },
+        valid: () => ({}),
+        hidden: (ids) => [ids.name],
+      }),
+    );
+    expect(found).toContainEqual(
+      expect.stringMatching(/^hidden: the response contains .*private-board/),
+    );
+    expect(found.filter((f) => /^(strict|raw)-response/.test(f))).toEqual([]);
+  });
+  it("reads a text/plain body as JSON only on a textBody route", async () => {
+    const env = contractEnv();
+    const post = (path: string, body: string) =>
+      app.request(`/quills-public/${env.a}/probe/${path}`, {
+        method: "POST",
+        headers: { "content-type": "text/plain;charset=UTF-8" },
+        body,
+      });
+    const ok = await post("text-body", JSON.stringify({ n: 3 }));
+    expect([ok.status, await ok.json()]).toEqual([200, { n: 3 }]);
+    expect((await post("text-body", JSON.stringify({ n: 11 }))).status).toBe(
+      400,
+    );
+    expect((await post("text-body", "not json")).status).toBe(400);
+    // The body bound of a textBody route: 8 KiB, read before any parser.
+    const large = JSON.stringify({ n: 3, pad: "x".repeat(9000) });
+    expect((await post("text-body", large)).status).toBe(413);
+    expect((await post("json-body", JSON.stringify({ n: 3 }))).status).toBe(
+      415,
+    );
+  });
+  it("runs a portal route's call between two transactions that see the same caller", async () => {
+    const env = contractEnv();
+    const { principalId } = await env.portalCustomer(env.a, env.customerA);
+    const send = () =>
+      app.request(`/quills-public/${env.a}/probe/prepared`, {
+        method: "POST",
+        headers: { "x-test-user": env.customerA },
+      });
+    const ok = await send();
+    expect(await ok.json()).toEqual({
+      called: `called ${env.a}:${principalId}`,
+      caller: principalId,
+      workspaceId: env.a,
+    });
+    // The account loses its profile link while the call runs: the handler must not act for it.
+    between = () =>
+      pool.query(
+        "UPDATE quills.customer_identity SET kaneo_user_id=NULL WHERE workspace_id=$1 AND kaneo_user_id=$2",
+        [env.a, env.customerA],
+      );
+    try {
+      const changed = await send();
+      expect(changed.status).toBe(409);
+    } finally {
+      between = undefined;
+    }
+  });
+  it("reports a widget route that lets another visitor change the visitor's records", async () => {
+    const found = await checks(
+      declared("brokenWidgetClaim"),
+      fixture({
+        seed: async (env) => ({
+          ...(await env.widgetVisitor(env.a)),
+          label: env.id("claim"),
+        }),
+        valid: (ids) => ({ bearer: ids.token, body: { label: ids.label } }),
+        probe: (env, ids) =>
+          env.scoped(env.a, (db) =>
+            db
+              .select({ id: boards.id })
+              .from(boards)
+              .where(eq(boards.name, ids.label)),
+          ),
+      }),
+    );
+    expect(found).toContain(
+      "customer-ownership: another widget visitor changed the visitor's records",
+    );
+  });
+});
+
+// The declaration rules of the raw, textBody and non-teammate prepare options, without a database.
+describe("raw, textBody and prepare declaration rules", () => {
+  const base = {
+    method: "get" as const,
+    path: "/rules",
+    operationId: "rules",
+    summary: "Rules",
+    action: "read" as const,
+    responseDescription: "Rules",
+  };
+  it("takes a raw response only on a non-teammate read with a string response", () => {
+    const raw = { ...base, raw: "application/xml" as const };
+    expect(() =>
+      buildQuillsRoute({
+        ...raw,
+        audience: "public",
+        response: z.string(),
+        handler: async () => "",
+      }),
+    ).not.toThrow();
+    expect(() =>
+      buildQuillsRoute({
+        ...raw,
+        response: z.string(),
+        handler: async () => "",
+      }),
+    ).toThrow(/raw response/);
+    expect(() =>
+      buildQuillsRoute({
+        ...raw,
+        audience: "public",
+        response: z.object({}),
+        handler: async () => ({}),
+      }),
+    ).toThrow(/raw response/);
+    expect(() =>
+      buildQuillsRoute({
+        ...raw,
+        audience: "public",
+        method: "post",
+        response: z.string(),
+        event: { none: "Rules" },
+        handler: async () => "",
+      }),
+    ).toThrow(/raw response/);
+  });
+  it("takes textBody only on a public route with a body", () => {
+    const route = {
+      ...base,
+      method: "post" as const,
+      event: { none: "Rules" },
+      body: z.object({ n: z.number().max(1) }),
+      response: z.object({}),
+      textBody: true as const,
+      handler: async () => ({}),
+    };
+    expect(() =>
+      buildQuillsRoute({ ...route, audience: "public" }),
+    ).not.toThrow();
+    expect(() => buildQuillsRoute({ ...route, audience: "portal" })).toThrow(
+      /textBody/,
+    );
+    expect(() => buildQuillsRoute({ ...route, audience: "widget" })).toThrow(
+      /textBody/,
+    );
+  });
+  it("takes prepare on a portal or widget route, not with ensureCustomer and not on a public route", () => {
+    const route = {
+      ...base,
+      response: z.object({}),
+      prepare: async () => null,
+      call: async () => null,
+      handler: async () => ({}),
+    };
+    expect(() =>
+      buildQuillsRoute({ ...route, audience: "widget" }),
+    ).not.toThrow();
+    expect(() =>
+      buildQuillsRoute({
+        ...route,
+        audience: "portal",
+        method: "post",
+        event: { none: "Rules" },
+        ensureCustomer: true,
+      }),
+    ).toThrow(/without ensureCustomer/);
+    expect(() => buildQuillsRoute({ ...route, audience: "public" })).toThrow(
+      /prepare and call/,
+    );
   });
 });
 

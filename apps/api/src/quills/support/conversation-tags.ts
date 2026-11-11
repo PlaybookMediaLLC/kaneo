@@ -196,7 +196,8 @@ const createTag = defineQuillsRoute({
       )
       .limit(1);
     if (live) return { ...live, created: false };
-    // The name is unique per workspace across archived rows: an archived tag comes back.
+    // The name is unique per workspace across archived rows: an archived tag comes back. A
+    // concurrent create of the same name in another case meets the live-name index: 409.
     const [row] = await db
       .insert(conversationTags)
       .values({ name: body.name, color: body.color })
@@ -204,7 +205,8 @@ const createTag = defineQuillsRoute({
         target: [conversationTags.workspaceId, conversationTags.name],
         set: { deletedAt: null, color: body.color },
       })
-      .returning(tagFields);
+      .returning(tagFields)
+      .catch(uniqueConflict("A tag with that name already exists"));
     return { ...row!, created: true };
   },
 });
@@ -324,7 +326,8 @@ const restoreTag = defineQuillsRoute({
           isNotNull(conversationTags.deletedAt),
         ),
       )
-      .returning(tagFields);
+      .returning(tagFields)
+      .catch(uniqueConflict("A live tag already uses this name"));
     if (!row) throw notFound("Archived tag");
     return row;
   },

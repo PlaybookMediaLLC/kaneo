@@ -178,7 +178,7 @@ appear (no platform read is allowed on portal routes).
 
 | Item | Status | Reason |
 |---|---|---|
-| Portal uploads (`api/portal/upload`, `api/portal/files`), widget upload (`api/widget/upload`, `getWidgetImageUploadUrl`), customer avatar upload | not built | Registration must verify the object (HEAD and digest) before the scoped transaction, under the verification lease. Only teammate routes have that `load` step; portal and widget routes cannot run it, and verifying inside the transaction would hold a pooled connection over network I/O. An upload URL alone leaves objects that no reference protects and nothing cleans up, which customers could fill. Needs a framework change: `load` for portal and widget routes, after the credential read and before `withQuillsAudience`. |
+| Portal uploads (`api/portal/upload`, `api/portal/files`), widget upload (`api/widget/upload`, `getWidgetImageUploadUrl`), customer avatar upload | built | `files/customer.ts` and `files/ROUTES.md`: portal and widget routes now run `prepare` and `call`, so verification happens outside the transaction. |
 | Public storage proxy (`listStorage`, `putStorage`) | not built | Signed GET URLs from `framework/files.ts` serve reads. |
 | Website-branding reads (`lookupWebsiteBranding`, `getAutomaticWebsiteBrandingStatus`) | not built | In the source these are teammate assistant features (`requireAuth`, AI module) that fetch an arbitrary website. They are not customer reads; they belong with the assistant phase and its SSRF guard. |
 | Identify `previousToken` merge | not built | It merges an anonymous widget session into the identified person. Anonymous widget sessions are minted by the public-feedback slice (in parallel); the merge needs their row shape. |

@@ -15,17 +15,18 @@ import {
 } from "drizzle-orm";
 import type { StatusComponentGroupId } from "@kaneo/ids";
 import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
-import {
-  apiRouter,
-  nullableResponseTimestamp,
-  responseTimestamp,
-  z,
-} from "../../../../openapi";
+import { apiRouter, responseTimestamp, z } from "../../../../openapi";
+import { settings } from "../../../../database/quills/schema/auth";
 import {
   statusComponentGroups,
   statusIncidents,
 } from "../../../../database/quills/schema/status";
 import { defineQuillsRoute } from "../../../framework/define-route";
+import {
+  portalUrl,
+  publicUrl,
+  rssDocument,
+} from "../../../portal/feedback/feeds";
 import { uptimeSeriesFor } from "../../status/overview";
 import { componentStatus, worst } from "../../status/shared";
 import {
@@ -355,30 +356,68 @@ const history = defineQuillsRoute({
   },
 });
 
+type FeedItem = z.output<typeof publicIncident> & {
+  detailsEditedAt: Date | null;
+};
+type FeedEntry = Parameters<typeof rssDocument>[0]["items"][number];
+
+/**
+ * The source's feed entries of one incident: one per update, and one more for a details edit after
+ * the latest update. Each names the status it set and carries the window and services as they are now.
+ */
+function feedEntries(workspaceId: string, item: FeedItem) {
+  const link = portalUrl(workspaceId, `/status/${item.id}`);
+  const title = (status: string) =>
+    `${item.kind === "maintenance" ? "Maintenance: " : ""}${item.title} (${status.replace(/_/g, " ")})`;
+  const context = [
+    ...(item.kind === "maintenance" && item.scheduledStartAt
+      ? [
+          item.scheduledEndAt
+            ? `Window: ${item.scheduledStartAt.toUTCString()} to ${item.scheduledEndAt.toUTCString()}`
+            : `Starts: ${item.scheduledStartAt.toUTCString()}`,
+        ]
+      : []),
+    ...(item.affectedComponents.length
+      ? [`Affected: ${item.affectedComponents.map((c) => c.name).join(", ")}`]
+      : []),
+  ];
+  const entries: FeedEntry[] = item.updates.map((update) => ({
+    title: title(update.status),
+    description: [update.body.slice(0, 500), ...context].join(" · "),
+    publishedAt: update.createdAt,
+    link,
+    guid: `${link}#${update.id}`,
+  }));
+  const latest = Math.max(0, ...entries.map((e) => +e.publishedAt));
+  if (item.detailsEditedAt && +item.detailsEditedAt > latest)
+    entries.push({
+      title: title(item.status),
+      description: ["Details updated", ...context].join(" · "),
+      publishedAt: item.detailsEditedAt,
+      link,
+      guid: `${link}#edited-${+item.detailsEditedAt}`,
+    });
+  return entries;
+}
+
 const feed = defineQuillsRoute({
   audience: "portal",
   signIn: false,
   method: "get",
-  path: "/status/feed",
+  path: "/status/rss.xml",
   operationId: "listQuillsPublicStatusFeed",
-  summary: "List the status feed items",
+  summary: "Get the status RSS feed",
   description:
-    "Open incidents and maintenance, then recently resolved items, by latest activity. The framework answers JSON; a reader-facing RSS document is rendered from these items.",
+    "RSS 2.0: one item per update of open incidents and maintenance and of recently resolved items, newest first, at most `limit` items. The newest item of each open incident always stays. Links point to KANEO_CLIENT_URL/portal/{workspaceId}.",
   action: "read",
   query: z.object({
     limit: z.coerce.number().int().min(1).max(100).default(50),
   }),
-  response: z.object({
-    items: z.array(
-      publicIncident.extend({
-        detailsEditedAt: nullableResponseTimestamp,
-        lastActivityAt: responseTimestamp,
-      }),
-    ),
-  }),
-  responseDescription: "Feed items, latest activity first",
+  raw: "application/rss+xml",
+  response: z.string(),
+  responseDescription: "The RSS document",
   errors,
-  handler: async ({ db, caller, query }) => {
+  handler: async ({ db, caller, query, workspaceId }) => {
     const { segmentIds } = await openStatusPage(db, caller);
     const open = await incidentIds(
       db,
@@ -404,23 +443,40 @@ const feed = defineQuillsRoute({
       [desc(statusIncidents.updatedAt), desc(statusIncidents.id)],
       query.limit,
     );
-    const items = (
+    const groups = (
       await publicIncidents(
         db,
         [...new Set([...open, ...resolved])],
         segmentIds,
       )
     ).map((item) => ({
-      ...item,
-      lastActivityAt: [item.resolvedAt, ...item.updates.map((u) => u.createdAt)]
-        .filter((at): at is Date => at !== null)
-        .reduce((latest, at) => (at > latest ? at : latest), item.startedAt),
+      open: item.resolvedAt === null,
+      entries: feedEntries(workspaceId, item).sort(
+        (x, y) => +y.publishedAt - +x.publishedAt,
+      ),
     }));
-    return {
-      items: items
-        .sort((x, y) => +y.lastActivityAt - +x.lastActivityAt)
-        .slice(0, query.limit),
-    };
+    // The newest entry of each open item stays; older entries fill the rest of the limit.
+    const kept = new Set(
+      groups.flatMap((g) => (g.open && g.entries[0] ? [g.entries[0]] : [])),
+    );
+    for (const entry of groups
+      .flatMap((g) => g.entries)
+      .filter((e) => !kept.has(e))
+      .sort((x, y) => +y.publishedAt - +x.publishedAt)
+      .slice(0, Math.max(0, query.limit - kept.size)))
+      kept.add(entry);
+    const [settingsRow] = await db
+      .select({ name: settings.name })
+      .from(settings)
+      .limit(1);
+    const name = settingsRow?.name || "Status";
+    return rssDocument({
+      title: `${name} Status`,
+      description: `Incidents and maintenance for ${name}`,
+      link: portalUrl(workspaceId, "/status"),
+      self: publicUrl(workspaceId, "/status/rss.xml"),
+      items: [...kept].sort((x, y) => +y.publishedAt - +x.publishedAt),
+    });
   },
 });
 

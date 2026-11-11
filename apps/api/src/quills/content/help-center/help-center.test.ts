@@ -8,6 +8,7 @@ import {
   helpCenterArticles,
   helpCenterCategories,
   helpCenterRedirectRules,
+  helpCenterSearchQueries,
 } from "../../../database/quills/schema/kb";
 import { segments } from "../../../database/quills/schema/segments";
 import quillsRouter from "../../index";
@@ -576,5 +577,44 @@ describe.skipIf(!url)("Quills help center", () => {
       "de",
       "ja",
     ]);
+  });
+
+  it("bounds the search terms window to the search log retention", async () => {
+    const env = contractEnv();
+    const term = env.id("term");
+    const day = 24 * 60 * 60 * 1000;
+    await env.scoped(env.a, (db) =>
+      db.insert(helpCenterSearchQueries).values(
+        [10, 60].map((age) => ({
+          query: term,
+          normalizedQuery: term,
+          locale: "en",
+          resultsCount: 0,
+          createdAt: new Date(Date.now() - age * day),
+        })),
+      ),
+    );
+    const searches = async (days: number) => {
+      const res = await send(
+        "GET",
+        `/help-center/analytics/search-terms?days=${days}&limit=100`,
+      );
+      return {
+        days: res.body.days,
+        n: res.body.terms.find(
+          (t: { normalizedQuery: string }) => t.normalizedQuery === term,
+        )?.searches,
+      };
+    };
+    try {
+      // Unset: the 90-day default.
+      vi.stubEnv("QUILLS_LOG_RETENTION_DAYS", undefined);
+      expect(await searches(365)).toEqual({ days: 90, n: 2 });
+      vi.stubEnv("QUILLS_LOG_RETENTION_DAYS", "30");
+      expect(await searches(365)).toEqual({ days: 30, n: 1 });
+      expect(await searches(7)).toEqual({ days: 7, n: undefined });
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

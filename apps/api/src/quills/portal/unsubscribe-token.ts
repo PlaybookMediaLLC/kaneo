@@ -23,7 +23,7 @@ export const UNSUBSCRIBE_ACTIONS = [
 export type UnsubscribeAction = (typeof UNSUBSCRIBE_ACTIONS)[number];
 const TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
-const apiBase = () => {
+export const apiBase = () => {
   const base = (process.env.KANEO_API_URL || "http://localhost:1337").replace(
     /\/+$/,
     "",

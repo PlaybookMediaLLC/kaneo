@@ -80,9 +80,15 @@ export type Fixture<T = any> = {
   foreign?: (ids: T) => Record<string, string>;
   /** Non-teammate: values that no response may contain (private, secret or workspace B data). */
   hidden?: (ids: T) => string[];
-  /** Portal: values that belong to customer A; customer B and a teammate must not read them. */
+  /**
+   * Portal: values that belong to customer A; customer B and a teammate must not read them.
+   * Widget (optional): values of the valid caller's visitor; another visitor must not read them.
+   */
   own?: (ids: T) => string[];
-  /** Portal: a snapshot of customer A's records; another caller's request must not change it. */
+  /**
+   * Portal: a snapshot of customer A's records; another caller's request must not change it.
+   * Widget (optional): the same for the valid caller's visitor and another visitor of A.
+   */
   probe?: (env: ContractEnv, ids: T) => Promise<unknown>;
   /**
    * Widget: requests with a forged credential, for example a wrong HMAC. Each is rejected.

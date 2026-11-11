@@ -9,3 +9,5 @@ export * from "./profile.fixture";
 export * from "./subscriptions.fixture";
 export * from "./unsubscribe.fixture";
 export * from "../support/customer/index.fixture";
+export * from "../files/customer.fixture";
+export * from "../reporting/track.fixture";

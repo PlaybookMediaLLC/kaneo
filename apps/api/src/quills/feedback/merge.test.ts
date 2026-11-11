@@ -390,11 +390,13 @@ describe.skipIf(!url)("Quills post merge", () => {
     });
 
     it("when the merged post's board is deleted", async () => {
-      const { canonical, duplicateBoard } = await mergedPair();
-      expect((await send("DELETE", `/boards/${duplicateBoard}`)).status).toBe(
-        200,
-      );
+      const { canonical, duplicate, duplicateBoard } = await mergedPair();
+      const deleted = await send("DELETE", `/boards/${duplicateBoard}`);
+      expect(deleted.status).toBe(200);
       expect(await counts(canonical)).toEqual(alone);
+      // Only a post merged into a post on the deleted board is unmerged; this one stays merged.
+      expect(deleted.body.unmerged).toEqual([]);
+      expect((await state(duplicate)).canonicalPostId).toBe(canonical);
     });
 
     it("rolls back the delete and the recount together", async () => {
@@ -432,10 +434,40 @@ describe.skipIf(!url)("Quills post merge", () => {
     });
   });
 
-  it("does not unmerge from a canonical post on a deleted board", async () => {
+  // Owner decision: a board delete unmerges the posts merged into its posts. Before, they stayed
+  // merged into a post that no route could reach, so they could not be unmerged or voted on.
+  it("unmerges every post merged into a post on a deleted board, in the delete's transaction", async () => {
     const env = contractEnv();
     const { canonical, duplicate, canonicalBoard } = await pair();
     expect((await merge(env.owner, duplicate, canonical)).status).toBe(200);
+    const declared = [...registry.keys()].find(
+      (d) => d.operationId === "deleteQuillsBoard",
+    )!;
+    const failing = contractApp(
+      apiRouter<BaseVariables & { workspaceId: string }>().openapi(
+        ...buildQuillsRoute({
+          ...declared,
+          handler: async (input) => {
+            await declared.handler(input);
+            throw new Error("Injected failure after the unmerge");
+          },
+        }),
+      ),
+    );
+    const before = [await state(canonical), await state(duplicate)];
+    expect(
+      (
+        await call(
+          failing,
+          env,
+          env.owner,
+          "DELETE",
+          `/boards/${canonicalBoard}`,
+        )
+      ).status,
+    ).toBe(500);
+    expect([await state(canonical), await state(duplicate)]).toEqual(before);
+
     const deleted = await call(
       app,
       env,
@@ -444,11 +476,69 @@ describe.skipIf(!url)("Quills post merge", () => {
       `/boards/${canonicalBoard}`,
     );
     expect(deleted.status).toBe(200);
-    const before = await state(duplicate);
+    expect(deleted.body.unmerged).toEqual([
+      { postId: duplicate, canonicalPostId: canonical },
+    ]);
+    expect(await state(duplicate)).toMatchObject({
+      canonicalPostId: null,
+      voteCount: 2,
+      commentCount: 1,
+      activity: ["post.merged_away", "post.unmerged"],
+      events: ["post.merged", "post.unmerged"],
+    });
+    expect(await state(canonical)).toMatchObject({
+      voteCount: 2,
+      commentCount: 0,
+      activity: ["post.merged_in", "post.unmerged"],
+    });
+    // Independent again: there is nothing left to unmerge, and nothing changes.
+    const after = await state(duplicate);
     expect(
       (await call(app, env, env.owner, "POST", `/posts/${duplicate}/unmerge`))
         .status,
-    ).toBe(404);
-    expect(await state(duplicate)).toEqual(before);
+    ).toBe(409);
+    expect(await state(duplicate)).toEqual(after);
+  });
+
+  it("also unmerges from a deleted canonical post on the deleted board", async () => {
+    const env = contractEnv();
+    const { canonical, duplicate, canonicalBoard } = await pair();
+    expect((await merge(env.owner, duplicate, canonical)).status).toBe(200);
+    const send = (method: string, path: string) =>
+      call(app, env, env.owner, method, path);
+    expect((await send("DELETE", `/posts/${canonical}`)).status).toBe(200);
+    const deleted = await send("DELETE", `/boards/${canonicalBoard}`);
+    expect(deleted.body.unmerged).toEqual([
+      { postId: duplicate, canonicalPostId: canonical },
+    ]);
+    expect(await state(duplicate)).toMatchObject({
+      canonicalPostId: null,
+      voteCount: 2,
+    });
+  });
+
+  it("unmerges a post the caller cannot see without naming it", async () => {
+    const env = contractEnv();
+    const { canonical, duplicate, canonicalBoard, duplicateBoard } =
+      await pair();
+    await linkedProject(env, duplicateBoard);
+    expect((await merge(env.owner, duplicate, canonical)).status).toBe(200);
+    // An administrator who can open no linked project still sees the canonical post's board.
+    const admin = await restrictedMember(env, [], "admin");
+    const deleted = await call(
+      app,
+      env,
+      admin,
+      "DELETE",
+      `/boards/${canonicalBoard}`,
+    );
+    expect(deleted.status).toBe(200);
+    expect(deleted.body.unmerged).toEqual([]);
+    expect(JSON.stringify(deleted.body)).not.toContain(duplicate);
+    expect(await state(duplicate)).toMatchObject({
+      canonicalPostId: null,
+      events: ["post.merged"],
+      activity: ["post.merged_away", "post.unmerged"],
+    });
   });
 });

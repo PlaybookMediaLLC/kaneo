@@ -46,9 +46,27 @@ export const settingsPurposes = [
 ] as const;
 /** Purposes registered in `quills.files`. Settings keys register in their own column. */
 export const filePurposes = [...contentPurposes, "assistant_avatar"] as const;
+/**
+ * Portal and widget uploads. Their keys have one more path segment, the customer's ID, so a
+ * customer can verify only its own uploads.
+ */
+export const customerPurposes = [
+  "customer_file",
+  "customer_image",
+  "customer_avatar",
+] as const;
 export type Purpose =
   | (typeof contentPurposes)[number]
-  | (typeof settingsPurposes)[number];
+  | (typeof settingsPurposes)[number]
+  | (typeof customerPurposes)[number];
+const isCustomerPurpose = (purpose: Purpose | "export") =>
+  (customerPurposes as readonly string[]).includes(purpose);
+/** What a customer may attach besides images: no markup, scripts or executables. */
+const customerFileTypes = new Set([
+  "application/pdf",
+  "text/plain",
+  "text/csv",
+]);
 
 const contentType = z
   .string()
@@ -127,16 +145,37 @@ function client(config: StorageConfig) {
   return cached.client;
 }
 
-const namespace = (
+/** A customer purpose takes the customer's ID as `owner`; no other purpose takes one. */
+function namespace(
   config: StorageConfig,
   workspaceId: string,
   purpose: Purpose | "export",
-) =>
-  `${applyKeyPrefix(config.keyPrefix, ["workspace", sanitizePathSegment(workspaceId), "quills", purpose].join("/"))}/`;
+  owner?: string,
+) {
+  if (isCustomerPurpose(purpose) !== Boolean(owner))
+    throw new Error(`Upload owner mismatch for ${purpose}`);
+  const segments = [
+    "workspace",
+    sanitizePathSegment(workspaceId),
+    "quills",
+    purpose,
+    ...(owner ? [sanitizePathSegment(owner)] : []),
+  ];
+  return `${applyKeyPrefix(config.keyPrefix, segments.join("/"))}/`;
+}
 
 function checkUpload(purpose: Purpose, type: string, bytes: number) {
-  if (purpose !== "file" && !isImageContentType(type))
-    throw new HTTPException(400, { message: "Upload a supported image." });
+  if (
+    purpose === "customer_file"
+      ? !isImageContentType(type) && !customerFileTypes.has(type)
+      : purpose !== "file" && !isImageContentType(type)
+  )
+    throw new HTTPException(400, {
+      message:
+        purpose === "customer_file"
+          ? "Upload an image, a PDF or a text file."
+          : "Upload a supported image.",
+    });
   try {
     validateTaskAssetUploadInput(type, bytes);
   } catch (error) {
@@ -144,15 +183,19 @@ function checkUpload(purpose: Purpose, type: string, bytes: number) {
   }
 }
 
-/** A presigned PUT for a new key in this workspace's namespace for `purpose`. */
+/**
+ * A presigned PUT for a new key in this workspace's namespace for `purpose`. `customer`: the
+ * caller's customer ID, required for customer purposes.
+ */
 export async function createUpload(
   workspaceId: string,
   input: z.output<ReturnType<typeof uploadRequest>>,
+  customer?: string,
 ): Promise<z.input<typeof uploadResponse>> {
   checkUpload(input.purpose, input.contentType, input.size);
   const config = storage();
   const extension = getFileExtension(input.filename);
-  const key = `${namespace(config, workspaceId, input.purpose)}${createId()}${extension ? `.${extension}` : ""}`;
+  const key = `${namespace(config, workspaceId, input.purpose, customer)}${createId()}${extension ? `.${extension}` : ""}`;
   const uploadUrl = await getSignedUrl(
     client(config),
     new PutObjectCommand({
@@ -210,6 +253,24 @@ export async function createDownload(file: {
     ),
     downloadExpiresAt: new Date(Date.now() + config.presignTtlSeconds * 1000),
   };
+}
+
+/**
+ * A short-lived inline GET for a verified image key that has no file row (a customer avatar). The
+ * object keeps the image type that its verified upload stored. Null when storage is not configured.
+ */
+export async function imageUrl(key: string) {
+  if (!isStorageConfigured()) return null;
+  const config = storage();
+  return getSignedUrl(
+    client(config),
+    new GetObjectCommand({
+      Bucket: config.bucket,
+      Key: key,
+      ResponseContentDisposition: "inline",
+    }),
+    { expiresIn: config.presignTtlSeconds },
+  );
 }
 
 /**
@@ -282,27 +343,27 @@ export async function verifyUpload(
   workspaceId: string,
   purposes: readonly Purpose[],
   input: z.output<typeof uploadedObject>,
+  options?: { customer?: string },
 ): Promise<VerifiedUpload>;
 export async function verifyUpload(
   workspaceId: string,
   purposes: readonly Purpose[],
   input: z.output<typeof uploadedObject>,
-  options: { digest: true },
+  options: { digest: true; customer?: string },
 ): Promise<VerifiedUpload & { sha256: string }>;
+/** `customer`: the caller's customer ID, required for customer purposes. */
 export async function verifyUpload(
   workspaceId: string,
   purposes: readonly Purpose[],
   input: z.output<typeof uploadedObject>,
-  options: { digest?: boolean } = {},
+  options: { digest?: boolean; customer?: string } = {},
 ): Promise<VerifiedUpload & { sha256?: string }> {
   const config = storage();
-  const purpose = purposes.find((p) =>
-    input.key.startsWith(namespace(config, workspaceId, p)),
-  );
-  const suffix = purpose
-    ? input.key.slice(namespace(config, workspaceId, purpose).length)
-    : "";
-  // Another workspace's key, another purpose's key or a path suffix is not this upload.
+  const prefix = (p: Purpose) =>
+    namespace(config, workspaceId, p, options.customer);
+  const purpose = purposes.find((p) => input.key.startsWith(prefix(p)));
+  const suffix = purpose ? input.key.slice(prefix(purpose).length) : "";
+  // Another workspace's or customer's key, another purpose's key or a path suffix is not this upload.
   if (!purpose || !/^[A-Za-z0-9_-][A-Za-z0-9._-]*$/.test(suffix))
     throw new HTTPException(404, { message: "Upload not found" });
   checkUpload(purpose, input.contentType, input.size);

@@ -68,6 +68,39 @@ custom audience) merge into `createQuillsUpload` plus `createQuillsFiles`, becau
 `saveQuillsHeaderLogoKey` and `deleteQuillsHeaderLogo` name SETTINGS_BRANDING; it maps to manage_settings like SETTINGS_MANAGE.
 A PUT with the key that is already set and a DELETE with no key change nothing and record no event.
 
+## Portal and widget uploads, customer avatar (`customer.ts`)
+
+These routes are under `/quills-public/{workspace}`. `prepare` runs the gate and finds the caller's
+customer in a read transaction. `call` signs or verifies outside any transaction. The handler's
+transaction resolves the caller again (409 when it changed) and writes the reference.
+
+- Key: `<S3_KEY_PREFIX>/workspace/<workspaceId>/quills/<purpose>/<customerId>/<cuid>.<ext>`. A customer
+  verifies only keys under its own customer ID: another customer's key, or a teammate key, is 404.
+- Purposes: `customer_file` (images, PDF, plain text, CSV), `customer_image` and `customer_avatar`
+  (images). The `S3_MAX_IMAGE_UPLOAD_BYTES` limit applies. A portal account needs a customer profile
+  here first (403, as the source); so does a removed customer, which keeps the profile row only.
+- Widget uploads need the messenger or tickets tab and a visitor that the host app identified. An
+  anonymous widget session gets 403. This is stricter than the source: customer files have no consumer
+  and no sweep yet, so an anonymous caller must not fill storage.
+- Rate limits per client and workspace: 20 a minute for uploads and registrations, 10 in 10 minutes
+  for the avatar.
+- Known gap: no route reads a registered customer file yet, and no sweep removes unattached `files` rows
+  (teammate registrations have the same gap). An upload URL that is never registered leaves an object
+  that nothing cleans up, as for teammates.
+
+| operationId | Route | Audience | Tables | Event | Tests |
+|---|---|---|---|---|---|
+| `createQuillsPortalUpload` | `POST /portal/uploads` | portal (portal access gate) | - (signs a URL) | none | contract, `customer.test.ts` |
+| `createQuillsPortalFiles` | `POST /portal/files` (idempotent per key) | portal (portal access gate) | `files` (`source` portal) | `file.created` (new file only) | contract (customer ownership, rollback), `customer.test.ts` |
+| `createQuillsWidgetUpload` | `POST /widget/uploads` (`customer_file`, `customer_image`) | widget | - (signs a URL) | none | contract |
+| `createQuillsWidgetFiles` | `POST /widget/files` (idempotent per key) | widget | `files` (`source` visitor) | `file.created` (new file only) | contract (another visitor's key), `customer.test.ts` |
+| `saveQuillsCustomerAvatar` | `PUT /user/avatar` | portal (portal on) | `customer_identity.image_key` | `customer.profile_updated` | contract, `customer.test.ts` (replace queues the old object) |
+| `deleteQuillsCustomerAvatar` | `DELETE /user/avatar` | portal (portal on) | `customer_identity.image_key` | `customer.profile_updated` (when it changed) | contract, `customer.test.ts` |
+
+The profile reads (`portal/profile.ts`) return a short-lived URL of an uploaded avatar before the
+provider image URL. The existing storage trigger, reference probes, workspace deletion and transfer
+already cover `customer_identity.image_key` and `files.storage_key`.
+
 ## Not in this slice
 
 | Source capability | Reason |
@@ -75,4 +108,4 @@ A PUT with the key that is already set and a DELETE with no key change nothing a
 | `getQuillsWidgetHeroUploadUrl`, `saveQuillsWidgetHeroImageKey`, `deleteQuillsWidgetHeroImage` | Built in P3c with a `settings.widget_hero_key` column; see `portal/CUSTOMER-ROUTES.md`. |
 | `getQuillsIdentityProviderLogoUploadUrl` | AUTH_MANAGE. The Kaneo Quills schema has no identity provider logo field to hold the key. Do it with the sign-in configuration routes. |
 | `getQuillsAvatarUploadUrl` (teammate part) | A teammate avatar is the canonical Kaneo profile image. A Quills copy would be a parallel profile. |
-| `getQuillsAvatarUploadUrl` (customer part), `getQuillsWidgetImageUploadUrl`, `createQuillsPortalFiles`, `createQuillsPortalUpload`, `listQuillsStorage` and `putQuillsStorage` (public proxy), the beacon form of `createQuillsFilesOpened`, the public use of `checkQuillsS3Configured` | Portal, widget or public audience: phase P3. |
+| `listQuillsStorage` and `putQuillsStorage` (public proxy), the beacon form of `createQuillsFilesOpened`, the public use of `checkQuillsS3Configured` | Portal, widget or public audience: phase P3. The customer uploads and the avatar are built above. |

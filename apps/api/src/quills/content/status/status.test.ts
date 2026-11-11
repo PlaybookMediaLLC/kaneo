@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, eq, inArray, sql } from "drizzle-orm";
 import { segments } from "../../../database/quills/schema/segments";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
@@ -22,6 +22,7 @@ import {
 } from "../../framework/contract";
 import { call } from "../../feedback/taxonomy-harness.fixture";
 import { uptimeDays } from "./overview";
+import { afterCursor } from "./subscribers";
 import { statusIn } from "./seed.fixture";
 
 let pool: Pool;
@@ -391,6 +392,38 @@ describe.skipIf(!url)("Quills status page", () => {
     ).toHaveLength(100);
     // Seeding 15,000 rows takes about 4 s locally, above the default 5 s budget with the requests.
   }, 60000);
+
+  it("pages subscribers by a row comparison that the index serves on every page", async () => {
+    const env = contractEnv();
+    // The 5,001 rows above share one created_at: every page boundary is a tie.
+    const first = await send("GET", "/status/subscribers?limit=100");
+    const second = await send(
+      "GET",
+      `/status/subscribers?limit=100&cursor=${first.body.nextCursor}`,
+    );
+    const whole = await send(
+      "GET",
+      `/status/subscribers?limit=100&cursor=${first.body.subscribers[49].id}`,
+    );
+    const ids = (page: { body: { subscribers: { id: string }[] } }) =>
+      page.body.subscribers.map((s) => s.id);
+    expect(second.body.subscribers).toHaveLength(100);
+    expect(ids(second)).not.toContain(ids(first)[99]);
+    // A cursor in the middle of page one continues exactly after that row.
+    expect(ids(whole).slice(0, 50)).toEqual(ids(first).slice(50));
+    expect(ids(whole).slice(50)).toEqual(ids(second).slice(0, 50));
+    const plan = await env.scoped(env.a, async (db) =>
+      (
+        await db.execute<{ "QUERY PLAN": string }>(
+          sql`EXPLAIN SELECT id FROM ${statusSubscriptions} WHERE ${afterCursor(first.body.nextCursor)} ORDER BY created_at DESC, id DESC LIMIT 101`,
+        )
+      ).rows
+        .map((row) => row["QUERY PLAN"])
+        .join("\n"),
+    );
+    expect(plan).toContain("status_subscriptions_workspace_created_idx");
+    expect(plan).toMatch(/Index Cond: .*ROW\(created_at, id\) </);
+  });
 
   it("starts the uptime window from the last status before it", async () => {
     const env = contractEnv();

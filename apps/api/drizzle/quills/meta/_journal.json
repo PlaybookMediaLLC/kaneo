@@ -148,6 +148,13 @@
 			"when": 1794367443469,
 			"tag": "0020_foreign_key_indexes",
 			"breakpoints": true
+		},
+		{
+			"idx": 21,
+			"version": "7",
+			"when": 1794372909423,
+			"tag": "0021_integration_sync_purge_scope",
+			"breakpoints": true
 		}
 	]
 }

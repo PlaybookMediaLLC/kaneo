@@ -83,6 +83,42 @@ describe("Workspace archive validation", () => {
       "new/video",
     ]);
   });
+  it("renames live tags that differ only in case, as migration 0020 does", () => {
+    const archive = base();
+    const id = (n: number) =>
+      `00000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+    archive.tables.conversation_tags = [
+      { id: id(3), name: "BUG", created_at: "2026-01-03T00:00:00.000Z" },
+      { id: id(2), name: "bug", created_at: "2026-01-01T00:00:00.000Z" },
+      { id: id(1), name: "Bug", created_at: "2026-01-01T00:00:00.000Z" },
+      {
+        id: id(4),
+        name: "bug",
+        created_at: "2025-01-01T00:00:00.000Z",
+        deleted_at: "2026-01-04T00:00:00.000Z",
+      },
+      {
+        id: id(5),
+        name: "x".repeat(50),
+        created_at: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: id(6),
+        name: "X".repeat(50),
+        created_at: "2026-01-02T00:00:00.000Z",
+      },
+    ];
+    const result = prepareArchive(archive, {}, "target", []);
+    expect(result.tables.conversation_tags!.map((tag) => tag.name)).toEqual([
+      "BUG (000000000003)",
+      "bug (000000000002)",
+      // The oldest (the lowest ID on a tie) keeps its name; an archived tag keeps its name.
+      "Bug",
+      "bug",
+      "x".repeat(50),
+      `${"X".repeat(35)} (000000000006)`,
+    ]);
+  });
   it("pauses an imported integration so it delivers nothing until an admin enables it", () => {
     const archive = base();
     archive.tables.integrations = [

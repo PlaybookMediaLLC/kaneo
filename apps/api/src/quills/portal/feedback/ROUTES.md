@@ -119,8 +119,8 @@ and posts still need the portal's `features.allowAnonymous` and the board tier.
 
 | operationId | Route | Action | Tables | Event | Tests |
 |---|---|---|---|---|---|
-| `getQuillsPublicChangelogFeed` | `GET /changelog/feed` (50 newest, JSON; 30 per minute per client) | read | settings, changelog_* | - | contract, portal-off, private portal |
-| `getQuillsPublicSitemap` | `GET /sitemap` (JSON; 30 per minute per client) | read | boards, posts, changelog_entries | - | contract, portal-off, private portal |
+| `getQuillsPublicChangelogFeed` | `GET /changelog/rss.xml` (RSS 2.0, 50 newest; 30 per minute per client) | read | settings, changelog_* | - | contract, portal-off, private portal |
+| `getQuillsPublicSitemap` | `GET /sitemap.xml` (sitemap XML; 30 per minute per client) | read | boards, posts, changelog_entries | - | contract, portal-off, private portal |
 
 Both show what an anonymous visitor of a public portal sees; a private portal gives empty lists.
 
@@ -150,6 +150,11 @@ Both show what an anonymous visitor of a public portal sees; a private portal gi
 - `getQuillsPublicChangelogFeed`: `routes/changelog/feed.ts`; `rss.ts` and `rss[.]xml.ts`
   only redirect to the feed in the source.
 - `getQuillsPublicSitemap`: `routes/sitemap[.]xml.ts`.
+- The XML routes (`raw` in `defineQuillsRoute`) replace the earlier JSON `/changelog/feed` and
+  `/sitemap`; nothing else read them. Page links are `KANEO_CLIENT_URL/portal/{workspaceId}/...`, the
+  portal path of the invite and post mails (`feeds.ts#portalUrl`). The feed's self link is
+  `KANEO_API_URL/api/quills-public/{workspaceId}/changelog/rss.xml`, as the unsubscribe link builds it.
+  The help-center sitemap and the status feed use the same helpers.
 
 ## Differences from the source (packages/widget RFCs win)
 
@@ -168,13 +173,11 @@ Both show what an anonymous visitor of a public portal sees; a private portal gi
 | Edit and delete rule | `voteCount > 0` blocks, so the author's own vote blocks | a team review, a merged-in post, and votes and public comments by others block; private notes, held comments and test customers do not count, so a refusal shows nothing hidden; an edit goes through moderation again | the source rule blocked every post |
 | Team reply rule on comments | any team reply blocks | only a public, published team reply blocks | a private note must not show through a refusal |
 | Similar posts | embeddings and full text | full text on any word | no embedding service in this slice |
-| RSS and sitemap | XML | JSON | `defineQuillsRoute` answers JSON only |
 
 ## Not built in this slice
 
 | Item | Reason |
 |---|---|
-| XML documents for RSS (`/changelog/rss`, `/rss.xml`, `/feed`) and `sitemap.xml` | Needs a raw-response option in `defineQuillsRoute` (framework change) and a decided portal URL scheme for absolute links. The JSON routes carry the data. |
 | 404 before 401/403/429 while the portal is off | The framework counts the rate limit and resolves the caller before the handler. A signed-out caller on a sign-in route gets 401, a blocked account 403. No data leaks. A strict 404 needs a gate hook in `defineQuillsRoute`. |
 | Anonymous writes in the portal | A portal caller is a Kaneo session (D1). Anonymous writes go through the widget's anonymous session. |
 | Anonymous to identified merge | P3a identify does not take a `previousToken` yet. |
