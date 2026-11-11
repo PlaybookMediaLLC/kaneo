@@ -8,3 +8,4 @@ export * from "./conversation-tags.fixture";
 export * from "./conversation-views.fixture";
 export * from "./conversations.fixture";
 export * from "./inbox.fixture";
+export * from "./test-conversations.fixture";

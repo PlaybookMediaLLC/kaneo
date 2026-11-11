@@ -18,6 +18,7 @@ import taxonomy from "./feedback/taxonomy";
 import supportTickets from "./support/tickets-router";
 import supportConversations from "./support/conversations-router";
 import supportTyping from "./support/customer/typing";
+import testConversations from "./support/test-conversations";
 import { brandText } from "@kaneo/branding";
 import { apiRouter, z, type BaseVariables } from "../openapi";
 import { settings } from "../database/quills/schema/auth";
@@ -78,6 +79,7 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", supportTickets)
   .route("/", supportConversations)
   .route("/", supportTyping)
+  .route("/", testConversations)
   .route("/", portalInvites)
   .route("/", reporting)
   .route("/", automation)
