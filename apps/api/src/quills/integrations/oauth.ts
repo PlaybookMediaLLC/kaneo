@@ -22,12 +22,15 @@ import {
   summaryColumns,
 } from "./connect";
 import {
+  connectQuery,
   failureOf,
   providerFailure,
   redirectUri,
   tokenFields,
   type Destination,
+  type DestinationScope,
   type ExternalItem,
+  type OAuthProvider,
 } from "./oauth-providers";
 import {
   freshSecrets,
@@ -171,9 +174,32 @@ const deleteCredentials = defineQuillsRoute({
   }),
 });
 
-/** One connect route per provider, at the source's path: the provider is part of the path, not an input. */
-const startConnect = (type: (typeof oauthTypes)[number]) =>
-  defineQuillsRoute({
+/** The provider's authorization URL, with a signed state that carries the connect fields. */
+async function authorization(
+  db: Database,
+  actor: { workspaceId: string; userId: string },
+  type: (typeof oauthTypes)[number],
+  fields: Record<string, string>,
+) {
+  const creds = await appCredentials(db, type);
+  if (!creds?.clientId) throw notConfigured();
+  const state = mintOAuthState({
+    workspaceId: actor.workspaceId,
+    userId: actor.userId,
+    type,
+    fields,
+  });
+  return {
+    authorizeUrl: oauthApp(type).authorizeUrl(
+      creds,
+      redirectUri(type),
+      state,
+      fields,
+    ),
+  };
+}
+const connectRoute = (type: (typeof oauthTypes)[number]) =>
+  ({
     method: "get",
     path: `/oauth/${type}/connect`,
     operationId: `startQuills${type[0]!.toUpperCase()}${type.slice(1)}OAuthConnect`,
@@ -183,24 +209,42 @@ const startConnect = (type: (typeof oauthTypes)[number]) =>
     action: "manage_settings",
     response: z.object({ authorizeUrl: z.string() }),
     responseDescription: "The provider authorization URL",
+  }) as const;
+
+/** One connect route per provider, at the source's path: the provider is part of the path, not an input. */
+const startConnect = (type: (typeof oauthTypes)[number]) =>
+  defineQuillsRoute({
+    ...connectRoute(type),
     errors: { 403: "Insufficient permission", 409: "No OAuth app credentials" },
-    handler: async ({ db, actor }) => {
-      const creds = await appCredentials(db, type);
-      if (!creds?.clientId) throw notConfigured();
-      const state = mintOAuthState({
-        workspaceId: actor.workspaceId,
-        userId: actor.userId,
-        type,
-      });
-      return {
-        authorizeUrl: oauthApp(type).authorizeUrl(
-          creds,
-          redirectUri(type),
-          state,
-        ),
-      };
-    },
+    handler: ({ db, actor }) => authorization(db, actor, type, {}),
   });
+/** The connect route of a provider with connect fields: they are query values, and the state carries them. */
+const startConnectWithFields = (
+  type: (typeof oauthTypes)[number],
+  fields: Record<string, RegExp>,
+) =>
+  defineQuillsRoute({
+    ...connectRoute(type),
+    query: connectQuery(fields),
+    errors: {
+      400: "A connect field is missing or not valid",
+      403: "Insufficient permission",
+      409: "No OAuth app credentials",
+    },
+    handler: ({ db, actor, query }) => authorization(db, actor, type, query),
+  });
+
+/** The connect fields of a verified state, checked again against the provider's patterns. 400 otherwise. */
+function stateFields(type: (typeof oauthTypes)[number], claim?: string) {
+  const parsed = connectQuery(oauthApp(type).connectFields ?? {})
+    .strict()
+    .safeParse(claim ? JSON.parse(claim) : {});
+  if (!parsed.success)
+    throw new HTTPException(400, {
+      message: "The connect fields are not valid.",
+    });
+  return parsed.data;
+}
 
 /** The teammate actor of a Kaneo account; it exists since the account joined the workspace. 403 otherwise. */
 async function teammate(db: Database, userId: string) {
@@ -242,18 +286,19 @@ const callback = defineQuillsRoute({
     502: "The provider could not be reached",
   },
   replay: { status: "already_used", integration: null },
-  prepare: async ({ db, params, query }) => {
+  prepare: async ({ db, params, query, located }) => {
     if (!query.code)
       throw new HTTPException(400, {
         message: "The provider did not grant access.",
       });
+    const fields = stateFields(params.type, located.claims?.fields);
     const creds = await appCredentials(db, params.type);
     if (!creds?.clientId || !creds.clientSecret) throw notConfigured();
-    return { creds, code: query.code };
+    return { creds, code: query.code, fields };
   },
-  call: ({ creds, code }, { params }) =>
+  call: ({ creds, code, fields }, { params }) =>
     oauthApp(params.type)
-      .exchange(code, redirectUri(params.type), creds)
+      .exchange(code, redirectUri(params.type), creds, fields)
       .catch(providerFailure),
   event: (input, result) =>
     result.integration
@@ -365,27 +410,63 @@ async function withToken<T>(
   }
 }
 
+/** The destination kind and parent of a request, checked against the provider's kinds. 400 otherwise. */
+function destinationScope(
+  provider: OAuthProvider,
+  query: DestinationScope,
+): DestinationScope {
+  const kinds = provider.destinationKinds ?? {};
+  if (query.kind !== undefined && !Object.hasOwn(kinds, query.kind))
+    throw new HTTPException(400, {
+      message: "This integration has no destinations of that kind.",
+    });
+  const parentKind = query.kind && kinds[query.kind]?.parent;
+  if (Boolean(parentKind) !== (query.parent !== undefined))
+    throw new HTTPException(400, {
+      message: parentKind
+        ? "Name the parent destination."
+        : "This kind of destination has no parent.",
+    });
+  return { kind: query.kind, parent: query.parent };
+}
+
 const listDestinations = defineQuillsRoute({
   method: "get",
   path: "/integrations/{integrationId}/destinations",
   operationId: "listQuillsIntegrationDestinations",
   summary: "List the channels an OAuth connection can send to",
   description:
-    "Repositories (GitHub), projects (GitLab) or channels (Slack, Discord), at most 200. Calls the provider.",
+    "The provider's destinations (for example repositories, projects or channels), at most 200. A provider with more than one kind takes `kind`; a child kind also takes `parent`, which must be a destination of the parent kind. Calls the provider.",
   action: "manage_settings",
   params: integrationParams,
+  query: z.object({
+    kind: z
+      .string()
+      .max(40)
+      .regex(/^[a-z][a-z0-9_-]*$/)
+      .optional(),
+    // A provider ID or name (an Azure DevOps project name has spaces). The route checks it against the parent list.
+    parent: z
+      .string()
+      .min(1)
+      .max(200)
+      .regex(/^[^/\\?#%]+$/)
+      .refine((value) => !/\p{Cc}/u.test(value), "No control characters")
+      .optional(),
+  }),
   response: z.object({
     destinations: z.array(z.object({ id: z.string(), name: z.string() })),
   }),
   responseDescription: "Destinations, in the provider's order",
   errors: {
+    400: "Unknown kind, or a missing or unexpected parent",
     403: "Insufficient permission",
-    404: "Integration not found",
+    404: "Integration or parent destination not found",
     409: "Reconnect the integration",
     502: "The provider could not be reached",
   },
-  prepare: async ({ db, params }) => {
-    const { row, secrets, creds } = await oauthConnection(
+  prepare: async ({ db, params, query }) => {
+    const { row, provider, secrets, creds } = await oauthConnection(
       db,
       params.integrationId,
     );
@@ -398,17 +479,39 @@ const listDestinations = defineQuillsRoute({
       secrets,
       creds,
       config: row.config,
+      scope: destinationScope(provider, query),
     };
   },
   call: async (prepared) => ({
     connection: prepared.connection,
-    ...(await withToken(prepared, (secrets) =>
-      oauthProvider(prepared.type)!.destinations(
+    ...(await withToken(prepared, async (secrets) => {
+      const provider = oauthProvider(prepared.type)!;
+      const { kind, parent } = prepared.scope;
+      const parentKind = kind && provider.destinationKinds?.[kind]?.parent;
+      // The parent must be one the integration lists: the token may reach far more.
+      if (
+        parentKind &&
+        !(
+          await provider.destinations(
+            secrets,
+            prepared.config,
+            prepared.creds,
+            {
+              kind: parentKind,
+            },
+          )
+        ).some((destination) => destination.id === parent)
+      )
+        throw new HTTPException(404, {
+          message: "Parent destination not found",
+        });
+      return provider.destinations(
         secrets,
         prepared.config,
         prepared.creds,
-      ),
-    )),
+        prepared.scope,
+      );
+    })),
   }),
   failure: (called) => called.failure,
   handler: async ({ db, called }) => {
@@ -498,14 +601,23 @@ const searchItems = defineQuillsRoute({
 });
 
 // One connect route per provider in the registry, in registry order. The path type of a connect route
-// names every provider, so the first mount types all of them for the client.
+// names every provider, so the first mount types all of them for the client. The client type has no
+// connect fields: a client adds them as query values. The first provider (GitHub) has none.
 const [firstType, ...otherTypes] = oauthTypes;
+if (oauthApp(firstType).connectFields)
+  throw new Error(
+    "providers/index.ts: the first provider has no connect fields",
+  );
 const router = apiRouter<BaseVariables & { workspaceId: string }>()
   .openapi(...saveCredentials)
   .openapi(...getCredentials)
   .openapi(...deleteCredentials)
   .openapi(...startConnect(firstType));
-for (const type of otherTypes) router.openapi(...startConnect(type));
+for (const type of otherTypes) {
+  const fields = oauthApp(type).connectFields;
+  if (fields) router.openapi(...startConnectWithFields(type, fields));
+  else router.openapi(...startConnect(type));
+}
 
 export default router.openapi(...listDestinations).openapi(...searchItems);
 

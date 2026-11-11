@@ -1,5 +1,6 @@
 // Route-module helper: framework/boundaries.test.ts checks its imports like a module that uses ../framework/define-route.
 import { HTTPException } from "hono/http-exception";
+import { z } from "../../openapi";
 import { ProviderCallError } from "../framework/integration-config";
 import type { Provider } from "./catalog";
 
@@ -9,6 +10,12 @@ import type { Provider } from "./catalog";
 // this instance's signed callback.
 
 export type Destination = { id: string; name: string };
+/**
+ * Which destinations to list. `kind` is a key of the provider's `destinationKinds`; without it, the
+ * provider lists its default kind. `parent` is set only for a child kind. The route checks before the
+ * call that it is a destination of the parent kind, so a provider can use it in an encoded URL path.
+ */
+export type DestinationScope = { kind?: string; parent?: string };
 export type ExternalItem = {
   externalId: string;
   title: string;
@@ -33,15 +40,25 @@ export type Contact = {
 };
 /** Connects through the OAuth redirect: a connect route and the signed callback (oauth.ts). */
 export type OAuthConnect = {
+  /**
+   * Values that a teammate enters before the redirect, by name, each with the pattern that the whole
+   * value must match (Zendesk: `{ subdomain: /[a-z0-9][a-z0-9-]{0,61}[a-z0-9]/ }`). The connect route
+   * takes them as query values, the signed state carries them, and the callback checks them again.
+   * `authorizeUrl` and `exchange` get them as `fields`. Build a host only from such a value and a
+   * fixed domain suffix.
+   */
+  connectFields?: Record<string, RegExp>;
   authorizeUrl: (
     creds: Record<string, string>,
     redirectUri: string,
     state: string,
+    fields: Record<string, string>,
   ) => string;
   exchange: (
     code: string,
     redirectUri: string,
     creds: Record<string, string>,
+    fields: Record<string, string>,
   ) => Promise<Exchanged>;
   connectWithKey?: never;
 };
@@ -68,7 +85,13 @@ export type OAuthProvider = Provider & {
     secrets: Record<string, string>,
     config: Record<string, unknown>,
     creds: Record<string, string>,
+    scope: DestinationScope,
   ) => Promise<Destination[]>;
+  /**
+   * The kinds of destination, when there is more than one. A child kind names its parent kind
+   * (Trello: `{ board: {}, list: { parent: "board" } }`). One level of parents only.
+   */
+  destinationKinds?: Record<string, { parent?: string }>;
   /** Issue search in one target. Absent for chat providers. */
   search?: (
     secrets: Record<string, string>,
@@ -108,6 +131,28 @@ export const formHeaders = {
 };
 export const rejected = () =>
   new HTTPException(400, { message: "The provider rejected the request." });
+
+/**
+ * The schema of a provider's connect fields. The whole value must match the pattern, so a provider
+ * cannot forget an anchor. A value has at most 253 characters, the length of a host name.
+ */
+export const connectQuery = (fields: Record<string, RegExp>) =>
+  z.object(
+    Object.fromEntries(
+      Object.entries(fields).map(([name, pattern]) => [
+        name,
+        z
+          .string()
+          .max(253)
+          .regex(
+            new RegExp(
+              `^(?:${pattern.source})$`,
+              pattern.flags.replace(/[gy]/g, ""),
+            ),
+          ),
+      ]),
+    ),
+  );
 
 /** GitHub `owner/repo` as a channel ID: `owner:repo` (a path segment cannot hold a slash). */
 export const githubRepo = (target: string) => target.replace(":", "/");

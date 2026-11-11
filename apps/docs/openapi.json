@@ -85337,7 +85337,7 @@
           "Quills"
         ],
         "summary": "List the channels an OAuth connection can send to",
-        "description": "Repositories (GitHub), projects (GitLab) or channels (Slack, Discord), at most 200. Calls the provider.",
+        "description": "The provider's destinations (for example repositories, projects or channels), at most 200. A provider with more than one kind takes `kind`; a child kind also takes `parent`, which must be a destination of the parent kind. Calls the provider.",
         "parameters": [
           {
             "schema": {
@@ -85356,6 +85356,27 @@
             "required": true,
             "name": "integrationId",
             "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 40,
+              "pattern": "^[a-z][a-z0-9_-]*$"
+            },
+            "required": false,
+            "name": "kind",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^[^/\\\\?#%]+$"
+            },
+            "required": false,
+            "name": "parent",
+            "in": "query"
           }
         ],
         "responses": {
@@ -85392,6 +85413,16 @@
               }
             }
           },
+          "400": {
+            "description": "Unknown kind, or a missing or unexpected parent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Authentication required",
             "content": {
@@ -85413,7 +85444,7 @@
             }
           },
           "404": {
-            "description": "Integration not found",
+            "description": "Integration or parent destination not found",
             "content": {
               "application/json": {
                 "schema": {

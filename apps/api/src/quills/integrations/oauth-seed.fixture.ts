@@ -35,20 +35,23 @@ export function platformCredentials(
   });
 }
 
-/** A fresh GitHub OAuth connection with a token and, optionally, a status-sync secret and mappings. */
+/** A fresh OAuth connection (GitHub by default) with a token and, optionally, a status-sync secret and mappings. */
 export function oauthConnection(
   env: ContractEnv,
   workspaceId: string,
-  extra: { webhookSecret?: string; config?: Record<string, unknown> } = {},
+  extra: {
+    type?: string;
+    webhookSecret?: string;
+    config?: Record<string, unknown>;
+  } = {},
 ) {
+  const type = extra.type ?? "github";
   return env.scoped(workspaceId, async (db, actor) => {
-    await db
-      .delete(integrations)
-      .where(eq(integrations.integrationType, "github"));
+    await db.delete(integrations).where(eq(integrations.integrationType, type));
     const [row] = await db
       .insert(integrations)
       .values({
-        integrationType: "github",
+        integrationType: type,
         status: "active",
         secrets: seal({
           accessToken: `gho_seeded_${workspaceId}`,

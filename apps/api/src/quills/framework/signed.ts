@@ -506,9 +506,15 @@ const sign = (payload: string) =>
 /**
  * A signed, expiring OAuth state that binds the redirect to the teammate who started it, the
  * workspace and the provider. The callback accepts each state once (its nonce is the delivery ID).
+ * `fields` are the provider's connect fields (a Zendesk subdomain): the signature covers them too.
  */
 export function mintOAuthState(
-  claims: { workspaceId: string; userId: string; type: string },
+  claims: {
+    workspaceId: string;
+    userId: string;
+    type: string;
+    fields?: Record<string, string>;
+  },
   ttlMs = STATE_TTL_MS,
 ) {
   const payload = Buffer.from(
@@ -518,6 +524,8 @@ export function mintOAuthState(
       t: claims.type,
       n: randomBytes(16).toString("base64url"),
       e: Date.now() + ttlMs,
+      ...(claims.fields &&
+        Object.keys(claims.fields).length > 0 && { f: claims.fields }),
     }),
   ).toString("base64url");
   return `${payload}.${sign(payload)}`;
@@ -534,6 +542,7 @@ function readState(state: string) {
       t?: unknown;
       n?: unknown;
       e?: unknown;
+      f?: unknown;
     };
     if (
       typeof value.w !== "string" ||
@@ -541,10 +550,20 @@ function readState(state: string) {
       typeof value.t !== "string" ||
       typeof value.n !== "string" ||
       typeof value.e !== "number" ||
-      Date.now() > value.e
+      Date.now() > value.e ||
+      (value.f !== undefined &&
+        (typeof value.f !== "object" ||
+          value.f === null ||
+          Object.values(value.f).some((field) => typeof field !== "string")))
     )
       return null;
-    return { w: value.w, u: value.u, t: value.t, n: value.n };
+    return {
+      w: value.w,
+      u: value.u,
+      t: value.t,
+      n: value.n,
+      f: value.f as Record<string, string> | undefined,
+    };
   } catch {
     return null;
   }
@@ -579,7 +598,11 @@ export const oauthState: SignedVerifier = {
     return {
       scope: { workspace: state.w },
       deliveryId: `oauth:${state.n}`,
-      claims: { userId: state.u, type: state.t },
+      claims: {
+        userId: state.u,
+        type: state.t,
+        ...(state.f && { fields: JSON.stringify(state.f) }),
+      },
     };
   },
 };
