@@ -19,10 +19,7 @@ import {
   type BaseVariables,
 } from "../../openapi";
 import { principal } from "../../database/quills/schema/auth";
-import {
-  conversationMessages,
-  conversations,
-} from "../../database/quills/schema/conversation";
+import { conversationMessages } from "../../database/quills/schema/conversation";
 import { ticketActivity } from "../../database/quills/schema/ticket-activity";
 import {
   ticketConversations,
@@ -33,6 +30,8 @@ import {
   type Database,
   type QuillsActor,
 } from "../framework/define-route";
+import { findConversation } from "./conversation-model";
+import { insertReply as replyToConversation } from "./conversation-ops";
 import { lockedLinkedTickets, lockTickets } from "./ticket-lifecycle";
 import {
   findTicket,
@@ -187,41 +186,56 @@ const listMessages = defineQuillsRoute({
 });
 
 /**
- * An agent reply. A customer pair's reply lands on its conversation and stops the requester's
- * wait; any other ticket keeps it on its own thread and stamps the first response.
+ * An agent reply. A customer pair's reply goes through the conversations slice's reply path
+ * (`conversation-ops.ts#insertReply`), so one code path writes every customer reply; any other
+ * ticket keeps it on its own thread and stamps the first response. A reply-all copy never
+ * reopens or claims the linked conversation.
  */
 async function insertReply(
   db: Database,
   actor: QuillsActor,
   ticket: TicketRow,
   content: string,
-  repliedAllFromTicketId?: TypeId<"ticket">,
+  repliedAllFrom?: { ticketId: TypeId<"ticket">; messageId: string },
 ) {
   const now = new Date();
-  const metadata = repliedAllFromTicketId
-    ? { repliedAllFromTicketId }
-    : undefined;
+  const metadata = repliedAllFrom
+    ? {
+        repliedAllFromTicketId: repliedAllFrom.ticketId,
+        repliedAllFromMessageId: repliedAllFrom.messageId,
+      }
+    : null;
   const pair =
     ticket.type === "customer" ? await pairConversationId(db, ticket.id) : null;
-  const [row] = await db
-    .insert(conversationMessages)
-    .values({
-      ...(pair ? { conversationId: pair } : { ticketId: ticket.id }),
-      principalId: actor.principalId,
-      senderType: "agent",
-      content,
-      metadata,
-    })
-    .returning();
-  if (pair)
-    await db
-      .update(conversations)
-      .set({
-        lastMessageAt: now,
-        lastMessagePreview: content.slice(0, 140),
-        waitingSince: null,
-      })
-      .where(eq(conversations.id, pair));
+  const [row] = pair
+    ? await db
+        .select()
+        .from(conversationMessages)
+        .where(
+          eq(
+            conversationMessages.id,
+            await replyToConversation(
+              db,
+              actor,
+              await findConversation(db, pair, true),
+              content,
+              null,
+              content,
+              metadata,
+              !repliedAllFrom,
+            ),
+          ),
+        )
+    : await db
+        .insert(conversationMessages)
+        .values({
+          ticketId: ticket.id,
+          principalId: actor.principalId,
+          senderType: "agent",
+          content,
+          metadata,
+        })
+        .returning();
   await db
     .update(tickets)
     .set({
@@ -247,11 +261,16 @@ const reply = defineQuillsRoute({
   response: messageSchema,
   responseDescription: "The reply",
   errors,
-  event: ({ params }, message) => ({
+  // One event names the tracker. Delivery finds the reply-all copies by the tracker message
+  // (`repliedAllFromMessageId`) and mails and tells each linked requester once.
+  event: ({ params, body }, message) => ({
     type: "ticket.replied",
     entityType: "ticket",
     entityId: params.ticketId,
-    payload: { messageId: message.id },
+    payload: {
+      messageId: message.id,
+      ...(body.replyAll && { replyAll: "true" }),
+    },
   }),
   handler: async ({ db, actor, params, body }) => {
     // With reply-all, the tracker and its linked tickets are locked together, in ID order.
@@ -262,7 +281,10 @@ const reply = defineQuillsRoute({
     await subscribe(db, ticket.id, actor.principalId, "replier");
     if (body.replyAll && ticket.type === "tracker")
       for (const target of await lockedLinkedTickets(db, ticket.id))
-        await insertReply(db, actor, target, body.content, ticket.id);
+        await insertReply(db, actor, target, body.content, {
+          ticketId: ticket.id,
+          messageId: row.id,
+        });
     return (await messageViews(db, [row]))[0]!;
   },
 });

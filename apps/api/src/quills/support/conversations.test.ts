@@ -281,16 +281,19 @@ describe.skipIf(!url)("Support conversations", () => {
       "GET",
       "/inbox?facet=open&assignee=unassigned&limit=100",
     );
-    expect(counts.body).toEqual({
-      mine: mine.body.items.length,
-      unassigned: unassigned.body.items.length,
+    // The inbox also lists tickets; the two queue counts are conversation counts.
+    const conversationsOf = (page: {
+      body: { items: { kind: string; conversation?: { id: string } }[] };
+    }) => page.body.items.filter((item) => item.kind === "conversation");
+    expect(counts.body).toMatchObject({
+      mine: conversationsOf(mine).length,
+      unassigned: conversationsOf(unassigned).length,
     });
     expect(counts.body.mine).toBe(1);
-    expect(
-      mine.body.items.map(
-        (item: { conversation: { id: string } }) => item.conversation.id,
-      ),
-    ).toEqual([ids.mine.conversationId]);
+    expect(counts.body.test).toBe(1);
+    expect(conversationsOf(mine).map((item) => item.conversation!.id)).toEqual([
+      ids.mine.conversationId,
+    ]);
 
     const tags = await owner("GET", "/conversation-tags?counts=true");
     expect(

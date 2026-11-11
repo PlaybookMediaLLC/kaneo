@@ -21,6 +21,29 @@ External effects:          one GET to the Resend Received Emails API when the ev
 |---|---|---|---|---|---|
 | `receiveQuillsInboundEmail` | `POST /quills-public/signed/chat/email/inbound` | signed (Resend, Svix) | `customer_identity`, `principal`, `conversations`, `conversation_messages`, `kv_store` | `conversation.email_received` | contract signed table: bad key, stale timestamp, no headers, changed recipient, workspace B, replay |
 | `wakeQuillsJobs` | `POST /quills-public/internal/job-wake` (hidden from OpenAPI) | internal (`Authorization: Bearer $QUILLS_INTERNAL_TOKEN`) | job tables, through the existing loop | none (each job records its own) | contract internal table: unset 404, no or wrong token 401 |
+| `receiveQuillsEmailDeliveryEvent` | `POST /quills-public/signed/chat/email/events` | signed (Resend, Svix) | `email_log`, `kv_store` | none (marks the log row) | contract signed table; signed.test.ts: bounce once, unsigned tags 404 |
+
+## Delivery events
+
+- `EMAIL_EVENTS_SIGNING_SECRET`, else `EMAIL_INBOUND_SIGNING_SECRET`, checks the Svix signature; 404 while
+  neither is set. The workspace and the `email_log` row come from the mail's own Resend tags
+  (`kaneo_workspace`, `kaneo_log`, `kaneo_sig`), which the mail worker writes and signs with an HMAC at
+  send time (`framework/signed.ts#mailTags`). Another sender on the same Resend account cannot name a
+  workspace. Mail without valid tags answers 404.
+- `email.bounced` and `email.complained` mark the row `bounced` or `complaint`; other types are acknowledged.
+  SES and SMTP sends carry no tags, so their events are not received.
+
+## Reply routing
+
+- Reply-To of a support reply: `<workspace slug>+c<conversation ID suffix><12-character HMAC tag>@<domain>`
+  (`framework/signed.ts#replyAddress`, key derived from `EMAIL_INBOUND_SIGNING_SECRET`). The slug routes
+  the mail: workspace IDs are 32 mixed-case characters, too long for a local part and lost to lower-casing.
+  The tag binds the workspace ID and the conversation. A slug that is not lower-case or is longer than 24
+  characters (a local part past 64) gets no Reply-To; such mail threads only by Message-ID, which Resend
+  and SES replace. A renamed slug stops routing old reply addresses, as it does for `<slug>@domain`.
+- Routing order: a verified reply address of an email conversation; then In-Reply-To and References that
+  name an earlier inbound mail or our own Message-ID (`<{messageId}@{inbound domain}>`). The sender must
+  still be the conversation's visitor (`from_mismatch` otherwise). A forged tag routes like any new mail.
 
 ## Inbound email
 
@@ -54,9 +77,9 @@ reaches the trusted job path. It answers `{ degraded }`.
 
 | Source rows | Reason |
 |---|---|
-| `api/chat/email/events` (delivery events: bounced, complained) | Outbound mail does not tag its workspace yet, so a delivery event cannot name its workspace from a verified value. Needs the mail handler to tag sends. |
+| SES SNS delivery events | Only Resend (Svix) events are received; see "Delivery events". |
 | Cloudflare raw-MIME inbound bridge | A second transport with its own credential and a MIME parser; Resend covers inbound. |
-| Plus-address conversation and ticket routing (`<slug>+c<id>.<tag>@`) | Kaneo mints no reply addresses yet (replies are not mailed). Threading uses Message-ID headers. |
+| Plus-address ticket routing (`+t`) | Conversation reply addresses are built ("Reply routing"); ticket replies by email are not. |
 | Cold-inbound rate limit, spam filter, DMARC and ARC checks, auto-reply detection, attachments, quoted-reply stripping, auto-acknowledgement, the email log row | Large source modules that this slice does not port; the conversation records the mail as received. |
 | Ticket replies by email | Need signed ticket reply addresses. |
 | Job wake `workspaceKey`, `jobIds`, `abort` | The source wakes a fleet worker for one workspace; Kaneo runs one shared loop. |

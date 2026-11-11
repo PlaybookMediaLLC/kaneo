@@ -26,7 +26,7 @@ import {
 import { portalUrl } from "../../portal/feedback/feeds";
 import { helpContentIn, openPublic, statusContentIn } from "./seed.fixture";
 import { likePattern } from "./help-center/search";
-import { mintStatusUnsubscribeToken } from "./status/subscriptions";
+import { mintUnsubscribeToken } from "../../portal/unsubscribe-token";
 
 let pool: Pool;
 vi.mock("../../../database/index", () => ({
@@ -580,7 +580,7 @@ describe.skipIf(!url)(
       const customer = await env.portalCustomer(env.a, env.customerB);
       const principalId = customer.principalId as PrincipalId;
       const token = await env.scoped(env.a, (db) =>
-        mintStatusUnsubscribeToken(db, principalId),
+        mintUnsubscribeToken(db, principalId, "unsubscribe_status"),
       );
       const stored = await env.scoped(env.a, (db) =>
         db
@@ -603,9 +603,11 @@ describe.skipIf(!url)(
           .changed,
       ).toBe(false);
       const expired = await env.scoped(env.a, (db) =>
-        mintStatusUnsubscribeToken(
+        mintUnsubscribeToken(
           db,
           principalId,
+          "unsubscribe_status",
+          null,
           new Date(Date.now() - 1000),
         ),
       );
@@ -619,7 +621,11 @@ describe.skipIf(!url)(
       // Workspace B's token does nothing in A.
       const foreign = await env.portalCustomer(env.b, env.customerB);
       const otherToken = await env.scoped(env.b, (db) =>
-        mintStatusUnsubscribeToken(db, foreign.principalId as PrincipalId),
+        mintUnsubscribeToken(
+          db,
+          foreign.principalId as PrincipalId,
+          "unsubscribe_status",
+        ),
       );
       expect(
         (
@@ -666,7 +672,7 @@ describe.skipIf(!url)(
         body: { scope: "page" },
       });
       const closedToken = await env.scoped(env.a, (db) =>
-        mintStatusUnsubscribeToken(db, principalId),
+        mintUnsubscribeToken(db, principalId, "unsubscribe_status"),
       );
       await setSettings({
         metadata: JSON.stringify({ statusSettings: { enabled: false } }),

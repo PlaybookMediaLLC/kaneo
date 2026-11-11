@@ -280,11 +280,15 @@ export async function attachTag(
 }
 
 type ContentJson = (typeof conversationMessages.$inferInsert)["contentJson"];
+type Metadata = (typeof conversationMessages.$inferInsert)["metadata"];
 
 /**
  * A customer-visible agent reply. Replying counts as reading, stops the wait clock,
  * reopens a closed conversation (a snoozed one stays snoozed) and claims an unassigned one.
- * Delivery to the customer is a worker's job (`message.created`); nothing is sent here.
+ * With `claim` false (a tracker's reply-all copy) the status, assignee and resolution stay:
+ * a tracker never reopens what it reaches through a link.
+ * Delivery to the customer is a worker's job (`message.created`, or `ticket.replied` for a
+ * ticket's paired conversation); nothing is sent here.
  */
 export async function insertReply(
   db: Database,
@@ -293,6 +297,8 @@ export async function insertReply(
   content: string,
   contentJson: ContentJson = null,
   label = content,
+  metadata: Metadata = null,
+  claim = true,
 ) {
   const [message] = await db
     .insert(conversationMessages)
@@ -302,6 +308,7 @@ export async function insertReply(
       senderType: "agent",
       content,
       contentJson,
+      metadata,
     })
     .returning({
       id: conversationMessages.id,
@@ -315,12 +322,14 @@ export async function insertReply(
       lastMessageAt: message!.createdAt,
       lastMessagePreview: preview(label),
       agentLastReadAt: message!.createdAt,
-      assignedAgentPrincipalId:
-        conversation.assignedAgentPrincipalId ?? actor.principalId,
-      status,
-      ...reopened(conversation, status),
+      ...(claim && {
+        assignedAgentPrincipalId:
+          conversation.assignedAgentPrincipalId ?? actor.principalId,
+        status,
+        ...reopened(conversation, status),
+        resolvedAt: null,
+      }),
       waitingSince: null,
-      resolvedAt: null,
       updatedAt: message!.createdAt,
     })
     .where(eq(conversations.id, conversation.id));

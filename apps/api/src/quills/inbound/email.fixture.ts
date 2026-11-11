@@ -1,5 +1,7 @@
 import { createHmac, randomUUID } from "node:crypto";
+import { emailLog } from "../../database/quills/schema/email-log";
 import { fixture, type ContractEnv } from "../framework/contract";
+import { mailTags } from "../framework/signed";
 
 // The instance's inbound mail settings for contract checks. Configured values win.
 const KEY = Buffer.from("quills-contract-inbound-signing-key").toString(
@@ -109,6 +111,78 @@ export const receiveQuillsInboundEmail = fixture({
       JSON.stringify({
         type: 5,
         data: { to: [`${env.a}@${process.env.EMAIL_INBOUND_DOMAIN}`] },
+      }),
+    ].map((raw) => signed(raw)),
+  hidden: () => [process.env.EMAIL_INBOUND_SIGNING_SECRET!, KEY],
+});
+
+/** A Resend delivery event for a mail whose tags the mail worker signed (`mailTags`). */
+function deliveryEvent(
+  tags: { name: string; value: string }[],
+  type = "email.bounced",
+  options: { secret?: string; timestamp?: number } = {},
+) {
+  const raw = JSON.stringify({
+    type,
+    data: {
+      email_id: randomUUID(),
+      tags: Object.fromEntries(tags.map((tag) => [tag.name, tag.value])),
+    },
+  });
+  return signed(raw, options);
+}
+
+/** One outbound log row in `workspaceId` and the tags its send carried. */
+async function sentMail(env: ContractEnv, workspaceId: string) {
+  const [row] = await env.scoped(workspaceId, (db) =>
+    db
+      .insert(emailLog)
+      .values({
+        direction: "outbound",
+        emailType: "ConversationReplyEmail",
+        address: "customer@example.test",
+        status: "sent",
+      })
+      .returning({ id: emailLog.id }),
+  );
+  return mailTags(workspaceId, row!.id);
+}
+type Sent = { a: Awaited<ReturnType<typeof sentMail>>; b: Sent["a"] };
+
+export const receiveQuillsEmailDeliveryEvent = fixture({
+  seed: async (env: ContractEnv) => ({
+    a: await sentMail(env, env.a),
+    b: await sentMail(env, env.b),
+  }),
+  valid: ({ a }: Sent) => deliveryEvent(a),
+  forged: ({ a, b }: Sent) => {
+    const good = deliveryEvent(a);
+    return [
+      deliveryEvent(a, "email.bounced", {
+        secret: `whsec_${Buffer.from("another-key").toString("base64")}`,
+      }),
+      deliveryEvent(a, "email.bounced", {
+        timestamp: Math.floor(Date.now() / 1000) - 3600,
+      }),
+      { ...good, headers: {} },
+      // Workspace B's log row under A's signature.
+      { ...good, raw: good.raw.replace(a[1]!.value, b[1]!.value) },
+    ];
+  },
+  crossed: ({ a, b }: Sent) => [
+    // B's mail changes B only; A's log row with B's workspace fails the tag signature (404).
+    deliveryEvent(b),
+    deliveryEvent([
+      { name: "kaneo_workspace", value: b[0]!.value },
+      ...a.slice(1),
+    ]),
+  ],
+  invalid: ({ a }: Sent) =>
+    [
+      "not json",
+      JSON.stringify({
+        type: 5,
+        data: { tags: Object.fromEntries(a.map((t) => [t.name, t.value])) },
       }),
     ].map((raw) => signed(raw)),
   hidden: () => [process.env.EMAIL_INBOUND_SIGNING_SECRET!, KEY],

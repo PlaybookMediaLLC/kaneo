@@ -253,6 +253,8 @@ const createIncident = defineQuillsRoute({
     entityId: result.id,
     payload: {
       kind: result.kind,
+      // The status at publish: subscriber mail decides from it, not from a later state.
+      status: result.status,
       backfilled: String(result.backfilled),
       notify: String(result.notifySubscribers),
     },

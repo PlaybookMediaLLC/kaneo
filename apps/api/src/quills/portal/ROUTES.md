@@ -95,7 +95,7 @@ Merged: `portal-access.ts#updatePortalAccessFn`.
 | `routes/api/widget-sso.ts#GET` | Quackback Cloud dogfood: a token signed with an environment secret for the vendor's own dashboard. |
 | Portal invites (`portal-invites.ts`, `portal-invite.$inviteId.tsx`) | Built in P3c; see `CUSTOMER-ROUTES.md`. |
 | `portal-permissions.ts#getMyPortalPermissionsFn` | A portal caller is always a customer, so the list is always empty. |
-| Identify: `previousToken` merge | Needs the anonymous widget session of the public-feedback slice. The attribute and `segments` claims, changelog auto-subscribe and voted post IDs are built in P3c (`CUSTOMER-ROUTES.md`). |
+| Identify: `previousToken` merge | Built (`CUSTOMER-ROUTES.md`). The attribute and `segments` claims, changelog auto-subscribe and voted post IDs are built in P3c. |
 | Identify: `widget_identified_session` provenance | Only the handoff reads it; it lands with the handoff. |
 | Anonymous widget sessions (Better Auth anonymous sign-in in the source) | No P3a route needs one; P3b adds the mint with anonymous votes and comments. |
 | P3b rows: public boards, posts, roadmaps, changelog, RSS, sitemap, customer posts, comments, votes, reactions, widget feedback, help-center and support widget routes, uploads | Out of scope for P3a. |

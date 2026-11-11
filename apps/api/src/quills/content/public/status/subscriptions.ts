@@ -8,15 +8,16 @@ import {
 } from "../../../framework/define-route";
 import { hashToken, type QuillsCaller } from "../../../framework/audience";
 import { idList } from "../../../feedback/schemas";
+import type { UnsubscribeAction } from "../../../portal/unsubscribe-token";
 import { notFound, openStatusPage, visibleComponents } from "./visibility";
 
 // A visitor's own status-page subscription. As in the source, a subscriber is always a principal:
 // a signed-in portal customer subscribes and unsubscribes here, and a status email's link carries
-// a one-time unsubscribe token. Only the SHA-256 hash of a token is stored; it expires after 30
-// days and works once. The source has no email-only (double opt-in) subscription.
+// a one-time unsubscribe token from portal/unsubscribe-token.ts#mintUnsubscribeToken (the one mint
+// and storage format; the generic `/unsubscribe` route accepts the same token). The source has no
+// email-only (double opt-in) subscription.
 
-const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-const STATUS_ACTION = "unsubscribe_status";
+const STATUS_ACTION: UnsubscribeAction = "unsubscribe_status";
 
 const subscription = z.object({
   subscribed: z.boolean(),
@@ -60,27 +61,6 @@ async function optOut(db: Database, principalId: QuillsCaller["principalId"]) {
     )
     .returning({ id: statusSubscriptions.id });
   return rows.length > 0;
-}
-
-/**
- * Mints a status unsubscribe link token for a subscriber and stores only its hash. For the status
- * mail sender: P4 delivers mail to teammates only, so no status mail carries one yet.
- */
-export async function mintStatusUnsubscribeToken(
-  db: Database,
-  principalId: NonNullable<QuillsCaller["principalId"]>,
-  expiresAt = new Date(Date.now() + TOKEN_TTL_MS),
-) {
-  const token = Buffer.from(
-    globalThis.crypto.getRandomValues(new Uint8Array(32)),
-  ).toString("base64url");
-  await db.insert(unsubscribeTokens).values({
-    token: hashToken(token),
-    principalId,
-    action: STATUS_ACTION,
-    expiresAt,
-  });
-  return token;
 }
 
 const changeEvent =

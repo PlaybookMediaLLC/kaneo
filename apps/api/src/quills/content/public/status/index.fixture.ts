@@ -8,7 +8,7 @@ import {
   type ContractInput,
 } from "../../../framework/contract";
 import { statusSeed, type StatusIds } from "../seed.fixture";
-import { mintStatusUnsubscribeToken } from "./subscriptions";
+import { mintUnsubscribeToken } from "../../../portal/unsubscribe-token";
 
 // Public reads: no customer owns the result, so `own` is empty on purpose.
 const read = (
@@ -132,7 +132,7 @@ export const unsubscribeQuillsStatusByToken = fixture({
         componentIds: [ids.a.componentId as StatusComponentId],
         source: "admin",
       });
-      return mintStatusUnsubscribeToken(db, person!.id);
+      return mintUnsubscribeToken(db, person!.id, "unsubscribe_status");
     });
     return { ...ids, token };
   },

@@ -119,7 +119,7 @@ with the outcome.
 | `api/v1/apps/**`, `apps*`, `setQuillsIframeHeaders` | The app sidebar authenticates a third-party app with its own token and needs iframe headers; neither fits the signed nor the teammate audience without a new app-token model. |
 | `oauth/connector/callback` | Assistant connectors (P8 assistant slice). |
 | `updateTicketStatusMappingsFn`, `updatePushStatusMappingsFn` | Ticket status sync and outbound status push need ticket links to tracker issues first. |
-| `fetchQuillsTicketExternalLinks`, `linkQuillsTicketIssue`, `createQuillsTicketIssue`, `unlinkQuillsTicketIssue` | Not built in this wave (time). The table `ticket_external_links` and ticket visibility from `support/` are ready for them. |
+| Ticket issue status sync | Inbound issue events update post links only. Ticket issue links are built (`support/TICKETS.md`, "Tracker issue links"). |
 | `verifyQuillsIntegrationSyncReference`, recovery `reconcile`/`keep_remote`/`link_existing` | Remote item inspection per provider; search exists, inspection does not. |
 | Post activity entry for an inbound status change | `recordActivity` takes a teammate actor; the change is audited as a system change. |
 | GitHub inbox channel (issue comments into conversations) | The source's second webhook consumer; needs the GitHub channel account flow. |

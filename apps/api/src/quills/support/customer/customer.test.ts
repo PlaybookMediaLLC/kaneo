@@ -1,3 +1,4 @@
+import { createHmac, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { createServer, type AddressInfo, type Socket } from "node:net";
 import {
@@ -9,7 +10,7 @@ import {
   it,
   vi,
 } from "vite-plus/test";
-import { and, eq, like } from "drizzle-orm";
+import { and, desc, eq, isNull, like, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import type { PrincipalId } from "@kaneo/ids";
@@ -19,11 +20,21 @@ import {
   conversationMessages,
   conversations,
 } from "../../../database/quills/schema/conversation";
+import { emailLog } from "../../../database/quills/schema/email-log";
 import { events } from "../../../database/quills/schema/events";
 import { kvStore } from "../../../database/quills/schema/kv";
 import { inAppNotifications } from "../../../database/quills/schema/notifications";
-import { postComments, posts } from "../../../database/quills/schema/posts";
+import {
+  postComments,
+  posts,
+  postVotes,
+} from "../../../database/quills/schema/posts";
+import { statusComponents } from "../../../database/quills/schema/status";
 import { postStatuses } from "../../../database/quills/schema/statuses";
+import {
+  tickets,
+  ticketStatuses,
+} from "../../../database/quills/schema/tickets";
 import * as kaneo from "../../../database/schema";
 import { broadcastToUserAndWait } from "../../../ws";
 import {
@@ -33,14 +44,23 @@ import {
   startContract,
   stopContract,
 } from "../../framework/contract";
+import { openPublic, statusContentIn } from "../../content/public/seed.fixture";
 import quillsRouter from "../../index";
+import { fanOut } from "../../jobs/fanout";
 import { drainQuillsWorkspace } from "../../jobs/worker";
 import {
+  accountEmail,
   customerPost,
   enablePortal,
   verifyEmail,
 } from "../../portal/customer-seed.fixture";
+import { contactEmailCode } from "../../framework/signed";
 import publicRouter from "../../public";
+import {
+  anonymousVisitor,
+  contactEmailOf,
+} from "../../widget/contact-email.fixture";
+import { signIdentity } from "../../widget/seed.fixture";
 import { withinOfficeHours } from "../../widget/support/presence";
 import { mintCsatToken } from "./csat-email";
 import {
@@ -188,6 +208,52 @@ const settle = async () => {
 let mateUser = "";
 let mate: PrincipalId;
 
+const INBOUND_KEY = Buffer.from("customer-test-inbound-key").toString("base64");
+/** A Resend inbound mail through the signed route, Svix-signed with the test key. */
+async function inbound(
+  to: string,
+  from: string,
+  messageId: string,
+  text: string,
+  headers: Record<string, string> = {},
+) {
+  const raw = JSON.stringify({
+    type: "email.received",
+    data: {
+      from,
+      to: [to],
+      subject: "Help",
+      text,
+      headers: { "message-id": messageId, ...headers },
+    },
+  });
+  const id = `msg_${randomUUID()}`;
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const signature = createHmac("sha256", Buffer.from(INBOUND_KEY, "base64"))
+    .update(`${id}.${timestamp}.${raw}`)
+    .digest("base64");
+  const res = await app.request("/quills-public/signed/chat/email/inbound", {
+    method: "POST",
+    headers: {
+      "webhook-id": id,
+      "webhook-timestamp": timestamp,
+      "webhook-signature": `v1,${signature}`,
+    },
+    body: raw,
+  });
+  return { status: res.status, body: await res.json() };
+}
+/** A header of a raw message from the SMTP sink, unfolded. */
+const headerOf = (data: string, name: string) =>
+  new RegExp(`^${name}:[ \\t]*(.*(?:\\n[ \\t].*)*)`, "im")
+    .exec(data)?.[1]
+    ?.replace(/\n[ \t]+/g, " ")
+    .trim();
+const customerCalls = () =>
+  broadcast.mock.calls.filter(
+    ([, message]) => message.type === "QUILLS_CUSTOMER_CHANGED",
+  );
+
 describe.skipIf(!url)("Quills customer support routes and delivery", () => {
   beforeAll(async () => {
     pool = new Pool({ connectionString: url, max: 6 });
@@ -204,6 +270,9 @@ describe.skipIf(!url)("Quills customer support routes and delivery", () => {
     vi.stubEnv("EMAIL_SMTP_HOST", "127.0.0.1");
     vi.stubEnv("EMAIL_SMTP_PORT", String((sink.address() as AddressInfo).port));
     vi.stubEnv("EMAIL_FROM", "Quills <quills@example.test>");
+    // Inbound mail is on: reply mail carries a signed Reply-To and threads by Message-ID.
+    vi.stubEnv("EMAIL_INBOUND_SIGNING_SECRET", `whsec_${INBOUND_KEY}`);
+    vi.stubEnv("EMAIL_INBOUND_DOMAIN", "in.example.test");
     // A second teammate with Quills read: the mention and watcher recipient.
     mateUser = `${env.a}_mate`;
     await env.db.insert(kaneo.userTable).values({
@@ -837,6 +906,24 @@ describe.skipIf(!url)("Quills customer support routes and delivery", () => {
     expect(readable(mail[0]!.data)).toContain("TicketReplyMarker-one");
     for (const m of mail)
       expect(readable(m.data)).not.toContain("TicketNoteMarker-secret");
+    // The pair reply ran the conversation reply path: claimed, read and no longer waiting.
+    const [pairState] = await env.scoped(env.a, (db) =>
+      db
+        .select({
+          assignee: conversations.assignedAgentPrincipalId,
+          waitingSince: conversations.waitingSince,
+          agentLastReadAt: conversations.agentLastReadAt,
+          preview: conversations.lastMessagePreview,
+        })
+        .from(conversations)
+        .where(eq(conversations.id, thread.conversationId)),
+    );
+    expect(pairState).toMatchObject({
+      assignee: expect.any(String),
+      waitingSince: null,
+      agentLastReadAt: expect.any(Date),
+      preview: expect.stringContaining("TicketReplyMarker-one"),
+    });
 
     // A portal requester hears about the ticket on the user socket, with no text.
     const portal = await env.portalCustomer(env.a, env.customerA);
@@ -905,6 +992,457 @@ describe.skipIf(!url)("Quills customer support routes and delivery", () => {
     } finally {
       await enablePortal(env, env.a);
     }
+  });
+
+  it("fans a tracker's reply-all and status move out to each linked requester once", async () => {
+    const env = contractEnv();
+    const visitor = await plainCustomer(env, env.a);
+    const thread = await conversationOf(
+      env,
+      env.a,
+      visitor.principalId,
+      "email",
+    );
+    const [{ address }] = (await env.scoped(env.a, (db) =>
+      db
+        .select({ address: conversations.visitorEmail })
+        .from(conversations)
+        .where(eq(conversations.id, thread.conversationId)),
+    )) as [{ address: string }];
+    const emailTicket = await ticketOf(
+      env,
+      env.a,
+      visitor.principalId,
+      thread.conversationId,
+    );
+    const portal = await env.portalCustomer(env.a, env.customerA);
+    const pair = await conversationOf(
+      env,
+      env.a,
+      portal.principalId as PrincipalId,
+    );
+    const portalTicket = await ticketOf(
+      env,
+      env.a,
+      portal.principalId as PrincipalId,
+      pair.conversationId,
+    );
+    const teammate = { user: env.owner, teammate: true };
+    const tracker = await call("POST", "/tickets", {
+      ...teammate,
+      body: { type: "tracker", title: "Export outage" },
+    });
+    expect(tracker.status).toBe(200);
+    const trackerId = tracker.body.id as string;
+    for (const linked of [emailTicket, portalTicket])
+      expect(
+        (
+          await call(
+            "PUT",
+            `/tickets/${linked.ticketId}/tracker/${trackerId}`,
+            teammate,
+          )
+        ).status,
+      ).toBe(200);
+    await settle();
+
+    // A tracker reply without reply-all stays on the tracker.
+    await call("POST", `/tickets/${trackerId}/reply`, {
+      ...teammate,
+      body: { content: "Tracker-only note to the team" },
+    });
+    await drain();
+    await drain();
+    expect(mail).toEqual([]);
+    expect(customerCalls()).toEqual([]);
+
+    // The email requester's conversation is closed and unassigned: reply-all neither reopens nor claims it.
+    await env.scoped(env.a, (db) =>
+      db
+        .update(conversations)
+        .set({ status: "closed", assignedAgentPrincipalId: null })
+        .where(eq(conversations.id, thread.conversationId)),
+    );
+    await call("POST", `/tickets/${trackerId}/reply`, {
+      ...teammate,
+      body: { content: "ReplyAllMarker-fixed", replyAll: true },
+    });
+    await drain();
+    await drain();
+    await drain();
+    expect(mail.map((m) => m.to)).toEqual([[address]]);
+    expect(readable(mail[0]!.data)).toContain("ReplyAllMarker-fixed");
+    const [kept] = await env.scoped(env.a, (db) =>
+      db
+        .select({
+          status: conversations.status,
+          assignee: conversations.assignedAgentPrincipalId,
+        })
+        .from(conversations)
+        .where(eq(conversations.id, thread.conversationId)),
+    );
+    expect(kept).toEqual({ status: "closed", assignee: null });
+    expect(customerCalls()).toEqual([
+      [
+        env.customerA,
+        expect.objectContaining({
+          ticketId: portalTicket.ticketId,
+          conversationId: pair.conversationId,
+        }),
+      ],
+    ]);
+    // One event names the tracker; running its fan-out again queues nothing new.
+    const replied = (await eventsOf(trackerId)).filter(
+      (e) => e.type === "ticket.replied",
+    );
+    expect(replied).toHaveLength(2);
+    for (const event of replied) await fanOut(env.a, event.eventId);
+    await drain();
+    await drain();
+    expect(mail).toHaveLength(1);
+
+    // The status cascade tells the linked portal requester.
+    await settle();
+    const [current] = await env.scoped(env.a, (db) =>
+      db
+        .select({ statusId: tickets.statusId })
+        .from(tickets)
+        .where(eq(tickets.id, trackerId as never)),
+    );
+    const [category] = await env.scoped(env.a, (db) =>
+      db
+        .select({ category: ticketStatuses.category })
+        .from(ticketStatuses)
+        .where(eq(ticketStatuses.id, current!.statusId)),
+    );
+    const [target] = await env.scoped(env.a, (db) =>
+      db
+        .select({ id: ticketStatuses.id })
+        .from(ticketStatuses)
+        .where(
+          and(
+            ne(ticketStatuses.category, category!.category),
+            ne(ticketStatuses.category, "closed"),
+            isNull(ticketStatuses.deletedAt),
+          ),
+        )
+        .limit(1),
+    );
+    expect(
+      (
+        await call("POST", `/tickets/${trackerId}/status`, {
+          ...teammate,
+          body: { statusId: target!.id },
+        })
+      ).status,
+    ).toBe(200);
+    await drain();
+    expect(customerCalls()).toEqual([
+      [
+        env.customerA,
+        expect.objectContaining({ ticketId: portalTicket.ticketId }),
+      ],
+    ]);
+    expect(mail).toEqual([]);
+  });
+
+  it("threads a reply mail and routes the customer's answer back through its signed Reply-To", async () => {
+    const env = contractEnv();
+    const from = `ada-${randomUUID()}@customer.test`;
+    const first = `<${randomUUID()}@customer.test>`;
+    const opened = await inbound(
+      `${env.a}@in.example.test`,
+      `Ada <${from}>`,
+      first,
+      "My invoice is wrong",
+    );
+    expect(opened.body.status).toBe("received");
+    const [{ conversationId }] = (await env.scoped(env.a, (db) =>
+      db
+        .select({ conversationId: conversationMessages.conversationId })
+        .from(conversationMessages)
+        .where(eq(conversationMessages.id, opened.body.messageId)),
+    )) as [{ conversationId: string }];
+    await settle();
+    const reply = await call("POST", `/conversations/${conversationId}/reply`, {
+      user: env.owner,
+      teammate: true,
+      body: { content: "ThreadMarker-reply" },
+    });
+    expect(reply.status).toBe(200);
+    await drain();
+    await drain();
+    expect(mail.map((m) => m.to)).toEqual([[from]]);
+    const data = mail[0]!.data;
+    expect(headerOf(data, "In-Reply-To")).toBe(first);
+    expect(headerOf(data, "References")).toBe(first);
+    expect(headerOf(data, "Message-ID")).toBe(
+      `<${reply.body.message.id}@in.example.test>`,
+    );
+    const replyTo = headerOf(data, "Reply-To")!;
+    expect(replyTo).toMatch(
+      new RegExp(`^${env.a}\\+c[0-9a-z]{38}@in\\.example\\.test$`),
+    );
+
+    // The customer's answer to the Reply-To address, without threading headers, joins the thread.
+    const answer = await inbound(
+      replyTo,
+      from,
+      `<${randomUUID()}@customer.test>`,
+      "Thanks, now it is right",
+    );
+    expect(answer.body.status).toBe("received");
+    const thread = await env.scoped(env.a, (db) =>
+      db
+        .select({ id: conversationMessages.id })
+        .from(conversationMessages)
+        .where(
+          eq(conversationMessages.conversationId, conversationId as never),
+        ),
+    );
+    expect(thread.map((m) => m.id)).toContain(answer.body.messageId);
+    // An answer that quotes only our Message-ID joins it too.
+    const quoted = await inbound(
+      `${env.a}@in.example.test`,
+      from,
+      `<${randomUUID()}@customer.test>`,
+      "One more thing",
+      { "in-reply-to": `<${reply.body.message.id}@in.example.test>` },
+    );
+    const [joined] = await env.scoped(env.a, (db) =>
+      db
+        .select({ conversationId: conversationMessages.conversationId })
+        .from(conversationMessages)
+        .where(eq(conversationMessages.id, quoted.body.messageId)),
+    );
+    expect(joined!.conversationId).toBe(conversationId);
+    // A forged tag opens a new conversation instead of joining this one.
+    const at = replyTo.indexOf("@");
+    const forged = await inbound(
+      `${replyTo.slice(0, at - 1)}${replyTo[at - 1] === "0" ? "1" : "0"}${replyTo.slice(at)}`,
+      from,
+      `<${randomUUID()}@customer.test>`,
+      "Forged",
+    );
+    const [elsewhere] = await env.scoped(env.a, (db) =>
+      db
+        .select({ conversationId: conversationMessages.conversationId })
+        .from(conversationMessages)
+        .where(eq(conversationMessages.id, forged.body.messageId)),
+    );
+    expect(elsewhere!.conversationId).not.toBe(conversationId);
+  });
+
+  it("asks an email customer for a CSAT rating once when the conversation closes", async () => {
+    const env = contractEnv();
+    const visitor = await plainCustomer(env, env.a);
+    const thread = await conversationOf(
+      env,
+      env.a,
+      visitor.principalId,
+      "email",
+    );
+    const [{ address }] = (await env.scoped(env.a, (db) =>
+      db
+        .select({ address: conversations.visitorEmail })
+        .from(conversations)
+        .where(eq(conversations.id, thread.conversationId)),
+    )) as [{ address: string }];
+    const teammate = { user: env.owner, teammate: true };
+    const status = (value: string) =>
+      call("POST", `/conversations/${thread.conversationId}/status`, {
+        ...teammate,
+        body: { status: value },
+      });
+    await settle();
+    expect((await status("closed")).status).toBe(200);
+    await drain();
+    await drain();
+    expect(mail.map((m) => m.to)).toEqual([[address]]);
+    const body = readable(mail[0]!.data).replace(/=3D/gi, "=");
+    // The links open the portal's rating page, which checks the token and POSTs the rating.
+    const token = new RegExp(
+      `/portal/${env.a}/csat\\?token=([A-Za-z0-9_-]+)(?:&amp;|&)rating=1`,
+    ).exec(body)?.[1];
+    expect(token).toBeTruthy();
+    for (const rating of [2, 3, 4, 5])
+      expect(body).toMatch(
+        new RegExp(`token=${token}(?:&amp;|&)rating=${rating}`),
+      );
+    expect(
+      (await call("GET", `/support/csat-email?token=${token}`)).body,
+    ).toEqual({ valid: true });
+    const [logged] = await env.scoped(env.a, (db) =>
+      db
+        .select({ conversationId: emailLog.conversationId })
+        .from(emailLog)
+        .where(eq(emailLog.emailType, "CsatRequestEmail"))
+        .orderBy(desc(emailLog.createdAt))
+        .limit(1),
+    );
+    expect(logged!.conversationId).toBe(thread.conversationId);
+
+    // Reopened and closed again: no second request for the same conversation.
+    mail = [];
+    expect((await status("open")).status).toBe(200);
+    expect((await status("closed")).status).toBe(200);
+    await drain();
+    await drain();
+    expect(mail).toEqual([]);
+
+    // A messenger conversation is rated in the widget, not by mail.
+    const plain = await conversationOf(env, env.a, visitor.principalId);
+    await settle();
+    await call("POST", `/conversations/${plain.conversationId}/status`, {
+      ...teammate,
+      body: { status: "closed" },
+    });
+    await drain();
+    await drain();
+    expect(mail).toEqual([]);
+
+    // An email conversation ended as spam, or already rated, is not asked.
+    const spam = await conversationOf(env, env.a, visitor.principalId, "email");
+    const rated = await conversationOf(
+      env,
+      env.a,
+      visitor.principalId,
+      "email",
+    );
+    await env.scoped(env.a, (db) =>
+      db
+        .update(conversations)
+        .set({ csatRating: 4 })
+        .where(eq(conversations.id, rated.conversationId)),
+    );
+    await settle();
+    expect(
+      (
+        await call("POST", `/conversations/${spam.conversationId}/end`, {
+          ...teammate,
+          body: { reason: "spam" },
+        })
+      ).status,
+    ).toBe(200);
+    await call("POST", `/conversations/${rated.conversationId}/status`, {
+      ...teammate,
+      body: { status: "closed" },
+    });
+    await drain();
+    await drain();
+    expect(mail).toEqual([]);
+  });
+
+  it("mails status subscribers what they may see, once, and honors the page switch, audience and component gates", async () => {
+    const env = contractEnv();
+    await openPublic(env);
+    await verifyEmail(env, env.customerA);
+    await verifyEmail(env, env.customerB);
+    const content = await statusContentIn(env, env.a);
+    expect(
+      (
+        await call("PUT", "/status/subscription", {
+          user: env.customerA,
+          body: { scope: "page" },
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await call("PUT", "/status/subscription", {
+          user: env.customerB,
+          body: { scope: "components", componentIds: [content.componentId] },
+        })
+      ).status,
+    ).toBe(200);
+    const teammate = { user: env.owner, teammate: true };
+    const publish = (title: string, componentId: string) =>
+      call("POST", "/status/incidents", {
+        ...teammate,
+        body: {
+          kind: "incident",
+          title,
+          status: "investigating",
+          affectedComponents: [
+            { componentId, componentStatus: "major_outage" },
+          ],
+          body: `${title} details`,
+        },
+      });
+    await settle();
+    // Only on a component behind a segment neither customer is in: nobody may see it.
+    expect(
+      (await publish("GatedMarker", content.gatedComponentId)).status,
+    ).toBe(200);
+    await drain();
+    await drain();
+    expect(mail).toEqual([]);
+
+    const shown = await publish("OutageMarker", content.componentId);
+    expect(shown.status).toBe(200);
+    await drain();
+    await drain();
+    await drain();
+    expect(mail.map((m) => m.to).sort()).toEqual(
+      [[accountEmail(env.customerA)], [accountEmail(env.customerB)]].sort(),
+    );
+    for (const m of mail) {
+      expect(readable(m.data)).toContain("OutageMarker");
+      expect(readable(m.data)).not.toContain(
+        `${content.label} gated component`,
+      );
+    }
+    // The unsubscribe link carries the one token format; the status route spends it.
+    const token = /unsubscribe\?token=([A-Za-z0-9_-]+)/.exec(
+      readable(mail[0]!.data),
+    )?.[1];
+    expect(token).toBeTruthy();
+    expect(
+      (await call("POST", "/status/unsubscribe", { body: { token } })).body,
+    ).toEqual({ changed: true });
+
+    // An update reaches the remaining subscriber once.
+    const remaining = mail.find((m) => !readable(m.data).includes(token!))!.to;
+    mail = [];
+    const updated = await call(
+      "POST",
+      `/status/incidents/${shown.body.id}/updates`,
+      { ...teammate, body: { status: "identified", body: "UpdateMarker" } },
+    );
+    expect(updated.status).toBe(200);
+    await drain();
+    await drain();
+    expect(mail.map((m) => m.to)).toEqual([remaining]);
+    expect(readable(mail[0]!.data)).toContain("UpdateMarker");
+
+    // Closed page, or an audience that no longer admits them: decided at send time, no mail.
+    const update = () =>
+      call("POST", `/status/incidents/${shown.body.id}/updates`, {
+        ...teammate,
+        body: { status: "monitoring", body: "Hidden update" },
+      });
+    for (const statusSettings of [
+      { enabled: false },
+      { enabled: true, audience: "segments", allowedSegmentIds: [] },
+    ]) {
+      await env.scoped(env.a, async (db) => {
+        const [row] = await db
+          .select({ metadata: settings.metadata })
+          .from(settings);
+        await db.update(settings).set({
+          metadata: JSON.stringify({
+            ...JSON.parse(row!.metadata || "{}"),
+            statusSettings,
+          }),
+        });
+      });
+      mail = [];
+      expect((await update()).status).toBe(200);
+      await drain();
+      await drain();
+      expect(mail).toEqual([]);
+    }
+    await openPublic(env);
   });
 
   it("shows customers only the customer intake types and fields, and refuses a back-office type", async () => {
@@ -1039,6 +1577,310 @@ describe.skipIf(!url)("Quills customer support routes and delivery", () => {
     } finally {
       await enablePortal(env, env.a);
     }
+  });
+
+  it("mails status subscribers by scope, hides gated components, mails a maintenance start and honors the notify switch", async () => {
+    const env = contractEnv();
+    await openPublic(env);
+    await verifyEmail(env, env.customerA);
+    await verifyEmail(env, env.customerB);
+    const content = await statusContentIn(env, env.a);
+    const [extra] = await env.scoped(env.a, (db) =>
+      db
+        .insert(statusComponents)
+        .values({ name: `${content.label} extra component` })
+        .returning({ id: statusComponents.id }),
+    );
+    for (const [user, body] of [
+      [env.customerA, { scope: "page" }],
+      [env.customerB, { scope: "components", componentIds: [extra!.id] }],
+    ] as const)
+      expect(
+        (await call("PUT", "/status/subscription", { user, body })).status,
+      ).toBe(200);
+    const teammate = { user: env.owner, teammate: true };
+    const publish = (body: Record<string, unknown>) =>
+      call("POST", "/status/incidents", { ...teammate, body });
+    const incident = (
+      title: string,
+      componentIds: string[],
+      more: Record<string, unknown> = {},
+    ) =>
+      publish({
+        kind: "incident",
+        title,
+        status: "investigating",
+        affectedComponents: componentIds.map((componentId) => ({
+          componentId,
+          componentStatus: "major_outage",
+        })),
+        body: `${title} details`,
+        ...more,
+      });
+    const sent = async () => {
+      await drain();
+      await drain();
+      const out = mail.map((m) => ({ to: m.to[0], text: readable(m.data) }));
+      mail = [];
+      return out;
+    };
+    await settle();
+
+    // A public and a gated component: the page subscriber hears, without the gated one's name;
+    // the components subscriber picked neither.
+    expect(
+      (
+        await incident("MixedMarker", [
+          content.componentId,
+          content.gatedComponentId,
+        ])
+      ).status,
+    ).toBe(200);
+    const mixed = await sent();
+    expect(mixed.map((m) => m.to)).toEqual([accountEmail(env.customerA)]);
+    expect(mixed[0]!.text).toContain(`${content.label} public component`);
+    expect(mixed[0]!.text).not.toContain(`${content.label} gated component`);
+
+    // Its own component reaches the components subscriber too.
+    await incident("ExtraMarker", [extra!.id]);
+    expect((await sent()).map((m) => m.to).sort()).toEqual(
+      [accountEmail(env.customerA), accountEmail(env.customerB)].sort(),
+    );
+
+    // notifySubscribers false sends nothing.
+    await incident("QuietMarker", [extra!.id], { notifySubscribers: false });
+    expect(await sent()).toEqual([]);
+
+    // A scheduled window mails when it starts, not when it is published.
+    const start = new Date(Date.now() + 3600_000).toISOString();
+    const window = await publish({
+      kind: "maintenance",
+      title: "WindowMarker",
+      status: "scheduled",
+      affectedComponents: [
+        {
+          componentId: content.componentId,
+          componentStatus: "under_maintenance",
+        },
+      ],
+      body: "Window details",
+      scheduledStartAt: start,
+      scheduledEndAt: new Date(Date.now() + 7200_000).toISOString(),
+    });
+    expect(window.status).toBe(200);
+    expect(await sent()).toEqual([]);
+    expect(
+      (
+        await call(
+          "POST",
+          `/status/incidents/${window.body.id}/start`,
+          teammate,
+        )
+      ).status,
+    ).toBe(200);
+    const started = await sent();
+    expect(started.map((m) => m.to)).toEqual([accountEmail(env.customerA)]);
+    expect(started[0]!.text).toContain("WindowMarker");
+    expect(mail).toEqual([]);
+  });
+
+  it("moves an anonymous widget session's conversations and votes to the identified visitor, only for its own session", async () => {
+    const env = contractEnv();
+    const anon = await anonymousVisitor(env, env.a);
+    const other = await anonymousVisitor(env, env.a);
+    const foreign = await anonymousVisitor(env, env.b);
+    const thread = await conversationOf(
+      env,
+      env.a,
+      anon.principalId as PrincipalId,
+    );
+    const { postId } = await customerPost(env, env.a);
+    await env.scoped(env.a, (db) =>
+      db.insert(postVotes).values({ postId, principalId: anon.principalId }),
+    );
+    const label = env.id("merge").toLowerCase();
+    const claims = {
+      sub: label,
+      email: `${label}@example.test`,
+      exp: Math.floor(Date.now() / 1000) + 300,
+    };
+    const identify = (bearer: string, previousToken: string) =>
+      call("POST", "/widget/identify", {
+        bearer,
+        body: { ssoToken: signIdentity(claims, anon.secret), previousToken },
+      });
+    // Another session's token in the body, or workspace B's session as the Bearer: nothing moves.
+    const first = await identify(anon.token, other.token);
+    expect(first.body.mergedPrincipalId).toBeNull();
+    expect(
+      (await identify(foreign.token, foreign.token)).body.mergedPrincipalId,
+    ).toBeNull();
+    // The identified person voted on the same post: two vote rows, a count of 2.
+    await env.scoped(env.a, async (db) => {
+      await db
+        .insert(postVotes)
+        .values({ postId, principalId: first.body.principalId });
+      await db.update(posts).set({ voteCount: 2 }).where(eq(posts.id, postId));
+    });
+    const owner = async () =>
+      (
+        await env.scoped(env.a, (db) =>
+          db
+            .select({ visitor: conversations.visitorPrincipalId })
+            .from(conversations)
+            .where(eq(conversations.id, thread.conversationId)),
+        )
+      )[0]!.visitor;
+    expect(await owner()).toBe(anon.principalId);
+
+    const merged = await identify(anon.token, anon.token);
+    expect(merged.status).toBe(200);
+    expect(merged.body.mergedPrincipalId).toBe(anon.principalId);
+    expect(await owner()).toBe(merged.body.principalId);
+    expect(merged.body.votedPostIds).toContain(postId);
+    // The duplicate anonymous vote is dropped, and the count with it.
+    const [counted] = await env.scoped(env.a, (db) =>
+      db
+        .select({ voteCount: posts.voteCount })
+        .from(posts)
+        .where(eq(posts.id, postId)),
+    );
+    expect(counted!.voteCount).toBe(1);
+    const leftover = await env.scoped(env.a, (db) =>
+      db
+        .select({ id: postVotes.postId })
+        .from(postVotes)
+        .where(eq(postVotes.principalId, anon.principalId as never)),
+    );
+    expect(leftover).toEqual([]);
+    // The anonymous session ended; identifying again moves nothing.
+    expect(
+      (await call("GET", "/widget/session", { bearer: anon.token })).status,
+    ).toBe(401);
+    expect(
+      (await identify(anon.token, anon.token)).body.mergedPrincipalId,
+    ).toBeNull();
+    const lead = (await eventsOf(merged.body.principalId)).filter(
+      (event) => event.type === "user.lead_merged",
+    );
+    expect(lead).toHaveLength(1);
+  });
+
+  it("changes an anonymous visitor's contact address only with the mailed codes", async () => {
+    const env = contractEnv();
+    const anon = await anonymousVisitor(env, env.a);
+    const codeFor = async (purpose: "current" | "change") => {
+      const [row] = await env.scoped(env.a, (db) =>
+        db
+          .select({ value: kvStore.value })
+          .from(kvStore)
+          .where(
+            eq(kvStore.key, `contact-email:${purpose}:${anon.principalId}`),
+          ),
+      );
+      const value = row!.value as { email: string; nonce: string };
+      return contactEmailCode(anon.secret, {
+        principalId: anon.principalId,
+        purpose,
+        email: value.email,
+        nonce: value.nonce,
+      });
+    };
+    const first = `first-${env.id("addr").toLowerCase()}@example.test`;
+    await settle();
+    const asked = await call("POST", "/widget/contact-email", {
+      bearer: anon.token,
+      body: { email: first },
+    });
+    expect(asked.body).toMatchObject({ ok: true, reason: null });
+    expect(mail).toEqual([]);
+    await drain();
+    await drain();
+    const code = await codeFor("change");
+    expect(mail.map((m) => m.to)).toEqual([[first]]);
+    expect(readable(mail[0]!.data)).toContain(code);
+    const wrong = code === "000000" ? "111111" : "000000";
+    expect(
+      (
+        await call("POST", "/widget/contact-email/confirm", {
+          bearer: anon.token,
+          body: { email: first, code: wrong },
+        })
+      ).body,
+    ).toMatchObject({ ok: false });
+    expect(await contactEmailOf(env, anon.principalId)).toBeNull();
+    expect(
+      (
+        await call("POST", "/widget/contact-email/confirm", {
+          bearer: anon.token,
+          body: { email: first, code },
+        })
+      ).body,
+    ).toMatchObject({ ok: true, email: first });
+    expect(await contactEmailOf(env, anon.principalId)).toBe(first);
+    // Spent: the same code does not work twice.
+    expect(
+      (
+        await call("POST", "/widget/contact-email/confirm", {
+          bearer: anon.token,
+          body: { email: first, code },
+        })
+      ).body.ok,
+    ).toBe(false);
+
+    // With an address set, the current address proves itself first.
+    const second = `second-${env.id("addr").toLowerCase()}@example.test`;
+    expect(
+      (
+        await call("POST", "/widget/contact-email", {
+          bearer: anon.token,
+          body: { email: second },
+        })
+      ).body,
+    ).toMatchObject({ ok: false, reason: "current_code_required" });
+    mail = [];
+    await call("POST", "/widget/contact-email/current-code", {
+      bearer: anon.token,
+    });
+    await drain();
+    expect(mail.map((m) => m.to)).toEqual([[first]]);
+    const current = await codeFor("current");
+    expect(readable(mail[0]!.data)).toContain(current);
+    expect(
+      (
+        await call("POST", "/widget/contact-email", {
+          bearer: anon.token,
+          body: { email: second, currentCode: current },
+        })
+      ).body,
+    ).toMatchObject({ ok: true });
+    // Five wrong tries end the request; the right code then fails too.
+    const next = await codeFor("change");
+    for (let i = 0; i < 5; i++)
+      await call("POST", "/widget/contact-email/confirm", {
+        bearer: anon.token,
+        body: { email: second, code: next === "000000" ? "111111" : "000000" },
+      });
+    expect(
+      (
+        await call("POST", "/widget/contact-email/confirm", {
+          bearer: anon.token,
+          body: { email: second, code: next },
+        })
+      ).body.ok,
+    ).toBe(false);
+    expect(await contactEmailOf(env, anon.principalId)).toBe(first);
+
+    // An identified visitor's address comes from the host's signed token.
+    const identified = await env.widgetVisitor(env.a);
+    expect(
+      (
+        await call("POST", "/widget/contact-email", {
+          bearer: identified.token,
+          body: { email: second },
+        })
+      ).status,
+    ).toBe(403);
   });
 
   it("reads office hours in the workspace timezone, past midnight and on holidays", () => {

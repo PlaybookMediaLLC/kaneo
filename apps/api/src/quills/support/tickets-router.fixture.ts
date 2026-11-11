@@ -3,6 +3,7 @@ export * from "./macros.fixture";
 export * from "./sla.fixture";
 export * from "./support-reporting.fixture";
 export * from "./support-settings.fixture";
+export * from "./ticket-external-links.fixture";
 export * from "./ticket-links.fixture";
 export * from "./ticket-read-state.fixture";
 export * from "./ticket-statuses.fixture";

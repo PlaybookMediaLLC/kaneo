@@ -20,7 +20,7 @@ const anonymousSession = defineQuillsRoute({
   operationId: "createQuillsWidgetAnonymousSession",
   summary: "Start an anonymous widget session",
   description:
-    "Needs the widget on and a widget secret. Each call creates a new anonymous person; identify does not merge it into the identified person yet.",
+    "Needs the widget on and a widget secret. Each call creates a new anonymous person. Identify with this token as previousToken (and as the Bearer token) moves its activity to the identified person.",
   action: "create",
   rateLimit: { limit: 10, windowSeconds: 3600 },
   response: z.object({ sessionToken: z.string(), principalId: z.string() }),

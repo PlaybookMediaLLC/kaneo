@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, eq, inArray, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { isTypeId, toUuid } from "@kaneo/ids";
 import {
@@ -8,7 +8,11 @@ import {
 } from "../../../database/quills/client";
 import { principal } from "../../../database/quills/schema/auth";
 import { boards } from "../../../database/quills/schema/boards";
-import { postExternalLinks } from "../../../database/quills/schema/external-links";
+import { conversationMessages } from "../../../database/quills/schema/conversation";
+import {
+  postExternalLinks,
+  ticketExternalLinks,
+} from "../../../database/quills/schema/external-links";
 import {
   integrationSyncAttempts as attempts,
   integrationSyncOperations as operations,
@@ -22,6 +26,10 @@ import type { JobQueueRow } from "../../../database/quills/schema/job-queue";
 import { postComments, posts } from "../../../database/quills/schema/posts";
 import { postStatuses } from "../../../database/quills/schema/statuses";
 import {
+  ticketConversations,
+  tickets,
+} from "../../../database/quills/schema/tickets";
+import {
   decryptSecret,
   encryptSecret,
   isEncryptedSecret,
@@ -34,6 +42,7 @@ import {
   type DeliveredEvent,
 } from "../../integrations/catalog";
 import { tokenFields } from "../../integrations/oauth-providers";
+import { systemMessage } from "../../support/ticket-view";
 import { loadEvent, type DeliveryEvent } from "../fanout";
 import { enqueueQuillsJob, finishQuillsJob } from "../queue";
 import {
@@ -115,9 +124,19 @@ export async function fanOutIntegrations(workspaceId: string, eventId: string) {
     const event = await loadEvent(db, eventId);
     if (!event || (event.context as { deliver?: unknown }).deliver !== true)
       return;
-    // A recovery request changed only the operation; its job starts here, after the request committed.
-    if (event.type === "integration_sync.recovered") {
-      const operationId = z.uuid().safeParse(event.entityId).data;
+    // A recovery request changed only the operation, and a ticket issue request queued one; its job
+    // starts here, after the request committed.
+    if (
+      event.type === "integration_sync.recovered" ||
+      event.type === "ticket.issue_requested"
+    ) {
+      const operationId = z
+        .uuid()
+        .safeParse(
+          event.type === "ticket.issue_requested"
+            ? (event.payload as { operationId?: unknown }).operationId
+            : event.entityId,
+        ).data;
       const [op] = operationId
         ? await db
             .select({
@@ -337,6 +356,59 @@ async function loadContent(
   };
 }
 
+/**
+ * A live ticket as issue content: its title and its first customer-visible message (the ticket's
+ * own thread or its customer pair's). The requester's name stays out: a tracker may be public.
+ */
+async function ticketContent(
+  db: Database,
+  ticketId: string,
+): Promise<Content | undefined> {
+  if (!isTypeId(ticketId, "ticket")) return undefined;
+  const [ticket] = await db
+    .select({ id: tickets.id, number: tickets.number, title: tickets.title })
+    .from(tickets)
+    .where(and(eq(tickets.id, ticketId), isNull(tickets.deletedAt)));
+  if (!ticket) return undefined;
+  const [pair] = await db
+    .select({ id: ticketConversations.conversationId })
+    .from(ticketConversations)
+    .where(
+      and(
+        eq(ticketConversations.ticketId, ticketId),
+        eq(ticketConversations.ticketType, "customer"),
+      ),
+    );
+  const [first] = await db
+    .select({ content: conversationMessages.content })
+    .from(conversationMessages)
+    .where(
+      and(
+        pair
+          ? or(
+              eq(conversationMessages.ticketId, ticketId),
+              eq(conversationMessages.conversationId, pair.id),
+            )
+          : eq(conversationMessages.ticketId, ticketId),
+        ne(conversationMessages.senderType, "system"),
+        eq(conversationMessages.isInternal, false),
+        isNull(conversationMessages.deletedAt),
+      ),
+    )
+    .orderBy(asc(conversationMessages.createdAt), asc(conversationMessages.id))
+    .limit(1);
+  return {
+    board: `Support ticket #${ticket.number}`,
+    boardId: "",
+    post: {
+      id: ticket.id,
+      title: ticket.title,
+      content: (first?.content ?? "").slice(0, 2000),
+      author: "Support team",
+    },
+  };
+}
+
 function unseal(secrets: string | null) {
   if (!isEncryptedSecret(secrets)) return undefined;
   try {
@@ -451,24 +523,46 @@ async function claimOperation(db: Database, id: string): Promise<Claim> {
   )
     return cancel("installation_changed");
   const meta = op.destination as { event?: unknown; statusId?: unknown };
-  const trigger = deliveredEvent.safeParse(meta.event).data;
-  if (!trigger) return cancel("source_unavailable");
-  const [mapping] = await db
-    .select({ filters: mappings.filters })
-    .from(mappings)
-    .where(
-      and(
-        eq(mappings.integrationId, integration.id),
-        eq(mappings.eventType, trigger),
-        eq(mappings.targetKey, op.destinationKey),
-        eq(mappings.enabled, true),
-      ),
-    );
-  if (!mapping) return cancel("installation_changed");
-  const content = await loadContent(db, op, trigger, meta.statusId);
-  if (!content) return cancel("source_unavailable");
-  if (!boardAllowed(mapping.filters, content.boardId))
-    return cancel("installation_changed");
+  let trigger: DeliveredEvent;
+  let content: Content | undefined;
+  if (op.sourceType === "ticket") {
+    // A teammate's issue request (support/ticket-external-links.ts): the channel must still be the
+    // connection's, and the ticket live. It is delivered as an issue create.
+    const [channel] = await db
+      .select({ id: mappings.id })
+      .from(mappings)
+      .where(
+        and(
+          eq(mappings.integrationId, integration.id),
+          eq(mappings.targetKey, op.destinationKey),
+        ),
+      )
+      .limit(1);
+    if (!channel) return cancel("installation_changed");
+    trigger = "post.created";
+    content = await ticketContent(db, op.sourceId);
+    if (!content) return cancel("source_unavailable");
+  } else {
+    const parsed = deliveredEvent.safeParse(meta.event).data;
+    if (!parsed) return cancel("source_unavailable");
+    trigger = parsed;
+    const [mapping] = await db
+      .select({ filters: mappings.filters })
+      .from(mappings)
+      .where(
+        and(
+          eq(mappings.integrationId, integration.id),
+          eq(mappings.eventType, trigger),
+          eq(mappings.targetKey, op.destinationKey),
+          eq(mappings.enabled, true),
+        ),
+      );
+    if (!mapping) return cancel("installation_changed");
+    content = await loadContent(db, op, trigger, meta.statusId);
+    if (!content) return cancel("source_unavailable");
+    if (!boardAllowed(mapping.filters, content.boardId))
+      return cancel("installation_changed");
+  }
   const credentials = unseal(integration.secrets);
   if (!credentials) {
     // An operator can restore the instance key; the sync history then offers a retry on this connection.
@@ -595,8 +689,7 @@ async function settle(db: Database, claim: Claimed, outcome: Outcome) {
   const [live] =
     result &&
     claim.op.kind === "create" &&
-    claim.op.sourceType === "post" &&
-    isTypeId(claim.op.sourceId, "post") &&
+    ["post", "ticket"].includes(claim.op.sourceType) &&
     isTypeId(claim.op.integrationId, "integration")
       ? await db
           .select({ id: integrations.id })
@@ -604,6 +697,7 @@ async function settle(db: Database, claim: Claimed, outcome: Outcome) {
           .where(eq(integrations.id, claim.op.integrationId))
           .for("key share")
       : [];
+  const syncScope = `${claim.op.installation}:${claim.op.destinationKey}`;
   if (live && result && isTypeId(claim.op.sourceId, "post"))
     await db
       .insert(postExternalLinks)
@@ -613,10 +707,40 @@ async function settle(db: Database, claim: Claimed, outcome: Outcome) {
         integrationType: claim.op.provider,
         externalId: result.externalId,
         externalUrl: result.externalUrl,
-        syncScope: `${claim.op.installation}:${claim.op.destinationKey}`,
+        syncScope,
         origin: "event",
       })
       .onConflictDoNothing();
+  // A ticket's issue request links the new issue, with a team-only note on the ticket.
+  if (live && result && isTypeId(claim.op.sourceId, "ticket")) {
+    const linked = await db
+      .insert(ticketExternalLinks)
+      .values({
+        ticketId: claim.op.sourceId,
+        integrationId: live.id,
+        integrationType: claim.op.provider,
+        externalId: result.externalId,
+        externalDisplayId: result.externalId,
+        externalUrl: result.externalUrl,
+        syncScope,
+        origin: "push",
+        createdByPrincipalId: claim.op.requestedBy,
+      })
+      .onConflictDoNothing()
+      .returning({ id: ticketExternalLinks.id });
+    if (linked.length)
+      await systemMessage(
+        db,
+        claim.op.sourceId,
+        `Created ${provider(claim.op.provider)?.name ?? claim.op.provider} issue ${result.externalId}`,
+        {
+          kind: "external_linked",
+          externalReference: result.externalId,
+          ...(result.externalUrl && { externalUrl: result.externalUrl }),
+        },
+        true,
+      );
+  }
   await recordHealth(db, claim.op.integrationId, outcome);
 }
 

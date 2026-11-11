@@ -12,6 +12,7 @@ import {
   sendNewCommentEmail,
   sendPortalInviteEmail,
   sendStatusChangeEmail,
+  sendVerifyAddressEmail,
   type EmailResult,
   type SealedEmail,
 } from "@kaneo/email/quills";
@@ -35,11 +36,13 @@ import {
   accessibleProjectIds,
   quillsReaders,
 } from "../framework/platform-reads";
+import { pendingCode } from "../widget/contact-email";
 import { inviteUrl, mintInviteToken } from "../portal/invite-token";
 import {
   mintUnsubscribeToken,
   unsubscribeUrl,
 } from "../portal/unsubscribe-token";
+import { statusSubscribers } from "./handlers/status-mail";
 import { supportSubscribers } from "./handlers/support-mail";
 import { enqueueQuillsJob, type QuillsQueue } from "./queue";
 
@@ -84,6 +87,21 @@ export type MailContent = {
   commentId?: PostCommentId;
   /** Direct mail only: the one address the event concerns, for example an invitee. */
   to?: string;
+  /**
+   * A customer recipient's address, decided at send time outside the transaction. Without it a
+   * customer gets post mail through handlers/support-mail.ts#customerPostAddress.
+   */
+  customerAddress?: (
+    workspaceId: string,
+    principalId: PrincipalId,
+  ) => Promise<string | undefined>;
+  /**
+   * The delivery ledger key when one send must cover more than this event, for example one CSAT
+   * request per conversation. Default `mail:{eventId}:{recipient}`.
+   */
+  ledgerKey?: string;
+  /** Recorded on the `email_log` row. */
+  conversationId?: string;
   /** Uses only values read before it is returned, never the transaction. */
   send: (to: string) => Promise<EmailResult>;
 };
@@ -102,19 +120,35 @@ export type Subscribers = {
    */
   direct?: true | ((db: Database, event: DeliveryEvent) => Promise<boolean>);
   /**
+   * Direct mail about other messages than the event's own: one mail job per message ID returned,
+   * for example the copies a tracker's reply-all wrote on its linked tickets. `mail` gets the
+   * message ID as its `target`; the mail handler checks again that this returns it.
+   */
+  copies?: (
+    db: Database,
+    event: DeliveryEvent,
+    /** Check this one message only (a copy mail job). */
+    only?: string,
+  ) => Promise<string[]>;
+  /**
    * Customers among the recipients are mailed too (no in-app notice). The mail handler decides at
-   * send time whether the customer may still see the post (handlers/support-mail.ts).
+   * send time whether the customer may still see the post (handlers/support-mail.ts), or asks
+   * the content's `customerAddress`.
    */
   customers?: true;
   notification?: (
     db: Database,
     event: DeliveryEvent,
   ) => Promise<NotificationContent | undefined>;
-  /** Called once per recipient, with its principal, or once with null for a direct entry. */
+  /**
+   * Called once per recipient, with its principal, once with null for a direct entry, and once
+   * per copy with null and the copy's message ID.
+   */
   mail?: (
     db: Database,
     event: DeliveryEvent,
     principalId: PrincipalId | null,
+    target?: string,
   ) => Promise<MailContent | undefined>;
 };
 
@@ -333,7 +367,34 @@ export const subscribers: Partial<Record<string, Subscribers>> = {
     direct: true,
     mail: inviteMail(false),
   },
+  // An anonymous visitor's address code (widget/contact-email.ts): read from the live request at
+  // send time, so a request that ended or was replaced mails its current state or nothing.
+  "user.contact_email_code_requested": {
+    recipients: noRecipients,
+    direct: true,
+    mail: async (db, event) => {
+      const request = await pendingCode(
+        db,
+        payloadOf(event).purpose ?? "",
+        event.entityId as PrincipalId,
+      );
+      const workspace = request && (await workspaceOf(db));
+      if (!request || !workspace) return undefined;
+      return {
+        type: "contact_email_code",
+        emailType: "VerifyAddressEmail",
+        to: request.email,
+        send: (to) =>
+          sendVerifyAddressEmail({
+            to,
+            code: request.code,
+            workspaceName: workspace.name,
+          }),
+      };
+    },
+  },
   ...supportSubscribers,
+  ...statusSubscribers,
 };
 
 export async function loadEvent(db: Database, eventId: string) {
@@ -475,13 +536,15 @@ export async function fanOut(workspaceId: string, eventId: string) {
     return {
       hooks: hooks.map((hook) => hook.id),
       teammates: postId && !post ? [] : teammates,
-      customers: post ? customers.map((row) => row.id) : [],
+      // An entry about a post mails customers only while the post is live.
+      customers: postId && !post ? [] : customers.map((row) => row.id),
       links: links.map((link) => link.projectId),
       entry,
       direct:
         typeof entry?.direct === "function"
           ? await entry.direct(db, event)
           : Boolean(entry?.direct),
+      copies: entry?.copies && entry.mail ? await entry.copies(db, event) : [],
     };
   });
   if (!plan) return;
@@ -507,6 +570,7 @@ export async function fanOut(workspaceId: string, eventId: string) {
     !plan.hooks.length &&
     !recipients.length &&
     !plan.customers.length &&
+    !plan.copies.length &&
     !direct
   )
     return;
@@ -518,6 +582,14 @@ export async function fanOut(workspaceId: string, eventId: string) {
         "quills.mail",
         { eventId },
         `${eventId}:direct`,
+        5,
+      );
+    for (const messageId of plan.copies)
+      await enqueueQuillsJob(
+        db,
+        "quills.mail",
+        { eventId, messageId },
+        `${eventId}:${messageId}`,
         5,
       );
     for (const webhookId of plan.hooks)

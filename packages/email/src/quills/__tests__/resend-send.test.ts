@@ -14,6 +14,7 @@ import {
 } from "../index";
 import { ResendEmailError } from "../resend";
 import { withEmailIdempotencyKey } from "../idempotency";
+import { withEmailTags } from "../tags";
 import { sendingAs } from "./brands";
 
 /**
@@ -210,6 +211,31 @@ describe("resend sending", () => {
     expect(keys[2]).not.toBe(keys[0]);
     // The raw scope value never reaches the provider.
     expect(keys[0]).not.toContain("send-1");
+  });
+
+  it("carries the scope's tags to Resend and refuses a tag Resend would reject", async () => {
+    process.env.EMAIL_RESEND_API_KEY = "re_test";
+    const send = () =>
+      sendRawEmail({
+        from: sendingAs("a@acme.test"),
+        to: "c@example.test",
+        subject: "s",
+        html: "<p>x</p>",
+      });
+    resendSend.mockResolvedValue({
+      data: { id: "e1" },
+      error: null,
+      headers: null,
+    });
+    const tags = [{ name: "kaneo_workspace", value: "ws_1" }];
+    await withEmailTags(tags, send);
+    await send();
+    expect(resendSend.mock.calls[0]?.[0].tags).toEqual(tags);
+    expect(resendSend.mock.calls[1]?.[0]).not.toHaveProperty("tags");
+    expect(() =>
+      withEmailTags([{ name: "bad tag", value: "x" }], send),
+    ).toThrow();
+    expect(resendSend).toHaveBeenCalledTimes(2);
   });
 
   it("retries a concurrent request on the same key rather than failing it", async () => {
