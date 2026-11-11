@@ -171,6 +171,92 @@ Filled by lane P3.
 
 Filled by lane P4.
 
+## Agent channels (RFC 0001, lane G1)
+
+The Slack assistant, the GitHub inbox channel, the inbound app hook and the identify hook.
+Decision D10: each setting comes with the hook route and the worker handler that it turns on.
+
+### Boundary map
+
+```
+Tables and owning schema:  quills: settings (assistant_config), integrations,
+                           integration_platform_credentials, channel_accounts, channel_threads,
+                           channel_identities, conversations, conversation_messages, principal,
+                           user, user_attribute_definitions, slack_user_links, teams (read),
+                           kv_store (hook payloads and signed receipts), hook_deliveries (send
+                           receipts), help_center_articles and assistant_snippets (read),
+                           ai_usage_log, events, job_queue, audit_log.
+                           public (read only, through framework/platform-reads.ts): workspace
+                           members, roles, and the account email of a member.
+Actor and workspace:       teammate routes: authenticated context. Signed routes: the workspace of
+                           the integration in the path (quills.integration_workspace). Workers:
+                           withQuillsSystemWorkspace with the job's workspace. The Slack asker is
+                           the teammate that slack_user_links names; a first link needs a current
+                           member whose verified account email is the Slack profile email.
+Permissions:               settings and status: quills:manage_settings. Retry: quills:update.
+                           Slack hook: the Slack signing secret of the workspace's Slack app.
+                           GitHub events: the status-sync webhook secret. Identify: the Segment
+                           shared secret. The Slack worker answers only a current member whose
+                           role holds quills:read now.
+Persisted relationships:   channel_accounts.config.integrationId (the inbox's connection);
+                           channel_threads (issue `owner/repo#n` to conversation);
+                           channel_identities (GitHub user to principal); slack_user_links.
+Transactions:              one scoped transaction per request. Provider calls run in `call`
+                           (GitHub webhook update) or in a worker with no transaction open.
+External effects:          GitHub webhook update (request, `call`); Slack users.info and
+                           chat.postMessage, GitHub issue comment create and list (workers, after
+                           commit, with a hook_deliveries receipt before each send).
+```
+
+### Routes
+
+| operationId | Route | Audience | Action | Tables | Event |
+|---|---|---|---|---|---|
+| `getQuillsSlackAgentSettings` | `GET /assistant/slack` | teammate | manage_settings | `settings`, `integrations`, `integration_platform_credentials` | - |
+| `setQuillsSlackAssistantEnabled` | `PUT /assistant/slack` (`expectedRevision`, `enabled`) | teammate | manage_settings | `settings` | `slack_agent.settings_updated` |
+| `getQuillsGitHubChannelStatus` | `GET /channels/github` | teammate | manage_settings | `integrations`, `channel_accounts` | - |
+| `setQuillsGitHubInboxEnabled` | `PUT /channels/github/inbox` (`enabled`) | teammate | manage_settings | `integrations`, `channel_accounts`, `teams` | `github_inbox.settings_updated` |
+| `retryQuillsGitHubAgentMessage` | `POST /conversation-messages/{messageId}/github-retry` | teammate | update | `conversation_messages`, `conversations` | `github_inbox.message_retried` |
+| `saveQuillsSegmentConnection` | `PUT /integrations/segment/connection` (`incomingSecret`) | teammate | manage_settings | `integrations` | `integration.connected` |
+| `receiveQuillsAppHook` | `POST /quills-public/signed/integrations/slack/{integrationId}/hooks/events` | signed (Slack) | create | `kv_store`, `settings` | `integration.hook_received` |
+| `receiveQuillsIdentify` | `POST /quills-public/signed/integrations/segment/{integrationId}/identify` | signed (Segment) | update | `user`, `user_attribute_definitions` | `user.identified` |
+| `receiveQuillsIntegrationWebhook` (extended) | `POST /quills-public/signed/integrations/github/{integrationId}/webhook` | signed (GitHub) | update | `channel_accounts`, `channel_threads`, `channel_identities`, `principal`, `conversations`, `conversation_messages` | `conversation.created`, `message.created`, `message.updated`, `message.deleted`, `conversation.status_changed` |
+
+- Slack: register `<KANEO_API_URL origin>/api/quills-public/signed/integrations/slack/<integration ID>/hooks/events`
+  (the settings read returns it) as the Event Subscriptions URL, and subscribe to `app_mention` and
+  `message.im`. Save the app's signing secret with the platform credentials (`signingSecret`). The
+  connection ID is stable across reconnects. The hook stores the question in `kv_store` for one day,
+  never in the event or audit row.
+- GitHub inbox: it uses the status-sync webhook of the connection. Enabling adds `issue_comment` to
+  that webhook's events; disabling sets them back to `issues`. A webhook update that fails keeps the
+  switch and records `lastError`, as the source does. Disabling status sync stops the inbox's events.
+- Identify: connect Segment with its shared secret, then send identify calls to
+  `/api/quills-public/signed/integrations/segment/<integration ID>/identify` (`x-signature`:
+  base64 HMAC-SHA1 of the body).
+
+### Worker handlers
+
+| Event | Queue | Handler | Deduplication and reconciliation |
+|---|---|---|---|
+| `integration.hook_received` (Slack) | `quills.ai` | `assistant/engine/slack.ts` | Receipt key `slack-answer:<hook key>` in `hook_deliveries`, written before `chat.postMessage`. A rerun, a lost lease or an expired lease that finds the receipt does not post: `processing` from a stopped attempt becomes `uncertain` and is never posted again. |
+| `message.created` (agent reply on a GitHub conversation), `github_inbox.message_retried` | `quills.webhook` (payload without `webhookId` or `operationId`) | `jobs/handlers/github-comment.ts` | Receipt key `github-comment:<message ID>` (a retry adds its event ID), written before the comment. Each comment carries `<!-- kaneo:<message ID> -->`. A retry first lists the issue's comments since the message and marks the message sent when one has the marker. An uncertain send is never repeated automatically. |
+
+### Behavior differences from the source
+
+| Source | Kaneo |
+|---|---|
+| Slack: streamed replies, slash command, message shortcut, proposal buttons, feedback reactions, App Home prompts, Stop, thread follow-ups, revocation events | Not ported. The assistant answers an `app_mention` or a direct message with one reply in the thread, from the help center and knowledge (team ceiling, copilot knowledge settings). |
+| Slack: the workspace assistant with every workspace tool | One provider call over the retrieved sources; no write tools. |
+| Slack routing check (`routing`, pooled tenancy) | Not applicable: Kaneo serves each workspace directly. The read returns `hookUrl` and `signingConfigured` instead. |
+| Slack signing secret in instance platform credentials | In the workspace's Slack platform credentials (`signingSecret`). |
+| GitHub inbox: its own webhook on `config.channelId` | The status-sync webhook; status sync must be on (409 otherwise). |
+| GitHub agent replies after the inbox is off still post | The worker posts only while the inbox is on (the message is marked failed). |
+| GitHub retry resets any message and posts again | Only a `failed` delivery, or a `pending` one older than ten minutes; a marker check runs first. |
+| `retryGitHubAgentMessageFn` takes `messageId` in the body | The message ID is a path parameter. |
+| Identify updates only existing users | The same: an unknown email changes nothing (`status: unknown`). `_externalUserId` goes into the metadata, as in the source. No ordering check against newer identify calls. |
+| Segment connection through the admin UI | `saveQuillsSegmentConnection` with the shared secret only; outbound Segment sync is not ported. |
+| Delivery ticks over SSE | The worker writes `channelDelivery`; clients see it on the next read. |
+
 ## Deferred or not implemented
 
 | Source rows | Reason |
@@ -179,12 +265,10 @@ Filled by lane P4.
 | Asana, Azure DevOps, ClickUp, HubSpot, Intercom, Jira, Linear, Monday, Notion, Salesforce, Trello, Zendesk | Decision D7 (RFC 0001) puts them in scope: lanes P1 to P3 (see "Providers in RFC 0001"). |
 | Segment | Decision D6: by demand. RFC 0001 leaves it out of scope (section 11). |
 | GitLab self-managed instances | The provider host would come from user input; needs the SSRF-checked outbound path and a host field. gitlab.com only. |
-| `api/integrations/{type}/hooks/{kind}` (Slack interactivity, app hooks) | Their consumers are the Slack assistant and message shortcuts (P8 assistant slice). |
-| `api/integrations/{type}/identify` | User-sync providers (Segment and similar) are not in this provider set. |
+| `api/integrations/{type}/hooks/{kind}` kinds `interactions`, `commands`, `options` | The Slack `events` kind is built ("Agent channels"); buttons, the slash command and shortcuts are not ported. |
 | `api/v1/apps/**`, `apps*`, `setQuillsIframeHeaders` | The app sidebar authenticates a third-party app with its own token and needs iframe headers; neither fits the signed nor the teammate audience without a new app-token model. |
 | `oauth/connector/callback` | Assistant connectors (P8 assistant slice). |
 | `updateTicketStatusMappingsFn`, `updatePushStatusMappingsFn` | Ticket status sync and outbound status push need ticket links to tracker issues first. |
 | Ticket issue status sync | Inbound issue events update post links only. Ticket issue links are built (`support/TICKETS.md`, "Tracker issue links"). |
 | `verifyQuillsIntegrationSyncReference`, recovery `reconcile`/`keep_remote`/`link_existing` | Remote item inspection per provider; search exists, inspection does not. |
 | Post activity entry for an inbound status change | `recordActivity` takes a teammate actor; the change is audited as a system change. |
-| GitHub inbox channel (issue comments into conversations) | The source's second webhook consumer; needs the GitHub channel account flow. |
