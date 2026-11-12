@@ -69519,6 +69519,7 @@
                         "assistant_action.proposed",
                         "assistant_action.approved",
                         "assistant_action.rejected",
+                        "assistant_action.completed",
                         "assistant.embeddings_requested",
                         "merge_suggestion.dismissed",
                         "merge_suggestion.restored",
@@ -70070,6 +70071,7 @@
                         "assistant_action.proposed",
                         "assistant_action.approved",
                         "assistant_action.rejected",
+                        "assistant_action.completed",
                         "assistant.embeddings_requested",
                         "merge_suggestion.dismissed",
                         "merge_suggestion.restored",
@@ -133163,7 +133165,7 @@
           "Quills"
         ],
         "summary": "List the assistant connectors",
-        "description": "Never returns credentials. This build cannot call a connector's tools.",
+        "description": "Never returns credentials. The copilot calls the tools of an enabled, connected connector that is assigned to it.",
         "parameters": [
           {
             "schema": {
@@ -136032,7 +136034,7 @@
           "Quills"
         ],
         "summary": "Approve and run a proposed action",
-        "description": "Needs quills:update, the permission of every write tool. The tool runs now, in this request, through the same domain checks as the teammate's own route; its change event names the approver. A failed check (for example a missing required attribute) leaves the action proposed.",
+        "description": "Needs quills:update, the permission of every write tool. A built-in tool runs now, in this request, through the same domain checks as the teammate's own route; its change event names the approver. A failed check (for example a missing required attribute) leaves the action proposed. A connector tool's action becomes `approved` here when its connector still offers the tool and the arguments fit its schema; a worker then calls the tool once and sets the action `executed` or `failed`.",
         "parameters": [
           {
             "schema": {
@@ -136453,6 +136455,7 @@
                             "assistant_action.proposed",
                             "assistant_action.approved",
                             "assistant_action.rejected",
+                            "assistant_action.completed",
                             "assistant.embeddings_requested",
                             "merge_suggestion.dismissed",
                             "merge_suggestion.restored",

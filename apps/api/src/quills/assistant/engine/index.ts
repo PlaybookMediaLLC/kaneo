@@ -8,6 +8,7 @@ import {
   summarizeTicket,
   translateRequested,
 } from "./content";
+import { runApprovedAction } from "./connector-calls";
 import { answerRun } from "./runs";
 import type { Work } from "./shared";
 import { answerSlackHook } from "./slack";
@@ -18,6 +19,8 @@ export type { Work, Write } from "./shared";
 /** Event type → the assistant work that the quills.ai queue runs for it after commit. */
 export const assistantWork: Record<string, Work> = {
   "assistant_run.requested": answerRun,
+  // Follow-up FU2: an approved connector action runs once here (connector-calls.ts).
+  "assistant_action.approved": runApprovedAction,
   "assistant_web_source.added": fetchWebSource,
   "assistant.embeddings_requested": backfillEmbeddings,
   "post.created": checkDuplicates,

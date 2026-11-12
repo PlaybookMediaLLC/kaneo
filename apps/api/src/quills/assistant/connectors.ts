@@ -46,7 +46,7 @@ import { toolCatalogue } from "./tools";
 // Remote MCP connectors and the built-in tool catalogue. A settings manager adds, changes, refreshes
 // and authorizes a connector. The URL is reached only through connector-client.ts, never inside a
 // transaction: `prepare` reads, `call` reaches the server, the handler writes. Credentials are sealed
-// with the instance key and never returned. The copilot does not call connector tools yet (ROUTES.md).
+// with the instance key and never returned. The copilot calls connector tools (ROUTES.md).
 
 const MAX_CONNECTORS = 100;
 const params = z.object({ connectorId: flexibleToTypeIdSchema("connector") });
@@ -299,7 +299,7 @@ const listConnectors = defineQuillsRoute({
   operationId: "listQuillsConnectors",
   summary: "List the assistant connectors",
   description:
-    "Never returns credentials. This build cannot call a connector's tools.",
+    "Never returns credentials. The copilot calls the tools of an enabled, connected connector that is assigned to it.",
   action: "manage_settings",
   response: z.object({ items: z.array(connectorSchema) }),
   responseDescription: "The connectors, by name",
