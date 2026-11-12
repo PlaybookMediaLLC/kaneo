@@ -9,6 +9,7 @@ import {
 } from "../../database/quills/schema/integrations";
 import { defineQuillsRoute, type Database } from "../framework/define-route";
 import {
+  beforeDeadline,
   credentialText,
   openCredentials,
   sealCredentials,
@@ -408,6 +409,9 @@ type Connection = {
 /**
  * A provider call with a fresh token. A failure after a refresh keeps the refreshed tokens: the
  * handler stores them and the route answers the failure after commit (GitLab rotates the refresh token).
+ * With `signal`, the refresh and then `work` each stop waiting when it aborts (a fixed 502). A refresh
+ * that finished first is kept; one that did not finish changes nothing. `work` gets the same signal
+ * from its caller and passes it to each provider request.
  */
 export async function withToken<T>(
   prepared: {
@@ -416,16 +420,20 @@ export async function withToken<T>(
     creds: Record<string, string>;
   },
   work: (secrets: Record<string, string>) => Promise<T>,
+  signal?: AbortSignal,
 ) {
   let refreshed: Record<string, string> | null = null;
   try {
-    const fresh = await freshSecrets(
-      prepared.type,
-      prepared.secrets,
-      prepared.creds,
+    const fresh = await beforeDeadline(
+      freshSecrets(prepared.type, prepared.secrets, prepared.creds, signal),
+      signal,
     );
     refreshed = fresh.refreshed;
-    return { data: await work(fresh.secrets), refreshed, failure: null };
+    return {
+      data: await beforeDeadline(work(fresh.secrets), signal),
+      refreshed,
+      failure: null,
+    };
   } catch (error) {
     return { data: null, refreshed, failure: failureOf(error) };
   }
