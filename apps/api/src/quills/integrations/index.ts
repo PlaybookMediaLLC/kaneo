@@ -1,4 +1,5 @@
 import { apiRouter, type BaseVariables } from "../../openapi";
+import azureDevops from "./azure-devops";
 import channels from "./channels";
 import externalLinks from "./external-links";
 import freshdesk from "./freshdesk";
@@ -23,6 +24,7 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", zapier)
   .route("/", ntfy)
   .route("/", freshdesk)
+  .route("/", azureDevops)
   .route("/", shortcut)
   .route("/", stripe)
   .route("/", oauth)

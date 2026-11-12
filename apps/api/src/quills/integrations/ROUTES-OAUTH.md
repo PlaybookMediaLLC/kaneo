@@ -120,15 +120,115 @@ the boundary map, the routes, the tests and the differences from the source. Fol
 
 ### Jira
 
-Filled by lane P1.
+```
+Tables and owning schema:  quills: integrations, integration_platform_credentials, principal, kv_store
+                           (state nonce), events, job_queue, audit_log. public: none.
+Actor and workspace:       connect and destinations: authenticated context. Callback: the signed state.
+Permissions:               workspace:read + quills:manage_settings (callback: the session account still holds it).
+Transactions:              read, call Atlassian with no transaction open, then write in a new one.
+External effects:          token exchange and refresh (auth.atlassian.com), accessible resources,
+                           project and issue type lists (api.atlassian.com). No issue is created.
+```
+
+| Source function | operationId | Route | Action | Tests |
+|---|---|---|---|---|
+| `getJiraConnectUrl` | `startQuillsJiraOAuthConnect` | `GET /oauth/jira/connect` | manage_settings | contract; `providers/jira.test.ts` |
+| `fetchJiraProjectsFn` | `listQuillsIntegrationDestinations` | `GET /integrations/{integrationId}/destinations?kind=project` (or no `kind`) | manage_settings | contract (GitHub); `providers/jira.test.ts` |
+| `fetchJiraIssueTypesFn` | `listQuillsIntegrationDestinations` | `GET /integrations/{integrationId}/destinations?kind=issue-type&parent=<project ID>` | manage_settings | `providers/jira.test.ts` |
+
+- The callback stores the cloud ID of the first site in `accessible-resources` in `config.cloudId`. A cloud
+  ID that is not a UUID refuses the connect (400). Each list checks the stored cloud ID again before it
+  builds `https://api.atlassian.com/ex/jira/<cloudId>/…`; a bad value answers 409 with no call.
+- Project and issue type IDs are numeric; the route drops any other ID. An issue type list needs a project
+  that the project list contains (404 otherwise, with no issue type call).
+- The project list is one page of 100 projects (Jira's maximum page). On a site with more projects, a
+  project after the first 100 is not listed and cannot be a parent.
+- Access tokens expire after one hour. A due token is refreshed before the call; Atlassian rotates the
+  refresh token. A rejected refresh (400 or 403) answers 409 "Reconnect".
+- Tests against the local provider server: exchange, both kinds, a foreign project, a bad stored cloud
+  ID, refresh and rejected refresh, a malformed `accessible-resources` (400) and project list (502).
+
+| Difference from the source | Reason |
+|---|---|
+| Scope `read:jira-work offline_access`, not `write:jira-work manage:jira-webhook` | Issue #131 lists projects and issue types only. Delivery and status sync add their scopes and a reconnect. |
+| No `events` and no status sync | Out of scope for #131. |
+| A connect with no valid cloud ID fails; the source stored `unknown` | The cloud ID enters every API path. |
+| `siteUrl` is the connection's `account`, not a `config` value | Only the issue links of delivery use it. |
+| A malformed list answer is 502, not an empty list or a raw error | Provider text never reaches a response. |
 
 ### Linear
 
-Filled by lane P1.
+```
+Tables and owning schema:  quills: integrations, integration_platform_credentials, principal, kv_store
+                           (state nonce), events, job_queue, audit_log. public: none.
+Actor and workspace:       connect and destinations: authenticated context. Callback: the signed state.
+Permissions:               workspace:read + quills:manage_settings (callback: the session account still holds it).
+Transactions:              read, call Linear with no transaction open, then write in a new one.
+External effects:          token exchange and refresh (api.linear.app/oauth/token), organization and team
+                           queries (api.linear.app/graphql). No issue is created.
+```
+
+| Source function | operationId | Route | Action | Tests |
+|---|---|---|---|---|
+| `getLinearConnectUrl` | `startQuillsLinearOAuthConnect` | `GET /oauth/linear/connect` | manage_settings | contract; `providers/linear.test.ts` |
+| `fetchLinearTeamsFn` | `listQuillsIntegrationDestinations` | `GET /integrations/{integrationId}/destinations` (one kind: teams) | manage_settings | contract (GitHub); `providers/linear.test.ts` |
+
+- The connection's name and account are the organization's name and URL key. No `config` value is stored.
+- The list asks for the first 100 teams. A team ID has 1 to 64 letters, digits and `-`; the route drops
+  any other ID. The route refuses a `kind`
+  or a `parent` (400): Linear has one kind.
+- A due token is refreshed before the call; Linear rotates the refresh token. A rejected refresh (400)
+  answers 409 "Reconnect".
+- Tests against the local provider server: exchange, the team list, a refused kind and parent, refresh
+  and rejected refresh, a token answer without a token (400) and a GraphQL answer without teams (502).
+
+| Difference from the source | Reason |
+|---|---|
+| Scope `read`, not `read,write,issues:create,admin` | Issue #131 lists teams only. Delivery and status sync add their scopes and a reconnect. |
+| No `events` and no status sync | Out of scope for #131. |
+| An organization query that Linear refuses (an HTTP error) fails the connect; the source named it `Linear` | One rule for every call: a refused call is a fixed error. An answer without a name still gives `Linear`, as in the source. |
+| `orgId` is not stored | Only the webhooks of status sync use it. |
+| A disconnect does not revoke the token | The shared disconnect route revokes no provider token. |
 
 ### Azure DevOps
 
-Filled by lane P1.
+```
+Tables and owning schema:  quills: integrations, events, job_queue, audit_log. public: none.
+Actor and workspace:       authenticated context.
+Permissions:               workspace:read + quills:manage_settings.
+Transactions:              connect: `load` checks the token with no transaction open, then one scoped
+                           transaction writes the connection and its `integration.connected` event.
+                           Destinations: read, call Azure DevOps, then a handler transaction that
+                           writes nothing (a personal access token has no refresh).
+External effects:          project and work item type lists (dev.azure.com). No work item is created.
+```
+
+| Source function | operationId | Route | Action | Tests |
+|---|---|---|---|---|
+| `connectAzureDevOpsFn` | `saveQuillsAzureDevopsKey` | `PUT /integrations/azure-devops/connection` (`token` ≤ 500, `organization` ≤ 50) | manage_settings | contract, rollback; `providers/azure-devops.test.ts` |
+| `fetchAzureDevOpsProjectsFn` | `listQuillsIntegrationDestinations` | `GET /integrations/{integrationId}/destinations?kind=project` (or no `kind`) | manage_settings | contract (GitHub); `providers/azure-devops.test.ts` |
+| `fetchAzureDevOpsWorkItemTypesFn` | `listQuillsIntegrationDestinations` | `GET /integrations/{integrationId}/destinations?kind=work-item-type&parent=<project name>` | manage_settings | `providers/azure-devops.test.ts` |
+
+- A key provider: no OAuth connect route, no callback and no OAuth app credentials. The token is a
+  personal access token, sent as `Basic base64(":" + token)`. It is sealed before the check and never
+  returned.
+- The organization is letters, digits and inner hyphens (at most 50). The route refuses any other value
+  (400) before a call. Each list checks the stored value again; a bad value answers 409 with no call.
+- The destination ID is the project or work item type name, as in the source. The project name is
+  encoded in the path. A work item type list needs a project that the project list contains (404
+  otherwise).
+- Each call sends `X-TFS-FedAuthRedirect: Suppress`, so a refused token gets 401 and not a sign-in page.
+  On connect, 401 or 403 answers 400. An answer without a list is 502.
+- Tests against the local provider server: connect, ten bad organization names with no call, a rejected
+  token, both kinds, a foreign project, a bad stored organization, malformed answers (502).
+
+| Difference from the source | Reason |
+|---|---|
+| The body takes the organization name, not `organizationUrl` | The name enters the URL; a strict pattern checks it. The host is always `dev.azure.com`. |
+| No `*.visualstudio.com` organization URLs | The host is fixed. The same organization is on `dev.azure.com`. |
+| `config` holds `organization` only, not `organizationUrl` and `organizationName` | One value builds every URL. |
+| No `events` and no status sync | Out of scope for #131. |
+| A rejected token is 400 with a fixed message; the source returned the provider error | Provider text never reaches a response. |
 
 ### Asana
 
