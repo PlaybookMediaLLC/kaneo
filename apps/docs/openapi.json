@@ -10273,6 +10273,368 @@
         }
       }
     },
+    "/quills-public/signed/oauth/connectors/{connectorId}/callback": {
+      "get": {
+        "operationId": "completeQuillsConnectorOAuth",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Complete a connector's OAuth authorization",
+        "description": "The authorization server redirects the browser here. The signed state must be unexpired, unused, for this connector and for the signed-in account, which must still hold quills:manage_settings in the state's workspace. Exchanges the code, then refreshes the connector's tools. `connected` means that the authorization is complete; the connector's own status tells whether its tools were read. The caller signs the raw request body; the body is parsed only after the signature check.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "connectorId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "required": true,
+            "name": "state",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "required": false,
+            "name": "code",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "required": false,
+            "name": "error",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The connector without its credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "connected",
+                        "already_used"
+                      ]
+                    },
+                    "connector": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "slug": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "type": "string"
+                        },
+                        "authMode": {
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "bearer",
+                            "oauth"
+                          ]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "connected",
+                            "error",
+                            "disabled"
+                          ]
+                        },
+                        "toolCount": {
+                          "type": "number"
+                        },
+                        "lastError": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "updatedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "hasSecret": {
+                          "type": "boolean"
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "assignments": {
+                          "type": "object",
+                          "properties": {
+                            "agent": {
+                              "type": "boolean"
+                            },
+                            "copilot": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "agent",
+                            "copilot"
+                          ]
+                        },
+                        "toolPolicies": {
+                          "type": "object",
+                          "properties": {
+                            "groupDefaults": {
+                              "type": "object",
+                              "properties": {
+                                "read": {
+                                  "type": "string",
+                                  "enum": [
+                                    "always",
+                                    "approval",
+                                    "never"
+                                  ]
+                                },
+                                "write": {
+                                  "type": "string",
+                                  "enum": [
+                                    "always",
+                                    "approval",
+                                    "never"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "read",
+                                "write"
+                              ]
+                            },
+                            "tools": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128
+                                  },
+                                  "policy": {
+                                    "type": "string",
+                                    "enum": [
+                                      "always",
+                                      "approval",
+                                      "never"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "policy"
+                                ]
+                              },
+                              "maxItems": 100
+                            }
+                          },
+                          "required": [
+                            "groupDefaults",
+                            "tools"
+                          ]
+                        },
+                        "tools": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "description": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "group": {
+                                "type": "string",
+                                "enum": [
+                                  "read",
+                                  "write"
+                                ]
+                              },
+                              "destructive": {
+                                "type": "boolean"
+                              },
+                              "policy": {
+                                "type": "string",
+                                "enum": [
+                                  "always",
+                                  "approval",
+                                  "never"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "title",
+                              "description",
+                              "group",
+                              "destructive",
+                              "policy"
+                            ]
+                          }
+                        },
+                        "lastSyncedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "lastCallAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "lastErrorAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "slug",
+                        "url",
+                        "authMode",
+                        "status",
+                        "toolCount",
+                        "lastError",
+                        "updatedAt",
+                        "hasSecret",
+                        "enabled",
+                        "assignments",
+                        "toolPolicies",
+                        "tools",
+                        "lastSyncedAt",
+                        "lastCallAt",
+                        "lastErrorAt",
+                        "createdAt"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "connector"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Access was not granted, or the authorization server rejected the code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid signature",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The account no longer manages Quills settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Connector not found; Not configured, or no workspace owns the credential",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No authorization is in progress, or the connector changed during the request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The authorization server could not be reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/quills-public/signed/chat/email/inbound": {
       "post": {
         "operationId": "receiveQuillsInboundEmail",
@@ -127892,6 +128254,371 @@
             "$ref": "#/components/responses/ApiKeyRateLimited"
           }
         }
+      },
+      "post": {
+        "operationId": "createQuillsConnector",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Add an assistant connector",
+        "description": "Connects to the MCP server and stores its tools. With authMode oauth, or when the server asks for authorization, the connector is stored with status error; start its authorization next. Names are unique, ignoring case. A workspace has at most 100 connectors. A bearer token is stored encrypted and never returned.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  },
+                  "authMode": {
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "bearer",
+                      "oauth"
+                    ],
+                    "default": "none"
+                  },
+                  "bearerToken": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000,
+                    "pattern": "^[\\x21-\\x7e]+$"
+                  },
+                  "assignments": {
+                    "type": "object",
+                    "properties": {
+                      "agent": {
+                        "type": "boolean"
+                      },
+                      "copilot": {
+                        "type": "boolean"
+                      }
+                    },
+                    "default": {
+                      "agent": false,
+                      "copilot": true
+                    },
+                    "required": [
+                      "agent",
+                      "copilot"
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "url"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The new connector",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "authMode": {
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "bearer",
+                        "oauth"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "connected",
+                        "error",
+                        "disabled"
+                      ]
+                    },
+                    "toolCount": {
+                      "type": "number"
+                    },
+                    "lastError": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "updatedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "hasSecret": {
+                      "type": "boolean"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "assignments": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "boolean"
+                        },
+                        "copilot": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "copilot"
+                      ]
+                    },
+                    "toolPolicies": {
+                      "type": "object",
+                      "properties": {
+                        "groupDefaults": {
+                          "type": "object",
+                          "properties": {
+                            "read": {
+                              "type": "string",
+                              "enum": [
+                                "always",
+                                "approval",
+                                "never"
+                              ]
+                            },
+                            "write": {
+                              "type": "string",
+                              "enum": [
+                                "always",
+                                "approval",
+                                "never"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "read",
+                            "write"
+                          ]
+                        },
+                        "tools": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128
+                              },
+                              "policy": {
+                                "type": "string",
+                                "enum": [
+                                  "always",
+                                  "approval",
+                                  "never"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "policy"
+                            ]
+                          },
+                          "maxItems": 100
+                        }
+                      },
+                      "required": [
+                        "groupDefaults",
+                        "tools"
+                      ]
+                    },
+                    "tools": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "description": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "group": {
+                            "type": "string",
+                            "enum": [
+                              "read",
+                              "write"
+                            ]
+                          },
+                          "destructive": {
+                            "type": "boolean"
+                          },
+                          "policy": {
+                            "type": "string",
+                            "enum": [
+                              "always",
+                              "approval",
+                              "never"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "title",
+                          "description",
+                          "group",
+                          "destructive",
+                          "policy"
+                        ]
+                      }
+                    },
+                    "lastSyncedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "lastCallAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "lastErrorAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "slug",
+                    "url",
+                    "authMode",
+                    "status",
+                    "toolCount",
+                    "lastError",
+                    "updatedAt",
+                    "hasSecret",
+                    "enabled",
+                    "assignments",
+                    "toolPolicies",
+                    "tools",
+                    "lastSyncedAt",
+                    "lastCallAt",
+                    "lastErrorAt",
+                    "createdAt"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The address is not allowed, or the server refused the bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Another connector has this name, the limit is reached, or NOTIFICATION_SECRET_ENCRYPTION_KEY is not set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          },
+          "502": {
+            "description": "The MCP server could not be reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/quills/{workspaceId}/assistant/connectors/{connectorId}": {
@@ -127963,6 +128690,720 @@
           },
           "404": {
             "description": "Connector not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      },
+      "get": {
+        "operationId": "getQuillsConnector",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get an assistant connector",
+        "description": "With its tools and their policies. Never returns credentials.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "connectorId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The connector",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "authMode": {
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "bearer",
+                        "oauth"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "connected",
+                        "error",
+                        "disabled"
+                      ]
+                    },
+                    "toolCount": {
+                      "type": "number"
+                    },
+                    "lastError": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "updatedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "hasSecret": {
+                      "type": "boolean"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "assignments": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "boolean"
+                        },
+                        "copilot": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "copilot"
+                      ]
+                    },
+                    "toolPolicies": {
+                      "type": "object",
+                      "properties": {
+                        "groupDefaults": {
+                          "type": "object",
+                          "properties": {
+                            "read": {
+                              "type": "string",
+                              "enum": [
+                                "always",
+                                "approval",
+                                "never"
+                              ]
+                            },
+                            "write": {
+                              "type": "string",
+                              "enum": [
+                                "always",
+                                "approval",
+                                "never"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "read",
+                            "write"
+                          ]
+                        },
+                        "tools": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128
+                              },
+                              "policy": {
+                                "type": "string",
+                                "enum": [
+                                  "always",
+                                  "approval",
+                                  "never"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "policy"
+                            ]
+                          },
+                          "maxItems": 100
+                        }
+                      },
+                      "required": [
+                        "groupDefaults",
+                        "tools"
+                      ]
+                    },
+                    "tools": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "description": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "group": {
+                            "type": "string",
+                            "enum": [
+                              "read",
+                              "write"
+                            ]
+                          },
+                          "destructive": {
+                            "type": "boolean"
+                          },
+                          "policy": {
+                            "type": "string",
+                            "enum": [
+                              "always",
+                              "approval",
+                              "never"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "title",
+                          "description",
+                          "group",
+                          "destructive",
+                          "policy"
+                        ]
+                      }
+                    },
+                    "lastSyncedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "lastCallAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "lastErrorAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "slug",
+                    "url",
+                    "authMode",
+                    "status",
+                    "toolCount",
+                    "lastError",
+                    "updatedAt",
+                    "hasSecret",
+                    "enabled",
+                    "assignments",
+                    "toolPolicies",
+                    "tools",
+                    "lastSyncedAt",
+                    "lastCallAt",
+                    "lastErrorAt",
+                    "createdAt"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Connector not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateQuillsConnector",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Update an assistant connector",
+        "description": "Does not reach the server; refresh it after a change. A new URL removes the stored credentials, unless the same request sends a bearer token, and sets status error.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "connectorId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  },
+                  "authMode": {
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "bearer",
+                      "oauth"
+                    ]
+                  },
+                  "bearerToken": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000,
+                    "pattern": "^[\\x21-\\x7e]+$"
+                  },
+                  "clearBearerToken": {
+                    "type": "boolean"
+                  },
+                  "assignments": {
+                    "type": "object",
+                    "properties": {
+                      "agent": {
+                        "type": "boolean"
+                      },
+                      "copilot": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "agent",
+                      "copilot"
+                    ]
+                  },
+                  "toolPolicies": {
+                    "type": "object",
+                    "properties": {
+                      "groupDefaults": {
+                        "type": "object",
+                        "properties": {
+                          "read": {
+                            "type": "string",
+                            "enum": [
+                              "always",
+                              "approval",
+                              "never"
+                            ]
+                          },
+                          "write": {
+                            "type": "string",
+                            "enum": [
+                              "always",
+                              "approval",
+                              "never"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "read",
+                          "write"
+                        ]
+                      },
+                      "tools": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "policy": {
+                              "type": "string",
+                              "enum": [
+                                "always",
+                                "approval",
+                                "never"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "policy"
+                          ]
+                        },
+                        "maxItems": 100
+                      }
+                    },
+                    "required": [
+                      "groupDefaults",
+                      "tools"
+                    ]
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated connector",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "authMode": {
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "bearer",
+                        "oauth"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "connected",
+                        "error",
+                        "disabled"
+                      ]
+                    },
+                    "toolCount": {
+                      "type": "number"
+                    },
+                    "lastError": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "updatedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "hasSecret": {
+                      "type": "boolean"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "assignments": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "boolean"
+                        },
+                        "copilot": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "copilot"
+                      ]
+                    },
+                    "toolPolicies": {
+                      "type": "object",
+                      "properties": {
+                        "groupDefaults": {
+                          "type": "object",
+                          "properties": {
+                            "read": {
+                              "type": "string",
+                              "enum": [
+                                "always",
+                                "approval",
+                                "never"
+                              ]
+                            },
+                            "write": {
+                              "type": "string",
+                              "enum": [
+                                "always",
+                                "approval",
+                                "never"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "read",
+                            "write"
+                          ]
+                        },
+                        "tools": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128
+                              },
+                              "policy": {
+                                "type": "string",
+                                "enum": [
+                                  "always",
+                                  "approval",
+                                  "never"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "policy"
+                            ]
+                          },
+                          "maxItems": 100
+                        }
+                      },
+                      "required": [
+                        "groupDefaults",
+                        "tools"
+                      ]
+                    },
+                    "tools": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "description": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "group": {
+                            "type": "string",
+                            "enum": [
+                              "read",
+                              "write"
+                            ]
+                          },
+                          "destructive": {
+                            "type": "boolean"
+                          },
+                          "policy": {
+                            "type": "string",
+                            "enum": [
+                              "always",
+                              "approval",
+                              "never"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "title",
+                          "description",
+                          "group",
+                          "destructive",
+                          "policy"
+                        ]
+                      }
+                    },
+                    "lastSyncedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "lastCallAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "lastErrorAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "slug",
+                    "url",
+                    "authMode",
+                    "status",
+                    "toolCount",
+                    "lastError",
+                    "updatedAt",
+                    "hasSecret",
+                    "enabled",
+                    "assignments",
+                    "toolPolicies",
+                    "tools",
+                    "lastSyncedAt",
+                    "lastCallAt",
+                    "lastErrorAt",
+                    "createdAt"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Connector not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Another connector has this name, or NOTIFICATION_SECRET_ENCRYPTION_KEY is not set",
             "content": {
               "application/json": {
                 "schema": {
@@ -128069,6 +129510,425 @@
           },
           "429": {
             "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/assistant/connectors/{connectorId}/refresh": {
+      "post": {
+        "operationId": "refreshQuillsConnector",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Refresh an assistant connector's tools",
+        "description": "Connects to the MCP server and stores its tools. A failure is stored as status error with a fixed message; the request still succeeds. Refreshed OAuth tokens are kept.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "connectorId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The connector after the refresh",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "authMode": {
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "bearer",
+                        "oauth"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "connected",
+                        "error",
+                        "disabled"
+                      ]
+                    },
+                    "toolCount": {
+                      "type": "number"
+                    },
+                    "lastError": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "updatedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "hasSecret": {
+                      "type": "boolean"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "assignments": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "boolean"
+                        },
+                        "copilot": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "copilot"
+                      ]
+                    },
+                    "toolPolicies": {
+                      "type": "object",
+                      "properties": {
+                        "groupDefaults": {
+                          "type": "object",
+                          "properties": {
+                            "read": {
+                              "type": "string",
+                              "enum": [
+                                "always",
+                                "approval",
+                                "never"
+                              ]
+                            },
+                            "write": {
+                              "type": "string",
+                              "enum": [
+                                "always",
+                                "approval",
+                                "never"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "read",
+                            "write"
+                          ]
+                        },
+                        "tools": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128
+                              },
+                              "policy": {
+                                "type": "string",
+                                "enum": [
+                                  "always",
+                                  "approval",
+                                  "never"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "policy"
+                            ]
+                          },
+                          "maxItems": 100
+                        }
+                      },
+                      "required": [
+                        "groupDefaults",
+                        "tools"
+                      ]
+                    },
+                    "tools": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "description": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "group": {
+                            "type": "string",
+                            "enum": [
+                              "read",
+                              "write"
+                            ]
+                          },
+                          "destructive": {
+                            "type": "boolean"
+                          },
+                          "policy": {
+                            "type": "string",
+                            "enum": [
+                              "always",
+                              "approval",
+                              "never"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "title",
+                          "description",
+                          "group",
+                          "destructive",
+                          "policy"
+                        ]
+                      }
+                    },
+                    "lastSyncedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "lastCallAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "lastErrorAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "slug",
+                    "url",
+                    "authMode",
+                    "status",
+                    "toolCount",
+                    "lastError",
+                    "updatedAt",
+                    "hasSecret",
+                    "enabled",
+                    "assignments",
+                    "toolPolicies",
+                    "tools",
+                    "lastSyncedAt",
+                    "lastCallAt",
+                    "lastErrorAt",
+                    "createdAt"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Connector not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The connector changed during the request, or NOTIFICATION_SECRET_ENCRYPTION_KEY is not set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/assistant/connectors/{connectorId}/oauth": {
+      "post": {
+        "operationId": "startQuillsConnectorOAuth",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Start a connector's OAuth authorization",
+        "description": "Registers this instance with the server's authorization server when needed and returns the authorization URL. Open it in the same browser session: the state expires after ten minutes, is bound to the caller, this workspace and the connector, and works once. Stored tokens stay until the callback replaces them.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "connectorId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The authorization URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "authorizationUrl": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "authorizationUrl"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The address is not allowed, or the authorization server refused the request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Connector not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The connector does not use OAuth, it changed during the request, or NOTIFICATION_SECRET_ENCRYPTION_KEY is not set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          },
+          "502": {
+            "description": "The MCP server could not be reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         }
       }
