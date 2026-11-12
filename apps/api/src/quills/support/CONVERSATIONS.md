@@ -254,8 +254,7 @@ Completion checks:         authenticated endpoint, tenant/object access, read (a
 Boundary map of the two entry points that the coordinator unblocked (link unfurl and read batch):
 
 ```
-Tables and owning schema:  unfurl: quills.kv_store (the preview cache, keyed by a hash of the URL;
-                           RLS scopes it to the workspace), settings (portal and widget switches, read).
+Tables and owning schema:  unfurl: settings (portal and widget switches, read); no write, no cache.
                            read batch: the tables of each read it runs, through that read's own handler.
                            public: none.
 Actor and workspace:       teammate: authenticated context. Portal: the Kaneo session. Widget: the widget
@@ -263,17 +262,20 @@ Actor and workspace:       teammate: authenticated context. Portal: the Kaneo se
                            workspace: it runs in the batch request's workspace and transaction.
 Permissions:               unfurl: quills:read (teammate); portal and widget: the portal gate and support
                            switch, or the widget and messenger switches. Read batch: quills:read for the
-                           batch, then each element's own action and alsoRequires, against the caller's
-                           role and API-key scope (callerActions).
+                           batch, then each element's own action, against the caller's role within the
+                           API-key scope (callerActions).
 Persisted relationships:   none for unfurl. A batch element runs its route's handler, so its object
                            checks are the route's own. Routes with path IDs, native permissions, a
-                           project resolver, load, after or prepare are not batchable.
-Transaction:               unfurl: prepare reads the cache in one scoped transaction, call fetches with
-                           no transaction open, the handler writes the cache in a second one. Read
-                           batch: one scoped transaction; each element in its own savepoint.
-External effects:          unfurl: one GET to the URL through support/link-fetch.ts, the only Quills
-                           module that imports import/guarded-fetch: every hop and the socket's DNS
-                           answer are checked, at most 3 redirects, 5 seconds, 512 KB. Read batch: none.
+                           project resolver, load, after, prepare, alsoRequires or callerActions are
+                           not batchable.
+Transaction:               unfurl: prepare runs the permission checks (and the customer gates) in one
+                           scoped transaction, call fetches with no transaction open, the handler
+                           answers in a second one. Read batch: one scoped transaction; each element
+                           in its own savepoint.
+External effects:          unfurl: one GET to the URL through support/link-fetch.ts, the module that
+                           route modules may import for import/guarded-fetch: every hop and the
+                           socket's DNS answer are checked, at most 3 redirects, a 5-second deadline
+                           that also covers DNS, 512 KB, at most 2 previews at once. Read batch: none.
 Completion checks:         authenticated endpoint, tenant/object access, read, outbound request (SSRF).
 ```
 
@@ -298,19 +300,27 @@ Merged: `getConversationPresenceFn` (the widget twin `widgetGetConversationPrese
 customer audience), `getEmailChannelStatusFn`, `attributeBreakdownFn`, `unfurlLinkFn` (one route
 for each audience), `readTogetherFn`.
 
-- Link preview: `support/link-fetch.ts` is the one Quills module that imports
-  `import/guarded-fetch.ts`; `framework/boundaries.test.ts` allows route modules to import it, and
-  `link-preview.test.ts` pins its import list to the guard alone. The page is fetched in `call`, with
-  no transaction open. The guard refuses a private, loopback, link-local or metadata address and a
-  redirect to one, at every hop and at the socket's DNS answer. The operator switch
-  `KANEO_ALLOW_PRIVATE_WEBHOOK_DESTINATIONS` lifts that refusal, as for imports and webhooks. The
-  parser reads at most 200 KB of the head in linear time: each search starts where the last one
-  stopped, a tag with no closing bracket ends the scan, and attributes are read in one pass.
+- Link preview: route modules reach `import/guarded-fetch.ts` only through `support/link-fetch.ts`.
+  `framework/boundaries.test.ts` allows route modules to import it, and `link-preview.test.ts` pins
+  its imports to the guard and `utils/assert-public-destination.ts`. The page is fetched in `call`,
+  with no transaction open. The guard refuses a private, loopback, link-local or metadata address and
+  a redirect to one, at every hop and at the socket's DNS answer. The instance switch
+  `KANEO_ALLOW_PRIVATE_WEBHOOK_DESTINATIONS` lifts that refusal for the teammate route only, as for
+  imports and webhooks; the portal and widget routes answer null while it is on, so a customer never
+  reaches the private network. The 5-second deadline also covers the guard's DNS lookups, which take
+  no abort signal, and at most 2 previews run at once in the process: a slot frees only when its work
+  ends, so stuck lookups cannot fill the libuv thread pool. The body is decoded in the charset that
+  the content type names. The parser reads at most 200 KB of the head in linear time: each search
+  starts where the last one stopped, a tag with no closing bracket ends the scan, and attributes are
+  read in one pass.
 - Read batch: `framework/read-batch.ts#runRead` runs each element as its route runs it. The batch
-  route declares `callerActions`, so the element's action and `alsoRequires` are checked against the
-  caller's role within the API-key scope. Each result has the status that the route itself gives
-  this caller. A read whose checks do not all run inside its handler and withQuillsRequest is not
-  batchable (404).
+  route declares `callerActions`, so the element's action is checked against the caller's role
+  within the API-key scope, as `requireWorkspacePermission` checks one action. Each result has the
+  status that the route itself gives this caller. A read whose checks do not all run inside its
+  handler and withQuillsRequest is not batchable (404), and neither is a read with `alsoRequires` or
+  `callerActions`: its route checks the actions together in one role. An API key spends one request
+  of its rate limit and quota on the whole batch (the platform counts requests); charging each read
+  needs a hook in `utils/api-key-usage.ts`.
 
 - Presence: the heartbeat writes `support:presence:{principalId}` with a 90-second expiry, one row for
   each teammate. `agentsOnline` is true while one live row names a teammate whose chat availability is
@@ -358,7 +368,9 @@ for each audience), `readTogetherFn`.
 - Link preview: no image and no favicon. The source copies them into its object storage; Kaneo would
   need the storage lifecycle for that, and a remote image URL would send the viewer to the site.
 - Link preview: no cache. The contract forbids a read to write rows. The portal and widget routes
-  have a rate limit for each client address instead; the source also limits each principal.
+  have a rate limit for each client address, and the process runs at most 2 previews at once; the
+  source also limits each principal. A customer route never previews a private address, whatever
+  the instance switch says.
 - Link preview: a URL of this instance is unfurled like any other page; the source leaves it to the
   embed preview. No `supportInbox` flag: the portal support switch and the widget messenger tab
   gate the customer routes.
