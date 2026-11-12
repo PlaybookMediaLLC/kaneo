@@ -129,6 +129,12 @@ export type OAuthProvider = Provider & {
    * uncertain. Return `uncertain` when the answer does not prove the outcome. Absent: no delivery.
    */
   deliver?: (delivery: DeliveryContext) => Promise<Outcome>;
+  /**
+   * OAuth scopes that `deliver` needs. `exchange` stores the granted scopes in `config.scopes`
+   * (grantedScopes in ../delivery.ts). A connection without them gets a fixed "reconnect" state and
+   * no provider call.
+   */
+  deliveryScopes?: readonly string[];
 } & (OAuthConnect | KeyConnect);
 
 export const text = (value: unknown) =>
