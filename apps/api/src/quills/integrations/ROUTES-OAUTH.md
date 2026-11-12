@@ -703,7 +703,6 @@ External effects:          GitHub webhook update (request, `call`); Slack users.
 | Source rows | Reason |
 |---|---|
 | Trello | Connect deferred: Trello returns the token in the URL fragment, and no page reads it yet. `providers/trello.ts` is built but not registered (see "Trello"). |
-| HubSpot, Intercom, Zendesk, Salesforce | Lane P3 of RFC 0001, pending. |
 | Segment outbound sync (segment membership pushed to Segment) | Lane G1 built the Segment connection (`saveQuillsSegmentConnection`) and the identify hook (`receiveQuillsIdentify`), because identify has no other provider. The outbound sync is not ported: RFC 0001 section 11 leaves Segment out of scope. |
 | GitLab self-managed instances | The provider host would come from user input; needs the SSRF-checked outbound path and a host field. gitlab.com only. |
 | `api/integrations/{type}/hooks/{kind}` kinds `interactions`, `commands`, `options` | The Slack `events` kind is built ("Agent channels"); buttons, the slash command and shortcuts are not ported. |
