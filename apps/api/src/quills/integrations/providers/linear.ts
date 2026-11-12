@@ -1,4 +1,5 @@
 // Route-module helper: framework/boundaries.test.ts checks its imports like a module that uses ../framework/define-route.
+import { isUuid } from "@kaneo/ids";
 import {
   ProviderCallError,
   providerJson,
@@ -19,7 +20,6 @@ import {
 const hosts = /^(api\.)?linear\.app$/;
 /** Lists teams, and creates issues. */
 const SCOPE = "read,issues:create";
-const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** One GraphQL request. Returns the whole answer: `data`, and `errors` when Linear refused it. */
 const graphqlAnswer = async (
@@ -121,7 +121,7 @@ export const linear = {
   },
   statuses: [],
   // A team ID: a UUID.
-  target: (target) => uuid.test(target),
+  target: (target) => isUuid(target),
   refresh: (secrets, creds) =>
     refreshGrant(
       tokenRequest({
@@ -147,7 +147,7 @@ export const linear = {
     );
     const issue = record(record(record(answer.data).issueCreate).issue);
     const id = text(issue.id);
-    if (uuid.test(id)) {
+    if (isUuid(id)) {
       const identifier = text(issue.identifier);
       const link = URL.parse(text(issue.url));
       return {
@@ -165,19 +165,25 @@ export const linear = {
         },
       };
     }
-    // GraphQL errors and no issueCreate: Linear refused the mutation, so no issue exists.
-    const errors = list(answer.errors).map((error) =>
-      record(record(error).extensions),
-    );
-    if (!errors.length || record(answer.data).issueCreate) return uncertain;
-    const kinds = errors
-      .map((extensions) => `${text(extensions.type)} ${text(extensions.code)}`)
-      .join(" ")
-      .toLowerCase();
-    if (/authenticat|forbidden/.test(kinds))
+    // GraphQL errors and no issueCreate. Only a refusal before the write proves that no issue exists;
+    // an internal error or a lock timeout can follow a write, so any other error is uncertain.
+    const kinds = list(answer.errors).map((error) => {
+      const extensions = record(record(error).extensions);
+      return `${text(extensions.type)} ${text(extensions.code)}`.toLowerCase();
+    });
+    if (!kinds.length || record(answer.data).issueCreate) return uncertain;
+    const every = (pattern: RegExp) =>
+      kinds.every((kind) => pattern.test(kind));
+    if (every(/authenticat|forbidden/))
       return { state: "auth_required", errorCode: "authentication" };
-    if (/ratelimit/.test(kinds))
+    if (every(/ratelimit/))
       return { state: "retry_wait", errorCode: "unavailable" };
-    return { state: "failed", errorCode: "provider_failed" };
+    if (
+      every(
+        /authenticat|forbidden|ratelimit|invalid input|user error|graphql error|usage limit|feature not accessible/,
+      )
+    )
+      return { state: "failed", errorCode: "provider_failed" };
+    return uncertain;
   },
 } satisfies OAuthProvider;
