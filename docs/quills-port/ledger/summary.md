@@ -13,8 +13,8 @@ Source: Quackback `42ef2e01b2b48db87f1a9dadabbe6d57af0dd10c`. Rerun: `node scrip
 | Server functions found (`createServerFn`) | 874 |
 | HTTP handlers found (route file × method) | 217 |
 | Capabilities without a domain | 0 |
-| Capabilities closed (`overrides.json`) | 70 |
-| Ported capabilities not marked closed | 870 |
+| Capabilities closed (`overrides.json`) | 73 |
+| Ported capabilities not marked closed | 867 |
 | Route files closed (`overrides.json`) | 11 |
 | Server functions that no route file reaches | 131 (each still has a disposition) |
 | Ported capabilities that use a table Kaneo does not have | 0 |

@@ -50,7 +50,7 @@ out of scope.
 4. Run `pnpm openapi:check:fix` from the repository root. The connect route of an OAuth provider is
    new: `startQuills<Key>OAuthConnect`, for example `startQuillsHubspotOAuthConnect`.
 5. Do not add a connect fixture. `../oauth.fixture.ts` already holds one for each RFC 0001 OAuth
-   provider except Trello (see "Trello"). Write fixtures for your own new routes in
+   provider. Write fixtures for your own new routes in
    `providers/<file>.fixture.ts`, and add one line to `../index.fixture.ts`:
    `export * from "./providers/<file>.fixture";`.
 6. For a test that calls the provider, add the local answers in your fixture file. Do not edit the
@@ -100,6 +100,7 @@ out of scope.
 | `hosts` | Every host that the provider calls | `providerJson`, test edge |
 | `credentials` | Platform credential fields of the OAuth app | credentials routes |
 | `authorizeUrl`, `exchange` | OAuth redirect and code exchange | connect route, callback |
+| `callback: "fragment"` | The token comes back in the URL fragment; `exchange` gets the token | bridge page, token post |
 | `connectFields` | Values that a teammate enters before the redirect | connect route, callback |
 | `connectWithKey` | Connect with a key, not OAuth | the provider's own route module |
 | `destinations`, `destinationKinds` | Channel targets, by kind | destinations route |
@@ -179,39 +180,33 @@ in the same order as `listQuillsIntegrationDestinations`:
 - `handler`: `keepRefreshed(db, called.connection, called.refreshed)`, then return only the selected
   and bounded `Contact` fields.
 
-## Trello (connect deferred)
+## Fragment providers (Trello)
 
 Trello returns its token in the URL fragment (`#token=…`), not as a `code` query value. A server never
-receives a fragment. A page in the browser must read it and post it back. No such page exists yet.
+receives a fragment, so a page in the browser reads it and posts it back. A provider like this declares
+`callback: "fragment"`. Then:
 
-What exists now: the connect route can build the authorization URL
-(`https://trello.com/1/authorize?key=…&return_url=<callback>?state=…&callback_method=fragment&response_type=token&scope=read,write&expiration=never`).
+1. The redirect URI is the bridge page, not the callback: `<API origin>/api/quills-public/signed/oauth/<type>/bridge`.
+   The credentials routes return it as `redirectUri`. For Trello, add its origin to the allowed origins
+   of the Trello API key.
+2. `GET /quills-public/signed/oauth/{type}/bridge?state=…` (`openQuillsOAuthBridge`) is a signed route
+   with `raw: "text/html"`. It checks the state as the callback does, but with a receipt of its own: the
+   page opens once for each state and does not use the state up. The page (`../oauth-bridge.ts`) reads
+   `token` from `location.hash`, removes the fragment with `history.replaceState`, and only then posts
+   `{ token }` as JSON to `callback` next to it, with `credentials: "same-origin"`. The framework sends
+   the page with `Content-Security-Policy: default-src 'none'; script-src 'sha256-…'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+   `Cache-Control: no-store`, `Referrer-Policy: no-referrer` and `X-Content-Type-Options: nosniff`.
+3. `POST /quills-public/signed/oauth/{type}/callback?state=…` (`completeQuillsOAuthFragmentConnect`), for
+   fragment providers only. `Origin` must be the API origin, and `Sec-Fetch-Site`, when sent, must be
+   `same-origin`. Then the same `oauthState` checks: valid signature, unexpired, this provider, the
+   same session account, still holds `quills:manage_settings`, single use. The token has at most 2,048
+   characters. It never enters a URL, a log, an event or a response.
+4. The route calls `exchange(token, …)` with no transaction open. For Trello, `exchange` checks the
+   token format, then the token itself with `GET https://api.trello.com/1/members/me`, and returns it
+   as the secret. Then the route calls `connect` in one scoped transaction (`integration.connected`).
 
-The design that completes it (from `lib/server/integrations/oauth-fragment.ts` in the reference):
-
-1. The provider declares `callback: "fragment"`.
-2. The GET callback for such a provider answers an HTML bridge page. It does not consume the state.
-   The page reads `token` from `location.hash`, removes the fragment with `history.replaceState`, and
-   posts `{ token }` as JSON to the same URL with `credentials: "same-origin"`. Headers:
-   `Content-Security-Policy: default-src 'none'; script-src 'nonce-…'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'`,
-   `Cache-Control: no-store`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`.
-3. A signed `POST /quills-public/signed/oauth/{type}/callback?state=…` route, for fragment providers
-   only. It uses the same `oauthState` verifier: valid signature, unexpired, same session account,
-   still holds `quills:manage_settings`, single use. It also requires an `Origin` header equal to the
-   API origin. The body is at most 4 KiB. The token is a secret: it never enters a log, an event or a
-   response.
-4. The handler calls `exchange(token, …)`. For Trello, `exchange` checks the token with
-   `GET https://api.trello.com/1/members/me` and returns it as the secret. Then it calls `connect`.
-
-What is missing:
-
-- `framework/define-route.ts` cannot answer `text/html` for a signed route. Its `raw` option allows
-  only RSS and XML for portal, widget and public reads. Lane X1 owns that file.
-- The POST route and the `callback: "fragment"` option, in `../oauth.ts`. They are small once the
-  HTML answer exists.
-
-Until then, lane P2 can write `providers/trello.ts` but must not register it. Trello then stays "not
-available" in the catalog. A registered Trello would offer a connect that cannot complete.
+The code callback (`GET /oauth/{type}/callback`) does not take a fragment provider: that path has no
+`Origin` check, and a token must not travel in a query string.
 
 ## Notes for each lane
 
@@ -240,8 +235,8 @@ available" in the catalog. A registered Trello would offer a connect that cannot
 - **Asana** (`asana`): `hosts: /^app\.asana\.com$/`. One kind (projects). Asana uses refresh tokens.
 - **ClickUp** (`clickup`): `hosts: /^(app|api)\.clickup\.com$/`.
   `destinationKinds: { space: {}, list: { parent: "space" } }`.
-- **Trello** (`trello`): connect deferred (see "Trello"). Its kinds would be
-  `{ board: {}, list: { parent: "board" } }`.
+- **Trello** (`trello`): `hosts: /^(api\.)?trello\.com$/`, `callback: "fragment"` (see "Fragment
+  providers"). `destinationKinds: { board: {}, list: { parent: "board" } }`.
 - **Monday** (`monday`): `hosts: /^(auth|api)\.monday\.com$/`. One kind (boards).
 - **Notion** (`notion`): `hosts: /^api\.notion\.com$/`. One kind (databases). The token exchange uses
   HTTP Basic authentication with the client ID and secret.
