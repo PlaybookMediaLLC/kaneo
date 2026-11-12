@@ -119,12 +119,34 @@ export const chatText = (d: { type: DeliveredEvent; content: Content }) => {
   );
 };
 
-/** The Markdown body of an issue for a new post (GitHub, GitLab). */
-export const issueBody = (d: { content: Content }) =>
+/**
+ * The Markdown body of an issue for a new post (GitHub, GitLab, Linear). The post content is
+ * Markdown already; `max` bounds it.
+ */
+export const issueBody = (d: { content: Content }, max = Infinity) =>
   [
-    d.content.post.content,
+    clip(d.content.post.content, max),
     "",
     "---",
     `**Submitted by:** ${d.content.post.author}`,
     `**Board:** ${d.content.board}`,
   ].join("\n");
+
+/**
+ * The plain-text parts of an issue for a new post, for a provider that formats them itself (Jira's
+ * document format, Azure DevOps HTML). The title is one line of at most 255 characters. The content
+ * keeps at most 2000 characters, one paragraph for each line that is not empty.
+ */
+export function issueParts(content: Content) {
+  return {
+    title: clip(content.post.title.replace(/\s+/g, " ").trim(), 255),
+    paragraphs: clip(content.post.content, 2000)
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean),
+    footer: [
+      `Submitted by: ${clip(content.post.author, 200)}`,
+      `Board: ${clip(content.board, 200)}`,
+    ],
+  };
+}

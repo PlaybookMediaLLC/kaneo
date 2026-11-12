@@ -26,6 +26,8 @@ providerAnswers.push((route) => {
         { id: "../x", key: "BAD", name: "Bad ID" },
       ],
     };
+  if (route === `POST ${api}/issue`)
+    return { id: "10100", key: "APP-1", self: `https:/${api}/issue/10100` };
   if (route === `GET ${api}/issuetype/project`)
     return [
       { id: "10001", name: "Bug", subtask: false },
