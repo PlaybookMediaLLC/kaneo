@@ -1,9 +1,23 @@
 # Quills port plan: Quackback capability in Kaneo's API
 
-Status: all phases P0 to P10 are implemented in `apps/api/src/quills/` (679 route declarations),
-with the widget client in `packages/widget`. Each slice's route table (`ROUTES.md` next to its
-code) lists what it ported, what it deferred and why. The ledger rows are not yet marked closed in
-`ledger/overrides.json`.
+Status: all phases P0 to P10 are implemented in `apps/api/src/quills/`, with the widget client in
+`packages/widget`. Each slice's route table (`ROUTES.md` next to its code) lists what it ported,
+what it deferred and why.
+
+[RFC 0001](rfc-0001-remaining-capabilities.md) (issue #131, 76 remaining entry points) is integrated
+on `feat/quills-131-integration`. The route registry has 735 declarations (679 before RFC 0001).
+
+| Entry points of #131 | Count |
+|---|---|
+| Built (lanes X1, C1, G1, G2, S1, B1, M1, P1, P2, P4) | 61 |
+| Pending: lane P3 (HubSpot, Intercom, Zendesk, Salesforce, customer context) | 8 |
+| Pending: settings receipt undo (lane M1 follow-up) | 1 |
+| Deferred: Trello connect, boards and lists | 3 |
+| Blocked: widget handoff (#129) | 1 |
+| Web-only: portal header setters (#130) | 2 |
+
+`ledger/overrides.json` marks 10 route files closed. The builder cannot mark a capability row
+(a server function) closed: it reads no `closed` value from `overrides.capabilities`.
 
 Goal: bring all of Quackback's feedback and support capability into Kaneo's API at
 `apps/api`, behind one shared route framework, with no added cost for upstream merges.
