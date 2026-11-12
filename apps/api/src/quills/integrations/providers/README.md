@@ -190,11 +190,14 @@ receives a fragment, so a page in the browser reads it and posts it back. A prov
    The credentials routes return it as `redirectUri`. For Trello, add its origin to the allowed origins
    of the Trello API key.
 2. `GET /quills-public/signed/oauth/{type}/bridge?state=…` (`openQuillsOAuthBridge`) is a signed route
-   with `raw: "text/html"`. It checks the state as the callback does, but with a receipt of its own: the
-   page opens once for each state and does not use the state up. The page (`../oauth-bridge.ts`) reads
-   `token` from `location.hash`, removes the fragment with `history.replaceState`, and only then posts
-   `{ token }` as JSON to `callback` next to it, with `credentials: "same-origin"`. The framework sends
-   the page with `Content-Security-Policy: default-src 'none'; script-src 'sha256-…'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+   with `raw: "text/html"`. Its verifier (`oauthBridge`) needs only a state that this instance signed
+   for this provider, also an expired one or one from another session: the page must load to take the
+   token out of the address, and the POST then refuses. It has a receipt of its own, so the page opens
+   once for each state and does not use the state up; a second visit gets a page that only removes the
+   fragment. The page (`../oauth-bridge.ts`) reads `token` from `location.hash`, removes the fragment
+   with `history.replaceState`, and only then posts `{ token }` as JSON to `callback` next to it, with
+   `credentials: "same-origin"`. The route declares the two scripts (`scripts`), and the framework
+   sends `Content-Security-Policy: default-src 'none'; script-src 'sha256-…' 'sha256-…'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
    `Cache-Control: no-store`, `Referrer-Policy: no-referrer` and `X-Content-Type-Options: nosniff`.
 3. `POST /quills-public/signed/oauth/{type}/callback?state=…` (`completeQuillsOAuthFragmentConnect`), for
    fragment providers only. `Origin` must be the API origin, and `Sec-Fetch-Site`, when sent, must be

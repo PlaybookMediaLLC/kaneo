@@ -32,7 +32,7 @@ External effects:          OAuth exchange, destinations and search, webhook regi
 | `deleteQuillsPlatformCredentials` | `DELETE /integration-platform-credentials?type=` | manage_settings | same | `integration.platform_credentials_deleted` | contract, rollback |
 | `startQuillsGithubOAuthConnect`, `…Gitlab…`, `…Slack…`, `…Discord…` | `GET /oauth/{github,gitlab,slack,discord}/connect` | manage_settings | `integration_platform_credentials` | - | contract |
 | `completeQuillsOAuthConnect` | `GET /quills-public/signed/oauth/{type}/callback?state&code` (signed; not for a fragment provider) | manage_settings (session) | `integrations`, `principal`, `kv_store` | `integration.connected` | contract signed table: forged, expired, wrong provider, other session, workspace B, replay |
-| `openQuillsOAuthBridge` | `GET /quills-public/signed/oauth/{type}/bridge?state` (signed, HTML; fragment providers) | manage_settings (session) | `kv_store` | none | contract signed table; `providers/trello-routes.test.ts`: exact headers, no secret, once per state |
+| `openQuillsOAuthBridge` | `GET /quills-public/signed/oauth/{type}/bridge?state` (signed, HTML; fragment providers) | a state signed for this provider (the POST checks the session and the permission) | `kv_store` | none | contract signed table; `providers/trello-routes.test.ts`: exact headers, no secret, once per state; `oauth-bridge.test.ts`: the scripts run |
 | `completeQuillsOAuthFragmentConnect` | `POST /quills-public/signed/oauth/{type}/callback?state` with `{ token }` (signed; fragment providers) | manage_settings (session) | `integrations`, `integration_platform_credentials`, `principal`, `kv_store` | `integration.connected` | contract signed table, plus missing or foreign `Origin`; `providers/trello-routes.test.ts` |
 
 - The OAuth app belongs to the workspace (`integration_platform_credentials` is workspace-owned). The
@@ -303,18 +303,21 @@ posts it to the callback (follow-up FU1; `providers/README.md`, "Fragment provid
 | `fetchTrelloBoardsFn` | `GET /integrations/{integrationId}/destinations` (default kind, or `?kind=board`) | `listQuillsIntegrationDestinations` |
 | `fetchTrelloListsFn` | `GET /integrations/{integrationId}/destinations?kind=list&parent=<board ID>` | `listQuillsIntegrationDestinations` |
 
-- Boundary: the map at the top of this file. Every route needs `manage_settings`; the bridge page and
-  the token post check it for the session account in the state's workspace. Trello is called only at
+- Boundary: the map at the top of this file. The connect route and the token post check
+  `manage_settings` for the session account in the state's workspace. Trello is called only at
   `trello.com` and `api.trello.com`, with no transaction open.
 - Connect: `authorizeUrl` is `https://trello.com/1/authorize` with `callback_method=fragment`,
   `response_type=token`, `scope=read,write`, `expiration=never`, and `return_url` set to the bridge
   page with the state. The client ID is the Trello API key. The credentials routes return the bridge
   URL as `redirectUri`: add its origin to the allowed origins of the key.
-- Bridge page: a static page with one inline script, allowed by its hash. It reads the token, removes
-  the fragment, then posts `{ token }` to `callback` next to it. Headers: a CSP with
-  `default-src 'none'`, `connect-src 'self'` and `frame-ancestors 'none'`, `Cache-Control: no-store`,
-  `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`. It checks the state like the
-  callback, opens once for each state (its own receipt), and does not use the state up.
+- Bridge page: a static page with one inline script, allowed by the hash of the script that the route
+  declares. It reads the token, removes the fragment, then posts `{ token }` to `callback` next to it.
+  Headers: a CSP with `default-src 'none'`, `connect-src 'self'` and `frame-ancestors 'none'`,
+  `Cache-Control: no-store`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`. It
+  needs only a state that this instance signed for Trello (401 otherwise), also an expired one or one
+  from another session, so the token leaves the address even when the post must fail. It opens once for
+  each state (its own receipt) and does not use the state up. A second visit gets a page that only
+  removes the fragment.
 - Token post, in order: `Origin` is the API origin and `Sec-Fetch-Site`, when sent, is `same-origin`
   (else 401); the state signature, expiry and provider (401); the session account is the state's
   (401); it still holds `quills:manage_settings` (403); the body is `{ token }` with at most 2,048
@@ -323,6 +326,8 @@ posts it to the callback (follow-up FU1; `providers/README.md`, "Fragment provid
   is 400 before any call; Trello's refusal is 409; an answer without a username is 400; no answer is
   502. Last, one scoped transaction seals the token, creates or replaces the connection and records
   `integration.connected`. A failure before that leaves the state usable.
+- The page's scripts: `oauth-bridge.test.ts` runs them with stub browser objects: the fragment goes
+  before the post, the post goes to `callback` with the state, and the text is fixed on a failure.
 - The token goes only into `secrets`. It is never in a URL, a response, an audit row, an event or a
   log line.
 - Destinations: `destinationKinds: { board: {}, list: { parent: "board" } }`. Boards are the member's
@@ -332,11 +337,13 @@ posts it to the callback (follow-up FU1; `providers/README.md`, "Fragment provid
 - Each call sends the key and the token in the `Authorization: OAuth …` header, never in the URL.
 - Tests: `providers/trello.test.ts` (provider calls, fetch answered in the test) and
   `providers/trello-routes.test.ts` (local provider server and PostgreSQL): the return URL, the bridge
-  page headers and body, once per state; connect with a sealed token that is absent from responses,
-  audit rows, events, jobs and logs; replay; forged, expired and foreign states, another session, no
-  session, a lost permission, a GitHub state and the code callback refused; missing, foreign and
-  cross-site `Origin`; Trello's refusal (409) and a malformed answer (400) with fixed text; boards,
-  lists, and a board that is not listed (404 before the list call).
+  page headers and body, once per state, also for an expired state or another session; connect with a
+  sealed token that is absent from responses, audit rows, events, jobs and every log line of the file;
+  replay; forged, expired and foreign states, another session, no session, workspace B, a removed
+  member, a lost permission, a GitHub state and the code callback refused; missing, foreign and
+  cross-site `Origin`; Trello's refusal (409), a malformed answer (400), no answer (502) and no OAuth
+  app (409), each with the state still usable; boards, lists, and a board that is not listed (404
+  before the list call). `oauth-bridge.test.ts` runs the page scripts.
 
 | Difference from the source | Reason |
 |---|---|
@@ -345,7 +352,8 @@ posts it to the callback (follow-up FU1; `providers/README.md`, "Fragment provid
 | `exchange` checks the token format before the call. | The token comes from the browser. |
 | Lists keep Trello's order. The source sorted them by `pos`. | Trello already answers in board order. |
 | The page is at `/bridge` and posts to `/callback`. The source used one URL for both. | The code callback already owns `GET /callback`. |
-| The page allows its script by hash, not a nonce. | The page is static; the framework computes the hash. |
+| The page allows its script by hash, not a nonce. | The page is static; the route declares the script and the framework hashes it once. |
+| The page opens for any state signed for Trello; the post checks the rest. | The page must load to take the token out of the address. |
 | The token post needs this API's `Origin`. | Only the bridge page of this instance can post a token. |
 | After the post, the page shows a result. The source redirected to its settings page. | The callback answers JSON; a web page is a follow-up. |
 

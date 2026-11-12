@@ -1249,26 +1249,32 @@ describe("raw, textBody and prepare declaration rules", () => {
         }),
       ).toThrow(/raw response/);
   });
-  it("lets an HTML page run only its own plain inline scripts", () => {
-    const policy = (page: string) =>
-      htmlHeaders(page)["content-security-policy"];
-    const hash = createHash("sha256").update("go()").digest("base64");
-    expect(policy("<p>x</p><script>go()</script>")).toContain(
-      `script-src 'sha256-${hash}'; connect-src 'self';`,
+  it("lets an HTML page run only the scripts that its route declares", () => {
+    const policy = (scripts?: string[]) =>
+      htmlHeaders(scripts)["content-security-policy"];
+    const hash = (script: string) =>
+      `'sha256-${createHash("sha256").update(script).digest("base64")}'`;
+    expect(policy(["go()", "stop()"])).toContain(
+      `script-src ${hash("go()")} ${hash("stop()")}; connect-src 'self';`,
     );
-    // A script with attributes, or no script, gets no hash.
-    for (const page of [
-      '<script src="https://cdn.example/x.js"></script>',
-      '<script nonce="n">go()</script>',
-      "<p>x</p>",
-    ])
-      expect(policy(page)).toContain("script-src 'none';");
-    expect(htmlHeaders("")).toMatchObject({
+    expect(policy()).toContain("script-src 'none';");
+    expect(htmlHeaders()).toMatchObject({
+      "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store",
       "referrer-policy": "no-referrer",
       "x-content-type-options": "nosniff",
     });
-    expect(policy("")).toContain("frame-ancestors 'none'");
+    expect(policy()).toContain("frame-ancestors 'none'");
+    expect(() =>
+      buildQuillsRoute({
+        ...base,
+        audience: "public",
+        raw: "application/xml",
+        scripts: ["go()"],
+        response: z.string(),
+        handler: async () => "",
+      }),
+    ).toThrow(/scripts are for an HTML page/);
   });
   it("takes textBody only on a public route with a body", () => {
     const route = {

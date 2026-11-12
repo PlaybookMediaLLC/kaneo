@@ -3,7 +3,10 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq } from "drizzle-orm";
 import { Pool } from "pg";
-import { integrations } from "../../../database/quills/schema/integrations";
+import {
+  integrationPlatformCredentials,
+  integrations,
+} from "../../../database/quills/schema/integrations";
 import * as kaneo from "../../../database/schema";
 import { decryptSecret } from "../../../notification-preferences/secrets";
 import {
@@ -18,7 +21,7 @@ import { users } from "../../framework/contract-world";
 import { mintOAuthState } from "../../framework/signed";
 import quillsRouter from "../../index";
 import publicRouter from "../../public";
-import { bridgePage } from "../oauth-bridge";
+import { bridgePage, bridgeScripts } from "../oauth-bridge";
 import { signedUrl } from "../oauth-providers";
 import { APP_SECRET, platformCredentials } from "../oauth-seed.fixture";
 import { providerCalls, providerOverrides } from "../provider-edge.fixture";
@@ -113,6 +116,10 @@ describe.skipIf(!url)(
       providerCalls.filter((call) =>
         call.path.startsWith("/api.trello.com/1/members/me?"),
       );
+    // Every log line of this file, also of the failures; the last test reads them.
+    const logs = (["log", "info", "warn", "error", "debug"] as const).map(
+      (level) => vi.spyOn(console, level),
+    );
 
     beforeAll(async () => {
       pool = new Pool({ connectionString: url, max: 5 });
@@ -120,7 +127,10 @@ describe.skipIf(!url)(
       await platformCredentials(contractEnv(), contractEnv().a, "trello");
       await platformCredentials(contractEnv(), contractEnv().b, "trello");
     }, 120000);
-    afterAll(() => stopContract());
+    afterAll(async () => {
+      for (const log of logs) log.mockRestore();
+      await stopContract();
+    });
 
     it("sends Trello back to the bridge page, which the credentials view names", async () => {
       const env = contractEnv();
@@ -156,103 +166,117 @@ describe.skipIf(!url)(
       expect(page.status).toBe(200);
       const html = await page.text();
       expect(html).toBe(bridgePage);
-      const script = /<script>([\s\S]*?)<\/script>/.exec(html)![1]!;
-      const hash = createHash("sha256").update(script).digest("base64");
-      expect(Object.fromEntries(page.headers)).toMatchObject({
+      const scripts = (text: string) =>
+        [...text.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+      const hashes = bridgeScripts
+        .map(
+          (script) =>
+            `'sha256-${createHash("sha256").update(script).digest("base64")}'`,
+        )
+        .join(" ");
+      const headers = {
         "content-type": "text/html; charset=utf-8",
-        "content-security-policy": `default-src 'none'; script-src 'sha256-${hash}'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+        "content-security-policy": `default-src 'none'; script-src ${hashes}; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
         "cache-control": "no-store",
         "referrer-policy": "no-referrer",
         "x-content-type-options": "nosniff",
-      });
-      // One inline script, and it clears the fragment before its only network call.
-      expect(html.match(/<script/g)).toHaveLength(1);
-      expect(script.indexOf("history.replaceState")).toBeLessThan(
-        script.indexOf("fetch("),
-      );
-      expect(script.match(/fetch\(/g)).toHaveLength(1);
+      };
+      expect(Object.fromEntries(page.headers)).toMatchObject(headers);
+      // The page's one script is a declared one, so its hash is in the policy.
+      expect(scripts(html)).toEqual([bridgeScripts[0]]);
       for (const secret of [value, TRELLO_TOKEN, APP_SECRET, "client-trello"])
         expect(html).not.toContain(secret);
 
-      // A second visit gets a page with no script; the state still completes the connect.
+      // A second visit only clears the fragment; the state still completes the connect.
       const again = await bridge(value);
       expect(again.status).toBe(200);
-      expect(await again.text()).toContain("already opened");
-      expect(again.headers.get("content-security-policy")).toContain(
-        "script-src 'none'",
-      );
+      const used = await again.text();
+      expect(used).toContain("already opened");
+      expect(scripts(used)).toEqual([bridgeScripts[1]]);
+      expect(Object.fromEntries(again.headers)).toMatchObject(headers);
       expect(await connection()).toBeUndefined();
       const done = await post(value);
       expect(done.status).toBe(200);
       expect(await done.json()).toMatchObject({ status: "connected" });
     });
 
-    it("connects with the checked token, seals it, and keeps it out of responses, records and logs", async () => {
+    it("opens the bridge page for any state that it signed for Trello, so the page always clears the token", async () => {
+      const env = contractEnv();
+      // The token post refuses these; the page still takes the token out of the address.
+      for (const [name, res] of [
+        ["expired", await bridge(state({}, -1000))],
+        ["another session", await bridge(state(), env.customerA)],
+        ["no session", await bridge(state(), "")],
+      ] as const) {
+        expect(res.status, name).toBe(200);
+        expect(await res.text(), name).toBe(bridgePage);
+      }
+      // A state that this instance did not sign for Trello gets no page.
+      const [payload, signature] = state().split(".");
+      const forged = `${Buffer.from(
+        Buffer.from(payload!, "base64url").toString().replace(env.a, env.b),
+      ).toString("base64url")}.${signature}`;
+      for (const value of [forged, state({ type: "github" }), "not.signed"])
+        expect((await bridge(value)).status, value).toBe(401);
+    });
+
+    it("connects with the checked token, seals it, and keeps it out of responses and records", async () => {
       await removeConnection();
-      const logs = (["log", "info", "warn", "error", "debug"] as const).map(
-        (level) => vi.spyOn(console, level),
-      );
       providerCalls.length = 0;
       const since: string = (
         await pool.query("SELECT clock_timestamp()::text AS t")
       ).rows[0].t;
-      try {
-        const value = state();
-        const done = await post(value);
-        expect(done.status).toBe(200);
-        const text = await done.text();
-        expect(JSON.parse(text)).toMatchObject({
-          status: "connected",
-          integration: {
-            integrationType: "trello",
-            workspaceName: "Contract",
-            account: "contract",
-          },
-        });
-        expect(text).not.toContain(TRELLO_TOKEN);
-        const row = await connection();
-        expect(JSON.parse(decryptSecret(row!.secrets)!)).toEqual({
-          accessToken: TRELLO_TOKEN,
-        });
-        // One check with Trello, with the key and the token in the header, not the URL.
-        expect(memberCalls()).toHaveLength(1);
-        expect(memberCalls()[0]!.path).not.toContain(TRELLO_TOKEN);
-        expect(memberCalls()[0]!.authorization).toBe(
-          `OAuth oauth_consumer_key="client-trello", oauth_token="${TRELLO_TOKEN}"`,
-        );
-        // The same state again is a replay: no second write.
-        const replay = await post(value);
-        expect(await replay.json()).toEqual({
-          status: "already_used",
-          integration: null,
-        });
-        expect((await connection())!.connectedAt).toEqual(row!.connectedAt);
+      const value = state();
+      const done = await post(value);
+      expect(done.status).toBe(200);
+      const text = await done.text();
+      expect(JSON.parse(text)).toMatchObject({
+        status: "connected",
+        integration: {
+          integrationType: "trello",
+          workspaceName: "Contract",
+          account: "contract",
+        },
+      });
+      expect(text).not.toContain(TRELLO_TOKEN);
+      const row = await connection();
+      expect(JSON.parse(decryptSecret(row!.secrets)!)).toEqual({
+        accessToken: TRELLO_TOKEN,
+      });
+      // One check with Trello, with the key and the token in the header, not the URL.
+      expect(memberCalls()).toHaveLength(1);
+      expect(memberCalls()[0]!.path).not.toContain(TRELLO_TOKEN);
+      expect(memberCalls()[0]!.authorization).toBe(
+        `OAuth oauth_consumer_key="client-trello", oauth_token="${TRELLO_TOKEN}"`,
+      );
+      // The same state again is a replay: no second write.
+      const replay = await post(value);
+      expect(await replay.json()).toEqual({
+        status: "already_used",
+        integration: null,
+      });
+      expect((await connection())!.connectedAt).toEqual(row!.connectedAt);
 
-        const {
-          rows: [recorded],
-        } = await pool.query(
-          `SELECT
+      const {
+        rows: [recorded],
+      } = await pool.query(
+        `SELECT
           (SELECT count(*) FROM quills.audit_log WHERE workspace_id=$1 AND occurred_at>=$2::timestamptz AND event_type='integration.connected')::int AS audit,
           (SELECT coalesce(string_agg(row_to_json(l)::text, ''), '') FROM quills.audit_log l WHERE workspace_id=$1 AND occurred_at>=$2::timestamptz) ||
           (SELECT coalesce(string_agg(row_to_json(e)::text, ''), '') FROM quills.events e WHERE workspace_id=$1 AND occurred_at>=$2::timestamptz) ||
           (SELECT coalesce(string_agg(row_to_json(j)::text, ''), '') FROM quills.job_queue j WHERE workspace_id=$1 AND created_at>=$2::timestamptz) ||
           (SELECT coalesce(string_agg(row_to_json(k)::text, ''), '') FROM quills.kv_store k WHERE workspace_id=$1) AS text`,
-          [contractEnv().a, since],
-        );
-        expect(recorded.audit).toBe(1);
-        expect(recorded.text).toContain("integration.connected");
-        expect(recorded.text).not.toContain(TRELLO_TOKEN);
-        for (const log of logs)
-          expect(JSON.stringify(log.mock.calls)).not.toContain(TRELLO_TOKEN);
-      } finally {
-        for (const log of logs) log.mockRestore();
-      }
+        [contractEnv().a, since],
+      );
+      expect(recorded.audit).toBe(1);
+      expect(recorded.text).toContain("integration.connected");
+      expect(recorded.text).not.toContain(TRELLO_TOKEN);
     });
 
     it("refuses a forged, expired or foreign state, another session, a lost permission and a wrong provider", async () => {
       await removeConnection();
       const env = contractEnv();
-      const ownerB = env.owner.replace(/_owner$/, "_outsider");
+      const ownerB = users.outsider;
       const [payload, signature] = state().split(".");
       const forged = `${Buffer.from(
         Buffer.from(payload!, "base64url").toString().replace(env.a, env.b),
@@ -272,16 +296,24 @@ describe.skipIf(!url)(
         ["a GitHub state", await post(state({ type: "github" }))],
       ];
       for (const [name, res] of cases) expect(res.status, name).toBe(401);
-      // The bridge page checks the same state.
-      expect((await bridge(forged)).status).toBe(401);
-      expect((await bridge(state(), env.customerA)).status).toBe(401);
+      // The state's account in its own session, without the right in that workspace: workspace B
+      // (A's owner is no member there), a removed member, and a member who lost the permission.
+      expect(
+        (await post(state({ workspaceId: env.b, userId: env.owner }))).status,
+      ).toBe(403);
+      expect(
+        (
+          await post(state({ userId: users.removed }), {
+            "x-test-user": users.removed,
+          })
+        ).status,
+      ).toBe(403);
       // The code callback never takes a Trello token from the query.
       const code = await app.request(
         `${signed("trello/callback", state())}&code=${TRELLO_TOKEN}`,
         { headers: { "x-test-user": env.owner } },
       );
       expect(code.status).toBe(400);
-      // A member who no longer manages settings.
       await setRole({ workspace: ["read"], quills: ["read"] });
       expect(
         (
@@ -342,11 +374,30 @@ describe.skipIf(!url)(
       } finally {
         providerOverrides.clear();
       }
+      // Trello does not answer.
+      providerOverrides.set("GET /api.trello.com/1/members/me", "drop");
+      try {
+        expect((await post(value)).status).toBe(502);
+      } finally {
+        providerOverrides.clear();
+      }
       providerCalls.length = 0;
       for (const token of ['a"b', "x".repeat(2049)]) {
         const res = await post(value, {}, JSON.stringify({ token }));
         expect(res.status).toBe(400);
         expect(await res.text()).not.toContain(token);
+      }
+      // No OAuth app saved: 409 before any call.
+      const env = contractEnv();
+      await env.scoped(env.a, (db) =>
+        db
+          .delete(integrationPlatformCredentials)
+          .where(eq(integrationPlatformCredentials.integrationType, "trello")),
+      );
+      try {
+        expect((await post(value)).status).toBe(409);
+      } finally {
+        await platformCredentials(env, env.a, "trello");
       }
       expect(memberCalls()).toEqual([]);
       expect(await connection()).toBeUndefined();
@@ -392,12 +443,16 @@ describe.skipIf(!url)(
       for (const query of ["?kind=list", "?kind=board&parent=x", "?kind=card"])
         expect((await destinations(query)).status, query).toBe(400);
       // Workspace B's owner cannot list A's connection.
-      const ownerB = env.owner.replace(/_owner$/, "_outsider");
       const foreign = await app.request(
         `/quills/${env.b}/integrations/${id}/destinations`,
-        { headers: { "x-test-user": ownerB } },
+        { headers: { "x-test-user": users.outsider } },
       );
       expect(foreign.status).toBe(404);
+    });
+
+    it("writes the token to no log line, also on the failures above", () => {
+      for (const log of logs)
+        expect(JSON.stringify(log.mock.calls)).not.toContain(TRELLO_TOKEN);
     });
   },
 );

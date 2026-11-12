@@ -15,12 +15,13 @@ import {
 } from "../framework/integration-config";
 import {
   mintOAuthState,
+  oauthBridge,
   oauthState,
   unauthorized,
   type Located,
   type SignedVerifier,
 } from "../framework/signed";
-import { bridgePage, usedPage } from "./oauth-bridge";
+import { bridgePage, bridgeScripts, usedPage } from "./oauth-bridge";
 import {
   connect,
   connectedEvent,
@@ -384,18 +385,13 @@ const callback = defineQuillsRoute({
 });
 
 /**
- * The bridge page checks the state as the callback does, with a receipt of its own: it opens once for
- * each state, and opening it does not use the state up.
- */
-const bridgeState: SignedVerifier = { ...oauthState, name: "oauth-bridge" };
-/**
  * The token post checks and uses up the state as the code callback does (the same receipts). A
  * browser sends `Origin` with every POST: it must be this API's origin, and `Sec-Fetch-Site`, when
  * sent, must be same-origin. So only the bridge page of this instance can post a token into the
  * session. 401 otherwise, before any database access.
  */
 const fragmentState: SignedVerifier = {
-  name: oauthState.name,
+  ...oauthState,
   locate: (request) => {
     const site = request.headers.get("sec-fetch-site");
     if (
@@ -410,20 +406,20 @@ const stateQuery = z.object({ state: z.string().min(1).max(2048) });
 
 const bridge = defineQuillsRoute({
   audience: "signed",
-  verifier: bridgeState,
+  verifier: oauthBridge,
   method: "get",
   path: "/oauth/{type}/bridge",
   operationId: "openQuillsOAuthBridge",
   summary: "Open the bridge page of an OAuth connection with a fragment token",
   description:
-    "Trello sends the browser here with the token in the URL fragment, which no server receives. The page removes the fragment, then posts the token to `completeQuillsOAuthFragmentConnect` with the same state. The state is checked as in the callback; the page opens once for each state and does not use the state up.",
+    "Trello sends the browser here with the token in the URL fragment, which no server receives. The page removes the fragment, then posts the token to `completeQuillsOAuthFragmentConnect` with the same state, which checks the session, the permission and the expiry. The page needs a state that this instance signed for this provider. It opens once for each state, and opening it does not use the state up.",
   action: "manage_settings",
   params: fragmentParams,
   query: stateQuery,
   raw: "text/html",
+  scripts: bridgeScripts,
   response: z.string(),
   responseDescription: "The bridge page",
-  errors: { 403: "The account no longer manages Quills settings" },
   replay: usedPage,
   event: { none: "The page changes nothing; the callback connects." },
   handler: async () => bridgePage,
@@ -437,7 +433,7 @@ const fragmentCallback = defineQuillsRoute({
   operationId: "completeQuillsOAuthFragmentConnect",
   summary: "Complete an OAuth connection with a token from the URL fragment",
   description:
-    "The bridge page posts the token here. `Origin` must be this API's origin. The signed state must be unexpired, unused, for this provider and for the signed-in account, which must still hold quills:manage_settings in the state's workspace. The provider checks the token before it is stored; it is never returned.",
+    'The bridge page posts the JSON body `{ "token": "…" }` (at most 2,048 characters) here. `Origin` must be this API\'s origin. The signed state in the query must be unexpired, unused, for this provider and for the signed-in account, which must still hold quills:manage_settings in the state\'s workspace. The provider checks the token before it is stored; it is never returned.',
   action: "manage_settings",
   params: fragmentParams,
   query: stateQuery,
@@ -445,7 +441,7 @@ const fragmentCallback = defineQuillsRoute({
   response: callbackResult,
   responseDescription: "The connection without its tokens",
   errors: {
-    400: "The provider rejected the token",
+    400: "The body is not a valid token, or the provider rejected the token",
     403: "The account no longer manages Quills settings",
     409: "No OAuth app credentials, or the provider rejected the credentials",
     502: "The provider could not be reached",

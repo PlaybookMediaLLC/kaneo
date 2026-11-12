@@ -178,7 +178,8 @@ const fromPage = (request: ReturnType<typeof fragment>) => ({
   headers: { ...request.headers, origin: new URL(signedUrl("")).origin },
   raw: JSON.stringify({ token: TRELLO_TOKEN }),
 });
-const fragmentForged = (env: ContractEnv) => {
+/** States that this instance did not sign for Trello: the bridge page refuses them too. */
+const unsigned = (env: ContractEnv) => {
   const good = fragment({ workspaceId: env.a, userId: env.owner });
   const [payload, signature] = good.query.state.split(".");
   return [
@@ -191,9 +192,16 @@ const fragmentForged = (env: ContractEnv) => {
         ).toString("base64url")}.${signature}`,
       },
     },
-    fragment({ workspaceId: env.a, userId: env.owner, ttlMs: -1000 }),
     fragment({ workspaceId: env.a, userId: env.owner, type: "github" }),
-    // Another account's browser session, and none.
+    { ...good, query: { state: "not.signed" } },
+  ];
+};
+/** Signed states that only the token post refuses: expired, or in another session or none. */
+const fragmentForged = (env: ContractEnv) => {
+  const good = fragment({ workspaceId: env.a, userId: env.owner });
+  return [
+    ...unsigned(env),
+    fragment({ workspaceId: env.a, userId: env.owner, ttlMs: -1000 }),
     fragment(
       { workspaceId: env.a, userId: env.owner },
       { "x-test-user": env.customerA },
@@ -217,7 +225,7 @@ export const openQuillsOAuthBridge = fixture({
   seed: async (env: ContractEnv) => env,
   valid: (env: ContractEnv) =>
     fragment({ workspaceId: env.a, userId: env.owner }),
-  forged: fragmentForged,
+  forged: unsigned,
   crossed: fragmentCrossed,
   hidden: () => [APP_SECRET],
 });
