@@ -19,6 +19,8 @@ import sharedTeams from "./teams";
 import taxonomy from "./feedback/taxonomy";
 import supportTickets from "./support/tickets-router";
 import supportConversations from "./support/conversations-router";
+import supportAssistant from "./support/conversation-assistant";
+import workspaceSearch from "./assistant/search";
 import supportTyping from "./support/customer/typing";
 import { brandText } from "@kaneo/branding";
 import { apiRouter, z, type BaseVariables } from "../openapi";
@@ -79,6 +81,8 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", operations)
   .route("/", supportTickets)
   .route("/", supportConversations)
+  .route("/", supportAssistant)
+  .route("/", workspaceSearch)
   .route("/", supportTyping)
   .route("/", portalInvites)
   .route("/", reporting)
