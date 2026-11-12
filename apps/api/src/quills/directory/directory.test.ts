@@ -415,6 +415,28 @@ describe.skipIf(!url)("Quills directory", () => {
     ).toBe(404);
   });
 
+  it("counts the customers of a company in memberCount", async () => {
+    const env = contractEnv();
+    const companyId = await company(env, env.a);
+    const otherCompany = await company(env, env.a);
+    await customer(env, env.a, { companyId });
+    await customer(env, env.a, { companyId });
+    await customer(env, env.a, { companyId: otherCompany });
+    const one = await call("GET", `/companies/${companyId}`);
+    expect(one.status).toBe(200);
+    expect(one.body.memberCount).toBe(2);
+    const list = await call(
+      "GET",
+      `/companies?search=${encodeURIComponent(one.body.name)}`,
+    );
+    expect(
+      list.body.companies.map((row: { id: string; memberCount: number }) => [
+        row.id,
+        row.memberCount,
+      ]),
+    ).toEqual([[companyId, 2]]);
+  });
+
   it("refuses to remove a customer who still authors content", async () => {
     const env = contractEnv();
     const author = await customer(env, env.a);

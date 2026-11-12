@@ -29,7 +29,9 @@ import {
   type Db,
 } from "./customer";
 
-const memberCount = sql<number>`(select count(*)::int from ${principal} m where m.company_id = ${companies.id} and m.kaneo_user_id is null and m.test_owner_principal_id is null)`;
+// Table-qualified: in a one-table select, drizzle writes ${companies.id} as a bare "id", which the
+// subquery would bind to m.id.
+const memberCount = sql<number>`(select count(*)::int from ${principal} m where m.company_id = ${companies}.id and m.kaneo_user_id is null and m.test_owner_principal_id is null)`;
 const companyFields = {
   id: companies.id,
   name: companies.name,
