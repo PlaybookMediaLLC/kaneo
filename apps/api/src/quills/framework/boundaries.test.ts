@@ -43,6 +43,8 @@ const allowedImport = (file: string, specifier: string) => {
     (routePaths.has(target) ||
       [
         "framework/define-route",
+        "framework/app",
+        "framework/app-keys",
         "framework/files",
         "framework/integration-config",
         "framework/platform-reads",
@@ -151,6 +153,8 @@ describe("Quills module boundaries", () => {
     expect(
       matching(quills, /from "(\.\.\/)+database(\/index|\/schema)?"/),
     ).toEqual([
+      // An app's API key in public.apikey: mint, scope and undo (RFC 0001, D14).
+      "framework/app-keys.ts",
       // Test harness: seeds the platform rows that the contract checks need.
       "framework/contract-checks.ts",
       "framework/contract-world.ts",

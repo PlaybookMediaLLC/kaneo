@@ -13,6 +13,7 @@ import {
   storageValues,
   archiveSchema,
   MAX_ARCHIVE_BYTES,
+  OMITTED_TABLES,
   portableTables,
   quote,
   type WorkspaceArchive,
@@ -52,6 +53,8 @@ export function prepareArchive(
     throw new Error("Workspace archive exceeds 64 MiB");
   const archive = archiveSchema.parse(input),
     mapping = mappingSchema.parse(mappingInput);
+  // An archive from a release before a table was omitted still holds it: its rows stay out.
+  for (const name of OMITTED_TABLES) delete archive.tables[name];
   const actorByCustomer = new Map(
     (archive.tables.principal ?? [])
       .filter((p) => p.user_id)

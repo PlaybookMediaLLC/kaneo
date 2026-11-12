@@ -74,7 +74,8 @@ async function count(
   return row!.voteCount;
 }
 
-async function addVote(
+/** Adds `voter`'s vote to a visible post, or to the post it was merged into. Idempotent. */
+export async function addVote(
   db: Database,
   postId: TypeId<"post">,
   projects: string[],

@@ -132906,6 +132906,1389 @@
         }
       }
     },
+    "/quills/{workspaceId}/apps/boards": {
+      "get": {
+        "operationId": "listQuillsAppBoards",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "List the boards that a sidebar app can file posts on",
+        "description": "Live boards that the key's owner can see, by name. Requires an API key with quills scopes that an active app of this workspace holds, with the read:feedback capability.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000,
+              "default": 0
+            },
+            "required": false,
+            "name": "offset",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 100
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of boards",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "slug": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "slug"
+                        ]
+                      }
+                    },
+                    "nextOffset": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextOffset"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access: MISSING_PERMISSION, API_KEY_SCOPE, APP_NOT_BOUND or APP_SCOPE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/apps/search": {
+      "get": {
+        "operationId": "searchQuillsAppPosts",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Search the posts that a sidebar app can link",
+        "description": "Full-text search over visible posts, most voted first. Leaves out merged, deleted and test-customer posts. Requires an API key with quills scopes that an active app of this workspace holds, with the read:feedback capability.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "q",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20,
+              "default": 10
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching posts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "voteCount": {
+                            "type": "number"
+                          },
+                          "boardName": {
+                            "type": "string"
+                          },
+                          "statusName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "statusColor": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title",
+                          "voteCount",
+                          "boardName",
+                          "statusName",
+                          "statusColor"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access: MISSING_PERMISSION, API_KEY_SCOPE, APP_NOT_BOUND or APP_SCOPE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/apps/suggest": {
+      "get": {
+        "operationId": "suggestQuillsAppPosts",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Suggest posts that match a ticket's text",
+        "description": "Ranks visible, unmerged posts by the cosine similarity of their embeddings (at least 0.5). Without an embedding model, or when the provider fails, it searches the text instead and `similarity` is null. The text goes to the configured AI provider. Requires an API key with quills scopes that an active app of this workspace holds, with the read:feedback capability.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "required": true,
+            "name": "text",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20,
+              "default": 5
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Suggested posts, best first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "voteCount": {
+                            "type": "number"
+                          },
+                          "boardName": {
+                            "type": "string"
+                          },
+                          "statusName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "statusColor": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "similarity": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title",
+                          "voteCount",
+                          "boardName",
+                          "statusName",
+                          "statusColor",
+                          "similarity"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access: MISSING_PERMISSION, API_KEY_SCOPE, APP_NOT_BOUND or APP_SCOPE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/apps/posts": {
+      "post": {
+        "operationId": "createQuillsAppPost",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Create a post from a sidebar app",
+        "description": "The requester, when given, is identified as a customer and becomes the author and first voter; the key's owner is recorded as the teammate who tracks the post. Without a requester the key's owner is the author. With `link`, the external item is linked to the new post. Requires an API key with quills scopes that an active app of this workspace holds, with the write:feedback capability.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "boardId": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "content": {
+                    "type": "string",
+                    "maxLength": 10000,
+                    "default": ""
+                  },
+                  "link": {
+                    "type": "object",
+                    "properties": {
+                      "externalType": {
+                        "type": "string",
+                        "maxLength": 50,
+                        "pattern": "^[a-z][a-z0-9_-]*$",
+                        "description": "The kind of external item, for example zendesk"
+                      },
+                      "externalKey": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "description": "The item's key in the external system"
+                      },
+                      "externalUrl": {
+                        "type": "string",
+                        "maxLength": 2048,
+                        "format": "uri",
+                        "description": "An https link to the item"
+                      }
+                    },
+                    "required": [
+                      "externalType",
+                      "externalKey"
+                    ]
+                  },
+                  "requester": {
+                    "type": "object",
+                    "properties": {
+                      "email": {
+                        "type": "string",
+                        "maxLength": 254,
+                        "format": "email"
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      }
+                    },
+                    "required": [
+                      "email"
+                    ],
+                    "description": "The customer who asked: identified, then the post's voter"
+                  }
+                },
+                "required": [
+                  "boardId",
+                  "title"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The created post",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "boardId": {
+                      "type": "string"
+                    },
+                    "statusId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "voteCount": {
+                      "type": "number"
+                    },
+                    "authorPrincipalId": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "linkId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "title",
+                    "boardId",
+                    "statusId",
+                    "voteCount",
+                    "authorPrincipalId",
+                    "createdAt",
+                    "linkId"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access: MISSING_PERMISSION, API_KEY_SCOPE, APP_NOT_BOUND or APP_SCOPE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Board not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The requester's email belongs to a teammate",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/apps/links": {
+      "put": {
+        "operationId": "linkQuillsAppPost",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Link an external item to a post",
+        "description": "Idempotent: `linked` is false when the link existed. With a requester, the requester is identified as a customer and votes on the post (or on the post it was merged into); the key's owner is recorded as the teammate who added the vote. A link to the same item that an integration owns is a 409. Requires an API key with quills scopes that an active app of this workspace holds, with the write:feedback capability.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "postId": {
+                    "type": "string"
+                  },
+                  "externalType": {
+                    "type": "string",
+                    "maxLength": 50,
+                    "pattern": "^[a-z][a-z0-9_-]*$",
+                    "description": "The kind of external item, for example zendesk"
+                  },
+                  "externalKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "description": "The item's key in the external system"
+                  },
+                  "externalUrl": {
+                    "type": "string",
+                    "maxLength": 2048,
+                    "format": "uri",
+                    "description": "An https link to the item"
+                  },
+                  "requester": {
+                    "type": "object",
+                    "properties": {
+                      "email": {
+                        "type": "string",
+                        "maxLength": 254,
+                        "format": "email"
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      }
+                    },
+                    "required": [
+                      "email"
+                    ],
+                    "description": "The customer who asked: identified, then the post's voter"
+                  }
+                },
+                "required": [
+                  "postId",
+                  "externalType",
+                  "externalKey"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The link and the vote",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "linkId": {
+                      "type": "string"
+                    },
+                    "linked": {
+                      "type": "boolean"
+                    },
+                    "voted": {
+                      "type": "boolean"
+                    },
+                    "voteCount": {
+                      "type": "number"
+                    },
+                    "votedPostId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "voterPrincipalId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "linkId",
+                    "linked",
+                    "voted",
+                    "voteCount",
+                    "votedPostId",
+                    "voterPrincipalId"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access: MISSING_PERMISSION, API_KEY_SCOPE, APP_NOT_BOUND or APP_SCOPE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Post not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "An integration owns this link, or the requester's email belongs to a teammate",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "unlinkQuillsAppPost",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Unlink an external item from a post",
+        "description": "Idempotent. Removes only the app's link; a vote that the link added stays. Requires an API key with quills scopes that an active app of this workspace holds, with the write:feedback capability.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "postId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 50,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "description": "The kind of external item, for example zendesk"
+            },
+            "required": true,
+            "description": "The kind of external item, for example zendesk",
+            "name": "externalType",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500,
+              "description": "The item's key in the external system"
+            },
+            "required": true,
+            "description": "The item's key in the external system",
+            "name": "externalKey",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Whether a link was removed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "changed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "changed"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access: MISSING_PERMISSION, API_KEY_SCOPE, APP_NOT_BOUND or APP_SCOPE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Post not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      },
+      "get": {
+        "operationId": "listQuillsAppLinkedPosts",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "List the posts linked to an external item",
+        "description": "The app's active links to visible posts, newest first, at most 100. Requires an API key with quills scopes that an active app of this workspace holds, with the read:feedback capability.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 50,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "description": "The kind of external item, for example zendesk"
+            },
+            "required": true,
+            "description": "The kind of external item, for example zendesk",
+            "name": "externalType",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500,
+              "description": "The item's key in the external system"
+            },
+            "required": true,
+            "description": "The item's key in the external system",
+            "name": "externalKey",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Linked posts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "voteCount": {
+                            "type": "number"
+                          },
+                          "boardName": {
+                            "type": "string"
+                          },
+                          "statusName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "statusColor": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "linkId": {
+                            "type": "string"
+                          },
+                          "linkedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title",
+                          "voteCount",
+                          "boardName",
+                          "statusName",
+                          "statusColor",
+                          "linkId",
+                          "linkedAt"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access: MISSING_PERMISSION, API_KEY_SCOPE, APP_NOT_BOUND or APP_SCOPE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/app-registrations": {
+      "get": {
+        "operationId": "listQuillsAppRegistrations",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "List the workspace's sidebar apps",
+        "description": "Newest first. An app with no `apiKeyId` was imported and cannot call the app routes.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000,
+              "default": 0
+            },
+            "required": false,
+            "name": "offset",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of apps",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "grantedScopes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "apiKeyId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "grantedScopes",
+                          "status",
+                          "apiKeyId",
+                          "createdAt",
+                          "updatedAt"
+                        ]
+                      }
+                    },
+                    "nextOffset": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextOffset"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createQuillsAppRegistration",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Register a sidebar app and create its API key",
+        "description": "Needs a user session, as API key management does. Creates an API key for the caller with workspace:read and the Quills actions that the scopes need, and binds it to the new app. The caller must hold those actions. `secret` is the key: it is shown only in this response. In this workspace's Quills API the key works only on the app routes; it keeps workspace:read on other Kaneo routes, and its scope in the caller's other workspaces.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "grantedScopes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "read:feedback",
+                        "write:feedback"
+                      ]
+                    },
+                    "minItems": 1,
+                    "maxItems": 2
+                  }
+                },
+                "required": [
+                  "name",
+                  "grantedScopes"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The app and its API key, shown once",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "grantedScopes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "apiKeyId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "secret": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "grantedScopes",
+                    "status",
+                    "apiKeyId",
+                    "createdAt",
+                    "updatedAt",
+                    "secret"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/app-registrations/{appId}": {
+      "patch": {
+        "operationId": "updateQuillsAppRegistration",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Rename, rescope, disable or enable a sidebar app",
+        "description": "Needs a user session. A disabled app's key is refused at once on the app routes and stays refused on this workspace's other Quills routes. The key itself stays enabled: delete it in the API key settings to revoke it everywhere. New scopes also set the key's scope; the caller must hold their Quills actions.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "appId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "grantedScopes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "read:feedback",
+                        "write:feedback"
+                      ]
+                    },
+                    "minItems": 1,
+                    "maxItems": 2
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "disabled"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated app",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "grantedScopes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "apiKeyId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "grantedScopes",
+                    "status",
+                    "apiKeyId",
+                    "createdAt",
+                    "updatedAt"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "App not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
     "/quills/{workspaceId}/context": {
       "get": {
         "operationId": "getQuillsWorkspaceContext",
