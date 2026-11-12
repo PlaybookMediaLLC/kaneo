@@ -16,6 +16,7 @@ import {
   vi,
 } from "vite-plus/test";
 import { eq, like } from "drizzle-orm";
+import { createId } from "@kaneo/ids";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Hono } from "hono";
 import { Pool } from "pg";
@@ -270,6 +271,45 @@ describe.skipIf(!url)("Quills webhook delivery", () => {
     };
     await expect(record("undo-oversized", oversized)).rejects.toThrow();
     expect(await rows("undo-oversized")).toEqual({ audit: [], events: [] });
+
+    // A caller-minted receipt ID names the audit row; the event never holds it. It needs a receipt.
+    const receiptId = createId("audit_log");
+    await h.as(h.a, h.owner, (db, actor) =>
+      recordQuillsChange(db, actor, {
+        type: "team.bound",
+        entityType: "team",
+        entityId: "undo-named",
+        receipt,
+        receiptId,
+      }),
+    );
+    const named = await h.system(h.a, async (db) => ({
+      audit: await db
+        .select({ id: auditLog.id })
+        .from(auditLog)
+        .where(eq(auditLog.targetId, "undo-named")),
+      events: await db
+        .select()
+        .from(events)
+        .where(eq(events.entityId, "undo-named")),
+    }));
+    expect(named.audit).toEqual([{ id: receiptId }]);
+    expect(
+      JSON.stringify(named.events, (_key, item) =>
+        typeof item === "bigint" ? String(item) : item,
+      ),
+    ).not.toContain(receiptId);
+    await expect(
+      h.as(h.a, h.owner, (db, actor) =>
+        recordQuillsChange(db, actor, {
+          type: "team.bound",
+          entityType: "team",
+          entityId: "undo-id-only",
+          receiptId: createId("audit_log"),
+        }),
+      ),
+    ).rejects.toThrow("A receipt ID needs a receipt");
+    expect(await rows("undo-id-only")).toEqual({ audit: [], events: [] });
   });
 
   it("records an uncertain outcome and never sends it again", async () => {

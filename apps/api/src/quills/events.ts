@@ -1,4 +1,4 @@
-import { createId } from "@kaneo/ids";
+import { createId, isValidTypeId, type AuditLogId } from "@kaneo/ids";
 import { z } from "zod";
 import type { Database, QuillsActor } from "../database/quills/client";
 import { auditLog } from "../database/quills/schema/audit-log";
@@ -430,6 +430,14 @@ export const changeSchema = z.object({
   entityId: z.string().min(1).max(200),
   payload: z.record(z.string(), z.string().max(500)).default({}),
   receipt: receiptSchema.optional(),
+  /**
+   * The audit row ID of a receipt. The caller mints it (`createId("audit_log")`), so the response of
+   * the write can name the receipt that undo takes. Only with a receipt; the outbox event never holds it.
+   */
+  receiptId: z
+    .string()
+    .refine((id) => isValidTypeId(id, "audit"), "Not an audit row ID")
+    .optional(),
 });
 /** "user" is a teammate; portal and widget callers are customers or anonymous visitors. */
 export const actorTypeSchema = z.enum(["user", "customer", "anonymous"]);
@@ -447,12 +455,14 @@ export async function recordQuillsChange(
   actor: ChangeActor | null,
   input: z.input<typeof changeSchema>,
 ) {
-  const { receipt, ...change } = changeSchema.parse(input);
+  const { receipt, receiptId, ...change } = changeSchema.parse(input);
+  if (receiptId && !receipt) throw new Error("A receipt ID needs a receipt");
   const actorType = actor
     ? actorTypeSchema.parse(actor.actorType ?? "user")
     : "system";
   const eventId = createId("event");
   await db.insert(auditLog).values({
+    ...(receiptId && { id: receiptId as AuditLogId }),
     actorPrincipalId: actor?.principalId ?? null,
     actorType,
     eventType: change.type,
