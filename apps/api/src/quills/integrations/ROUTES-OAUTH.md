@@ -335,7 +335,7 @@ Delivery (FU3a, the worker; no route):
   stores the first Asana workspace of the account in `config.workspaceGid`. The sealed secrets are
   `accessToken`, `refreshToken` and `expiresAt`.
 - Destinations: one kind, the projects of that workspace (one page of 100, `archived=false`). The
-  route keeps only IDs of 1 to 30 letters and digits.
+  route keeps only gids of 1 to 30 digits.
 - Refresh: an access token that is due within a minute is refreshed first. Asana keeps the refresh
   token. A refused refresh (400) is 409: reconnect. A missing or out-of-range `expires_in` stores no
   expiry, so that token is never refreshed.
@@ -344,12 +344,34 @@ Delivery (FU3a, the worker; no route):
   refresh, an account without a workspace (400), an out-of-range expiry, and malformed answers (400
   and 502 with fixed text).
 
+Delivery (FU3b, the worker; no route):
+
+- Events: `post.created` only, as in the source hook. A channel is a project gid (1 to 30 digits, the
+  destination ID); adding another channel answers 400.
+- Scopes: none to add. The authorize URL lists no scopes (the OAuth app's settings grant them), so
+  there is no `deliveryScopes` and existing connections do not reconnect. A token that cannot create
+  tasks gets 403, which asks for a reconnect.
+- `POST https://app.asana.com/api/1.0/tasks` with `{ data: { name, html_notes, projects: [<gid>],
+  workspace } }`. The stored `config.workspaceGid` is checked before each call (a bad one asks for a
+  reconnect with no call). The name is one line of at most 255 characters. `html_notes` is Asana rich
+  text (XML): `<body>`, each line of the post (at most 2000 characters), a blank line, the author and
+  the board, with line breaks only. Every part is escaped (`&`, `<`, `>`), and characters that XML
+  refuses (control characters, lone surrogates) are dropped.
+- The task gid is the link's external ID. The link URL is `permalink_url` only on
+  `https://app.asana.com/` (no other host, port or user); otherwise it is empty. A 2xx answer without
+  a gid is `uncertain`.
+- A due token is refreshed before the call, and a 401 refreshes once and sends once more.
+- Tests: `jobs/handlers/asana-delivery.test.ts` (the worker evidence table, the escaped body, the
+  stored workspace and channel checks, and the link host rule).
+
 | Difference from the source | Reason |
 |---|---|
 | A connect without an Asana workspace, or with a failed profile read, fails. The source stored `unknown` and the name "Asana". | The project list needs the workspace. |
 | Asana filters archived projects (`archived=false`). The source filtered them after the call. | A page of 100 holds only active projects. |
 | The refresh also sends `redirect_uri`. | Asana's token endpoint documents it for both grants. |
-| No task creation, status sync, webhook or token revoke at disconnect. | Delivery and status sync are out of scope for #131. |
+| The notes use only `<body>` and line breaks. The source also used `<p>`, `<hr/>` and `<a>`. | Asana rich text does not list `<p>`; no portal URL exists for a post yet. |
+| The link URL is kept only on `https://app.asana.com/`. The source kept any `permalink_url`. | A link comes only from the provider's own host. |
+| No status sync, webhook or token revoke at disconnect. | Status sync is out of scope. |
 
 ### ClickUp
 
@@ -367,17 +389,36 @@ Delivery (FU3a, the worker; no route):
 - Destinations: `destinationKinds: { space: {}, list: { parent: "space" } }`. Spaces come from the
   stored team. Lists are the folderless lists of one space. The route lists the team's spaces first
   and refuses a space that is not among them (404), so the token never reads another team's space.
-  The route keeps only IDs of 1 to 30 letters and digits.
+  The route keeps only IDs of 1 to 30 digits.
 - Tests: `providers/clickup.test.ts` (local provider server): connect with a sealed token, spaces by
   default and by kind, lists with the limit of 200, a foreign space refused before the list call,
   refused kind and parent values, an account without a team (400), and malformed answers (400 and
   502 with fixed text).
 
+Delivery (FU3b, the worker; no route):
+
+- Events: `post.created` only, as in the source hook. A channel is a list ID (the child destination;
+  1 to 30 digits). The rule cannot tell a list from a space, which is also digits: add a list. A
+  task call for an ID that is not a list gets ClickUp's 4xx (`failed`).
+- Scopes: none to add. ClickUp has no OAuth scopes (the token acts as the teammate), so existing
+  connections do not reconnect. ClickUp tokens do not expire: a 401 or 403 asks for a reconnect.
+- `POST https://api.clickup.com/api/v2/list/<list ID>/task` with `{ name, description }`. The list ID
+  is encoded. The name is one line of at most 255 characters. The description is plain text (not
+  `markdown_description`): each line of the post (at most 2000 characters), a blank line, the author
+  and the board. ClickUp shows it as typed, so nothing is escaped.
+- The task ID (1 to 64 letters and digits) is the link's external ID. The link URL is `url` only on
+  `https://app.clickup.com/`; otherwise it is empty. A 2xx answer without a task ID is `uncertain`.
+- Tests: `jobs/handlers/clickup-delivery.test.ts` (the worker evidence table, the plain-text body, the
+  channel rule and the link host rule).
+
 | Difference from the source | Reason |
 |---|---|
 | A connect without a ClickUp team fails. The source stored `unknown`. | The space list needs the team. |
 | A list request names a space of the stored team. The source listed any space ID it got. | Authorization: the token may reach more teams. |
-| No task creation, status sync or webhook. | Delivery and status sync are out of scope for #131. |
+| The description is plain text. The source sent Markdown in `description`, which ClickUp shows as typed. | The same text, without Markdown marks that do not render. |
+| No "View in …" link in the description. | No portal URL exists for a post yet. |
+| The link URL is kept only on `https://app.clickup.com/`; a 2xx without a task ID is `uncertain`. The source kept any answer. | A link comes only from the provider's own host; the task may exist. |
+| No status sync or webhook. | Status sync is out of scope. |
 
 ### Trello
 
@@ -434,9 +475,32 @@ posts it to the callback (follow-up FU1; `providers/README.md`, "Fragment provid
   app (409), each with the state still usable; boards, lists, and a board that is not listed (404
   before the list call). `oauth-bridge.test.ts` runs the page scripts.
 
+Delivery (FU3b, the worker; no route):
+
+- Events: `post.created` only, as in the source hook. A channel is a list ID (the child destination;
+  24 lowercase hexadecimal digits). A board ID has the same shape and passes the rule: add a list.
+  A card call for an ID that is not a list gets Trello's 4xx (`failed`).
+- Scopes: none to add. The connect already asks for `read,write`, so existing connections do not
+  reconnect. Trello tokens set to never expire: a 401 or 403 asks for a reconnect.
+- The API key is the client ID of the workspace's saved Trello OAuth app, read at each delivery. The
+  key and the stored token must be 32 to 256 letters and digits; otherwise (also with no saved app)
+  the delivery asks for a reconnect with no call. Both travel only in the
+  `Authorization: OAuth oauth_consumer_key="<key>", oauth_token="<token>"` header.
+- `POST https://api.trello.com/1/cards` with a JSON body `{ idList, name, desc, pos: "top" }`; the URL
+  has no query string. The name is one line of at most 255 characters. The description is Markdown,
+  as the post content is (at most 2000 characters, then the author and the board), and at most 16384
+  characters in all.
+- The card ID is the link's external ID. The link URL is `shortUrl` only on `https://trello.com/`;
+  otherwise it is empty. A 2xx answer without a card ID is `uncertain`.
+- Tests: `jobs/handlers/trello-delivery.test.ts` (the worker evidence table, the body and the header,
+  the size bounds, the key and token checks, the channel rule and the link host rule).
+
 | Difference from the source | Reason |
 |---|---|
-| The key and the token travel in the `Authorization` header. The source put them in the query string. | A URL reaches logs and proxies. |
+| The key and the token travel in the `Authorization` header, and a card's values in a JSON body. The source put them all in the query string. | A URL reaches logs and proxies. |
+| No "View in …" link in the description. | No portal URL exists for a post yet. |
+| The link URL is kept only on `https://trello.com/`; a 2xx without a card ID is `uncertain`. The source kept any answer. | A link comes only from the provider's own host; the card may exist. |
+| A delivery with no saved OAuth app asks for a reconnect. The source failed it. | The teammate must save the app (the key) again; a retry alone cannot work. |
 | The API key comes from the OAuth app credentials at each call. The source copied it into `config`. | One place for the key. |
 | `exchange` checks the token format before the call. | The token comes from the browser. |
 | Lists keep Trello's order. The source sorted them by `pos`. | Trello already answers in board order. |
@@ -459,17 +523,51 @@ posts it to the callback (follow-up FU1; `providers/README.md`, "Fragment provid
   name with the GraphQL query `me`. The sealed secret is `accessToken`; Monday.com tokens do not
   expire.
 - Destinations: one kind, the boards (`boards(limit: 100, order_by: used_at)`). The route keeps only
-  IDs of 1 to 30 letters and digits.
+  IDs of 1 to 30 digits.
 - A failed GraphQL query (200 with `errors` and no `data`) is 502, for the connect and for the list.
 - Tests: `providers/monday.test.ts` (local provider server): connect with a sealed token, the limit
   of 200 and the ID filter, a refused `kind`, and malformed answers (400 on the token call, 502 for a
   failed query on the connect and on the list, with fixed text).
 
+Delivery (FU3b, the worker; no route):
+
+- Events: `post.created` only, as in the source hook. A channel is a board ID (1 to 30 digits, the
+  destination ID).
+- Scopes: none to add. The authorize URL lists no scopes (the app's settings grant them), so existing
+  connections do not reconnect. Monday.com tokens do not expire: a 401 or 403 asks for a reconnect.
+- Two GraphQL calls on `https://api.monday.com/v2`, each with `Authorization: <token>` (no `Bearer`).
+  The values are GraphQL variables, never query text:
+  1. `create_item(board_id: $board, item_name: $name)`. The name is one line of at most 255
+     characters.
+  2. `create_update(item_id: $item, body: $body)`. The body is HTML in which every part is escaped:
+     one `<p>` per line of the post (at most 2000 characters), then the author and the board.
+- Monday.com answers 200 with `errors` for a refused query. Without an item ID, only a refusal proves
+  that no item exists: every error with the same 4xx `extensions.status_code` maps as that HTTP status
+  (401 or 403 a reconnect, 429 a retry, another 4xx `failed`), and 4xx codes of several kinds fail.
+  Any other answer (a 5xx code, no code, or a `create_item` without a valid ID) is `uncertain`.
+  Provider text is never kept.
+- **Partial success.** Once `create_item` answered with an ID, the item exists. `deliver` then never
+  throws: any failure of the update (an HTTP error, no answer, GraphQL errors or no update ID) still
+  returns `succeeded` with the item, and the item has no body. A thrown refusal would end `failed`,
+  which offers a retry and so a second item. The outcome keeps the update's error code
+  (`provider_failed`, `authentication`, `unavailable` or `outcome_unknown`), so the sync history shows
+  the reason. The state alone decides the actions, so `succeeded` offers no retry. The connection's
+  health shows no error, because the delivery succeeded.
+- The item ID is the link's external ID. The link has no URL: a Monday.com item URL names the
+  account's subdomain, which is not stored.
+- Tests: `jobs/handlers/monday-delivery.test.ts` (the worker evidence table, the GraphQL variables and
+  the escaped update, the refusal map, the partial success for eight update failures, and the channel
+  rule).
+
 | Difference from the source | Reason |
 |---|---|
 | A failed account read fails the connect. The source connected with the name "Monday.com". | The same rule as the other providers: a connect that cannot read the account is not complete. |
 | The account label is the Monday.com user name. The source stored no account label. | The integration summary shows `account`. |
-| No item creation. | Delivery is out of scope for #131. |
+| The values are GraphQL variables. The source put the board ID and the JSON-quoted title in the query text. | A title can never change the query. |
+| A failed update returns `succeeded` with the item and the update's error code. The source returned `uncertain` with no link. | The item exists: it is linked, and a retry cannot make a second one. |
+| GraphQL errors with a 4xx status map to a fixed outcome. The source made every error `uncertain`. | A refusal before the write proves that no item exists. |
+| The update is escaped HTML with the author and the board. The source sent plain text and a "View in …" link. | Monday.com reads an update as HTML; no portal URL exists for a post yet. |
+| No group (`groupId`). | No route sets one; Monday.com puts the item in the board's top group. |
 
 ### Notion
 
@@ -491,11 +589,31 @@ posts it to the callback (follow-up FU1; `providers/README.md`, "Fragment provid
   token, the limit of 200, UUID filter and titles, the channel ID rule, a refused `kind`, and
   malformed answers (400 and 502 with fixed text).
 
+Delivery (FU3b, the worker; no route):
+
+- Events: `post.created` only, as in the source hook. A channel is a database ID (a lowercase UUID
+  with dashes, as the list returns it).
+- Scopes: none to add. Notion has no OAuth scopes; the teammate shares each database with the
+  integration. Existing connections do not reconnect. Notion tokens do not expire: a 401 or 403 asks
+  for a reconnect. A database that is no longer shared answers 404 (`failed`).
+- `POST https://api.notion.com/v1/pages` with `Notion-Version: 2022-06-28`, `parent.database_id`, the
+  title in `properties.title` (the ID of every database's title property; one line of at most 255
+  characters) and `children`: one `paragraph` block of plain `rich_text` for each line of the post (at
+  most 2000 characters), a divider, the author and the board. Notion takes at most 100 blocks, so the
+  lines after the 96th join one last paragraph. Plain rich text is never read as markup, so nothing is
+  escaped.
+- The page ID (a UUID) is the link's external ID. The link URL is `url` only on
+  `https://www.notion.so/`; otherwise it is empty. A 2xx answer without a page ID is `uncertain`.
+- Tests: `jobs/handlers/notion-delivery.test.ts` (the worker evidence table, the plain body, the
+  100-block limit, the channel rule and the link host rule).
+
 | Difference from the source | Reason |
 |---|---|
 | The Notion workspace ID is not stored. | No route uses it. |
 | The account label is the owner's name. The source stored no account label. | The integration summary shows `account`. |
-| No page creation. | Delivery is out of scope for #131. |
+| The body is one paragraph per line, a divider, the author and the board. The source sent a callout with an emoji, the whole post in one paragraph and a bookmark to the post. | Notion limits one text to 2000 characters; no portal URL exists for a post yet. |
+| The lines after the 96th join one paragraph. | Notion refuses a page with more than 100 blocks. |
+| The link URL is kept only on `https://www.notion.so/`; a 2xx without a page ID is `uncertain`. The source kept any answer. | A link comes only from the provider's own host; the page may exist. |
 
 ### HubSpot
 

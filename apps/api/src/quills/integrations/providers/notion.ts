@@ -3,6 +3,7 @@ import {
   ProviderCallError,
   providerJson,
 } from "../../framework/integration-config";
+import { issueParts, uncertain } from "../delivery";
 import {
   form,
   list,
@@ -17,13 +18,19 @@ const api = "https://api.notion.com/v1";
 const json = { "content-type": "application/json", accept: "application/json" };
 // A Notion ID is a UUID with dashes.
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/** A paragraph block of plain rich text: Notion never reads it as markup. */
+const paragraph = (content: string) => ({
+  object: "block",
+  type: "paragraph",
+  paragraph: { rich_text: [{ type: "text", text: { content } }] },
+});
 
 export const notion = {
   name: "Notion",
   hosts,
   category: "issue_tracking",
-  description: "Connect a Notion workspace and list its databases.",
-  events: [],
+  description: "Create Notion database pages from new feedback.",
+  events: ["post.created"],
   channels: true,
   credentials: ["clientId", "clientSecret"],
   authorizeUrl: (creds, redirectUri, state) =>
@@ -98,4 +105,49 @@ export const notion = {
   statuses: [],
   // A channel ID is a database ID, which the default rule (30 letters and digits) refuses.
   target: (target) => uuid.test(target),
+  // A page in the database for a new post. Every part is plain rich text.
+  deliver: async ({ secrets, target, content }) => {
+    const { title, paragraphs, footer } = issueParts(content);
+    // Notion takes at most 100 blocks: the lines after the 96th join one last paragraph. The content
+    // has at most 2000 characters, Notion's limit for one text.
+    const lines = [
+      ...paragraphs.slice(0, 96),
+      paragraphs.slice(96).join("\n"),
+    ].filter(Boolean);
+    const page = record(
+      await providerJson(
+        `${api}/pages`,
+        {
+          method: "POST",
+          headers: {
+            ...json,
+            authorization: `Bearer ${secrets.accessToken ?? ""}`,
+            "notion-version": "2022-06-28",
+          },
+          body: JSON.stringify({
+            parent: { database_id: target },
+            // `title` is the ID of every database's title property.
+            properties: { title: { title: [{ text: { content: title } }] } },
+            children: [
+              ...lines.map(paragraph),
+              { object: "block", type: "divider", divider: {} },
+              ...footer.map(paragraph),
+            ],
+          }),
+        },
+        hosts,
+      ),
+    );
+    const id = text(page.id);
+    // A 2xx without a page ID: the page may exist.
+    if (!uuid.test(id)) return uncertain;
+    const link = URL.parse(text(page.url))?.href;
+    return {
+      state: "succeeded",
+      result: {
+        externalId: id,
+        externalUrl: link?.startsWith("https://www.notion.so/") ? link : null,
+      },
+    };
+  },
 } satisfies OAuthProvider;

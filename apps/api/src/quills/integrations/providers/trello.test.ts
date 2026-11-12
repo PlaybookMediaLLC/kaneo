@@ -33,7 +33,7 @@ describe("Trello provider", () => {
     expect(oauthProviders.trello).toBe(trello);
     expect(trello.callback).toBe("fragment");
     expect(catalog.filter((entry) => entry.id === "trello")).toEqual([
-      expect.objectContaining({ available: true, events: [] }),
+      expect.objectContaining({ available: true, events: ["post.created"] }),
     ]);
   });
 
