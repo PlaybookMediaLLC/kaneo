@@ -89777,7 +89777,7 @@
             "$ref": "#/components/responses/ApiKeyRateLimited"
           },
           "502": {
-            "description": "The provider could not be reached",
+            "description": "The provider could not be reached or did not answer in time",
             "content": {
               "application/json": {
                 "schema": {
@@ -89796,7 +89796,7 @@
           "Quills"
         ],
         "summary": "Look up a customer in the connected CRM and support tools",
-        "description": "Sends the customer's email to each connected provider with a contact lookup (HubSpot, Intercom, Zendesk, Salesforce, Freshdesk, Stripe) and returns one entry for each, with selected fields only. A provider that fails gives `failed` and a fixed error text; the others still answer. A customer without an email address gives no entries. Calls the providers.",
+        "description": "Sends the customer's email to each connected provider with a contact lookup (HubSpot, Intercom, Zendesk, Salesforce, Freshdesk, Stripe) and returns one entry for each, with selected fields only. A provider that fails, or does not answer in time, gives `failed` and a fixed error text; the others still answer. A customer without an email address gives no entries. Calls the providers.",
         "parameters": [
           {
             "schema": {
