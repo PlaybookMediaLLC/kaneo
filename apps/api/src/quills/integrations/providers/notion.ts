@@ -96,4 +96,6 @@ export const notion = {
       }));
   },
   statuses: [],
+  // A channel ID is a database ID, which the default rule (30 letters and digits) refuses.
+  target: (target) => uuid.test(target),
 } satisfies OAuthProvider;

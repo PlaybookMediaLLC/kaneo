@@ -16,6 +16,7 @@ import { mintOAuthState } from "../../framework/signed";
 import quillsRouter from "../../index";
 import publicRouter from "../../public";
 import { APP_SECRET, platformCredentials } from "../oauth-seed.fixture";
+import { validTarget } from "./index";
 import { providerCalls, providerOverrides } from "../provider-edge.fixture";
 import "./notion.fixture";
 
@@ -134,6 +135,9 @@ describe.skipIf(!url)("Notion provider with PostgreSQL", () => {
       { id: "00000000-0000-4000-8000-000000000000", name: "Roadmap" },
       { id: "00000000-0000-4000-8000-000000000001", name: "Untitled" },
     ]);
+    // A listed database ID is a valid channel ID for later delivery and search.
+    expect(validTarget("notion", listed.body.destinations[0].id)).toBe(true);
+    expect(validTarget("notion", "../1")).toBe(false);
     const call = providerCalls
       .filter((entry) => entry.path === "/api.notion.com/v1/search")
       .pop();

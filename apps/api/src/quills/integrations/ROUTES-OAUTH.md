@@ -277,9 +277,11 @@ Missing (from `providers/README.md`, "Trello"):
   owner. The sealed secret is `accessToken`; Notion tokens do not expire.
 - Destinations: one kind, the databases that the teammate shared with the integration
   (`POST /v1/search`, one page of 100, `Notion-Version: 2022-06-28`). The route keeps only UUID IDs.
+  `target` accepts the same UUIDs as channel IDs; the default rule (30 letters and digits) would
+  refuse them.
 - Tests: `providers/notion.test.ts` (local provider server): connect with HTTP Basic and a sealed
-  token, the limit of 200, UUID filter and titles, a refused `kind`, and malformed answers (400 and
-  502 with fixed text).
+  token, the limit of 200, UUID filter and titles, the channel ID rule, a refused `kind`, and
+  malformed answers (400 and 502 with fixed text).
 
 | Difference from the source | Reason |
 |---|---|
