@@ -3,6 +3,7 @@ import {
   ProviderCallError,
   providerJson,
 } from "../../framework/integration-config";
+import { callFailed, chatText, grantedScopes } from "../delivery";
 import {
   expiresAt,
   form,
@@ -14,14 +15,31 @@ import {
 } from "../oauth-providers";
 
 // Delegated scopes only: a teammate can consent unless the tenant restricts user consent
-// (ROUTES-OAUTH.md, "Microsoft Teams"). Sending to a channel is delivery and needs more.
-const scope = "Team.ReadBasic.All Channel.ReadBasic.All offline_access";
+// (ROUTES-OAUTH.md, "Microsoft Teams"). Messages are posted as the teammate who connected.
+const scope =
+  "Team.ReadBasic.All Channel.ReadBasic.All ChannelMessage.Send offline_access";
 // Work and school accounts of any tenant. Personal accounts cannot use the Teams Graph APIs.
 const login = "https://login.microsoftonline.com/organizations/oauth2/v2.0";
 const graph = "https://graph.microsoft.com";
 const hosts = /^(login\.microsoftonline|graph\.microsoft)\.com$/;
 const guid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const channelId = /^19:[\w.=+-]{1,200}@thread\.[a-z0-9]{1,20}$/i;
+
+/** A channel is `<team ID>:<channel ID>`, split at the first `:`. The channel ID has its own `:`. */
+const parts = (target: string) => {
+  const at = target.indexOf(":");
+  return { team: target.slice(0, at), channel: target.slice(at + 1) };
+};
+
+/** Chat text as Teams HTML. Each markup character is escaped: no tag, mention or attachment gets in. */
+const html = (value: string) =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;")
+    .replaceAll("\n", "<br>");
 
 /** A token request. A missing access token is an empty string; the caller decides the error. */
 async function token(
@@ -45,9 +63,12 @@ async function token(
     ),
   );
   return {
-    accessToken: text(answer.access_token),
-    refreshToken: text(answer.refresh_token),
-    expiresAt: expiresAt(answer),
+    answer,
+    secrets: {
+      accessToken: text(answer.access_token),
+      refreshToken: text(answer.refresh_token),
+      expiresAt: expiresAt(answer),
+    },
   };
 }
 
@@ -81,8 +102,8 @@ export const teams = {
   name: "Microsoft Teams",
   hosts,
   category: "notifications",
-  description: "List the Microsoft Teams teams and channels of a connection.",
-  events: [],
+  description: "Post feedback events to Microsoft Teams channels.",
+  events: ["post.created", "post.status_changed", "comment.created"],
   channels: true,
   credentials: ["clientId", "clientSecret"],
   authorizeUrl: (creds, redirectUri, state) =>
@@ -95,13 +116,18 @@ export const teams = {
       state,
     })}`,
   exchange: async (code, redirectUri, creds) => {
-    const secrets = await token(
+    const { answer, secrets } = await token(
       { code, grant_type: "authorization_code", redirect_uri: redirectUri },
       creds,
     );
     if (!secrets.accessToken) throw rejected();
     // The tenant name needs User.Read, which this connection does not ask for.
-    return { secrets, workspaceName: "Microsoft Teams", account: null };
+    return {
+      secrets,
+      workspaceName: "Microsoft Teams",
+      account: null,
+      config: { scopes: grantedScopes(answer, scope) },
+    };
   },
   destinationKinds: { team: {}, channel: { parent: "team" } },
   destinations: async (secrets, _config, _creds, { kind, parent }) => {
@@ -127,7 +153,7 @@ export const teams = {
   statuses: [],
   // Access tokens expire after about one hour. Microsoft returns a new refresh token each time.
   refresh: async (secrets, creds) => {
-    const next = await token(
+    const { secrets: next } = await token(
       {
         grant_type: "refresh_token",
         refresh_token: secrets.refreshToken ?? "",
@@ -144,5 +170,39 @@ export const teams = {
       ...next,
       refreshToken: next.refreshToken || (secrets.refreshToken ?? ""),
     };
+  },
+  target: (value) => {
+    const { team, channel } = parts(value);
+    return value.length <= 100 && guid.test(team) && channelId.test(channel);
+  },
+  deliveryScopes: ["ChannelMessage.Send"],
+  // A message for each delivered event, posted as the teammate who connected. A message is not a
+  // create: it has no link.
+  deliver: async (d) => {
+    const { team, channel } = parts(d.target);
+    try {
+      await providerJson(
+        `${graph}/v1.0/teams/${encodeURIComponent(team)}/channels/${encodeURIComponent(channel)}/messages`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${d.secrets.accessToken ?? ""}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            body: { contentType: "html", content: html(chatText(d)) },
+          }),
+        },
+        hosts,
+      );
+    } catch (error) {
+      // A 401 proves that nothing was posted: the worker refreshes the token once and sends again.
+      if (error instanceof ProviderCallError && error.status === 401)
+        throw error;
+      // As in slack.ts: a 5xx waits for a retry (a message may repeat); no answer is uncertain.
+      return callFailed(error, false);
+    }
+    // A 2xx posted the message, whatever its body says.
+    return { state: "succeeded" };
   },
 } satisfies OAuthProvider;

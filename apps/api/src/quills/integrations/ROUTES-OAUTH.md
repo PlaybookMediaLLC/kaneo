@@ -565,19 +565,20 @@ Lane P3. File `providers/salesforce.ts`, type `salesforce`. Connect route
 
 ### Microsoft Teams
 
-Lane P4. Key `teams`, file `providers/teams.ts`. Connect and list only: delivery to a channel is out
-of scope for #131, so `events` and `statuses` stay empty.
+Lane P4 (connect and lists) and FU3c (delivery). Key `teams`, file `providers/teams.ts`. `statuses`
+stays empty: Teams has no status sync.
 
 ```
 Tables and owning schema:  quills: integration_platform_credentials (the OAuth app), integrations
-                           (sealed tokens), and the callback's kv_store, events, job_queue, audit_log.
-                           public: none.
+                           (sealed tokens, config.scopes), and the callback's kv_store, events, job_queue,
+                           audit_log. public: none.
 Actor and workspace:       the generic routes above: authenticated context; the callback uses the
-                           signed state.
-Permissions:               quills:manage_settings (connect, callback, destinations).
+                           signed state. Worker: the event's workspace.
+Permissions:               quills:manage_settings (connect, callback, destinations, channels).
 Transactions:              no provider call in a transaction (prepare, call, handler).
 External effects:          requests to login.microsoftonline.com (token) and graph.microsoft.com
-                           (lists). Nothing is written in Microsoft.
+                           (lists). Worker (FU3c): one channel message for each delivery, after the
+                           event's transaction committed.
 ```
 
 Consent flow:
@@ -587,16 +588,18 @@ Consent flow:
    secret with `saveQuillsPlatformCredentials`.
 2. The connect route returns
    `https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize` with the delegated scopes
-   `Team.ReadBasic.All Channel.ReadBasic.All offline_access`. The `organizations` endpoint accepts work
-   and school accounts of any tenant. It refuses personal Microsoft accounts, which cannot use the
-   Teams Graph APIs.
-3. Microsoft marks none of these delegated scopes "admin consent required". A user can consent for
-   themselves when the tenant's user consent policy allows it.
+   `Team.ReadBasic.All Channel.ReadBasic.All ChannelMessage.Send offline_access`. The `organizations`
+   endpoint accepts work and school accounts of any tenant. It refuses personal Microsoft accounts,
+   which cannot use the Teams Graph APIs.
+3. Microsoft marks none of these delegated scopes "admin consent required". The Microsoft Graph
+   permissions reference lists `ChannelMessage.Send` (delegated, "Send channel messages") with admin
+   consent "No". A user can consent for themselves when the tenant's user consent policy allows it.
 4. Many tenants restrict user consent (for example to verified publishers only, or to no apps). Then
    Microsoft shows "Need admin approval" and sends no code. A tenant admin grants consent one time for
    the organization: through the same connect, with "Consent on behalf of your organization", or in
    the Microsoft Entra admin center (Enterprise applications, Permissions). Then any teammate can
-   connect.
+   connect. The same applies when the policy allows user consent for some permissions only and
+   `ChannelMessage.Send` is not one of them.
 5. Failures, each with a fixed error. Microsoft's error text never reaches a response.
    - The redirect has `error` (for example `access_denied` or `consent_required`) and no `code`: the
      callback answers 400 "The provider did not grant access." It calls nothing.
@@ -604,8 +607,10 @@ Consent flow:
      consent was removed): 400 "The provider rejected the request."
    - A refused refresh (400 or 401): 409 "The provider rejected the saved credentials. Reconnect."
    - Graph refuses a list (403): 409 "The connected account may not do this in the provider."
-6. No application (app-only) permission and no bot registration. The lists use the signed-in user's
-   delegated token. Sending to a channel (`ChannelMessage.Send` or a bot) is delivery.
+6. No application (app-only) permission and no bot registration. The lists and the messages use the
+   delegated token of the teammate who connected, so each message shows that teammate as the sender.
+   Graph has no application permission that posts a channel message, except `Teamwork.Migrate.All` for
+   message import (migration).
 7. A single-tenant app registration fails at the `organizations` endpoint (AADSTS50194). A tenant ID
    option needs a connect field or a credential field. That is a follow-up.
 
@@ -625,19 +630,65 @@ Consent flow:
   200 items. A link to another host ends the list. An answer without a `value` list is 502.
 - The access token expires after about one hour. `refresh` uses the same `organizations` token
   endpoint and keeps the new refresh token.
-- For delivery (not in #131): a channel ID has `@`, which the channel route and the default
-  `validTarget` refuse. A Graph channel message also needs the team ID. The delivery lane adds a
-  `target` rule and a target key that holds both IDs. With `events: []`, no channel can be saved now.
+
+Delivery (FU3c, the worker; no route):
+
+- Events: `post.created`, `post.status_changed` and `comment.created`. The source hook posts a card for
+  each event that it gets; Kaneo delivers these three event types to integrations.
+- Channel: `<team ID>:<channel ID>`, split at the first `:`. Add it with
+  `POST /integrations/{integrationId}/channels`; the team ID comes from the team list and the channel
+  ID from the channel list. The rule: the team ID is a GUID; the channel ID follows the channel list's
+  rule (`19:`, 1 to 200 letters, digits, `_`, `.`, `=`, `+` or `-`, then `@thread.` and 1 to 20
+  letters and digits). The whole value has at most 100 characters, the limit of the channel route, so
+  a channel ID has at most 63 characters. The rule refuses `/`, `\`, `?`, `#`, `%`, spaces, control
+  characters and a second `:` in the channel ID. Another value answers 400.
+- Measured lengths (Microsoft Graph examples): a standard channel ID (`19:`, 32 hexadecimal
+  characters, `@thread.tacv2`) has 48 characters, 85 with its team ID. A shared channel ID (`19:` and
+  44 letters and digits) has 60 characters, 97 with its team ID.
+- Scopes: delivery needs `ChannelMessage.Send`. The callback stores the granted scopes in
+  `config.scopes`: the token answer's `scope` (Microsoft names the Graph scopes there, without
+  `offline_access`), or the requested scopes when the answer has none.
+- **Existing connections must reconnect.** A connection made before FU3c has no `config.scopes`: each
+  delivery ends `auth_required` with "Reconnect the integration to grant write access." and no call.
+  Its token refresh now asks for `ChannelMessage.Send`, which the teammate did not grant. Microsoft can
+  refuse that refresh; then the destinations route answers 409 "Reconnect" too. Before FU3c, a Teams
+  connection could save no channel (`events: []`), so no delivery stops.
+- Call: `POST https://graph.microsoft.com/v1.0/teams/<team ID>/channels/<channel ID>/messages`, each
+  ID with `encodeURIComponent`, on the fixed Graph host. The body is
+  `{ "body": { "contentType": "html", "content": "…" } }`, with no `mentions` and no `attachments`.
+- Content: the shared chat text (`chatText`: the event line, the title and at most 500 characters of
+  the post or comment; at most 1,900 characters in total). Every `&`, `<`, `>`, `"` and `'` is escaped,
+  and a line break becomes `<br>`. So a title, a post or a comment cannot add markup, an `<at>` mention
+  or an `<attachment>`. The escaped content has at most 11,400 bytes. Teams allows about 100 KB for
+  each post (Microsoft recommends 80 KB or less).
+- A message is not a create: it has no link and no remote ID. Any 2xx answer counts as posted,
+  whatever its body.
+- Outcomes:
+  - 401: the worker refreshes the token once and sends once more. A second 401 asks for a reconnect.
+  - 403: a reconnect (`auth_required`), with no retry. Graph also answers 403 to a teammate who left
+    the team or the private channel.
+  - 408 or 429: a retry within the job's limits. Graph throttles with 429.
+  - Another 4xx (for example 404 for a deleted channel): `failed`, with a fixed error.
+  - 5xx: a retry, as for Slack and Discord. Graph can post the message and then answer 5xx, so the
+    channel can show the message twice. For a notice, a repeat is better than a loss.
+  - No answer (a timeout or a closed connection): `uncertain`. The worker never sends it again.
+- Tests: `jobs/handlers/teams-delivery.test.ts` (the worker evidence for a message, the target rule,
+  the escaping and the size bound) and `providers/teams.test.ts` (the stored scopes).
 
 | Source | Kaneo |
 |---|---|
 | `common` endpoint | `organizations` endpoint (work and school accounts only) |
-| Scope `ChannelMessage.Send` | Not requested: it is for delivery |
+| Scope `ChannelMessage.Send` | Requested (FU3c). The granted scopes are stored in `config.scopes`; delivery needs this scope |
 | `/organization` read for the tenant name and ID | Not read: it needs `User.Read`, which is not requested. The name is "Microsoft Teams", with no account |
 | Two list functions; any `teamId` | The destinations route with kinds; the team must be one the connection lists |
 | Channels carry `isPrivate` | ID and name only |
 | First page only | `@odata.nextLink` on the Graph host, up to 200 items |
 | Provider error text in thrown errors | Fixed errors |
+| One `teamId` in the connection config | The team ID is part of each channel, so one connection posts to channels of more teams |
+| An Adaptive Card with a "View in Portal" link | Escaped HTML text with no link: no portal URL exists for a post yet |
+| Cards for `post.updated`, `post.deleted` and `post.merged` | Not sent: Kaneo delivers three event types |
+| The message ID is the delivery result | No result: a message has no link |
+| IDs enter the Graph path without encoding | Each ID is checked and encoded |
 
 ### Contacts and customer context
 
