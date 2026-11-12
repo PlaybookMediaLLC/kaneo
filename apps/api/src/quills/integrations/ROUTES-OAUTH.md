@@ -578,13 +578,12 @@ External effects:          GitHub webhook update (request, `call`); Slack users.
 
 | Source rows | Reason |
 |---|---|
-| Microsoft Teams | Graph channel messages need tenant consent and a bot registration. Decision D7 (RFC 0001) puts it in scope: lane P4. |
-| Asana, Azure DevOps, ClickUp, HubSpot, Intercom, Jira, Linear, Monday, Notion, Salesforce, Trello, Zendesk | Decision D7 (RFC 0001) puts them in scope: lanes P1 to P3 (see "Providers in RFC 0001"). |
-| Segment outbound sync (segment membership pushed to Segment) | RFC 0001 section 11 leaves Segment out of scope. Lane G1 builds only the connection and the identify hook, because identify has no other provider. |
+| Trello | Connect deferred: Trello returns the token in the URL fragment, and no page reads it yet. `providers/trello.ts` is built but not registered (see "Trello"). |
+| HubSpot, Intercom, Zendesk, Salesforce | Lane P3 of RFC 0001, pending. |
+| Segment outbound sync (segment membership pushed to Segment) | Lane G1 built the Segment connection (`saveQuillsSegmentConnection`) and the identify hook (`receiveQuillsIdentify`), because identify has no other provider. The outbound sync is not ported: RFC 0001 section 11 leaves Segment out of scope. |
 | GitLab self-managed instances | The provider host would come from user input; needs the SSRF-checked outbound path and a host field. gitlab.com only. |
 | `api/integrations/{type}/hooks/{kind}` kinds `interactions`, `commands`, `options` | The Slack `events` kind is built ("Agent channels"); buttons, the slash command and shortcuts are not ported. |
-| `api/v1/apps/**`, `apps*`, `setQuillsIframeHeaders` | The app sidebar authenticates a third-party app with its own token and needs iframe headers; neither fits the signed nor the teammate audience without a new app-token model. |
-| `oauth/connector/callback` | Assistant connectors (P8 assistant slice). |
+| `setQuillsIframeHeaders` | Web-only (#130). Lane X1 built the app sidebar routes (`api/v1/apps/**`) and the app registrations with the `app` audience: `apps/ROUTES.md`. |
 | `updateTicketStatusMappingsFn`, `updatePushStatusMappingsFn` | Ticket status sync and outbound status push need ticket links to tracker issues first. |
 | Ticket issue status sync | Inbound issue events update post links only. Ticket issue links are built (`support/TICKETS.md`, "Tracker issue links"). |
 | `verifyQuillsIntegrationSyncReference`, recovery `reconcile`/`keep_remote`/`link_existing` | Remote item inspection per provider; search exists, inspection does not. |
