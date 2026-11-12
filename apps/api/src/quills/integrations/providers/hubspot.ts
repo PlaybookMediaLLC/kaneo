@@ -27,11 +27,11 @@ const recordId = (value: unknown) => {
 };
 
 /** The token request. A rejected refresh token means the grant is gone: reconnect. */
-async function token(values: Record<string, string>) {
+async function token(values: Record<string, string>, signal?: AbortSignal) {
   return record(
     await providerJson(
       `${api}/oauth/v1/token`,
-      { method: "POST", headers: formHeaders, body: form(values) },
+      { method: "POST", headers: formHeaders, body: form(values), signal },
       hosts,
     ),
   );
@@ -41,12 +41,16 @@ async function token(values: Record<string, string>) {
  * The amounts of a contact's deals (at most 100, one batch read) in the account's currency: the
  * `amount` of a deal can be in another currency. A failed deal read leaves the deal fields out.
  */
-async function deals(accessToken: string, contactId: string) {
+async function deals(
+  accessToken: string,
+  contactId: string,
+  signal?: AbortSignal,
+) {
   const ids = list(
     record(
       await providerJson(
         `${api}/crm/v3/objects/contacts/${contactId}/associations/deals?limit=100`,
-        { headers: bearer(accessToken) },
+        { headers: bearer(accessToken), signal },
         hosts,
       ),
     ).results,
@@ -66,6 +70,7 @@ async function deals(accessToken: string, contactId: string) {
             properties: ["amount_in_home_currency"],
             inputs: ids.map((id) => ({ id })),
           }),
+          signal,
         },
         hosts,
       ),
@@ -128,17 +133,20 @@ export const hubspot = {
   destinations: async () => [],
   statuses: [],
   // Access tokens expire after 30 minutes.
-  refresh: (secrets, creds) =>
+  refresh: (secrets, creds, signal) =>
     refreshGrant(
-      token({
-        grant_type: "refresh_token",
-        client_id: creds.clientId ?? "",
-        client_secret: creds.clientSecret ?? "",
-        refresh_token: secrets.refreshToken ?? "",
-      }),
+      token(
+        {
+          grant_type: "refresh_token",
+          client_id: creds.clientId ?? "",
+          client_secret: creds.clientSecret ?? "",
+          refresh_token: secrets.refreshToken ?? "",
+        },
+        signal,
+      ),
       secrets,
     ),
-  contact: async (secrets, config, email) => {
+  contact: async (secrets, config, email, signal) => {
     const accessToken = secrets.accessToken ?? "";
     const [found] = rows(
       record(
@@ -163,6 +171,7 @@ export const hubspot = {
               ],
               limit: 1,
             }),
+            signal,
           },
           hosts,
         ),
@@ -171,7 +180,7 @@ export const hubspot = {
     const id = found && recordId(found.id);
     if (!found || !id) return null;
     const properties = record(found.properties);
-    const amounts = await deals(accessToken, id).catch(() => []);
+    const amounts = await deals(accessToken, id, signal).catch(() => []);
     const total = amounts.reduce((sum, amount) => sum + amount, 0);
     const portalId = recordId(config.portalId);
     const lifecycle = text(properties.lifecyclestage);
