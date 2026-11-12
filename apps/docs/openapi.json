@@ -87243,7 +87243,7 @@
           "Quills"
         ],
         "summary": "Save the OAuth app credentials for a provider",
-        "description": "A provider whose bot posts messages (Discord) also needs the bot token. Slack takes the app's signing secret for the assistant's event hook. Secrets are stored encrypted and never returned. Register the returned redirect URI in the provider app.",
+        "description": "A provider whose bot posts messages (Discord) also needs the bot token. Slack takes the app's signing secret for the assistant's event hook: a save without `signingSecret` keeps the stored one, and an empty value or null removes it. Secrets are stored encrypted and never returned. Register the returned redirect URI in the provider app.",
         "parameters": [
           {
             "schema": {
@@ -87310,10 +87310,23 @@
                     "pattern": "^[\\x21-\\x7e]+$"
                   },
                   "signingSecret": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 500,
-                    "pattern": "^[\\x21-\\x7e]+$"
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "^[\\x21-\\x7e]+$"
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          ""
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": [

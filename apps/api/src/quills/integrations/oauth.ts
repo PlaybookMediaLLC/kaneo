@@ -76,13 +76,14 @@ const saveCredentials = defineQuillsRoute({
   operationId: "saveQuillsPlatformCredentials",
   summary: "Save the OAuth app credentials for a provider",
   description:
-    "A provider whose bot posts messages (Discord) also needs the bot token. Slack takes the app's signing secret for the assistant's event hook. Secrets are stored encrypted and never returned. Register the returned redirect URI in the provider app.",
+    "A provider whose bot posts messages (Discord) also needs the bot token. Slack takes the app's signing secret for the assistant's event hook: a save without `signingSecret` keeps the stored one, and an empty value or null removes it. Secrets are stored encrypted and never returned. Register the returned redirect URI in the provider app.",
   action: "manage_settings",
   body: typeQuery.extend({
     // Nested: the OAuth client ID is a provider value, not an ID in this workspace.
     client: z.object({ id: credentialValue, secret: credentialValue }),
     botToken: credentialValue.optional(),
-    signingSecret: credentialValue.optional(),
+    // Omitted: keep the stored secret. Empty or null: remove it.
+    signingSecret: z.union([credentialValue, z.literal("")]).nullish(),
   }),
   response: credentialsView,
   responseDescription: "The masked credentials",
@@ -99,11 +100,24 @@ const saveCredentials = defineQuillsRoute({
     const fields = oauthProvider(body.type)!.credentials;
     if (fields.includes("botToken") && !body.botToken)
       throw new HTTPException(400, { message: "A bot token is required." });
+    // The row lock keeps a concurrent save from losing the secret that this save keeps.
+    const [stored] =
+      body.signingSecret === undefined
+        ? await db
+            .select({ secrets: platform.secrets })
+            .from(platform)
+            .where(eq(platform.integrationType, body.type))
+            .for("update")
+        : [];
+    const signingSecret =
+      body.signingSecret === undefined
+        ? stored && openCredentials(stored.secrets)?.signingSecret
+        : body.signingSecret;
     const secrets = sealCredentials({
       clientId: body.client.id,
       clientSecret: body.client.secret,
       ...(body.botToken && { botToken: body.botToken }),
-      ...(body.signingSecret && { signingSecret: body.signingSecret }),
+      ...(signingSecret && { signingSecret }),
     });
     await db
       .insert(platform)
