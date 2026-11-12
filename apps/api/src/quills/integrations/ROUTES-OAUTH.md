@@ -145,10 +145,12 @@ Filled by lane P1.
 - Destinations: one kind, the projects of that workspace (one page of 100, `archived=false`). The
   route keeps only IDs of 1 to 30 letters and digits.
 - Refresh: an access token that is due within a minute is refreshed first. Asana keeps the refresh
-  token. A refused refresh (400) is 409: reconnect.
+  token. A refused refresh (400) is 409: reconnect. A missing or out-of-range `expires_in` stores no
+  expiry, so that token is never refreshed.
 - Tests: `providers/asana.test.ts` (local provider server): connect with sealed tokens, the limit of
-  200 and the ID filter, refresh, refused refresh, malformed answers (400 and 502 with fixed text),
-  and a refused `kind`.
+  200, the ID filter and `archived=false`, a refused `kind`, refresh with the new expiry, refused
+  refresh, an account without a workspace (400), an out-of-range expiry, and malformed answers (400
+  and 502 with fixed text).
 
 | Difference from the source | Reason |
 |---|---|

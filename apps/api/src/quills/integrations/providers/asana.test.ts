@@ -61,7 +61,10 @@ describe.skipIf(!url)("Asana provider with PostgreSQL", () => {
       )}`,
       as(env.owner),
     );
-  const destinations = async (env: ReturnType<typeof contractEnv>) => {
+  const destinations = async (
+    env: ReturnType<typeof contractEnv>,
+    query = "",
+  ) => {
     const [row] = await env.scoped(env.a, (db) =>
       db
         .select({ id: integrations.id })
@@ -69,10 +72,10 @@ describe.skipIf(!url)("Asana provider with PostgreSQL", () => {
         .where(eq(integrations.integrationType, "asana")),
     );
     const res = await app.request(
-      `/quills/${env.a}/integrations/${row!.id}/destinations`,
+      `/quills/${env.a}/integrations/${row!.id}/destinations${query}`,
       as(env.owner),
     );
-    return { id: row!.id, status: res.status, body: await res.json() };
+    return { status: res.status, body: await res.json() };
   };
   const stored = async (env: ReturnType<typeof contractEnv>) => {
     const [row] = await env.scoped(env.a, (db) =>
@@ -85,6 +88,23 @@ describe.skipIf(!url)("Asana provider with PostgreSQL", () => {
       secrets: JSON.parse(decryptSecret(row!.secrets)!),
       config: row!.config,
     };
+  };
+  /** Makes the stored access token due, so the next provider call refreshes it first. */
+  const expire = async (env: ReturnType<typeof contractEnv>) => {
+    const { secrets } = await stored(env);
+    await env.scoped(env.a, (db) =>
+      db
+        .update(integrations)
+        .set({
+          secrets: encryptSecret(
+            JSON.stringify({
+              ...secrets,
+              expiresAt: new Date(Date.now() - 1000).toISOString(),
+            }),
+          )!,
+        })
+        .where(eq(integrations.integrationType, "asana")),
+    );
   };
   beforeAll(async () => {
     pool = new Pool({ connectionString: url, max: 5 });
@@ -147,27 +167,17 @@ describe.skipIf(!url)("Asana provider with PostgreSQL", () => {
     const call = lastCall(/^\/app\.asana\.com\/api\/1\.0\/projects\?/);
     const query = new URL(call!.path, "http://x").searchParams;
     expect(query.get("workspace")).toBe("1200");
+    expect(query.get("archived")).toBe("false");
     expect(query.get("limit")).toBe("100");
     expect(call!.authorization).toBe("Bearer asana-access");
+    // One kind of destination: a kind is refused.
+    expect((await destinations(env, "?kind=project")).status).toBe(400);
   });
 
   it("refreshes a due token first and stores only the token fields", async () => {
     const env = contractEnv();
     expect((await callback(env)).status).toBe(200);
-    const { secrets } = await stored(env);
-    await env.scoped(env.a, (db) =>
-      db
-        .update(integrations)
-        .set({
-          secrets: encryptSecret(
-            JSON.stringify({
-              ...secrets,
-              expiresAt: new Date(Date.now() - 1000).toISOString(),
-            }),
-          )!,
-        })
-        .where(eq(integrations.integrationType, "asana")),
-    );
+    await expire(env);
     providerOverrides.set("POST /app.asana.com/-/oauth_token", {
       status: 200,
       body: { access_token: "asana-refreshed", expires_in: 3600 },
@@ -187,30 +197,19 @@ describe.skipIf(!url)("Asana provider with PostgreSQL", () => {
     expect(lastCall(/\/projects\?/)!.authorization).toBe(
       "Bearer asana-refreshed",
     );
-    // Asana keeps the refresh token: the stored one stays.
-    expect((await stored(env)).secrets).toMatchObject({
+    // Asana keeps the refresh token: the stored one stays. The new expiry is stored.
+    const { secrets } = await stored(env);
+    expect(secrets).toMatchObject({
       accessToken: "asana-refreshed",
       refreshToken: "asana-refresh",
     });
+    expect(Date.parse(secrets.expiresAt)).toBeGreaterThan(Date.now());
   });
 
   it("asks for a reconnect when Asana rejects the refresh token", async () => {
     const env = contractEnv();
     expect((await callback(env)).status).toBe(200);
-    const { secrets } = await stored(env);
-    await env.scoped(env.a, (db) =>
-      db
-        .update(integrations)
-        .set({
-          secrets: encryptSecret(
-            JSON.stringify({
-              ...secrets,
-              expiresAt: new Date(Date.now() - 1000).toISOString(),
-            }),
-          )!,
-        })
-        .where(eq(integrations.integrationType, "asana")),
-    );
+    await expire(env);
     providerOverrides.set("POST /app.asana.com/-/oauth_token", {
       status: 400,
       body: { error: "invalid_grant", detail: "provider text" },
@@ -239,6 +238,27 @@ describe.skipIf(!url)("Asana provider with PostgreSQL", () => {
     } finally {
       providerOverrides.clear();
     }
+    // An account without an Asana workspace has no projects to list.
+    providerOverrides.set("GET /app.asana.com/api/1.0/users/me", {
+      status: 200,
+      body: { data: { name: "Contract", workspaces: [] } },
+    });
+    try {
+      expect((await callback(env)).status).toBe(400);
+    } finally {
+      providerOverrides.clear();
+    }
+    // An out-of-range expiry is no expiry, not a server error.
+    providerOverrides.set("POST /app.asana.com/-/oauth_token", {
+      status: 200,
+      body: { access_token: "asana-access", expires_in: 1e13 },
+    });
+    try {
+      expect((await callback(env)).status).toBe(200);
+      expect((await stored(env)).secrets.expiresAt).toBe("");
+    } finally {
+      providerOverrides.clear();
+    }
 
     expect((await callback(env)).status).toBe(200);
     providerOverrides.set("GET /app.asana.com/api/1.0/projects", {
@@ -254,16 +274,5 @@ describe.skipIf(!url)("Asana provider with PostgreSQL", () => {
     } finally {
       providerOverrides.clear();
     }
-  });
-
-  it("has one kind of destination and refuses a kind", async () => {
-    const env = contractEnv();
-    expect((await callback(env)).status).toBe(200);
-    const { id } = await destinations(env);
-    const res = await app.request(
-      `/quills/${env.a}/integrations/${id}/destinations?kind=project`,
-      as(env.owner),
-    );
-    expect(res.status).toBe(400);
   });
 });

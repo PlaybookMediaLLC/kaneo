@@ -26,7 +26,6 @@ const bearer = (accessToken: string) => ({
 async function tokens(
   creds: Record<string, string>,
   grant: Record<string, string>,
-  refreshToken = "",
 ) {
   const token = record(
     await providerJson(
@@ -44,14 +43,13 @@ async function tokens(
       hosts,
     ),
   );
-  const expiresIn = Number(token.expires_in);
+  // A missing, negative or out-of-range `expires_in` gives no expiry: the token is never refreshed.
+  const expiresAt = new Date(Date.now() + Number(token.expires_in) * 1000);
   return {
     accessToken: text(token.access_token),
     // A refresh answer has no new refresh token: the old one stays valid.
-    refreshToken: text(token.refresh_token) || refreshToken,
-    expiresAt: Number.isFinite(expiresIn)
-      ? new Date(Date.now() + expiresIn * 1000).toISOString()
-      : "",
+    refreshToken: text(token.refresh_token) || (grant.refresh_token ?? ""),
+    expiresAt: expiresAt.getTime() > Date.now() ? expiresAt.toISOString() : "",
   };
 }
 
@@ -116,14 +114,10 @@ export const asana = {
       }));
   },
   refresh: async (secrets, creds) => {
-    const next = await tokens(
-      creds,
-      {
-        grant_type: "refresh_token",
-        refresh_token: secrets.refreshToken ?? "",
-      },
-      secrets.refreshToken,
-    ).catch((error: unknown) => {
+    const next = await tokens(creds, {
+      grant_type: "refresh_token",
+      refresh_token: secrets.refreshToken ?? "",
+    }).catch((error: unknown) => {
       // A rejected refresh token means the grant is gone: reconnect.
       if (error instanceof ProviderCallError && error.status === 400)
         throw new ProviderCallError(401);
