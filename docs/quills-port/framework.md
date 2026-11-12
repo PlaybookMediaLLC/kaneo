@@ -33,6 +33,12 @@ Differences between this design and the P0 code:
   contract skips `strict-response` only for these routes. It checks `raw-response` instead (the
   declared content type and a text body) and still runs the leak checks on the text. Every other
   route must answer `application/json`.
+- A signed read may declare `raw: "text/html"` (follow-up FU1, the Trello bridge page). No other
+  audience may: a signed page is static, so no stored text becomes markup. The helper sends the page
+  with `htmlHeaders`: a CSP with `default-src 'none'`, `script-src` limited to the SHA-256 hashes of
+  the page's plain inline scripts, `connect-src 'self'`, `base-uri 'none'`, `form-action 'none'` and
+  `frame-ancestors 'none'`, and `Cache-Control: no-store`, `Referrer-Policy: no-referrer` and
+  `X-Content-Type-Options: nosniff`. The replay answer is a page too.
 - The declaration has the field `textBody` (public routes with a body): a `text/plain` body is read
   as JSON, so `sendBeacon` needs no CORS preflight. The body is at most 8 KiB. Another route answers
   `text/plain` with 415.

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { RouteHandler } from "@hono/zod-openapi";
 import type { Context, MiddlewareHandler } from "hono";
 import { HTTPException } from "hono/http-exception";
@@ -81,7 +82,7 @@ const SIGNED_BODY_BYTES = 1_048_576;
 /** A `textBody` route reads at most this much body. */
 const TEXT_BODY_BYTES = 8192;
 /** Content types of a raw (non-JSON) response. */
-export type RawType = "application/rss+xml" | "application/xml";
+export type RawType = "application/rss+xml" | "application/xml" | "text/html";
 
 export type QuillsRouteInput<P, Q, B> = {
   params: Output<P>;
@@ -169,8 +170,9 @@ export type QuillsRouteDeclaration<
   /** Non-teammate writes: attempts per client IP and workspace, counted even when the request fails. */
   rateLimit?: { limit: number; windowSeconds: number };
   /**
-   * Portal, widget and public reads: the handler returns the document as a string (the response
-   * schema is a string), sent with this content type instead of JSON.
+   * Portal, widget and public reads (RSS, XML) and signed reads (HTML): the handler returns the
+   * document as a string (the response schema is a string), sent with this content type instead of
+   * JSON. An HTML page gets the headers of `htmlHeaders`.
    */
   raw?: X;
   /**
@@ -342,6 +344,32 @@ type QuillsRoute<
   >;
 };
 
+/**
+ * The headers of an HTML page (a signed read with `raw: "text/html"`). The page runs only its own
+ * inline scripts, allowed by their SHA-256 hash, and may call only its own origin. It is never
+ * cached, framed or named in a Referer. A script tag with attributes gets no hash and does not run.
+ */
+export function htmlHeaders(page: string) {
+  const scripts = [...page.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(
+    ([, script]) =>
+      `'sha256-${createHash("sha256").update(script!).digest("base64")}'`,
+  );
+  return {
+    "content-type": "text/html; charset=utf-8",
+    "content-security-policy": [
+      "default-src 'none'",
+      `script-src ${scripts.join(" ") || "'none'"}`,
+      "connect-src 'self'",
+      "base-uri 'none'",
+      "form-action 'none'",
+      "frame-ancestors 'none'",
+    ].join("; "),
+    "cache-control": "no-store",
+    "referrer-policy": "no-referrer",
+    "x-content-type-options": "nosniff",
+  };
+}
+
 // Without a JSON content type, @hono/zod-openapi passes an optional body through as an unvalidated {}.
 function emptyBody(schema: z.ZodType) {
   const result = schema.safeParse({});
@@ -418,14 +446,17 @@ export function buildQuillsRoute<
   const prepare = d.prepare as ((input: object) => Promise<H>) | undefined;
   const audience: Audience = d.audience ?? "teammate";
   const customer = audience === "portal" || audience === "widget";
+  // HTML only from a signed route: its page is static, so no stored text can become markup.
   if (
     d.raw &&
-    (!(customer || audience === "public") ||
+    (!(d.raw === "text/html"
+      ? audience === "signed"
+      : customer || audience === "public") ||
       d.method !== "get" ||
       !(d.response instanceof z.ZodString))
   )
     throw new Error(
-      `${d.operationId}: a raw response is for a portal, widget or public read with a string response`,
+      `${d.operationId}: a raw response is for a read with a string response: HTML on a signed route, RSS or XML on a portal, widget or public route`,
     );
   if (d.textBody && (audience !== "public" || !d.body))
     throw new Error(
@@ -506,7 +537,12 @@ export function buildQuillsRoute<
       // Signed routes read and verify the raw body before parsing it, so no validator reads it first.
       request: { params: d.params, query: d.query },
       responses: {
-        200: jsonResponse(d.responseDescription, d.response),
+        200: d.raw
+          ? {
+              description: d.responseDescription,
+              content: { [d.raw]: { schema: d.response } },
+            }
+          : jsonResponse(d.responseDescription, d.response),
         401: errorResponse(signed ? "Invalid signature" : "Invalid token"),
         ...(signed &&
           d.body && {
@@ -561,6 +597,10 @@ export function buildQuillsRoute<
         query: d.query ? (c.req.valid("query") as Record<string, string>) : {},
       };
       const located = await verifier.locate(request);
+      const answer = (value: unknown) =>
+        d.raw
+          ? c.body(value as string, 200, htmlHeaders(value as string))
+          : c.json(value, 200);
       let body: unknown;
       const open = <T>(
         work: (
@@ -602,7 +642,7 @@ export function buildQuillsRoute<
                 prepared: await prepare({ ...input, db, credential, located }),
               },
         );
-        if (first === REPLAY) return c.json(d.replay, 200);
+        if (first === REPLAY) return answer(d.replay);
         called = await d.call!(first.prepared, first.input);
       }
       const result = await open(async (db, input, credential) => {
@@ -630,7 +670,7 @@ export function buildQuillsRoute<
           );
         return result;
       });
-      return c.json(result === REPLAY ? d.replay : result, 200);
+      return answer(result === REPLAY ? d.replay : result);
     }) as unknown as RouteHandler<typeof route, RouteEnv<A>>;
     return [route, handler] as const;
   }
