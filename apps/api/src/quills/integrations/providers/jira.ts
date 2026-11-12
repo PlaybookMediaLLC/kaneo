@@ -160,7 +160,8 @@ export const jira = {
   // An issue for a new post. The description is Jira's document format with plain text nodes, so the
   // post text is never read as markup.
   deliver: async ({ secrets, config, target, content }) => {
-    // A stored cloud ID that does not match: reconnect, with no call and no token refresh.
+    // A stored cloud ID that does not match: reconnect, with no issue call. It returns, not throws a
+    // 401, so the worker does not refresh the token for it (a due token was refreshed before).
     if (!cloudIdPattern.test(text(config.cloudId)))
       return { state: "auth_required", errorCode: "authentication" };
     const [project, issueType] = target.split(":");

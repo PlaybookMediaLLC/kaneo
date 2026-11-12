@@ -116,8 +116,10 @@ The worker sends through the provider registry (FU3a): each provider's `deliver`
 - A provider with `deliveryScopes` sends only when `config.scopes` holds them. Otherwise the sync ends
   `auth_required` with the fixed message "Reconnect the integration to grant write access." and no
   provider call. The job fails at once (no retry).
-- Fan-out creates no second item for a post that an earlier installation of the connection linked in
-  the same channel (a reconnect, then a resync).
+- A resync after a reconnect sends no create that an earlier installation of the connection sent or
+  may have sent to the same channel (its create is `running`, `uncertain` or `succeeded`). This applies
+  to every provider, chat and webhook ones too. A `failed` or `auth_required` create was certainly not
+  sent, so the resync sends it.
 - Adding a channel checks the provider's `target` rule (400 otherwise). The channel schema accepts 1 to
   100 characters without `/`, `\`, `?`, `#`, `%` or control characters.
 
@@ -175,7 +177,7 @@ Delivery (FU3a, the worker; no route):
 - **Existing connections must reconnect.** A connection made before FU3a has no `config.scopes`: each
   delivery ends `auth_required` with "Reconnect the integration to grant write access." and no call.
 - `POST https://api.atlassian.com/ex/jira/<cloudId>/rest/api/3/issue`. The stored cloud ID is checked
-  before each call (a bad one asks for a reconnect, with no call and no refresh). The summary is one
+  before each call (a bad one asks for a reconnect with no issue call; a due token is still refreshed first). The summary is one
   line of at most 255 characters. The description is Atlassian Document Format with plain text nodes:
   each line of the post (at most 2000 characters), a rule, the author and the board.
 - The issue key is the link's external ID. The link URL is `<site>/browse/<key>` only when the stored
@@ -237,9 +239,11 @@ Delivery (FU3a, the worker; no route):
 - The issue UUID is the link's external ID (an identifier changes when an issue moves to another team).
   The identifier (`ENG-12`) is the link's display ID and the sync history's `remoteDisplayId`. The URL
   is kept only on `https://linear.app`.
-- Linear answers 200 with `errors` for a refused mutation. With no `issueCreate`, no issue exists: an
-  authentication or forbidden error asks for a reconnect, a rate limit waits for a retry, other errors
-  fail. Any other answer without an issue is `uncertain`. Provider text is never kept.
+- Linear answers 200 with `errors` for a refused mutation. With no `issueCreate`, only a refusal before
+  the write proves that no issue exists: authentication or forbidden errors ask for a reconnect, a rate
+  limit waits for a retry, and invalid input, user, GraphQL, usage-limit or feature errors fail. Any
+  other error (an internal error or a lock timeout can follow a write) and any other answer without an
+  issue is `uncertain`. Provider text is never kept.
 - Tests: `jobs/handlers/tracker-delivery.test.ts` and `jobs/handlers/provider-send.test.ts`.
 
 | Difference from the source | Reason |
@@ -287,9 +291,11 @@ External effects:          project and work item type lists (dev.azure.com). Wor
 
 Delivery (FU3a, the worker; no route):
 
-- Events: `post.created` only, as in the source hook. A channel is `<project>:<work item type>`: two
-  names of letters, digits, spaces and `_ . & ( ) -` (at most 64 each), each starting with a letter or
-  digit, split at the first `:` (a project name has no `:`). Adding another channel answers 400.
+- Events: `post.created` only, as in the source hook. A channel is `<project>:<work item type>`, split
+  at the first `:`. Each name follows Azure DevOps' naming rules: at most 64 characters, none of
+  `\ / : * ? " ' < > ; # $ { } , + = [ ] |`, no control character, not starting with `_`, `.` or a
+  space and not ending with `.` or a space. `%` is refused too (the channel route refuses it), and the
+  whole channel has at most 100 characters (the mapping column). Adding another channel answers 400.
 - A personal access token has no granted-scope list: the teammate gives it "Work Items (Read & write)".
   A token without it gets 401 or 403, which asks for a reconnect (no refresh, no retry). Existing
   connections do not need to reconnect unless their token lacks that scope.

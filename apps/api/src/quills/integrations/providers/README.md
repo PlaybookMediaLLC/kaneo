@@ -128,8 +128,8 @@ provider in this registry:
    401 or 403 asks for a reconnect; 408 or 429 retries; another 4xx fails; a 5xx or no answer is
    `uncertain` and is never sent again;
 7. stores the outcome, the refreshed tokens and a `post_external_links` row for `result` in one
-   transaction. Fan-out creates one create per installation, post and channel, and none for a post that
-   an earlier installation already linked in the channel.
+   transaction. Fan-out creates one create per installation, post and channel. A resync after a
+   reconnect sends none that an earlier installation sent or may have sent to the channel.
 
 A later lane edits only its provider file, its fixture and its tests:
 
