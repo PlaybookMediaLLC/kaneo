@@ -10,6 +10,7 @@ import { events } from "../../database/quills/schema/events";
 import { importRuns } from "../../database/quills/schema/import-runs";
 import { jobQueue } from "../../database/quills/schema/job-queue";
 import * as kaneo from "../../database/schema";
+import { recordQuillsChange } from "../events";
 import quillsRouter from "../index";
 import {
   contractApp,
@@ -24,6 +25,7 @@ import {
   importWorkspaceArchive,
   prepareArchive,
 } from "../transfer/import-archive";
+import { parseJson } from "./area";
 import { brandingReceipt } from "./branding";
 import { developerReceipt } from "./developer";
 import { labsReceipt } from "./labs";
@@ -340,6 +342,53 @@ describe.skipIf(!url)("Quills settings receipts and undo", () => {
     expect(stale.body.message).toBe(
       "These settings changed since. Undo is unavailable.",
     );
+  });
+
+  it("orders receipts by the settings lock, not by when a transaction began", async () => {
+    const env = contractEnv();
+    /** A labs write with its receipt, as the update route does it, in a transaction that began earlier. */
+    const early = (statusPage: boolean) => {
+      let go!: () => void;
+      const gate = new Promise<void>((resolve) => (go = resolve));
+      let began!: () => void;
+      const ready = new Promise<void>((resolve) => (began = resolve));
+      const done = env.scoped(env.a, async (db, actor) => {
+        began();
+        await gate;
+        const [row] = await db.select().from(settings).limit(1).for("update");
+        const flags = parseJson(row!.featureFlags);
+        await db
+          .update(settings)
+          .set({ featureFlags: JSON.stringify({ ...flags, statusPage }) })
+          .where(eq(settings.id, row!.id));
+        await recordQuillsChange(db, actor, {
+          type: "settings.labs_updated",
+          entityType: "settings",
+          entityId: env.a,
+          receiptId: createId("audit_log"),
+          receipt: {
+            area: "labs",
+            before: { "featureFlags.statusPage": flags.statusPage === true },
+            after: { "featureFlags.statusPage": statusPage },
+          },
+        });
+      });
+      return { ready, go, done };
+    };
+    await call("PUT", "/settings/labs", { statusPage: false });
+    // B and C begin first; A takes the lock first, then B (off) and C (on).
+    const b = early(false);
+    const c = early(true);
+    await Promise.all([b.ready, c.ready]);
+    const a = await call("PUT", "/settings/labs", { statusPage: true });
+    b.go();
+    await b.done;
+    c.go();
+    await c.done;
+    // C is the newest change and holds A's value, so only the order of the rows can refuse A.
+    const res = await undo(a.body.receiptId);
+    expect(res.status).toBe(409);
+    expect((await call("GET", "/settings/labs")).body.statusPage).toBe(true);
   });
 
   it("answers 404 for an unknown ID or a row that is no receipt, and 403 without manage_settings", async () => {

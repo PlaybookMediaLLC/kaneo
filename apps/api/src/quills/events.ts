@@ -1,4 +1,5 @@
 import { createId, isValidTypeId, type AuditLogId } from "@kaneo/ids";
+import { sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Database, QuillsActor } from "../database/quills/client";
 import { auditLog } from "../database/quills/schema/audit-log";
@@ -463,6 +464,9 @@ export async function recordQuillsChange(
   const eventId = createId("event");
   await db.insert(auditLog).values({
     ...(receiptId && { id: receiptId as AuditLogId }),
+    // A receipt is written under the settings row lock: the insert time follows the lock order, so
+    // settings undo can tell which change came later. now() is the transaction start, which may not.
+    ...(receipt && { occurredAt: sql`clock_timestamp()` }),
     actorPrincipalId: actor?.principalId ?? null,
     actorType,
     eventType: change.type,
