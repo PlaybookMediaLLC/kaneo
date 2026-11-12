@@ -1,6 +1,7 @@
 import { providerAnswers } from "../provider-edge.fixture";
 
 // Answers of the local Asana server. The project list is longer than the route's limit of 200.
+export const ASANA_TASK = "1300";
 providerAnswers.push((route) => {
   if (route === "POST /app.asana.com/-/oauth_token")
     return {
@@ -24,6 +25,14 @@ providerAnswers.push((route) => {
           name: `Project ${i}`,
         })),
       ],
+    };
+  // A task create. The project is in the body, so one route answers every channel.
+  if (route === "POST /app.asana.com/api/1.0/tasks")
+    return {
+      data: {
+        gid: ASANA_TASK,
+        permalink_url: `https://app.asana.com/0/1000/${ASANA_TASK}`,
+      },
     };
   return undefined;
 });

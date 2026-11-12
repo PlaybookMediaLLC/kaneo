@@ -335,7 +335,7 @@ Delivery (FU3a, the worker; no route):
   stores the first Asana workspace of the account in `config.workspaceGid`. The sealed secrets are
   `accessToken`, `refreshToken` and `expiresAt`.
 - Destinations: one kind, the projects of that workspace (one page of 100, `archived=false`). The
-  route keeps only IDs of 1 to 30 letters and digits.
+  route keeps only gids of 1 to 30 digits.
 - Refresh: an access token that is due within a minute is refreshed first. Asana keeps the refresh
   token. A refused refresh (400) is 409: reconnect. A missing or out-of-range `expires_in` stores no
   expiry, so that token is never refreshed.
@@ -344,12 +344,34 @@ Delivery (FU3a, the worker; no route):
   refresh, an account without a workspace (400), an out-of-range expiry, and malformed answers (400
   and 502 with fixed text).
 
+Delivery (FU3b, the worker; no route):
+
+- Events: `post.created` only, as in the source hook. A channel is a project gid (1 to 30 digits, the
+  destination ID); adding another channel answers 400.
+- Scopes: none to add. The authorize URL lists no scopes (the OAuth app's settings grant them), so
+  there is no `deliveryScopes` and existing connections do not reconnect. A token that cannot create
+  tasks gets 403, which asks for a reconnect.
+- `POST https://app.asana.com/api/1.0/tasks` with `{ data: { name, html_notes, projects: [<gid>],
+  workspace } }`. The stored `config.workspaceGid` is checked before each call (a bad one asks for a
+  reconnect with no call). The name is one line of at most 255 characters. `html_notes` is Asana rich
+  text (XML): `<body>`, each line of the post (at most 2000 characters), a blank line, the author and
+  the board, with line breaks only. Every part is escaped (`&`, `<`, `>`), and characters that XML
+  refuses (control characters, lone surrogates) are dropped.
+- The task gid is the link's external ID. The link URL is `permalink_url` only on
+  `https://app.asana.com/` (no other host, port or user); otherwise it is empty. A 2xx answer without
+  a gid is `uncertain`.
+- A due token is refreshed before the call, and a 401 refreshes once and sends once more.
+- Tests: `jobs/handlers/asana-delivery.test.ts` (the worker evidence table, the escaped body, the
+  stored workspace and channel checks, and the link host rule).
+
 | Difference from the source | Reason |
 |---|---|
 | A connect without an Asana workspace, or with a failed profile read, fails. The source stored `unknown` and the name "Asana". | The project list needs the workspace. |
 | Asana filters archived projects (`archived=false`). The source filtered them after the call. | A page of 100 holds only active projects. |
 | The refresh also sends `redirect_uri`. | Asana's token endpoint documents it for both grants. |
-| No task creation, status sync, webhook or token revoke at disconnect. | Delivery and status sync are out of scope for #131. |
+| The notes use only `<body>` and line breaks. The source also used `<p>`, `<hr/>` and `<a>`. | Asana rich text does not list `<p>`; no portal URL exists for a post yet. |
+| The link URL is kept only on `https://app.asana.com/`. The source kept any `permalink_url`. | A link comes only from the provider's own host. |
+| No status sync, webhook or token revoke at disconnect. | Status sync is out of scope. |
 
 ### ClickUp
 
