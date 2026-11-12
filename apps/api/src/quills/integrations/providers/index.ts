@@ -76,6 +76,7 @@ export async function freshSecrets(
   type: string,
   secrets: Record<string, string>,
   creds: Record<string, string>,
+  signal?: AbortSignal,
 ): Promise<{
   secrets: Record<string, string>;
   refreshed: Record<string, string> | null;
@@ -85,6 +86,6 @@ export async function freshSecrets(
   if (!refresh || !Number.isFinite(due) || due > Date.now() + 60_000)
     return { secrets, refreshed: null };
   if (!secrets.refreshToken) throw new ProviderCallError(401);
-  const next = { ...secrets, ...(await refresh(secrets, creds)) };
+  const next = { ...secrets, ...(await refresh(secrets, creds, signal)) };
   return { secrets: next, refreshed: next };
 }

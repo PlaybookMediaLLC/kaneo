@@ -39,11 +39,11 @@ function salesforceInstance(value: unknown) {
 // after a rejected call instead when withToken (../oauth.ts) supports it.
 const expiresAt = () => new Date(Date.now() + 15 * 60_000).toISOString();
 
-async function token(values: Record<string, string>) {
+async function token(values: Record<string, string>, signal?: AbortSignal) {
   return record(
     await providerJson(
       `${login}/token`,
-      { method: "POST", headers: formHeaders, body: form(values) },
+      { method: "POST", headers: formHeaders, body: form(values), signal },
       hosts,
     ),
   );
@@ -94,18 +94,21 @@ export const salesforce = {
   destinations: async () => [],
   statuses: [],
   // Returns the token fields only: an instance URL in the answer cannot change the stored instance.
-  refresh: (secrets, creds) =>
+  refresh: (secrets, creds, signal) =>
     refreshGrant(
-      token({
-        grant_type: "refresh_token",
-        client_id: creds.clientId ?? "",
-        client_secret: creds.clientSecret ?? "",
-        refresh_token: secrets.refreshToken ?? "",
-      }),
+      token(
+        {
+          grant_type: "refresh_token",
+          client_id: creds.clientId ?? "",
+          client_secret: creds.clientSecret ?? "",
+          refresh_token: secrets.refreshToken ?? "",
+        },
+        signal,
+      ),
       secrets,
       expiresAt,
     ),
-  contact: async (secrets, config, email) => {
+  contact: async (secrets, config, email, signal) => {
     const instance = salesforceInstance(config.instanceUrl);
     if (!instance) throw new ProviderCallError(401);
     // A SOQL string literal: escape the backslash and the quote.
@@ -121,6 +124,7 @@ export const salesforce = {
               authorization: `Bearer ${secrets.accessToken ?? ""}`,
               accept: "application/json",
             },
+            signal,
           },
           hosts,
         ),

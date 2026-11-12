@@ -572,6 +572,12 @@ Merged: `searchHubSpotContactFn`, `searchIntercomContactFn` and `searchZendeskUs
   at most six entries. Each entry has `status` (`found`, `not_found` or `failed`) and, when it failed, a
   fixed error text. One failure does not fail the read. A person without an email gives no entries and
   no calls.
+- Deadlines (`lookupLimits` in `contacts.ts`): each provider has 8 seconds for its whole chain (a token
+  refresh, the lookup and its follow-up reads). The context read has 10 seconds from its start, and its
+  providers run at once. At the deadline the provider's requests are aborted, and its entry is `failed`
+  with "The provider did not answer in time. Try again." The read does not wait for a call that ignores
+  the abort. The contact route answers this text with 502. A refresh that finished before the deadline
+  is stored. A refresh that did not finish changes no stored token.
 - Freshdesk uses the saved key and the help desk host that the Freshdesk save route stores as the
   account label. The lookup checks the host against `<label>.freshdesk.com` before the call. Stripe
   uses the saved key and the first customer with the email.
@@ -589,6 +595,8 @@ the SOQL quote escape; contact found, not found and malformed answers, and the e
 exact-email rule and a changed stored subdomain in Zendesk; the Intercom company and tag names;
 Freshdesk and Stripe found, and a changed Freshdesk host; context with the customer's email, a lead's
 contact email, no email, a refresh and a `not_found` entry; context with two providers where one fails;
+providers that hang (one ignores the abort) at the provider budget and at the read's deadline; HubSpot's
+chained reads at the budget; a refresh that finished before the deadline (both routes) and one that did not;
 context refused for a teammate, a teammate's portal profile, a person of workspace B and a removed
 person; no email or token in audit, event or job rows.
 
