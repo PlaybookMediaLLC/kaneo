@@ -13,7 +13,14 @@ import {
   openCredentials,
   sealCredentials,
 } from "../framework/integration-config";
-import { mintOAuthState, oauthState } from "../framework/signed";
+import {
+  mintOAuthState,
+  oauthState,
+  unauthorized,
+  type Located,
+  type SignedVerifier,
+} from "../framework/signed";
+import { bridgePage, usedPage } from "./oauth-bridge";
 import {
   connect,
   connectedEvent,
@@ -26,9 +33,11 @@ import {
   failureOf,
   providerFailure,
   redirectUri,
+  signedUrl,
   tokenFields,
   type Destination,
   type DestinationScope,
+  type Exchanged,
   type ExternalItem,
   type OAuthProvider,
 } from "./oauth-providers";
@@ -38,6 +47,7 @@ import {
   oauthProvider,
   oauthTypes,
   validTarget,
+  type OAuthProviderType,
 } from "./providers";
 
 // OAuth connections (the providers in providers/). A teammate saves the workspace's OAuth app
@@ -46,7 +56,20 @@ import {
 // NOTIFICATION_SECRET_ENCRYPTION_KEY and never returned. Every provider call runs with no database
 // transaction open: read, release, call, then write in a new scoped transaction.
 
-const typeParams = z.object({ type: z.enum(oauthTypes) });
+type Types = [OAuthProviderType, ...OAuthProviderType[]];
+/** A provider that returns a token in the URL fragment (Trello) completes through the bridge page. */
+const fragment = (type: OAuthProviderType) =>
+  oauthApp(type).callback === "fragment";
+// The code callback never takes a fragment provider's token: that path has no Origin check.
+const typeParams = z.object({
+  type: z.enum(oauthTypes.filter((type) => !fragment(type)) as Types),
+});
+const fragmentParams = z.object({
+  type: z.enum(oauthTypes.filter(fragment) as Types),
+});
+/** Where the provider sends the browser back: the signed callback, or the bridge page. */
+const returnUri = (type: OAuthProviderType) =>
+  fragment(type) ? signedUrl(`/oauth/${type}/bridge`) : redirectUri(type);
 const credentialValue = z.string().min(1).max(500).regex(credentialText);
 const notConfigured = () =>
   new HTTPException(409, {
@@ -139,7 +162,7 @@ const saveCredentials = defineQuillsRoute({
     return {
       configured: true,
       clientId: body.client.id,
-      redirectUri: redirectUri(body.type),
+      redirectUri: returnUri(body.type),
     };
   },
 });
@@ -159,7 +182,7 @@ const getCredentials = defineQuillsRoute({
     return {
       configured: Boolean(creds),
       clientId: creds?.clientId ?? null,
-      redirectUri: redirectUri(query.type),
+      redirectUri: returnUri(query.type),
     };
   },
 });
@@ -210,7 +233,7 @@ async function authorization(
   return {
     authorizeUrl: oauthApp(type).authorizeUrl(
       creds,
-      redirectUri(type),
+      returnUri(type),
       state,
       fields,
     ),
@@ -279,6 +302,45 @@ const callbackResult = z.object({
   status: z.enum(["connected", "already_used"]),
   integration: integrationSummary.nullable(),
 });
+/** Both callbacks, after the exchange: seal the tokens and connect as the teammate who started it. */
+const completion = {
+  replay: { status: "already_used", integration: null },
+  event: (input: unknown, result: z.output<typeof callbackResult>) =>
+    result.integration
+      ? connectedEvent(input, { integration: result.integration })
+      : false,
+  // The audit row names the teammate who started the connect.
+  actor: (db: Database, located: Located) =>
+    teammate(db, located.claims?.userId ?? ""),
+} as const;
+async function connectAs({
+  db,
+  params,
+  located,
+  called,
+  workspaceId,
+}: {
+  db: Database;
+  params: { type: OAuthProviderType };
+  located: Located;
+  called: Exchanged;
+  workspaceId: string;
+}) {
+  const userId = located.claims?.userId ?? "";
+  const principalId = await teammate(db, userId);
+  const result = await connect(
+    db,
+    { principalId, userId, workspaceId },
+    params.type,
+    {
+      secrets: sealCredentials(called.secrets),
+      workspaceName: called.workspaceName,
+      account: called.account,
+      config: called.config,
+    },
+  );
+  return { status: "connected" as const, integration: result.integration };
+}
 const callback = defineQuillsRoute({
   audience: "signed",
   verifier: oauthState,
@@ -303,7 +365,6 @@ const callback = defineQuillsRoute({
     409: "No OAuth app credentials, or the provider rejected the credentials",
     502: "The provider could not be reached",
   },
-  replay: { status: "already_used", integration: null },
   prepare: async ({ db, params, query, located }) => {
     if (!query.code)
       throw new HTTPException(400, {
@@ -318,28 +379,89 @@ const callback = defineQuillsRoute({
     oauthApp(params.type)
       .exchange(code, redirectUri(params.type), creds, fields)
       .catch(providerFailure),
-  event: (input, result) =>
-    result.integration
-      ? connectedEvent(input, { integration: result.integration })
-      : false,
-  // The audit row names the teammate who started the connect.
-  actor: (db, located) => teammate(db, located.claims?.userId ?? ""),
-  handler: async ({ db, params, located, called, workspaceId }) => {
-    const userId = located.claims?.userId ?? "";
-    const principalId = await teammate(db, userId);
-    const result = await connect(
-      db,
-      { principalId, userId, workspaceId },
-      params.type,
-      {
-        secrets: sealCredentials(called.secrets),
-        workspaceName: called.workspaceName,
-        account: called.account,
-        config: called.config,
-      },
-    );
-    return { status: "connected" as const, integration: result.integration };
+  ...completion,
+  handler: (input) => connectAs(input),
+});
+
+/**
+ * The bridge page checks the state as the callback does, with a receipt of its own: it opens once for
+ * each state, and opening it does not use the state up.
+ */
+const bridgeState: SignedVerifier = { ...oauthState, name: "oauth-bridge" };
+/**
+ * The token post checks and uses up the state as the code callback does (the same receipts). A
+ * browser sends `Origin` with every POST: it must be this API's origin, and `Sec-Fetch-Site`, when
+ * sent, must be same-origin. So only the bridge page of this instance can post a token into the
+ * session. 401 otherwise, before any database access.
+ */
+const fragmentState: SignedVerifier = {
+  name: oauthState.name,
+  locate: (request) => {
+    const site = request.headers.get("sec-fetch-site");
+    if (
+      request.headers.get("origin") !== new URL(signedUrl("")).origin ||
+      (site !== null && site !== "same-origin")
+    )
+      throw unauthorized();
+    return oauthState.locate(request);
   },
+};
+const stateQuery = z.object({ state: z.string().min(1).max(2048) });
+
+const bridge = defineQuillsRoute({
+  audience: "signed",
+  verifier: bridgeState,
+  method: "get",
+  path: "/oauth/{type}/bridge",
+  operationId: "openQuillsOAuthBridge",
+  summary: "Open the bridge page of an OAuth connection with a fragment token",
+  description:
+    "Trello sends the browser here with the token in the URL fragment, which no server receives. The page removes the fragment, then posts the token to `completeQuillsOAuthFragmentConnect` with the same state. The state is checked as in the callback; the page opens once for each state and does not use the state up.",
+  action: "manage_settings",
+  params: fragmentParams,
+  query: stateQuery,
+  raw: "text/html",
+  response: z.string(),
+  responseDescription: "The bridge page",
+  errors: { 403: "The account no longer manages Quills settings" },
+  replay: usedPage,
+  event: { none: "The page changes nothing; the callback connects." },
+  handler: async () => bridgePage,
+});
+
+const fragmentCallback = defineQuillsRoute({
+  audience: "signed",
+  verifier: fragmentState,
+  method: "post",
+  path: "/oauth/{type}/callback",
+  operationId: "completeQuillsOAuthFragmentConnect",
+  summary: "Complete an OAuth connection with a token from the URL fragment",
+  description:
+    "The bridge page posts the token here. `Origin` must be this API's origin. The signed state must be unexpired, unused, for this provider and for the signed-in account, which must still hold quills:manage_settings in the state's workspace. The provider checks the token before it is stored; it is never returned.",
+  action: "manage_settings",
+  params: fragmentParams,
+  query: stateQuery,
+  body: z.object({ token: z.string().min(1).max(2048) }),
+  response: callbackResult,
+  responseDescription: "The connection without its tokens",
+  errors: {
+    400: "The provider rejected the token",
+    403: "The account no longer manages Quills settings",
+    409: "No OAuth app credentials, or the provider rejected the credentials",
+    502: "The provider could not be reached",
+  },
+  prepare: async ({ db, params, body, located }) => {
+    const fields = stateFields(params.type, located.claims?.fields);
+    const creds = await appCredentials(db, params.type);
+    if (!creds?.clientId) throw notConfigured();
+    return { creds, token: body.token, fields };
+  },
+  call: ({ creds, token, fields }, { params }) =>
+    oauthApp(params.type)
+      .exchange(token, returnUri(params.type), creds, fields)
+      .catch(providerFailure),
+  ...completion,
+  handler: (input) => connectAs(input),
 });
 
 /**
@@ -642,5 +764,8 @@ for (const type of otherTypes) {
 
 export default router.openapi(...listDestinations).openapi(...searchItems);
 
-/** The signed OAuth callback, mounted from quills/public.ts. */
-export const oauthCallback = apiRouter().openapi(...callback);
+/** The signed OAuth callbacks and the bridge page, mounted from quills/public.ts. */
+export const oauthCallback = apiRouter()
+  .openapi(...callback)
+  .openapi(...bridge)
+  .openapi(...fragmentCallback);
