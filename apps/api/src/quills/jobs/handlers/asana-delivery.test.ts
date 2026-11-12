@@ -78,8 +78,9 @@ describe("Asana task body and answers", () => {
           post: {
             id: "post_1",
             title: 'Title "}]}\n<b>bold</b> &amp;\u0000',
+            // Letters outside ASCII, a CJK word and an emoji (a surrogate pair) stay.
             content:
-              "</body><script>alert(1)</script>\n\u0007bell & <![CDATA[x]]>\n\uD800lone",
+              "</body><script>alert(1)</script>\n\u0007bell & <![CDATA[x]]>\n\uD800lone Ünïcödé 日本 😀￾",
             author: "Ada <ada@example.test>",
           },
         },
@@ -91,7 +92,7 @@ describe("Asana task body and answers", () => {
         // Plain text in JSON: one line, nothing escaped.
         name: 'Title "}]} <b>bold</b> &amp;\u0000',
         html_notes:
-          "<body>&lt;/body&gt;&lt;script&gt;alert(1)&lt;/script&gt;\nbell &amp; &lt;![CDATA[x]]&gt;\nlone\n\n" +
+          "<body>&lt;/body&gt;&lt;script&gt;alert(1)&lt;/script&gt;\nbell &amp; &lt;![CDATA[x]]&gt;\nlone Ünïcödé 日本 😀\n\n" +
           'Submitted by: Ada &lt;ada@example.test&gt;\nBoard: Board &lt;/body&gt;&lt;a href="x"&gt;</body>',
         projects: ["1000"],
         workspace: "1200",

@@ -95,6 +95,9 @@ describe("Notion page body and answers", () => {
     );
     expect(outcome).toMatchObject({ state: "succeeded" });
     expect(providerCalls[0]!.authorization).toBe("Bearer notion_token");
+    // Notion refuses a call without its API version.
+    const [, init] = vi.mocked(globalThis.fetch).mock.calls.at(-1)!;
+    expect(new Headers(init?.headers).get("notion-version")).toBe("2022-06-28");
     expect(sentBody()).toEqual({
       parent: { database_id: NOTION_DATABASE },
       properties: {
@@ -134,6 +137,13 @@ describe("Notion page body and answers", () => {
     expect(last.startsWith("L96\nL97\n")).toBe(true);
     expect(last.length).toBeLessThanOrEqual(2000);
     expect(children.at(-1)).toEqual(paragraph("Board: Ideas"));
+  });
+
+  it("sends nothing for an event that Notion does not deliver", async () => {
+    expect(await deliver(delivery({ type: "post.status_changed" }))).toEqual({
+      state: "succeeded",
+    });
+    expect(providerCalls).toEqual([]);
   });
 
   it("refuses a channel that is not a database UUID, with no call", async () => {

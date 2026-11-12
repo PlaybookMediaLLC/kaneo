@@ -53,6 +53,9 @@ vi.mock("../../../ws", () => ({
 const CARDS = "POST /api.trello.com/1/cards";
 // Built at run time: no key-like or token-like literal in the source.
 const KEY = "key".repeat(11).slice(0, 32);
+/** The OAuth app's key in a harness workspace (`…_a` or `…_b`): each workspace saves its own. */
+const keyOf = (workspaceId: string) =>
+  `${workspaceId.endsWith("_b") ? "b" : "a"}${KEY.slice(1)}`;
 const token = (workspaceId: string) =>
   `t${"0".repeat(31)}${workspaceId.replace(/[^A-Za-z0-9]/g, "")}`;
 const header = (key: string, accessToken: string) =>
@@ -202,7 +205,8 @@ const trello: DeliveryCase = {
   config: {},
   // Trello tokens set to never expire: no refresh.
   secrets: (workspaceId) => ({ accessToken: token(workspaceId) }),
-  authorization: (workspaceId) => header(KEY, token(workspaceId)),
+  authorization: (workspaceId) =>
+    header(keyOf(workspaceId), token(workspaceId)),
   create: CARDS,
   contentType: "application/json",
   query: "",
@@ -224,17 +228,24 @@ const trello: DeliveryCase = {
 // Seam gap: the evidence table saves the workspace's OAuth app only for a provider with a token
 // route (`token`). Trello has no refresh, but its delivery needs the app's API key. Until the shared
 // fixture saves the app for such a provider, a trigger saves it whenever the table adds a Trello
-// connection. Remove this block with that fixture change.
+// connection. Each workspace gets its own key, so the isolation test sees a key from the wrong
+// workspace. Remove this block with that fixture change.
 describe("Trello with the workspace's OAuth app", () => {
   const seed = "fu3b_trello_app";
-  beforeEach(async () => {
-    const sealed = encryptSecret(
-      JSON.stringify({ clientId: KEY, clientSecret: "app-secret" }),
+  const sealed = (workspace: string) =>
+    encryptSecret(
+      JSON.stringify({
+        clientId: keyOf(workspace),
+        clientSecret: "app-secret",
+      }),
     )!;
+  beforeEach(async () => {
     await pool.query(
       `CREATE OR REPLACE FUNCTION public.${seed}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
          INSERT INTO quills.integration_platform_credentials (workspace_id, id, integration_type, secrets)
-         VALUES (NEW.workspace_id, gen_random_uuid(), 'trello', '${sealed}') ON CONFLICT DO NOTHING;
+         VALUES (NEW.workspace_id, gen_random_uuid(), 'trello',
+           CASE WHEN right(NEW.workspace_id, 2) = '_b' THEN '${sealed("_b")}' ELSE '${sealed("_a")}' END)
+         ON CONFLICT DO NOTHING;
          RETURN NEW;
        END $$`,
     );

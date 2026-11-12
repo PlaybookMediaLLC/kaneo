@@ -99,6 +99,13 @@ describe("ClickUp task body and answers", () => {
     ]);
   });
 
+  it("sends nothing for an event that ClickUp does not deliver", async () => {
+    expect(await deliver(delivery({ type: "comment.created" }))).toEqual({
+      state: "succeeded",
+    });
+    expect(providerCalls).toEqual([]);
+  });
+
   it("refuses a channel that is not a list ID, with no call", async () => {
     for (const target of ["../3000", "3000/task", "abc", "1".repeat(31)])
       expect(await deliver(delivery({ target }))).toMatchObject({
