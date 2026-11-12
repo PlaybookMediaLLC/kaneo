@@ -262,3 +262,31 @@ describe("Linear answers", () => {
     });
   });
 });
+
+describe("stored values checked before each call", () => {
+  const CLOUD = "11111111-2222-3333-4444-555555555555";
+  it("asks for a reconnect with no call for a bad Jira cloud ID or Azure DevOps organization", async () => {
+    for (const [provider, config, target] of [
+      ["jira", { cloudId: "../evil", scopes: "write:jira-work" }, "1:2"],
+      ["jira", { cloudId: "evil.test/x", scopes: "write:jira-work" }, "1:2"],
+      ["azure_devops", { organization: "evil.test/x" }, "App:Bug"],
+      ["azure_devops", { organization: "" }, "App:Bug"],
+    ] as const)
+      expect(
+        await deliver({ ...gitlab(), provider, config, target }),
+        `${provider} ${JSON.stringify(config)}`,
+      ).toMatchObject({ state: "auth_required", errorCode: "authentication" });
+    expect(providerCalls).toEqual([]);
+  });
+  it("refuses a channel that is not the provider's shape before any call", async () => {
+    for (const [provider, config, target] of [
+      ["jira", { cloudId: CLOUD, scopes: "write:jira-work" }, "../1:2"],
+      ["azure_devops", { organization: "contract" }, "..:Bug"],
+      ["linear", { scopes: "issues:create" }, "../teams"],
+    ] as const)
+      expect(
+        await deliver({ ...gitlab(), provider, config, target }),
+      ).toMatchObject({ state: "failed", errorCode: "provider_failed" });
+    expect(providerCalls).toEqual([]);
+  });
+});

@@ -3,6 +3,7 @@ import {
   ProviderCallError,
   providerJson,
 } from "../../framework/integration-config";
+import { issueParts, uncertain } from "../delivery";
 import { record, rejected, text, type OAuthProvider } from "../oauth-providers";
 
 const hosts = /^dev\.azure\.com$/;
@@ -34,6 +35,20 @@ function organizationOf(config: Record<string, unknown>) {
   return organization;
 }
 
+const headers = (token: string) => ({
+  authorization: `Basic ${Buffer.from(`:${token}`).toString("base64")}`,
+  accept: "application/json",
+  // A refused token then gets 401, not a sign-in page with status 203.
+  "x-tfs-fedauthredirect": "Suppress",
+});
+const escapeHtml = (value: string) =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+
 /**
  * The names in one list of the organization's API, as destinations. The ID is the name: the work item
  * type list takes the project name. `path` starts with the encoded organization.
@@ -42,14 +57,7 @@ async function names(token: string, path: string) {
   const value = record(
     await providerJson(
       `https://dev.azure.com/${path}?api-version=7.1`,
-      {
-        headers: {
-          authorization: `Basic ${Buffer.from(`:${token}`).toString("base64")}`,
-          accept: "application/json",
-          // A refused token then gets 401, not a sign-in page with status 203.
-          "x-tfs-fedauthredirect": "Suppress",
-        },
-      },
+      { headers: headers(token) },
       hosts,
     ),
   ).value;
@@ -66,8 +74,8 @@ export const azureDevops = {
   hosts,
   category: "issue_tracking",
   description:
-    "Connect an Azure DevOps organization with a personal access token.",
-  events: [],
+    "Create Azure DevOps work items from new feedback, with a personal access token.",
+  events: ["post.created"],
   channels: true,
   credentials: [],
   connectWithKey: async (key, fields) => {
@@ -105,4 +113,47 @@ export const azureDevops = {
   statuses: [],
   // `<project>:<work item type>`, the names of a destination of each kind.
   target: (target) => channelOf(target) !== undefined,
+  // A work item for a new post. The description is HTML: each part of the post is escaped.
+  deliver: async ({ secrets, config, target, content }) => {
+    const { project, type } = channelOf(target)!;
+    const parts = issueParts(content);
+    // The organization is checked again before it enters the URL; a bad one asks for a reconnect.
+    const base = `https://dev.azure.com/${encodeURIComponent(organizationOf(config))}/${encodeURIComponent(project)}`;
+    const item = record(
+      await providerJson(
+        `${base}/_apis/wit/workitems/$${encodeURIComponent(type)}?api-version=7.1`,
+        {
+          method: "POST",
+          headers: {
+            ...headers(secrets.accessToken ?? ""),
+            "content-type": "application/json-patch+json",
+          },
+          body: JSON.stringify([
+            { op: "add", path: "/fields/System.Title", value: parts.title },
+            {
+              op: "add",
+              path: "/fields/System.Description",
+              value: [
+                ...parts.paragraphs.map((line) => `<p>${escapeHtml(line)}</p>`),
+                "<hr>",
+                ...parts.footer.map((line) => `<p>${escapeHtml(line)}</p>`),
+              ].join(""),
+            },
+          ]),
+        },
+        hosts,
+      ),
+    );
+    // A 2xx without a work item ID: the item may exist.
+    if (!Number.isSafeInteger(item.id) || (item.id as number) <= 0)
+      return uncertain;
+    return {
+      state: "succeeded",
+      // The link is built on the fixed host, not taken from the answer.
+      result: {
+        externalId: String(item.id),
+        externalUrl: `${base}/_workitems/edit/${item.id as number}`,
+      },
+    };
+  },
 } satisfies OAuthProvider;

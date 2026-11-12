@@ -33,6 +33,7 @@ import {
   providerCalls,
   providerOverrides,
 } from "../../integrations/provider-edge.fixture";
+import "../../integrations/providers/azure-devops.fixture";
 import { JIRA_CLOUD_ID } from "../../integrations/providers/jira.fixture";
 import { LINEAR_ISSUE } from "../../integrations/providers/linear.fixture";
 import { enqueueQuillsJob } from "../queue";
@@ -214,6 +215,34 @@ const trackers: Tracker[] = [
           },
         },
       }),
+  },
+  {
+    type: "azure_devops",
+    // A project name with a space: the channel route and the target rule accept it.
+    channel: "Contract App:Bug",
+    config: { organization: "contract" },
+    secrets: (workspaceId) => ({ accessToken: `pat_${workspaceId}` }),
+    authorization: (workspaceId) =>
+      `Basic ${Buffer.from(`:pat_${workspaceId}`).toString("base64")}`,
+    create:
+      "POST /dev.azure.com/contract/Contract%20App/_apis/wit/workitems/$Bug",
+    link: {
+      externalId: "42",
+      // Built on the fixed host, not taken from the answer.
+      externalUrl:
+        "https://dev.azure.com/contract/Contract%20App/_workitems/edit/42",
+      externalDisplayId: null,
+    },
+    request: (body, board) =>
+      expect(body).toEqual([
+        { op: "add", path: "/fields/System.Title", value: "Integration post" },
+        {
+          op: "add",
+          path: "/fields/System.Description",
+          // Escaped HTML: the post text is never markup.
+          value: `<p>First line</p><p>&lt;script&gt;alert(1)&lt;/script&gt; &amp; **bold**</p><hr><p>Submitted by: ${h.owner}</p><p>Board: ${board}</p>`,
+        },
+      ]),
   },
 ];
 
@@ -520,9 +549,9 @@ describe.skipIf(!url)("issue tracker delivery", () => {
       expect(creates()).toHaveLength(2);
     }, 20_000);
 
-    it.runIf(t.token)(
-      "retries a refresh that got a 5xx, with nothing sent, within the job's limits",
-      async () => {
+    // A personal access token (Azure DevOps) has no refresh: no such test, rather than a skipped one.
+    if (t.token)
+      it("retries a refresh that got a 5xx, with nothing sent, within the job's limits", async () => {
         const id = await connect(t);
         await h.system(h.a, (db) =>
           db
@@ -552,9 +581,7 @@ describe.skipIf(!url)("issue tracker delivery", () => {
         expect(await secretsOf(id)).toMatchObject({
           accessToken: t.refreshedToken,
         });
-      },
-      20_000,
-    );
+      }, 20_000);
 
     it("never resends a create that got no answer or a 5xx, and shows it for a teammate to check", async () => {
       const id = await connect(t);
