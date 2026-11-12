@@ -60,8 +60,14 @@ export class ProviderCallError extends Error {
  */
 const MAX_ANSWER_BYTES = 10 * 1024 * 1024;
 
-/** The JSON of an answer, read in chunks up to MAX_ANSWER_BYTES. Null when the body breaks or is not JSON. */
-async function answerJson(response: Response): Promise<unknown> {
+/**
+ * The JSON of an answer, read in chunks up to MAX_ANSWER_BYTES. Null when the body breaks or is not
+ * JSON. A body that the caller's `signal` ended is no answer (status null), not an empty one.
+ */
+async function answerJson(
+  response: Response,
+  signal?: AbortSignal,
+): Promise<unknown> {
   const reader = response.body?.getReader();
   if (!reader) return null;
   const chunks: Uint8Array[] = [];
@@ -77,39 +83,39 @@ async function answerJson(response: Response): Promise<unknown> {
       }
       chunks.push(value);
     }
+    return JSON.parse(new TextDecoder().decode(Buffer.concat(chunks)));
   } catch (error) {
     if (error instanceof ProviderCallError) throw error;
-    return null;
-  }
-  try {
-    return JSON.parse(new TextDecoder().decode(Buffer.concat(chunks)));
-  } catch {
+    if (signal?.aborted) throw new ProviderCallError(null);
     return null;
   }
 }
 
 /**
  * Settles with `work`, or rejects with a fixed 502 as soon as `signal` aborts. It does not wait for
- * work that ignores the abort (a stuck DNS lookup): that work ends later and its result is dropped.
+ * work that ignores the abort (a call that does not pass the signal on): that work ends later and
+ * its result is dropped.
  */
 export function beforeDeadline<T>(
   work: Promise<T>,
   signal?: AbortSignal,
 ): Promise<T> {
   if (!signal) return work;
-  return Promise.race([
-    work,
-    new Promise<never>((_, reject) => {
-      const late = () =>
-        reject(
-          new HTTPException(502, {
-            message: "The provider did not answer in time. Try again.",
-          }),
-        );
-      if (signal.aborted) late();
-      else signal.addEventListener("abort", late, { once: true });
-    }),
-  ]);
+  let late = () => {};
+  const deadline = new Promise<never>((_, reject) => {
+    late = () =>
+      reject(
+        new HTTPException(502, {
+          message: "The provider did not answer in time. Try again.",
+        }),
+      );
+    if (signal.aborted) late();
+    else signal.addEventListener("abort", late, { once: true });
+  });
+  // The listener goes when the race ends, so it does not hold the result until the signal fires.
+  return Promise.race([work, deadline]).finally(() =>
+    signal.removeEventListener("abort", late),
+  );
 }
 
 /**
@@ -157,7 +163,7 @@ export async function providerJson(
     void response.body?.cancel().catch(() => {});
     throw new ProviderCallError(response.status);
   }
-  return answerJson(response);
+  return answerJson(response, init.signal);
 }
 
 /** The provider API hosts a request may reach. A Freshdesk subdomain is one DNS label. */

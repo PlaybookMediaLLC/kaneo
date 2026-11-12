@@ -1,3 +1,4 @@
+import { getEventListeners } from "node:events";
 import { HTTPException } from "hono/http-exception";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
@@ -31,6 +32,21 @@ function stream(total: number) {
   return { body, seen };
 }
 
+/** A body of `parts`, one chunk each; with `signal`, the body breaks when it aborts, as fetch's does. */
+function chunks(parts: Uint8Array[], signal?: AbortSignal) {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      signal?.addEventListener("abort", () => controller.error(signal.reason));
+    },
+    pull(controller) {
+      const part = parts.shift();
+      if (part) controller.enqueue(part);
+      // Without a signal the body ends; with one it stays open until the signal aborts.
+      else if (!signal) controller.close();
+    },
+  });
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -54,6 +70,51 @@ describe("providerJson", () => {
     expect(await providerJson(URL_, {}, hosts)).toBeNull();
     fetch.mockResolvedValueOnce(new Response(null, { status: 204 }));
     expect(await providerJson(URL_, {}, hosts)).toBeNull();
+  });
+
+  it("joins an answer that arrives in many chunks, also inside a multi-byte character", async () => {
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({ name: "Zoë Müller", note: "€".repeat(30_000) }),
+    );
+    // Cut 1 byte into "ë" (2 bytes) and then every 7 KiB, also through the 3-byte "€" signs.
+    const cut = new TextEncoder().encode('{"name":"Zo').length + 1;
+    const parts = [bytes.subarray(0, cut)];
+    for (let at = cut; at < bytes.length; at += 7 * 1024)
+      parts.push(bytes.subarray(at, at + 7 * 1024));
+    expect(parts.length).toBeGreaterThan(10);
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(chunks(parts)),
+    );
+    expect(await providerJson(URL_, {}, hosts)).toEqual({
+      name: "Zoë Müller",
+      note: "€".repeat(30_000),
+    });
+  });
+
+  it("treats a body that the caller's signal ended as no answer, and keeps null without a signal", async () => {
+    const part = new TextEncoder().encode('{"results":[');
+    const controller = new AbortController();
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(chunks([part], controller.signal)),
+    );
+    const reading = providerJson(
+      URL_,
+      { signal: controller.signal },
+      hosts,
+    ).catch((e: unknown) => e);
+    setTimeout(() => controller.abort(), 20);
+    const error = await reading;
+    expect(error).toBeInstanceOf(ProviderCallError);
+    expect((error as ProviderCallError).status).toBeNull();
+
+    // Without a caller signal, a broken body stays null, as before.
+    const broken = new AbortController();
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(chunks([part], broken.signal)),
+    );
+    const plain = providerJson(URL_, {}, hosts);
+    setTimeout(() => broken.abort(), 20);
+    expect(await plain).toBeNull();
   });
 
   it("refuses an answer over the limit with a fixed 502 and stops reading it", async () => {
@@ -113,13 +174,14 @@ describe("beforeDeadline", () => {
     expect((error as HTTPException).message).toBe(
       "The provider did not answer in time. Try again.",
     );
-    // An aborted signal stops at once; work that ends first wins; no signal: the work itself.
+    // An aborted signal stops at once; no signal: the work itself.
     await expect(
       beforeDeadline(new Promise(() => {}), AbortSignal.abort()),
     ).rejects.toBeInstanceOf(HTTPException);
-    await expect(
-      beforeDeadline(Promise.resolve(1), new AbortController().signal),
-    ).resolves.toBe(1);
+    // Work that ends first wins, and its listener goes with it.
+    const open = new AbortController().signal;
+    await expect(beforeDeadline(Promise.resolve(1), open)).resolves.toBe(1);
+    expect(getEventListeners(open, "abort")).toHaveLength(0);
     const work = Promise.resolve(2);
     expect(beforeDeadline(work)).toBe(work);
   });
