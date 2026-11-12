@@ -729,13 +729,16 @@ describe.skipIf(!url)("CRM providers and customer context", () => {
     const aborted: string[] = [];
     /** A request that never answers; it ends when its signal aborts. */
     const hang = (path: string, init?: RequestInit) =>
-      new Promise<Response>((_, reject) =>
-        init?.signal?.addEventListener("abort", () => {
+      new Promise<Response>((_, reject) => {
+        const stop = () => {
           aborted.push(path);
-          reject(init.signal!.reason);
-        }),
-      );
-    /** A request that never answers and ignores its signal, as a stuck DNS lookup does. */
+          reject(init!.signal!.reason);
+        };
+        // A real fetch with a signal that already aborted fails at once.
+        if (init?.signal?.aborted) stop();
+        else init?.signal?.addEventListener("abort", stop);
+      });
+    /** A request that never answers and ignores its signal, as a call that does not pass it on. */
     const stuck = () => new Promise<Response>(() => {});
     /**
      * One read with short lookup limits and some requests answered by `answer` (by host and path),
@@ -853,17 +856,23 @@ describe.skipIf(!url)("CRM providers and customer context", () => {
       const id = await deadlineCustomer();
       await oauthConnection(env, env.a, { type: "intercom" });
       await oauthConnection(env, env.a, {
+        type: "salesforce",
+        config: { instanceUrl: "https://contract.my.salesforce.com" },
+      });
+      await oauthConnection(env, env.a, {
         type: "zendesk",
         config: { subdomain: "contract" },
       });
+      const query = "contract.my.salesforce.com/services/data/v62.0/query";
+      const search = "contract.zendesk.com/api/v2/users/search.json";
       const res = await read(
         `/people/${id}/context`,
         { provider: 60_000, context: 500 },
         (path, init) =>
           path === "api.intercom.io/contacts/search"
-            ? hang(path, init)
-            : path === "contract.zendesk.com/api/v2/users/search.json"
-              ? stuck()
+            ? stuck()
+            : path === query || path === search
+              ? hang(path, init)
               : undefined,
       );
       expect(res.status).toBe(200);
@@ -875,38 +884,46 @@ describe.skipIf(!url)("CRM providers and customer context", () => {
         ]),
       ).toEqual([
         ["intercom", "failed", TIMED_OUT],
+        ["salesforce", "failed", TIMED_OUT],
         ["zendesk", "failed", TIMED_OUT],
       ]);
       expect(res.ms).toBeLessThan(5_000);
-      expect(aborted).toEqual(["api.intercom.io/contacts/search"]);
+      expect([...aborted].sort()).toEqual([query, search]);
     }, 20_000);
 
     it("stops HubSpot's chained reads at its budget", async () => {
       await disconnectAll();
       const id = await deadlineCustomer();
       await oauthConnection(env, env.a, { type: "hubspot" });
+      const search = "/api.hubapi.com/crm/v3/objects/contacts/search";
       const deals =
         "api.hubapi.com/crm/v3/objects/contacts/101/associations/deals";
-      const from = providerCalls.length;
-      const res = await read(
-        `/people/${id}/context`,
-        { provider: 500, context: 60_000 },
-        (path, init) => (path === deals ? hang(path, init) : undefined),
-      );
-      expect(res.body.providers).toEqual([
-        expect.objectContaining({
-          integrationType: "hubspot",
-          status: "failed",
-          error: TIMED_OUT,
-          contact: null,
-        }),
-      ]);
-      expect(res.ms).toBeLessThan(5_000);
-      // The search answered, the deal read in flight was aborted, and the batch read never left.
-      expect(aborted).toEqual([deals]);
-      expect(providerCalls.slice(from).map((call) => call.path)).toEqual([
-        "/api.hubapi.com/crm/v3/objects/contacts/search",
-      ]);
+      const batch = "api.hubapi.com/crm/v3/objects/deals/batch/read";
+      // The deal list in flight: the batch read never leaves. Then the batch read in flight.
+      for (const [late, sent] of [
+        [deals, [search]],
+        [batch, [search, `/${deals}?limit=100`]],
+      ] as const) {
+        const from = providerCalls.length;
+        const res = await read(
+          `/people/${id}/context`,
+          { provider: 500, context: 60_000 },
+          (path, init) => (path === late ? hang(path, init) : undefined),
+        );
+        expect(res.body.providers, late).toEqual([
+          expect.objectContaining({
+            integrationType: "hubspot",
+            status: "failed",
+            error: TIMED_OUT,
+            contact: null,
+          }),
+        ]);
+        expect(res.ms).toBeLessThan(5_000);
+        expect(aborted).toEqual([late]);
+        expect(providerCalls.slice(from).map((call) => call.path)).toEqual(
+          sent,
+        );
+      }
     }, 20_000);
 
     it("stores a refresh that finished before the deadline, in both routes", async () => {
