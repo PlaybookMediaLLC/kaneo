@@ -59507,6 +59507,13 @@
                     },
                     "supportEnabled": {
                       "type": "boolean"
+                    },
+                    "receiptId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "The receipt of this change, for POST /settings/receipts/{receiptId}/undo. Null when no field that undo restores changed."
                     }
                   },
                   "required": [
@@ -59516,7 +59523,8 @@
                     "moderationDefault",
                     "access",
                     "nav",
-                    "supportEnabled"
+                    "supportEnabled",
+                    "receiptId"
                   ]
                 }
               }
@@ -60738,13 +60746,21 @@
                         "string",
                         "null"
                       ]
+                    },
+                    "receiptId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "The receipt of this change, for POST /settings/receipts/{receiptId}/undo. Null when no field that undo restores changed."
                     }
                   },
                   "required": [
                     "theme",
                     "customCss",
                     "headerDisplayMode",
-                    "headerDisplayName"
+                    "headerDisplayName",
+                    "receiptId"
                   ]
                 }
               }
@@ -61362,6 +61378,13 @@
                         "showTeamAvatars",
                         "cards"
                       ]
+                    },
+                    "receiptId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "The receipt of this change, for POST /settings/receipts/{receiptId}/undo. Null when no field that undo restores changed."
                     }
                   },
                   "required": [
@@ -61373,7 +61396,8 @@
                     "tabs",
                     "visitorAnalytics",
                     "visitorDeviceTracking",
-                    "home"
+                    "home",
+                    "receiptId"
                   ]
                 }
               }
@@ -61742,13 +61766,21 @@
                     },
                     "personalApiKeysEnabled": {
                       "type": "boolean"
+                    },
+                    "receiptId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "The receipt of this change, for POST /settings/receipts/{receiptId}/undo. Null when no field that undo restores changed."
                     }
                   },
                   "required": [
                     "mcpEnabled",
                     "mcpPortalAccessEnabled",
                     "oauthDynamicClientRegistrationEnabled",
-                    "personalApiKeysEnabled"
+                    "personalApiKeysEnabled",
+                    "receiptId"
                   ]
                 }
               }
@@ -61933,6 +61965,13 @@
                     },
                     "feedback": {
                       "type": "boolean"
+                    },
+                    "receiptId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "The receipt of this change, for POST /settings/receipts/{receiptId}/undo. Null when no field that undo restores changed."
                     }
                   },
                   "required": [
@@ -61941,7 +61980,8 @@
                     "supportInbox",
                     "supportTickets",
                     "statusPage",
-                    "feedback"
+                    "feedback",
+                    "receiptId"
                   ]
                 }
               }
@@ -61959,6 +61999,108 @@
           },
           "403": {
             "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/settings/receipts/{receiptId}/undo": {
+      "post": {
+        "operationId": "createQuillsSettingsReceiptsUndo",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Undo a settings change",
+        "description": "Restores the values that a settings update changed. receiptId is the update's receiptId. 409 when the change was already undone, when a later change or undo in the area touched the same field, when a field no longer holds the value the change wrote, or when the receipt came in with a workspace import.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "receiptId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The undone change",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "area": {
+                      "type": "string"
+                    },
+                    "undoneAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "area",
+                    "undoneAt"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Settings receipt not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The change cannot be undone",
             "content": {
               "application/json": {
                 "schema": {
