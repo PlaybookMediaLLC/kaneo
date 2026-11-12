@@ -128,8 +128,13 @@ function view(
     post: post ?? null,
     destination: op.destinationKey,
     remoteUrl: post ? httpsUrl(result.externalUrl) : null,
-    remoteDisplayId:
-      post && typeof result.externalId === "string" ? result.externalId : null,
+    remoteDisplayId: !post
+      ? null
+      : typeof result.externalDisplayId === "string"
+        ? result.externalDisplayId
+        : typeof result.externalId === "string"
+          ? result.externalId
+          : null,
     attempts: op.attempts,
     error: syncError(errorCode),
     cancelRequested: op.cancelRequested,

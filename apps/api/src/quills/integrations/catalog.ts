@@ -137,6 +137,7 @@ export const catalog = [
 const SYNC_ERRORS: Record<string, string> = {
   provider_failed: "The provider rejected the request.",
   authentication: "The provider rejected the saved credentials.",
+  write_access_required: "Reconnect the integration to grant write access.",
   credentials_unavailable: "The saved credentials cannot be read.",
   unavailable: "The provider was unavailable.",
   outcome_unknown:

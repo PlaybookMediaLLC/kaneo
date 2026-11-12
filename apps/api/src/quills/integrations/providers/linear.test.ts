@@ -109,7 +109,7 @@ describe.skipIf(!url)("Linear provider with the local provider server", () => {
     );
     expect(Object.fromEntries(authorize.searchParams)).toMatchObject({
       client_id: "client-linear",
-      scope: "read",
+      scope: "read,issues:create",
       response_type: "code",
     });
 
@@ -147,6 +147,14 @@ describe.skipIf(!url)("Linear provider with the local provider server", () => {
     expect(
       Date.parse((await secretsOf(body.integration.id)).expiresAt),
     ).toBeGreaterThan(Date.now());
+    // The token answer names no scope: the requested scopes were granted (RFC 6749, 5.1).
+    const [row] = await env().scoped(env().a, (db) =>
+      db
+        .select({ config: integrations.config })
+        .from(integrations)
+        .where(eq(integrations.id, body.integration.id)),
+    );
+    expect(row!.config).toMatchObject({ scopes: "read issues:create" });
   });
 
   it("lists teams and refuses a kind or a parent", async () => {

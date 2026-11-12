@@ -3,6 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "../../openapi";
 import { ProviderCallError } from "../framework/integration-config";
 import type { Provider } from "./catalog";
+import type { DeliveryContext, Outcome } from "./delivery";
 
 // The types and shared helpers of the OAuth providers. Each provider is one file in providers/, and
 // providers/index.ts collects them. Each one has a fixed host, so a call never reaches an address
@@ -134,6 +135,19 @@ export type OAuthProvider = Provider & {
     email: string,
     signal?: AbortSignal,
   ) => Promise<Contact | null>;
+  /**
+   * Sends one delivery of an event in `events` (the worker, jobs/handlers/integration-send.ts). It
+   * runs with no transaction open, after the token refresh and the `target` check. A refused call
+   * throws (providerJson does), and the worker maps it: a create that got a 5xx or no answer is
+   * uncertain. Return `uncertain` when the answer does not prove the outcome. Absent: no delivery.
+   */
+  deliver?: (delivery: DeliveryContext) => Promise<Outcome>;
+  /**
+   * OAuth scopes that `deliver` needs. `exchange` stores the granted scopes in `config.scopes`
+   * (grantedScopes in ../delivery.ts). A connection without them gets a fixed "reconnect" state and
+   * no provider call.
+   */
+  deliveryScopes?: readonly string[];
 } & (OAuthConnect | KeyConnect);
 
 export const text = (value: unknown) =>

@@ -110,6 +110,24 @@ again; Slack's `ok: false` errors map to `auth_required` or `failed`; a due GitL
 before the call (never retried; a rejected refresh is `auth_required`) and the new tokens are stored
 with the outcome.
 
+The worker sends through the provider registry (FU3a): each provider's `deliver`, for the events in its
+`events`. The seam is provider-neutral:
+
+- A 401 proves that nothing was made. A provider with `refresh` refreshes once and sends once more; a
+  second 401 asks for a reconnect. GitLab gets this too (before FU3a, a GitLab 401 asked for a
+  reconnect at once).
+- A provider with `deliveryScopes` sends only when `config.scopes` holds them. Otherwise the sync ends
+  `auth_required` with the fixed message "Reconnect the integration to grant write access." and no
+  provider call. The job fails at once (no retry).
+- A resync after a reconnect sends no create that an earlier installation of the connection sent or
+  may have sent to the same channel (its create is `running`, `uncertain` or `succeeded`). This applies
+  to every provider, chat and webhook ones too. A `failed` or `auth_required` create was certainly not
+  sent, so the resync sends it.
+- Adding a channel checks the provider's `target` rule (400 otherwise). The channel schema accepts 1 to
+  100 characters without `/`, `\`, `?`, `#`, `%` or control characters.
+
+`providers/README.md` ("Add delivery to a provider") lists what a provider lane adds.
+
 Each provider is one file in `providers/`. `providers/index.ts` collects them in one registry.
 `providers/README.md` gives the steps to add a provider and the rules. It also describes the
 destination kinds (`kind` and `parent` on the destinations route) and the connect fields (query
@@ -130,7 +148,8 @@ Actor and workspace:       connect and destinations: authenticated context. Call
 Permissions:               workspace:read + quills:manage_settings (callback: the session account still holds it).
 Transactions:              read, call Atlassian with no transaction open, then write in a new one.
 External effects:          token exchange and refresh (auth.atlassian.com), accessible resources,
-                           project and issue type lists (api.atlassian.com). No issue is created.
+                           project and issue type lists (api.atlassian.com). Worker (FU3a): issue
+                           create, after the event's transaction committed.
 ```
 
 | Source function | operationId | Route | Action | Tests |
@@ -151,12 +170,33 @@ External effects:          token exchange and refresh (auth.atlassian.com), acce
 - Tests against the local provider server: exchange, both kinds, a foreign project, a bad stored cloud
   ID, refresh and rejected refresh, a malformed `accessible-resources` (400) and project list (502).
 
+Delivery (FU3a, the worker; no route):
+
+- Events: `post.created` only, as in the source hook. A channel is `<project ID>:<issue type ID>`, both
+  numeric (a destination of each kind); adding another channel answers 400.
+- Scopes: `read:jira-work write:jira-work offline_access`. The callback stores the granted scopes in
+  `config.scopes` (the token answer's `scope`, or the requested ones when it has none). Delivery needs
+  `write:jira-work`.
+- **Existing connections must reconnect.** A connection made before FU3a has no `config.scopes`: each
+  delivery ends `auth_required` with "Reconnect the integration to grant write access." and no call.
+- `POST https://api.atlassian.com/ex/jira/<cloudId>/rest/api/3/issue`. The stored cloud ID is checked
+  before each call (a bad one asks for a reconnect with no issue call; a due token is still refreshed first). The summary is one
+  line of at most 255 characters. The description is Atlassian Document Format with plain text nodes:
+  each line of the post (at most 2000 characters), a rule, the author and the board.
+- The issue key is the link's external ID. The link URL is `<site>/browse/<key>` only when the stored
+  site (`account`) is `https://<name>.atlassian.net`; otherwise it is empty.
+- Outcomes: see "Providers". A 2xx answer without a valid key is `uncertain`.
+- Tests: `jobs/handlers/tracker-delivery.test.ts` (the worker evidence table) and
+  `jobs/handlers/provider-send.test.ts`.
+
 | Difference from the source | Reason |
 |---|---|
-| Scope `read:jira-work offline_access`, not `write:jira-work manage:jira-webhook` | Issue #131 lists projects and issue types only. Delivery and status sync add their scopes and a reconnect. |
-| No `events` and no status sync | Out of scope for #131. |
+| Scope `read:jira-work write:jira-work offline_access`, not also `manage:jira-webhook` | Delivery creates issues. Status sync (inbound) adds its scope and a reconnect. |
+| No status sync; delivery fails closed without the stored write scope | Inbound sync is out of scope. A request that must get 403 is not sent. |
+| The channel must name the issue type; the source also took a bare project ID | Jira's create needs an issue type. |
+| No "View in …" link in the description | No portal URL exists for a post yet. |
 | A connect with no valid cloud ID fails; the source stored `unknown` | The cloud ID enters every API path. |
-| `siteUrl` is the connection's `account`, not a `config` value | Only the issue links of delivery use it. |
+| `siteUrl` is the connection's `account`, not a `config` value | Only the issue links of delivery use it, after a host check. |
 | A malformed list answer is 502, not an empty list or a raw error | Provider text never reaches a response. |
 
 ### Linear
@@ -168,7 +208,8 @@ Actor and workspace:       connect and destinations: authenticated context. Call
 Permissions:               workspace:read + quills:manage_settings (callback: the session account still holds it).
 Transactions:              read, call Linear with no transaction open, then write in a new one.
 External effects:          token exchange and refresh (api.linear.app/oauth/token), organization and team
-                           queries (api.linear.app/graphql). No issue is created.
+                           queries (api.linear.app/graphql). Worker (FU3a): `issueCreate`, after the
+                           event's transaction committed.
 ```
 
 | Source function | operationId | Route | Action | Tests |
@@ -176,7 +217,8 @@ External effects:          token exchange and refresh (api.linear.app/oauth/toke
 | `getLinearConnectUrl` | `startQuillsLinearOAuthConnect` | `GET /oauth/linear/connect` | manage_settings | contract; `providers/linear.test.ts` |
 | `fetchLinearTeamsFn` | `listQuillsIntegrationDestinations` | `GET /integrations/{integrationId}/destinations` (one kind: teams) | manage_settings | contract (GitHub); `providers/linear.test.ts` |
 
-- The connection's name and account are the organization's name and URL key. No `config` value is stored.
+- The connection's name and account are the organization's name and URL key. `config` stores only the
+  granted scopes (FU3a).
 - The list asks for the first 100 teams. A team ID has 1 to 64 letters, digits and `-`; the route drops
   any other ID. The route refuses a `kind`
   or a `parent` (400): Linear has one kind.
@@ -185,10 +227,34 @@ External effects:          token exchange and refresh (api.linear.app/oauth/toke
 - Tests against the local provider server: exchange, the team list, a refused kind and parent, refresh
   and rejected refresh, a token answer without a token (400) and a GraphQL answer without teams (502).
 
+Delivery (FU3a, the worker; no route):
+
+- Events: `post.created` only, as in the source hook. A channel is a team ID, a UUID; adding another
+  channel answers 400 (the earlier default rule refused UUIDs).
+- Scopes: `read,issues:create`. The callback stores the granted scopes in `config.scopes` (the token
+  answer's `scope` as a string or a list, or the requested ones when it has none). Delivery needs
+  `issues:create`.
+- **Existing connections must reconnect.** A connection made before FU3a has no `config.scopes`: each
+  delivery ends `auth_required` with "Reconnect the integration to grant write access." and no call.
+- One `issueCreate` mutation on `https://api.linear.app/graphql`, with the values as GraphQL variables:
+  `teamId`, the title (one line, at most 255 characters) and the Markdown description (the post
+  content is Markdown; at most 2000 characters, then the author and the board).
+- The issue UUID is the link's external ID (an identifier changes when an issue moves to another team).
+  The identifier (`ENG-12`) is the link's display ID and the sync history's `remoteDisplayId`. The URL
+  is kept only on `https://linear.app`.
+- Linear answers 200 with `errors` for a refused mutation. With no `issueCreate`, only a refusal before
+  the write proves that no issue exists: authentication or forbidden errors ask for a reconnect, a rate
+  limit waits for a retry, and invalid input, user, GraphQL, usage-limit or feature errors fail. Any
+  other error (an internal error or a lock timeout can follow a write) and any other answer without an
+  issue is `uncertain`. Provider text is never kept.
+- Tests: `jobs/handlers/tracker-delivery.test.ts` and `jobs/handlers/provider-send.test.ts`.
+
 | Difference from the source | Reason |
 |---|---|
-| Scope `read`, not `read,write,issues:create,admin` | Issue #131 lists teams only. Delivery and status sync add their scopes and a reconnect. |
-| No `events` and no status sync | Out of scope for #131. |
+| Scope `read,issues:create`, not `read,write,issues:create,admin` | Delivery creates issues only. Status sync (inbound) adds its scopes and a reconnect. |
+| No status sync; delivery fails closed without the stored scope | Inbound sync is out of scope. A request that must be refused is not sent. |
+| A GraphQL refusal is a fixed outcome; the source kept Linear's error message | Provider text never reaches a response or a record. |
+| No "View in …" link in the description | No portal URL exists for a post yet. |
 | An organization query that Linear refuses (an HTTP error) fails the connect; the source named it `Linear` | One rule for every call: a refused call is a fixed error. An answer without a name still gives `Linear`, as in the source. |
 | `orgId` is not stored | Only the webhooks of status sync use it. |
 | A disconnect does not revoke the token | The shared disconnect route revokes no provider token. |
@@ -203,7 +269,8 @@ Transactions:              connect: `load` checks the token with no transaction 
                            transaction writes the connection and its `integration.connected` event.
                            Destinations: read, call Azure DevOps, then a handler transaction that
                            writes nothing (a personal access token has no refresh).
-External effects:          project and work item type lists (dev.azure.com). No work item is created.
+External effects:          project and work item type lists (dev.azure.com). Worker (FU3a): work item
+                           create, after the event's transaction committed.
 ```
 
 | Source function | operationId | Route | Action | Tests |
@@ -225,12 +292,34 @@ External effects:          project and work item type lists (dev.azure.com). No 
 - Tests against the local provider server: connect, ten bad organization names with no call, a rejected
   token, both kinds, a foreign project, a bad stored organization, malformed answers (502).
 
+Delivery (FU3a, the worker; no route):
+
+- Events: `post.created` only, as in the source hook. A channel is `<project>:<work item type>`, split
+  at the first `:`. Each name follows Azure DevOps' naming rules: at most 64 characters, none of
+  `\ / : * ? " ' < > ; # $ { } , + = [ ] |`, no control character, not starting with `_`, `.` or a
+  space and not ending with `.` or a space. `%` is refused too (the channel route refuses it), and the
+  whole channel has at most 100 characters (the mapping column). Adding another channel answers 400.
+- A personal access token has no granted-scope list: the teammate gives it "Work Items (Read & write)".
+  A token without it gets 401 or 403, which asks for a reconnect (no refresh, no retry). Existing
+  connections do not need to reconnect unless their token lacks that scope.
+- `POST https://dev.azure.com/<organization>/<project>/_apis/wit/workitems/$<type>?api-version=7.1`
+  with a JSON Patch (`application/json-patch+json`). The stored organization is checked before each
+  call; both names are encoded. The title is one line of at most 255 characters. The description is
+  HTML in which every part of the post is escaped: one `<p>` per line (at most 2000 characters), `<hr>`,
+  the author and the board.
+- The work item ID is the link's external ID. The link URL is built on the fixed host
+  (`…/<project>/_workitems/edit/<id>`), never taken from the answer. A 2xx answer without a positive
+  integer ID is `uncertain`.
+- Tests: `jobs/handlers/tracker-delivery.test.ts` and `jobs/handlers/provider-send.test.ts`.
+
 | Difference from the source | Reason |
 |---|---|
 | The body takes the organization name, not `organizationUrl` | The name enters the URL; a strict pattern checks it. The host is always `dev.azure.com`. |
 | No `*.visualstudio.com` organization URLs | The host is fixed. The same organization is on `dev.azure.com`. |
 | `config` holds `organization` only, not `organizationUrl` and `organizationName` | One value builds every URL. |
-| No `events` and no status sync | Out of scope for #131. |
+| No status sync | Inbound sync is out of scope. |
+| The link URL is built from the fixed host; the source took `_links.html.href` | Every URL comes from a fixed host. |
+| The description escapes `'` too, and has no "View in …" link | Post text is never markup; no portal URL exists for a post yet. |
 | A rejected token is 400 with a fixed message; the source returned the provider error | Provider text never reaches a response. |
 
 ### Asana

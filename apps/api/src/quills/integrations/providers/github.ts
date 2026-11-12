@@ -1,5 +1,6 @@
 // Route-module helper: framework/boundaries.test.ts checks its imports like a module that uses ../framework/define-route.
 import { providerJson } from "../../framework/integration-config";
+import { clip, issueBody, uncertain } from "../delivery";
 import {
   form,
   githubRepo,
@@ -101,5 +102,33 @@ export const github = {
       parts.every((part) => /^[A-Za-z0-9_.-]{1,100}$/.test(part)) &&
       parts.every((part) => part !== "." && part !== "..")
     );
+  },
+  // An issue for a new post.
+  deliver: async (d) => {
+    const repo = githubRepo(d.target);
+    const issue = (await providerJson(
+      `https://api.github.com/repos/${repo}/issues`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${d.secrets.accessToken ?? ""}`,
+          accept: "application/vnd.github+json",
+          "content-type": "application/json",
+          "user-agent": "Quills",
+        },
+        body: JSON.stringify({
+          title: clip(d.content.post.title, 256),
+          body: issueBody(d),
+        }),
+      },
+    )) as { number?: unknown; html_url?: unknown } | null;
+    if (typeof issue?.number !== "number") return uncertain;
+    return {
+      state: "succeeded",
+      result: {
+        externalId: `${repo}#${issue.number}`,
+        externalUrl: typeof issue.html_url === "string" ? issue.html_url : null,
+      },
+    };
   },
 } satisfies OAuthProvider;
