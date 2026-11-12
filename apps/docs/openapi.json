@@ -117601,7 +117601,7 @@
           "Quills"
         ],
         "summary": "Get a link preview for a web page",
-        "description": "A private, loopback, link-local or metadata address, a redirect to one, more than 3 redirects, more than 5 seconds, a body that is not HTML, more than 2 previews at once in the API process, or any failure answers preview: null. The instance switch KANEO_ALLOW_PRIVATE_WEBHOOK_DESTINATIONS lets teammates preview private addresses, as for imports and webhooks.",
+        "description": "A private, loopback, link-local or metadata address, a redirect to one, more than 3 redirects, more than 5 seconds, a body that is not HTML, more than 2 previews at once in the API process, or any failure answers preview: null. The instance setting that allows private webhook destinations also lets teammates preview private addresses, as for imports and webhooks.",
         "parameters": [
           {
             "schema": {
@@ -118515,7 +118515,7 @@
           "Quills"
         ],
         "summary": "Get the team context of a profile",
-        "description": "The email, company, segments, last device visit and the verified and blocked flags of a person with a profile. The email is the customer account's, else the contact email; a teammate's account email stays in Kaneo.",
+        "description": "The email, company, segments, last device visit and the verified and blocked flags of a person with a profile. The email is the customer account's, else the contact email; a teammate's account email is not returned.",
         "parameters": [
           {
             "schema": {
@@ -140898,7 +140898,7 @@
           "Quills"
         ],
         "summary": "Register a sidebar app and create its API key",
-        "description": "Needs a user session, as API key management does. Creates an API key for the caller with workspace:read and the Quills actions that the scopes need, and binds it to the new app. The caller must hold those actions. `secret` is the key: it is shown only in this response. In this workspace's Quills API the key works only on the app routes; it keeps workspace:read on other Kaneo routes, and its scope in the caller's other workspaces.",
+        "description": "Needs a user session, as API key management does. Creates an API key for the caller with workspace:read and the Quills actions that the scopes need, and binds it to the new app. The caller must hold those actions. `secret` is the key: it is shown only in this response. In this workspace's Quills API the key works only on the app routes; it keeps workspace:read on the other platform routes, and its scope in the caller's other workspaces.",
         "parameters": [
           {
             "schema": {

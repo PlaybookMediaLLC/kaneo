@@ -150,7 +150,7 @@ const teammate = defineQuillsRoute({
   path: "/support/link-preview",
   operationId: "unfurlQuillsLink",
   summary: "Get a link preview for a web page",
-  description: `${description} The instance switch KANEO_ALLOW_PRIVATE_WEBHOOK_DESTINATIONS lets teammates preview private addresses, as for imports and webhooks.`,
+  description: `${description} The instance setting that allows private webhook destinations also lets teammates preview private addresses, as for imports and webhooks.`,
   action: "read",
   query,
   response,

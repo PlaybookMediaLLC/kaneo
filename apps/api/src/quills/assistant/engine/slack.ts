@@ -44,7 +44,7 @@ const hookSchema = z.object({
 });
 type Hook = z.infer<typeof hookSchema>;
 const NOT_A_TEAMMATE =
-  "I can only answer teammates of this workspace. Sign in to Kaneo with the email that you use in Slack, then ask again.";
+  "I can only answer teammates of this workspace. Sign in to this workspace with the email that you use in Slack, then ask again.";
 
 /** Slack mrkdwn treats `<`, `>` and `&` as control characters: model text cannot mention anyone. */
 const escape = (text: string) =>

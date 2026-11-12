@@ -54,7 +54,7 @@ async function fetchPage(
     const response = await guard.fetch(url, {
       headers: {
         accept: "text/html, application/xhtml+xml",
-        "user-agent": "KaneoLinkPreview/1.0",
+        "user-agent": "QuillsLinkPreview/1.0",
       },
       signal,
     });

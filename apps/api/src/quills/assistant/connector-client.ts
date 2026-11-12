@@ -111,7 +111,7 @@ function oauthClient(secrets: Secrets, redirectUrl: string, state?: string) {
   const provider: OAuthClientProvider = {
     redirectUrl,
     clientMetadata: {
-      client_name: "Kaneo",
+      client_name: "Quills",
       redirect_uris: [redirectUrl],
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
@@ -199,7 +199,7 @@ export async function discover(target: Target) {
       ? oauthClient(secrets, target.redirectUrl ?? "")
       : undefined;
   const bearer = target.authMode === "bearer" && secrets.bearerToken;
-  const client = new Client({ name: "kaneo-connectors", version: "1.0.0" });
+  const client = new Client({ name: "quills-connectors", version: "1.0.0" });
   try {
     await client.connect(
       new StreamableHTTPClientTransport(new URL(target.url), {

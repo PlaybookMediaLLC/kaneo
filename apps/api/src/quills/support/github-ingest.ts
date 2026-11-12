@@ -58,8 +58,8 @@ type MessageId = (typeof conversationMessages.$inferSelect)["id"];
 
 /** The marker that every outbound comment ends with. */
 export const outboundMarker = (messageId: string) =>
-  `<!-- kaneo:${messageId} -->`;
-const OURS = /<!-- kaneo:conversation_msg_[0-9a-z]{26} -->/;
+  `<!-- quills:${messageId} -->`;
+const OURS = /<!-- quills:conversation_msg_[0-9a-z]{26} -->/;
 
 const sameLogin = (a?: string, b?: unknown) =>
   Boolean(a && typeof b === "string" && a.toLowerCase() === b.toLowerCase());

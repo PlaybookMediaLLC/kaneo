@@ -83,7 +83,7 @@ const createApp = defineQuillsRoute({
   operationId: "createQuillsAppRegistration",
   summary: "Register a sidebar app and create its API key",
   description:
-    "Needs a user session, as API key management does. Creates an API key for the caller with workspace:read and the Quills actions that the scopes need, and binds it to the new app. The caller must hold those actions. `secret` is the key: it is shown only in this response. In this workspace's Quills API the key works only on the app routes; it keeps workspace:read on other Kaneo routes, and its scope in the caller's other workspaces.",
+    "Needs a user session, as API key management does. Creates an API key for the caller with workspace:read and the Quills actions that the scopes need, and binds it to the new app. The caller must hold those actions. `secret` is the key: it is shown only in this response. In this workspace's Quills API the key works only on the app routes; it keeps workspace:read on the other platform routes, and its scope in the caller's other workspaces.",
   action: "manage_settings",
   // A key must not mint a key that outlives it.
   sessionOnly: true,

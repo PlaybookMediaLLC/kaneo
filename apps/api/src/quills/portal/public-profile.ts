@@ -186,7 +186,7 @@ const teamContext = defineQuillsRoute({
   operationId: "getQuillsProfileTeamContext",
   summary: "Get the team context of a profile",
   description:
-    "The email, company, segments, last device visit and the verified and blocked flags of a person with a profile. The email is the customer account's, else the contact email; a teammate's account email stays in Kaneo.",
+    "The email, company, segments, last device visit and the verified and blocked flags of a person with a profile. The email is the customer account's, else the contact email; a teammate's account email is not returned.",
   action: "read",
   params,
   response: z.object({
