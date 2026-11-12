@@ -14,8 +14,8 @@ const URL_ = "https://api.provider.test/v1/items";
 const CAP = 10 * 1024 * 1024;
 const CHUNK = 64 * 1024;
 
-/** An answer of `total` bytes (endless without it), in chunks, that counts what was read from it. */
-function stream(total = Infinity) {
+/** An answer of `total` bytes, in chunks, that counts what was read from it. */
+function stream(total: number) {
   const seen = { read: 0, cancelled: false };
   const body = new ReadableStream<Uint8Array>({
     pull(controller) {
@@ -57,18 +57,19 @@ describe("providerJson", () => {
   });
 
   it("refuses an answer over the limit with a fixed 502 and stops reading it", async () => {
-    const endless = stream();
+    // 1 MiB over the limit: without the limit, all of it would be read.
+    const over = stream(CAP + 1024 * 1024);
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response(endless.body),
+      new Response(over.body),
     );
     const error = await providerJson(URL_, {}, hosts).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ProviderCallError);
     expect((error as ProviderCallError).status).toBe(502);
     expect((error as Error).message).toBe("Provider answered 502");
-    expect(endless.seen.read).toBeGreaterThan(CAP);
+    expect(over.seen.read).toBeGreaterThan(CAP);
     // At most the chunk that crossed the limit and one that the stream queued ahead.
-    expect(endless.seen.read).toBeLessThanOrEqual(CAP + 2 * CHUNK);
-    expect(endless.seen.cancelled).toBe(true);
+    expect(over.seen.read).toBeLessThanOrEqual(CAP + 2 * CHUNK);
+    expect(over.seen.cancelled).toBe(true);
 
     // An answer of exactly the limit is still read.
     const full = stream(CAP);
