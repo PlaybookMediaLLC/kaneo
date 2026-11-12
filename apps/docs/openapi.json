@@ -85613,8 +85613,10 @@
                 "properties": {
                   "channel": {
                     "type": "string",
-                    "pattern": "^[A-Za-z0-9_.:-]{1,100}$",
-                    "description": "A target in the provider account, such as a Shortcut group ID"
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^[^/\\\\?#%]+$",
+                    "description": "A target in the provider account, such as a Shortcut group ID or `Project:Bug` for Azure DevOps"
                   },
                   "events": {
                     "type": "array",
@@ -85660,6 +85662,16 @@
                   "required": [
                     "channel"
                   ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "An event the provider does not deliver, or a channel that is not a valid target for it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }
@@ -85740,11 +85752,13 @@
           {
             "schema": {
               "type": "string",
-              "pattern": "^[A-Za-z0-9_.:-]{1,100}$",
-              "description": "A target in the provider account, such as a Shortcut group ID"
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[^/\\\\?#%]+$",
+              "description": "A target in the provider account, such as a Shortcut group ID or `Project:Bug` for Azure DevOps"
             },
             "required": true,
-            "description": "A target in the provider account, such as a Shortcut group ID",
+            "description": "A target in the provider account, such as a Shortcut group ID or `Project:Bug` for Azure DevOps",
             "name": "channel",
             "in": "path"
           }
@@ -85891,11 +85905,13 @@
           {
             "schema": {
               "type": "string",
-              "pattern": "^[A-Za-z0-9_.:-]{1,100}$",
-              "description": "A target in the provider account, such as a Shortcut group ID"
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[^/\\\\?#%]+$",
+              "description": "A target in the provider account, such as a Shortcut group ID or `Project:Bug` for Azure DevOps"
             },
             "required": true,
-            "description": "A target in the provider account, such as a Shortcut group ID",
+            "description": "A target in the provider account, such as a Shortcut group ID or `Project:Bug` for Azure DevOps",
             "name": "channel",
             "in": "path"
           }
