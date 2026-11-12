@@ -475,9 +475,32 @@ posts it to the callback (follow-up FU1; `providers/README.md`, "Fragment provid
   app (409), each with the state still usable; boards, lists, and a board that is not listed (404
   before the list call). `oauth-bridge.test.ts` runs the page scripts.
 
+Delivery (FU3b, the worker; no route):
+
+- Events: `post.created` only, as in the source hook. A channel is a list ID (the child destination;
+  24 lowercase hexadecimal digits). A board ID has the same shape and passes the rule: add a list.
+  A card call for an ID that is not a list gets Trello's 4xx (`failed`).
+- Scopes: none to add. The connect already asks for `read,write`, so existing connections do not
+  reconnect. Trello tokens set to never expire: a 401 or 403 asks for a reconnect.
+- The API key is the client ID of the workspace's saved Trello OAuth app, read at each delivery. The
+  key and the stored token must be 32 to 256 letters and digits; otherwise (also with no saved app)
+  the delivery asks for a reconnect with no call. Both travel only in the
+  `Authorization: OAuth oauth_consumer_key="<key>", oauth_token="<token>"` header.
+- `POST https://api.trello.com/1/cards` with a JSON body `{ idList, name, desc, pos: "top" }`; the URL
+  has no query string. The name is one line of at most 255 characters. The description is Markdown,
+  as the post content is (at most 2000 characters, then the author and the board), and at most 16384
+  characters in all.
+- The card ID is the link's external ID. The link URL is `shortUrl` only on `https://trello.com/`;
+  otherwise it is empty. A 2xx answer without a card ID is `uncertain`.
+- Tests: `jobs/handlers/trello-delivery.test.ts` (the worker evidence table, the body and the header,
+  the size bounds, the key and token checks, the channel rule and the link host rule).
+
 | Difference from the source | Reason |
 |---|---|
-| The key and the token travel in the `Authorization` header. The source put them in the query string. | A URL reaches logs and proxies. |
+| The key and the token travel in the `Authorization` header, and a card's values in a JSON body. The source put them all in the query string. | A URL reaches logs and proxies. |
+| No "View in …" link in the description. | No portal URL exists for a post yet. |
+| The link URL is kept only on `https://trello.com/`; a 2xx without a card ID is `uncertain`. The source kept any answer. | A link comes only from the provider's own host; the card may exist. |
+| A delivery with no saved OAuth app asks for a reconnect. The source failed it. | The teammate must save the app (the key) again; a retry alone cannot work. |
 | The API key comes from the OAuth app credentials at each call. The source copied it into `config`. | One place for the key. |
 | `exchange` checks the token format before the call. | The token comes from the browser. |
 | Lists keep Trello's order. The source sorted them by `pos`. | Trello already answers in board order. |
