@@ -178,7 +178,8 @@ Filled by lane P1.
   The route keeps only IDs of 1 to 30 letters and digits.
 - Tests: `providers/clickup.test.ts` (local provider server): connect with a sealed token, spaces by
   default and by kind, lists with the limit of 200, a foreign space refused before the list call,
-  refused kind and parent values, and malformed answers (400 and 502 with fixed text).
+  refused kind and parent values, an account without a team (400), and malformed answers (400 and
+  502 with fixed text).
 
 | Difference from the source | Reason |
 |---|---|

@@ -183,6 +183,16 @@ describe.skipIf(!url)("ClickUp provider with PostgreSQL", () => {
     } finally {
       providerOverrides.clear();
     }
+    // An account without a ClickUp team has no spaces to list.
+    providerOverrides.set("GET /api.clickup.com/api/v2/team", {
+      status: 200,
+      body: { teams: [] },
+    });
+    try {
+      expect((await callback(env)).status).toBe(400);
+    } finally {
+      providerOverrides.clear();
+    }
 
     expect((await callback(env)).status).toBe(200);
     providerOverrides.set("GET /api.clickup.com/api/v2/space/11/list", {
