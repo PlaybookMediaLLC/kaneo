@@ -10,9 +10,13 @@ import {
   startContract,
   stopContract,
 } from "../framework/contract";
-import { openCredentials } from "../framework/integration-config";
+import {
+  openCredentials,
+  ProviderCallError,
+} from "../framework/integration-config";
 import { registry } from "../framework/registry";
 import quillsRouter from "../index";
+import { expiresAt, refreshGrant } from "./oauth-providers";
 import { oauthProvider, oauthTypes } from "./providers";
 
 let pool: Pool;
@@ -50,6 +54,51 @@ describe("OAuth connect routes", () => {
         ]),
       ),
     );
+  });
+});
+
+describe("shared token helpers", () => {
+  it("reads the expiry from expires_in, and gives none without a number", () => {
+    const at = Date.parse(expiresAt({ expires_in: 3600 }));
+    expect(at - Date.now()).toBeGreaterThan(3590_000);
+    expect(at - Date.now()).toBeLessThanOrEqual(3600_000);
+    expect(expiresAt({})).toBe("");
+    expect(expiresAt({ expires_in: "soon" })).toBe("");
+  });
+  it("maps a refused refresh to 401, keeps the stored refresh token and refuses an answer without a token", async () => {
+    const status = (promise: Promise<unknown>) =>
+      promise.then(
+        () => "resolved",
+        (error: unknown) =>
+          error instanceof ProviderCallError ? error.status : error,
+      );
+    expect(
+      await status(
+        refreshGrant(Promise.reject(new ProviderCallError(400)), {}),
+      ),
+    ).toBe(401);
+    expect(
+      await status(
+        refreshGrant(Promise.reject(new ProviderCallError(503)), {}),
+      ),
+    ).toBe(503);
+    expect(await status(refreshGrant(Promise.resolve({}), {}))).toBe(401);
+    expect(
+      await refreshGrant(Promise.resolve({ access_token: "next" }), {
+        refreshToken: "stored",
+      }),
+    ).toEqual({ accessToken: "next", refreshToken: "stored", expiresAt: "" });
+    expect(
+      await refreshGrant(
+        Promise.resolve({ access_token: "next", refresh_token: "rotated" }),
+        {},
+        () => "fixed",
+      ),
+    ).toEqual({
+      accessToken: "next",
+      refreshToken: "rotated",
+      expiresAt: "fixed",
+    });
   });
 });
 

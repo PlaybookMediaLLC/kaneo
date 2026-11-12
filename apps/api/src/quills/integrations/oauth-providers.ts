@@ -173,6 +173,39 @@ export const tokenFields = (secrets: Record<string, string>) => ({
   expiresAt: secrets.expiresAt ?? "",
 });
 
+/** The expiry of an access token from the answer's `expires_in` seconds. Empty when it has none. */
+export const expiresAt = (token: Record<string, unknown>) => {
+  const expiresIn = Number(token.expires_in);
+  return Number.isFinite(expiresIn)
+    ? new Date(Date.now() + expiresIn * 1000).toISOString()
+    : "";
+};
+
+/**
+ * The token fields of a refresh answer. A refused refresh token (400) means the grant is gone: 401,
+ * reconnect. An answer without a new refresh token keeps the stored one.
+ */
+export async function refreshGrant(
+  answer: Promise<unknown>,
+  secrets: Record<string, string>,
+  expiry: (token: Record<string, unknown>) => string = expiresAt,
+): Promise<ReturnType<typeof tokenFields>> {
+  const token = record(
+    await answer.catch((error: unknown) => {
+      if (error instanceof ProviderCallError && error.status === 400)
+        throw new ProviderCallError(401);
+      throw error;
+    }),
+  );
+  const accessToken = text(token.access_token);
+  if (!accessToken) throw new ProviderCallError(401);
+  return {
+    accessToken,
+    refreshToken: text(token.refresh_token) || (secrets.refreshToken ?? ""),
+    expiresAt: expiry(token),
+  };
+}
+
 /** The provider's error as an HTTP answer. Provider text never reaches the caller. Other errors throw. */
 export function failureOf(error: unknown): HTTPException {
   if (error instanceof HTTPException) return error;

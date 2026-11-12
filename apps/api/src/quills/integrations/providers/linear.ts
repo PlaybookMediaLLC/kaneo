@@ -4,9 +4,11 @@ import {
   providerJson,
 } from "../../framework/integration-config";
 import {
+  expiresAt,
   form,
   formHeaders,
   record,
+  refreshGrant,
   rejected,
   text,
   type OAuthProvider,
@@ -43,13 +45,6 @@ const tokenRequest = async (body: Record<string, string>) =>
       hosts,
     ),
   );
-
-const expiresAt = (token: Record<string, unknown>) => {
-  const expiresIn = Number(token.expires_in);
-  return Number.isFinite(expiresIn)
-    ? new Date(Date.now() + expiresIn * 1000).toISOString()
-    : "";
-};
 
 export const linear = {
   name: "Linear",
@@ -110,24 +105,14 @@ export const linear = {
       .map((team) => ({ id: text(team.id), name: text(team.name) }));
   },
   statuses: [],
-  refresh: async (secrets, creds) => {
-    const token = await tokenRequest({
-      client_id: creds.clientId ?? "",
-      client_secret: creds.clientSecret ?? "",
-      grant_type: "refresh_token",
-      refresh_token: secrets.refreshToken ?? "",
-    }).catch((error: unknown) => {
-      // A rejected refresh token (400 invalid_grant) means the grant is gone: reconnect.
-      if (error instanceof ProviderCallError && error.status === 400)
-        throw new ProviderCallError(401);
-      throw error;
-    });
-    const accessToken = text(token.access_token);
-    if (!accessToken) throw new ProviderCallError(401);
-    return {
-      accessToken,
-      refreshToken: text(token.refresh_token) || (secrets.refreshToken ?? ""),
-      expiresAt: expiresAt(token),
-    };
-  },
+  refresh: (secrets, creds) =>
+    refreshGrant(
+      tokenRequest({
+        client_id: creds.clientId ?? "",
+        client_secret: creds.clientSecret ?? "",
+        grant_type: "refresh_token",
+        refresh_token: secrets.refreshToken ?? "",
+      }),
+      secrets,
+    ),
 } satisfies OAuthProvider;

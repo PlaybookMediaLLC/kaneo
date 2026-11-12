@@ -1,13 +1,12 @@
 // Route-module helper: framework/boundaries.test.ts checks its imports like a module that uses ../framework/define-route.
+import { providerJson } from "../../framework/integration-config";
 import {
-  ProviderCallError,
-  providerJson,
-} from "../../framework/integration-config";
-import {
+  expiresAt,
   form,
   formHeaders,
   list,
   record,
+  refreshGrant,
   rejected,
   text,
   type OAuthProvider,
@@ -20,12 +19,6 @@ const bearer = (token: string) => ({
   "content-type": "application/json",
   accept: "application/json",
 });
-const expiry = (seconds: unknown) => {
-  const value = Number(seconds);
-  return Number.isFinite(value)
-    ? new Date(Date.now() + value * 1000).toISOString()
-    : "";
-};
 /** A HubSpot record ID: digits only, so it is safe in a URL path. */
 const recordId = (value: unknown) => {
   const id = text(value);
@@ -124,7 +117,7 @@ export const hubspot = {
       secrets: {
         accessToken,
         refreshToken: text(answer.refresh_token),
-        expiresAt: expiry(answer.expires_in),
+        expiresAt: expiresAt(answer),
       },
       workspaceName: domain || "HubSpot",
       account: domain || null,
@@ -134,25 +127,16 @@ export const hubspot = {
   destinations: async () => [],
   statuses: [],
   // Access tokens expire after 30 minutes.
-  refresh: async (secrets, creds) => {
-    const answer = await token({
-      grant_type: "refresh_token",
-      client_id: creds.clientId ?? "",
-      client_secret: creds.clientSecret ?? "",
-      refresh_token: secrets.refreshToken ?? "",
-    }).catch((error: unknown) => {
-      if (error instanceof ProviderCallError && error.status === 400)
-        throw new ProviderCallError(401);
-      throw error;
-    });
-    const accessToken = text(answer.access_token);
-    if (!accessToken) throw new ProviderCallError(401);
-    return {
-      accessToken,
-      refreshToken: text(answer.refresh_token) || (secrets.refreshToken ?? ""),
-      expiresAt: expiry(answer.expires_in),
-    };
-  },
+  refresh: (secrets, creds) =>
+    refreshGrant(
+      token({
+        grant_type: "refresh_token",
+        client_id: creds.clientId ?? "",
+        client_secret: creds.clientSecret ?? "",
+        refresh_token: secrets.refreshToken ?? "",
+      }),
+      secrets,
+    ),
   contact: async (secrets, config, email) => {
     const accessToken = secrets.accessToken ?? "";
     const [found] = list(

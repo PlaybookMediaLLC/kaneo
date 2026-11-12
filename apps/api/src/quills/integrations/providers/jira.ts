@@ -4,6 +4,7 @@ import {
   providerJson,
 } from "../../framework/integration-config";
 import {
+  expiresAt,
   form,
   record,
   rejected,
@@ -29,13 +30,6 @@ function items(value: unknown) {
   if (!Array.isArray(value)) throw new ProviderCallError(502);
   return value.map(record);
 }
-
-const expiresAt = (token: Record<string, unknown>) => {
-  const expiresIn = Number(token.expires_in);
-  return Number.isFinite(expiresIn)
-    ? new Date(Date.now() + expiresIn * 1000).toISOString()
-    : "";
-};
 
 /** One token request. Atlassian rotates the refresh token on each refresh. */
 const tokenRequest = (body: Record<string, string>) =>

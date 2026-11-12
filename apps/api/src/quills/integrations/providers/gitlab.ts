@@ -1,15 +1,14 @@
 // Route-module helper: framework/boundaries.test.ts checks its imports like a module that uses ../framework/define-route.
+import { providerJson } from "../../framework/integration-config";
 import {
-  ProviderCallError,
-  providerJson,
-} from "../../framework/integration-config";
-import {
+  expiresAt,
   form,
   formHeaders,
   list,
   plainQuery,
   record,
   redirectUri,
+  refreshGrant,
   rejected,
   text,
   type OAuthProvider,
@@ -52,15 +51,12 @@ export const gitlab = {
         headers: { authorization: `Bearer ${accessToken}` },
       }),
     );
-    const expiresIn = Number(token.expires_in);
     return {
       secrets: {
         accessToken,
         refreshToken: text(token.refresh_token),
         // Refreshed by the delivery job when it is due (jobs/handlers/integration-send.ts).
-        expiresAt: Number.isFinite(expiresIn)
-          ? new Date(Date.now() + expiresIn * 1000).toISOString()
-          : "",
+        expiresAt: expiresAt(token),
       },
       workspaceName: text(user.name) || text(user.username) || "GitLab",
       account: text(user.username) || null,
@@ -97,9 +93,9 @@ export const gitlab = {
   // A numeric project ID.
   target: (target) => /^\d{1,20}$/.test(target),
   // Access tokens expire after two hours. GitLab rotates the refresh token on each refresh.
-  refresh: async (secrets, creds) => {
-    const token = record(
-      await providerJson("https://gitlab.com/oauth/token", {
+  refresh: (secrets, creds) =>
+    refreshGrant(
+      providerJson("https://gitlab.com/oauth/token", {
         method: "POST",
         headers: formHeaders,
         body: form({
@@ -109,22 +105,7 @@ export const gitlab = {
           grant_type: "refresh_token",
           redirect_uri: redirectUri("gitlab"),
         }),
-      }).catch((error: unknown) => {
-        // A rejected refresh token means the grant is gone: reconnect.
-        if (error instanceof ProviderCallError && error.status === 400)
-          throw new ProviderCallError(401);
-        throw error;
       }),
-    );
-    const accessToken = text(token.access_token);
-    if (!accessToken) throw new ProviderCallError(401);
-    const expiresIn = Number(token.expires_in);
-    return {
-      accessToken,
-      refreshToken: text(token.refresh_token) || (secrets.refreshToken ?? ""),
-      expiresAt: Number.isFinite(expiresIn)
-        ? new Date(Date.now() + expiresIn * 1000).toISOString()
-        : "",
-    };
-  },
+      secrets,
+    ),
 } satisfies OAuthProvider;

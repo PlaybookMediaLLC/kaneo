@@ -4,6 +4,7 @@ import {
   providerJson,
 } from "../../framework/integration-config";
 import {
+  expiresAt,
   form,
   formHeaders,
   record,
@@ -43,13 +44,10 @@ async function token(
       hosts,
     ),
   );
-  const expiresIn = Number(answer.expires_in);
   return {
     accessToken: text(answer.access_token),
     refreshToken: text(answer.refresh_token),
-    expiresAt: Number.isFinite(expiresIn)
-      ? new Date(Date.now() + expiresIn * 1000).toISOString()
-      : "",
+    expiresAt: expiresAt(answer),
   };
 }
 

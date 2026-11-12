@@ -8,6 +8,7 @@ import {
   formHeaders,
   list,
   record,
+  refreshGrant,
   rejected,
   text,
   type OAuthProvider,
@@ -93,25 +94,17 @@ export const salesforce = {
   destinations: async () => [],
   statuses: [],
   // Returns the token fields only: an instance URL in the answer cannot change the stored instance.
-  refresh: async (secrets, creds) => {
-    const answer = await token({
-      grant_type: "refresh_token",
-      client_id: creds.clientId ?? "",
-      client_secret: creds.clientSecret ?? "",
-      refresh_token: secrets.refreshToken ?? "",
-    }).catch((error: unknown) => {
-      if (error instanceof ProviderCallError && error.status === 400)
-        throw new ProviderCallError(401);
-      throw error;
-    });
-    const accessToken = text(answer.access_token);
-    if (!accessToken) throw new ProviderCallError(401);
-    return {
-      accessToken,
-      refreshToken: text(answer.refresh_token) || (secrets.refreshToken ?? ""),
-      expiresAt: expiresAt(),
-    };
-  },
+  refresh: (secrets, creds) =>
+    refreshGrant(
+      token({
+        grant_type: "refresh_token",
+        client_id: creds.clientId ?? "",
+        client_secret: creds.clientSecret ?? "",
+        refresh_token: secrets.refreshToken ?? "",
+      }),
+      secrets,
+      expiresAt,
+    ),
   contact: async (secrets, config, email) => {
     const instance = salesforceInstance(config.instanceUrl);
     if (!instance) throw new ProviderCallError(401);
