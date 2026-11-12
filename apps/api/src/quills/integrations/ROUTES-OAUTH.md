@@ -532,11 +532,31 @@ posts it to the callback (follow-up FU1; `providers/README.md`, "Fragment provid
   token, the limit of 200, UUID filter and titles, the channel ID rule, a refused `kind`, and
   malformed answers (400 and 502 with fixed text).
 
+Delivery (FU3b, the worker; no route):
+
+- Events: `post.created` only, as in the source hook. A channel is a database ID (a lowercase UUID
+  with dashes, as the list returns it).
+- Scopes: none to add. Notion has no OAuth scopes; the teammate shares each database with the
+  integration. Existing connections do not reconnect. Notion tokens do not expire: a 401 or 403 asks
+  for a reconnect. A database that is no longer shared answers 404 (`failed`).
+- `POST https://api.notion.com/v1/pages` with `Notion-Version: 2022-06-28`, `parent.database_id`, the
+  title in `properties.title` (the ID of every database's title property; one line of at most 255
+  characters) and `children`: one `paragraph` block of plain `rich_text` for each line of the post (at
+  most 2000 characters), a divider, the author and the board. Notion takes at most 100 blocks, so the
+  lines after the 96th join one last paragraph. Plain rich text is never read as markup, so nothing is
+  escaped.
+- The page ID (a UUID) is the link's external ID. The link URL is `url` only on
+  `https://www.notion.so/`; otherwise it is empty. A 2xx answer without a page ID is `uncertain`.
+- Tests: `jobs/handlers/notion-delivery.test.ts` (the worker evidence table, the plain body, the
+  100-block limit, the channel rule and the link host rule).
+
 | Difference from the source | Reason |
 |---|---|
 | The Notion workspace ID is not stored. | No route uses it. |
 | The account label is the owner's name. The source stored no account label. | The integration summary shows `account`. |
-| No page creation. | Delivery is out of scope for #131. |
+| The body is one paragraph per line, a divider, the author and the board. The source sent a callout with an emoji, the whole post in one paragraph and a bookmark to the post. | Notion limits one text to 2000 characters; no portal URL exists for a post yet. |
+| The lines after the 96th join one paragraph. | Notion refuses a page with more than 100 blocks. |
+| The link URL is kept only on `https://www.notion.so/`; a 2xx without a page ID is `uncertain`. The source kept any answer. | A link comes only from the provider's own host; the page may exist. |
 
 ### HubSpot
 
