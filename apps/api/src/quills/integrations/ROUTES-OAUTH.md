@@ -500,17 +500,48 @@ posts it to the callback (follow-up FU1; `providers/README.md`, "Fragment provid
   name with the GraphQL query `me`. The sealed secret is `accessToken`; Monday.com tokens do not
   expire.
 - Destinations: one kind, the boards (`boards(limit: 100, order_by: used_at)`). The route keeps only
-  IDs of 1 to 30 letters and digits.
+  IDs of 1 to 30 digits.
 - A failed GraphQL query (200 with `errors` and no `data`) is 502, for the connect and for the list.
 - Tests: `providers/monday.test.ts` (local provider server): connect with a sealed token, the limit
   of 200 and the ID filter, a refused `kind`, and malformed answers (400 on the token call, 502 for a
   failed query on the connect and on the list, with fixed text).
 
+Delivery (FU3b, the worker; no route):
+
+- Events: `post.created` only, as in the source hook. A channel is a board ID (1 to 30 digits, the
+  destination ID).
+- Scopes: none to add. The authorize URL lists no scopes (the app's settings grant them), so existing
+  connections do not reconnect. Monday.com tokens do not expire: a 401 or 403 asks for a reconnect.
+- Two GraphQL calls on `https://api.monday.com/v2`, each with `Authorization: <token>` (no `Bearer`).
+  The values are GraphQL variables, never query text:
+  1. `create_item(board_id: $board, item_name: $name)`. The name is one line of at most 255
+     characters.
+  2. `create_update(item_id: $item, body: $body)`. The body is HTML in which every part is escaped:
+     one `<p>` per line of the post (at most 2000 characters), then the author and the board.
+- Monday.com answers 200 with `errors` for a refused query. Without an item ID, only a refusal proves
+  that no item exists: every error with the same 4xx `extensions.status_code` maps as that HTTP status
+  (401 or 403 a reconnect, 429 a retry, another 4xx `failed`), and 4xx codes of several kinds fail.
+  Any other answer (a 5xx code, no code, or a `create_item` without a valid ID) is `uncertain`.
+  Provider text is never kept.
+- **Partial success.** Once `create_item` answered with an ID, the item exists. `deliver` then never
+  throws: any failure of the update (an HTTP error, no answer, GraphQL errors) still returns
+  `succeeded` with the item, and the item has no body. A thrown refusal would end `failed`, which
+  offers a retry and so a second item.
+- The item ID is the link's external ID. The link has no URL: a Monday.com item URL names the
+  account's subdomain, which is not stored.
+- Tests: `jobs/handlers/monday-delivery.test.ts` (the worker evidence table, the GraphQL variables and
+  the escaped update, the refusal map, the partial success for eight update failures, and the channel
+  rule).
+
 | Difference from the source | Reason |
 |---|---|
 | A failed account read fails the connect. The source connected with the name "Monday.com". | The same rule as the other providers: a connect that cannot read the account is not complete. |
 | The account label is the Monday.com user name. The source stored no account label. | The integration summary shows `account`. |
-| No item creation. | Delivery is out of scope for #131. |
+| The values are GraphQL variables. The source put the board ID and the JSON-quoted title in the query text. | A title can never change the query. |
+| A failed update returns `succeeded` with the item. The source returned `uncertain` with no link. | The item exists: it is linked, and a retry cannot make a second one. |
+| GraphQL errors with a 4xx status map to a fixed outcome. The source made every error `uncertain`. | A refusal before the write proves that no item exists. |
+| The update is escaped HTML with the author and the board. The source sent plain text and a "View in …" link. | Monday.com reads an update as HTML; no portal URL exists for a post yet. |
+| No group (`groupId`). | No route sets one; Monday.com puts the item in the board's top group. |
 
 ### Notion
 

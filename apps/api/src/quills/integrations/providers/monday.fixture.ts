@@ -1,7 +1,9 @@
 import { providerAnswers } from "../provider-edge.fixture";
 
-// Answers of the local Monday.com server. GraphQL has one path: the query decides the answer.
-// The board list is longer than the route's limit of 200.
+// Answers of the local Monday.com server. GraphQL has one path, so one answer holds every query's
+// data: the connect reads `me`, the list reads `boards`, and a delivery reads `create_item`, then
+// `create_update`. The board list is longer than the route's limit of 200.
+export const MONDAY_ITEM = "5001";
 providerAnswers.push((route) => {
   if (route === "POST /auth.monday.com/oauth2/token")
     return { access_token: "monday-access" };
@@ -16,6 +18,8 @@ providerAnswers.push((route) => {
             name: `Board ${i}`,
           })),
         ],
+        create_item: { id: MONDAY_ITEM },
+        create_update: { id: "6001" },
       },
     };
   return undefined;
