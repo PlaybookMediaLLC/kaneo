@@ -13,7 +13,7 @@ process.env.NOTIFICATION_SECRET_ENCRYPTION_KEY ||= "quills-contract-test-key";
  * on PUBLIC_ORIGIN (a documentation address, so it passes the destination guard) reaches this server
  * at the socket; any other address gets no network. The guard still checks every URL first.
  * Paths: /open/mcp (no auth), /bearer/mcp (BEARER), /oauth/mcp (an access token from /token),
- * /stall/mcp (an event stream that never sends a result).
+ * /stall/mcp (an event stream that never sends a result). tools/call answers with `edge.answer`.
  */
 export const PUBLIC_ORIGIN = "https://203.0.113.10";
 export const BEARER = "contract-bearer-token";
@@ -26,6 +26,10 @@ const tool = (name: string, readOnly = false) => ({
   annotations: { readOnlyHint: readOnly },
 });
 const DEFAULT_TOOLS = [tool("search", true), tool("create_issue")];
+type CallAnswer = { content: unknown[]; isError?: boolean };
+const echo = (name: string): CallAnswer => ({
+  content: [{ type: "text", text: `${name} done` }],
+});
 
 export const edge = {
   /** The tools/list answer. Tests may replace it; `reset` restores the default. */
@@ -40,12 +44,27 @@ export const edge = {
   challenge: null as string | null,
   /** The advertised authorization endpoint. */
   authorize: `${PUBLIC_ORIGIN}/authorize`,
+  /** Each tools/call that reached the server, with its path and arguments. */
+  calls: [] as { path: string; name: string; arguments: unknown }[],
+  /** The tools/call answer. */
+  answer: echo as (name: string, args: unknown) => CallAnswer,
+  /** While set, tools/call never answers: the client's deadline must end it. */
+  stallCalls: false,
+  /** While set, tools/call waits for it after it is recorded. */
+  callGate: null as Promise<void> | null,
+  /** While set, the next tools/call on /oauth/mcp answers 401 and its access token expires. */
+  expireOnCall: false,
   reset() {
     this.tools = DEFAULT_TOOLS;
     this.requests = [];
     this.gate = null;
     this.challenge = null;
     this.authorize = `${PUBLIC_ORIGIN}/authorize`;
+    this.calls = [];
+    this.answer = echo;
+    this.stallCalls = false;
+    this.expireOnCall = false;
+    this.callGate = null;
   },
 };
 
@@ -60,7 +79,7 @@ function mcp(raw: string): Answer {
   const message = JSON.parse(raw) as {
     id?: number;
     method: string;
-    params?: { protocolVersion?: string };
+    params?: { protocolVersion?: string; name?: string; arguments?: unknown };
   };
   // A notification gets no answer.
   if (message.id === undefined) return { status: 202 };
@@ -73,7 +92,9 @@ function mcp(raw: string): Answer {
         }
       : message.method === "tools/list"
         ? { tools: edge.tools }
-        : undefined;
+        : message.method === "tools/call"
+          ? edge.answer(message.params?.name ?? "", message.params?.arguments)
+          : undefined;
   return {
     status: 200,
     body: result
@@ -110,6 +131,14 @@ function answer(
     if (method !== "POST") return { status: 405 };
     if (path === "/bearer/mcp" && authorization !== `Bearer ${BEARER}`)
       return { status: 401 };
+    if (
+      path === "/oauth/mcp" &&
+      edge.expireOnCall &&
+      raw.includes('"tools/call"')
+    ) {
+      edge.expireOnCall = false;
+      edge.access.delete(authorization.replace(/^Bearer /, ""));
+    }
     if (
       path === "/oauth/mcp" &&
       !edge.access.has(authorization.replace(/^Bearer /, ""))
@@ -180,6 +209,17 @@ const server = createServer((request, response) => {
       authorization,
     });
     if (edge.gate && raw.includes('"tools/list"')) await edge.gate;
+    if (raw.includes('"tools/call"')) {
+      const { params } = JSON.parse(raw) as {
+        params: { name: string; arguments: unknown };
+      };
+      edge.calls.push({ path, ...params });
+      if (edge.callGate) await edge.callGate;
+      if (edge.stallCalls)
+        return void response
+          .writeHead(200, { "content-type": "text/event-stream" })
+          .flushHeaders();
+    }
     // Headers, then nothing: the client's deadline must end the request.
     if (path === "/stall/mcp" && request.method === "POST")
       return void response

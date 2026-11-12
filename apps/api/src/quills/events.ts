@@ -329,6 +329,7 @@ export const changeSchema = z.object({
     "assistant_action.proposed",
     "assistant_action.approved",
     "assistant_action.rejected",
+    "assistant_action.completed",
     "assistant.embeddings_requested",
     "merge_suggestion.dismissed",
     "merge_suggestion.restored",

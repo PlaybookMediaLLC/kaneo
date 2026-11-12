@@ -101,8 +101,8 @@ settings stay with the widget slice.
 ## Connectors (RFC 0001, lane C1)
 
 A connector is a remote MCP server that a settings manager adds. These routes add, read, change,
-refresh and authorize a connector. `connector-client.ts` is the MCP client. The copilot does not
-call connector tools yet (see "Not ported").
+refresh and authorize a connector. `connector-client.ts` is the MCP client. The copilot calls
+connector tools (see "Connector tools").
 
 ### Boundary map
 
@@ -162,6 +162,155 @@ Tests: the contract suite (a local MCP and OAuth server in `connector-edge.fixtu
 | Each assignment needs its AI permission. | Every connector route needs `manage_settings`, as all assistant configuration does. |
 | No limit. | At most 100 connectors (the list shows 100). |
 | The OAuth tokens get an `expiresAt` and a 5-minute refresh buffer. | The tokens are stored as the SDK returns them. The SDK refreshes them when the server answers 401. |
+
+## Connector tools (follow-up FU2)
+
+The teammate copilot calls the tools of the workspace's connectors. Modules:
+`connector-tools.ts` (names, policies, input schemas; shared by the worker and the approval
+route), `engine/connector-calls.ts` (the calls, their records and the approved-action work) and
+`connector-client.ts` (`callTool`). Feature tests: `connector-tools.test.ts`.
+
+### Surfaces
+
+| Surface | Tools today | Connector tools |
+|---|---|---|
+| Teammate copilot (`engine/copilot.ts`) | The only tool loop: built-in read tools run, write tools propose. | Yes: connectors with `assignments.copilot`, in conversation and ticket turns. |
+| Other runs (translation, attribute preview, ticket fields, widget answer) | One provider call, no tools. | No. |
+| Slack answers (`engine/slack.ts`) | One provider call, no tools. | No. |
+| Customer-facing agent | Not ported. | No. `assignments.agent` stays stored only. |
+| Workflows | No provider call. | No. |
+
+### Boundary map
+
+```
+Tables and owning schema:  quills: connectors (read; the call writes last_call_at, last_error,
+                           error_count and rotated secrets), assistant_tool_calls,
+                           assistant_pending_actions, events, audit_log, job_queue. public: none
+                           (the worker reads the requester's and the approver's role through
+                           framework/platform-reads.ts, as the copilot does).
+Actor and workspace:       the job's workspace (withQuillsSystemWorkspace). The actor is the run's
+                           requester, or the approver of an approved action. Never a tool result.
+Permissions:               a read-group tool needs quills:read (the copilot's action). A write-group
+                           tool, and every proposal, needs quills:update now. Approval needs
+                           quills:update (the route), and the worker checks it again.
+Persisted relationships:   the connector ID in the pending action's arguments, read again in the
+                           caller's or the job's workspace.
+Transactions:              a connector call never runs in a transaction. Each call: claim (a
+                           `started` tool-call row) in one transaction, the call with none open,
+                           then the record in a new one. The approval route only decides.
+External effects:          MCP initialize and tools/call through `callTool`: the guarded fetch, one
+                           deadline for the step, answers of at most 1 MB, the OAuth refresh of the
+                           SDK on 401 (once). Connector credentials only: no Kaneo session, API key
+                           or ID goes to the server beyond the arguments that the model made.
+```
+
+### The loop and its limits
+
+The copilot loop runs in the `quills.ai` worker (`answerCopilot`): at most 4 provider calls and 5
+tool calls for each. Connector tools join the built-in tools under these limits:
+
+| Limit | Value |
+|---|---|
+| Connector tools offered in a run | 32, with at most 40,000 characters of descriptions and schemas in all (connectors by name, tools in catalogue order; a tool that does not fit is skipped) |
+| Tool name | `connector_<slug>__<tool>`, at most 64 characters of `[A-Za-z0-9_-]`. A tool name that does not fit gets a cut and an 8-character hash. A name that is already offered is skipped. |
+| Tool description to the model | the connector's name and at most 500 characters of the server's text |
+| Arguments | a JSON object of at most 8,000 characters, valid for the tool's stored input schema |
+| Connector calls that reach the network in a run | 5 |
+| Time for all connector calls of a run | 30 seconds of call time (the provider's time does not count); each call has at most 10 seconds and the time that is left; no call starts with less than 1 second left |
+| Answer from the server | 1 MB (the client) |
+| Result text to the model | 8,000 characters; then `[truncated]` |
+
+The input schema is the stored one (C1 drops a schema over 20,000 characters). The worker makes a
+copy whose checks cost work in proportion to its size:
+
+- It removes `pattern` and `patternProperties`: a server's regular expression must not block the
+  worker.
+- It removes a repeated `type` entry: zod converts the node again for each entry.
+- It replaces each local `$ref` with a copy of its target: zod checks a shared target again for
+  each use. A remote reference or an anchor is refused.
+- It refuses a copy of more than 5,000 nodes or 32 levels (also a reference cycle), a schema that
+  is not an object, and a schema that the converter cannot read.
+
+A tool without a usable schema is not offered. The converter gets a registry of its own, so an
+`id` in a server's schema does not stay in memory.
+
+### Policies
+
+`toolPolicies` from C1: a per-tool override, else the default of the tool's group.
+
+1. The group is `read` only when the stored annotations say `readOnlyHint` and not
+   `destructiveHint`. Any other tool is `write`.
+2. A policy value that is not `always`, `approval` or `never` counts as `approval`.
+3. `never`: the tool is not offered, and a call to it is denied.
+4. `always`, read group: the tool runs in the loop.
+5. `always`, write group: the tool runs in the loop only when the requester holds `update`.
+6. `approval`: the call becomes a pending action when the requester holds `update`. Otherwise it is
+   denied. The default for the write group is `approval`.
+7. A connector offers tools only when it is `enabled`, its status is `connected`, and
+   `assignments.copilot` is true. A disabled or errored connector offers nothing.
+8. New tools: the worker offers only the stored catalogue. A tool that the server added after the
+   last refresh is unknown and cannot run. A manager's refresh adds it with its group's default.
+
+### Untrusted text
+
+- A tool result goes to the model in a `tool` message, inside `<tool_result>` with the
+  `untrusted()` note. It is never part of the system message. NUL and lone surrogates become
+  U+FFFD. A server error (`isError`) and a failed call return fixed text, never the server's text.
+- `untrusted()` changes each closing tag of its label in the text (any case or spacing) to
+  `<\/label>` in one pass, so the text cannot close the block early. This also protects the
+  thread and the other wrapped texts.
+- A result cannot change the run: the workspace, the actor, the tool list and the policies are
+  fixed before the first provider call. A tool that the result names is still checked against the
+  list, and the worker fetches no URL from a result. Each call checks again that its connector is
+  enabled, connected and assigned to the copilot, so a connector that a manager turns off gets no
+  more calls from a run in progress.
+- Tool names and descriptions come from the server: they are namespaced, bounded, and cannot match
+  a built-in tool (built-in names never start with `connector_`).
+
+### Approval
+
+1. The copilot stores a pending action (`originRole` `copilot_qa`). Its tool name is the offered
+   name. Its arguments are `{connectorId, tool, arguments}`. Its summary names the connector and
+   the tool and shows all the arguments (at most 8,000 characters), so the approver sees each
+   value that will run.
+2. `approveQuillsAssistantAction` (update) checks in its transaction that the connector is in this
+   workspace and still offers the tool with a policy other than `never`, and that the arguments fit
+   the current schema. It sets the action `approved` and records `assistant_action.approved`. It
+   reaches no network. Otherwise it answers 409.
+3. `assistant_action.approved` goes to the `quills.ai` worker. The worker acts only on an
+   `approved` connector action. It checks the approver's `update` and the connector again, claims
+   the call (tool-call key `action:<actionId>`), calls once, and sets the action `executed` or
+   `failed` (`result`: `{ok}` only) with `assistant_action.completed`.
+4. A second approval answers 409. A repeated job reads the claim first, before any check that may
+   have changed since, and never calls again: it copies the recorded outcome, or sets `failed`
+   when the outcome is unknown (the worker stopped during the call; the tool-call row stays
+   `started`).
+
+### Records
+
+Each connector call writes one `assistant_tool_calls` row: the offered tool name, the status, a
+fixed summary, a failure kind in `error`, the duration, the principal, the conversation, the
+pending action, and in `args` only `{connectorId, argsBytes, resultBytes}`. A built-in tool's row
+keeps the model's arguments (a search query or a status) and never a result. A connector tool's
+arguments go to an outside service and can hold any text from the thread, so its row keeps their
+size only. The pending action keeps the arguments, as a built-in proposal does: the approval needs
+them.
+
+The call key is `<runId>:connector:<hash of name and arguments>:<repeat>`, where `<repeat>`
+counts the same call in this attempt. The model can call the same tool with the same arguments
+again in one run, and a repeated job attempt that makes the same calls skips the ones that ran. The connector row gets `last_call_at`,
+and on a failure a fixed `last_error`. Rotated OAuth tokens are stored only when the stored secrets
+did not change during the call and the new secrets still hold tokens (C1's rule). These health
+fields record no event.
+
+An import (`transfer/import-archive.ts`) turns each imported connector off (`enabled` false), as
+it pauses webhooks and integrations: it sends no thread text until a manager here enables it.
+
+### Events
+
+| Event | Recorded by |
+|---|---|
+| `assistant_action.completed` (new; payload `status`: `executed` or `failed`) | the worker, when an approved connector action finishes |
 
 ## Runtime
 
@@ -324,7 +473,7 @@ No table changes.
 | Copilot streaming (AG-UI SSE) | Not ported | A provider call cannot run inside the request transaction, and the framework has one transaction per request. The copilot is a run that the worker answers. A two-phase declaration (read, call, write) is a framework change. |
 | Workspace assistant threads | Not ported | The source retired them (`workspace-assistant.ts`: nothing creates or reads these threads). |
 | Customer-facing agent (Quinn in conversations), involvements | Not ported | Needs the conversation reply pipeline and channel delivery; the analytics routes, the inbox assistant counts and the conversation activity read the existing tables (`support/CONVERSATIONS.md`). |
-| Connector tools in the copilot | Not ported | No RFC 0001 entry point runs them. A tool call reaches a user URL, so it needs a network step in the worker's tool loop and in approval. Connector `assignments` and `toolPolicies` are stored only. |
+| Connector tools outside the copilot | Not ported | Only the copilot has a tool loop (see "Connector tools"). `assignments.agent` is stored only. The result of an approved connector call is not shown: the run already ended. |
 | Imported connector secrets | Unreadable | The source sealed them with its own key. A refresh then answers `Authorization required`: enter the bearer token again, or authorize again. |
 | Document upload of an original file, PDF text extraction | Not ported | Needs a PDF parser dependency and a new `framework/files.ts` purpose. Documents take text or Markdown. |
 | Widget assistant deployment | Not ported | Widget slice. |
@@ -332,6 +481,7 @@ No table changes.
 | `my_tone` transform | Not ported | Needs a read of the teammate's replies before the provider call. |
 | Feedback posts as a copilot read tool | Not ported | Needs a project-visibility read for the requester inside the worker. |
 | Pending-action expiry sweep | Not ported | An expired action returns 409 on decision; its stored status stays `proposed`. |
+| Sweep of approved connector actions | Not ported | When the worker job fails three times before it claims the call (for example a database outage), the action stays `approved`: approve and reject answer 409, and nothing runs it. |
 | Usage rows for a failed `load` call (transform, draft, semantic search) | Not logged | `load` has no transaction; a failed call returns 502 and writes nothing. |
 | API-key scope in the worker | Partial | A request's handler cannot see the API key, so the worker checks the requester's role, not the key's scope. A read-only key can lead to a proposal; approval still checks the approver's role and key scope. |
 | Snippet and document embeddings | Not ported | No retrieval reads them yet; `search_knowledge` matches words. Imported embeddings are kept and cleared on edit. |
