@@ -487,11 +487,20 @@ describe.skipIf(!url)("Microsoft Teams delivery", () => {
     ]);
   }, 20_000);
 
-  it("after a reconnect, a resync posts nothing to a channel that got the message, and fills a new channel", async () => {
+  it("after a reconnect, a resync posts nothing to a channel that got or may have got the message, and fills a new channel", async () => {
     const id = await connect();
     const postId = await makePost();
     await created(postId);
     await h.drain(h.a);
+    // A second post whose message got no answer: uncertain.
+    answers(MESSAGES, "drop");
+    const unsurePost = await makePost();
+    await created(unsurePost);
+    await h.drain(h.a);
+    expect((await ops(id)).map((op) => op.state)).toEqual([
+      "succeeded",
+      "uncertain",
+    ]);
     await h.system(h.a, (db) =>
       db
         .update(integrations)
@@ -507,16 +516,17 @@ describe.skipIf(!url)("Microsoft Teams delivery", () => {
       ).status,
     ).toBe(200);
     const before = providerCalls.length;
-    expect(
-      (await call(`/posts/${postId}/integration-sync`, "POST")).status,
-    ).toBe(200);
+    for (const post of [postId, unsurePost])
+      expect(
+        (await call(`/posts/${post}/integration-sync`, "POST")).status,
+      ).toBe(200);
     await h.drain(h.a);
+    // Only the new channel gets a message for each post; the first channel gets nothing again.
+    const other = `POST /graph.microsoft.com/v1.0/teams/${TEAMS_TEAM}/channels/19%3Aother%40thread.tacv2/messages`;
     expect(
       providerCalls.slice(before).map((c) => `${c.method} ${c.path}`),
-    ).toEqual([
-      `POST /graph.microsoft.com/v1.0/teams/${TEAMS_TEAM}/channels/19%3Aother%40thread.tacv2/messages`,
-    ]);
-    expect(messages()).toHaveLength(1);
+    ).toEqual([other, other]);
+    expect(messages()).toHaveLength(2);
   }, 20_000);
 
   it("keeps the outcome when the job lease is lost during the send", async () => {

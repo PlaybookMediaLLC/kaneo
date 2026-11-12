@@ -31,7 +31,7 @@ providerAnswers.push((route) => {
         { id: "../escape", displayName: "Dropped" },
       ],
     };
-  // A channel message: Graph answers 201 with the chatMessage.
+  // A channel message. Graph answers 201 with the chatMessage; this local server answers 200.
   if (
     /^POST \/graph\.microsoft\.com\/v1\.0\/teams\/[^/]+\/channels\/[^/]+\/messages$/.test(
       route,
