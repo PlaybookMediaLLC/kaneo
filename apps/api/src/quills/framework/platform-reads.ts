@@ -264,7 +264,9 @@ export async function portalAccount(workspaceId: string, userId: string) {
       email: userTable.email,
       emailVerified: userTable.emailVerified,
       image: userTable.image,
-      member: sql<boolean>`exists (select 1 from ${workspaceUserTable} where ${workspaceUserTable.workspaceId} = ${workspaceId} and ${workspaceUserTable.userId} = ${userTable.id})`,
+      // ${userTable}.id, not ${userTable.id}: in a one-table select, drizzle writes the column as a
+      // bare "id", which the subquery would bind to workspace_member.id.
+      member: sql<boolean>`exists (select 1 from ${workspaceUserTable} where ${workspaceUserTable.workspaceId} = ${workspaceId} and ${workspaceUserTable.userId} = ${userTable}.id)`,
     })
     .from(userTable)
     .where(

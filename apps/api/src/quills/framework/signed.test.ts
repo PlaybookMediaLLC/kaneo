@@ -32,7 +32,7 @@ import {
   startContract,
   stopContract,
 } from "./contract";
-import { memberHoldsQuillsAction } from "./platform-reads";
+import { memberHoldsQuillsAction, portalAccount } from "./platform-reads";
 import {
   inboundLabel,
   mailTags,
@@ -482,6 +482,13 @@ describe.skipIf(!url)("signed audience with PostgreSQL", () => {
       { headers: { "x-test-user": user("limited") } },
     );
     expect(res.status).toBe(403);
+  });
+
+  it("marks a portal account as a member only for a workspace that it belongs to", async () => {
+    const env = contractEnv();
+    expect((await portalAccount(env.a, env.owner))?.member).toBe(true);
+    expect((await portalAccount(env.b, env.owner))?.member).toBe(false);
+    expect((await portalAccount(env.a, env.customerA))?.member).toBe(false);
   });
 
   it("verifies a GitLab token, applies a close, and refuses deliveries once status sync is off", async () => {

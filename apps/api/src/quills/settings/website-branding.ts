@@ -299,7 +299,7 @@ async function callerDomain({
   workspaceId: string;
   userId: string;
 }) {
-  // Not portalAccount's `member` flag: its subquery compares workspace_member.id, not user.id.
+  // isMemberOfNamedWorkspace, not portalAccount's `member` flag: it also requires an unarchived workspace.
   const [account, member] = await Promise.all([
     portalAccount(workspaceId, userId),
     isMemberOfNamedWorkspace(workspaceId, userId),
