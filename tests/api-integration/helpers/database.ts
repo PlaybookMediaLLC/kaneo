@@ -5,6 +5,7 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Client } from "pg";
 import db from "../../../apps/api/src/database";
 import { runQuillsMigrations } from "../../../apps/api/src/database/quills/migrate";
+import { runAlone } from "./run-alone";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const migrationsFolder = resolve(currentDir, "../../../apps/api/drizzle");
@@ -115,7 +116,9 @@ export async function resetTestDatabase() {
 
   const formattedTableNames = tableNames.map(quoteIdentifier).join(", ");
 
-  await db.execute(
-    sql.raw(`TRUNCATE TABLE ${formattedTableNames} RESTART IDENTITY CASCADE`),
+  await runAlone((client) =>
+    client.query(
+      `TRUNCATE TABLE ${formattedTableNames} RESTART IDENTITY CASCADE`,
+    ),
   );
 }
