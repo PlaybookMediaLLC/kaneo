@@ -91,6 +91,9 @@ out of scope.
   function never gets a database handle.
 - **Errors.** Use `providerJson`. It throws `ProviderCallError` with the status only; provider text
   never reaches a response.
+- **Deadline and size.** `providerJson` stops at the earlier of 10 seconds and `init.signal`. It refuses
+  an answer over 10 MiB as a 502. `refresh` and `contact` get the caller's signal as their last
+  argument. Pass it to each of their calls, so that one deadline ends the whole chain.
 - **Bot tokens.** A credential named `botToken` is required at save time (Discord).
 
 ## Capabilities
@@ -174,7 +177,8 @@ would need a different body for each provider, and a route mounted in a loop has
 in the same order as `listQuillsIntegrationDestinations`:
 
 - `prepare`: `oauthConnection(db, params.integrationId)`. Answer 409 when the provider has no `contact`.
-- `call`: `withToken(prepared, (secrets) => provider.contact(secrets, config, query.email))`.
+- `call`: `withToken(prepared, (secrets) => provider.contact(secrets, config, query.email, signal), signal)`,
+  with `signal = AbortSignal.timeout(lookupLimits.provider)` (`../contacts.ts`).
 - `failure`: `called.failure`.
 - `handler`: `keepRefreshed(db, called.connection, called.refreshed)`, then return only the selected
   and bounded `Contact` fields.
