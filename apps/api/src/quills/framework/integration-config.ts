@@ -62,7 +62,7 @@ export class ProviderCallError extends Error {
 export async function providerJson(
   url: string,
   init: {
-    method?: "GET" | "POST";
+    method?: "GET" | "POST" | "PATCH";
     headers?: Record<string, string>;
     body?: string;
   } = {},

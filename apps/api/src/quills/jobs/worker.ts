@@ -12,6 +12,7 @@ import { deliverCustomerChange } from "./handlers/customer-stream";
 import { fanOutIntegrations, runIntegrationJob } from "./handlers/integration";
 import { runAiJob } from "./handlers/ai";
 import { runDomainCheckJob } from "./handlers/domain-check";
+import { runGitHubCommentJob } from "./handlers/github-comment";
 import { runMailJob } from "./handlers/mail";
 import { runNotificationJob } from "./handlers/notification";
 import { runWebhookJob } from "./handlers/webhook";
@@ -33,11 +34,14 @@ const handlers: Record<
   Exclude<QuillsQueue, "quills.event">,
   (workspaceId: string, job: JobQueueRow) => Promise<unknown>
 > = {
-  // Integration deliveries share this queue until a quills.integration queue is runnable (integrations/ROUTES.md).
+  // Integration deliveries and GitHub inbox comments share this queue until a quills.integration queue
+  // is runnable (integrations/ROUTES.md). A webhook job names its webhook.
   "quills.webhook": (workspaceId, job) =>
     "operationId" in (job.payload as object)
       ? runIntegrationJob(workspaceId, job)
-      : runWebhookJob(workspaceId, job),
+      : "webhookId" in (job.payload as object)
+        ? runWebhookJob(workspaceId, job)
+        : runGitHubCommentJob(workspaceId, job),
   "quills.mail": runMailJob,
   "quills.notification": runNotificationJob,
   "quills.domain_check": runDomainCheckJob,

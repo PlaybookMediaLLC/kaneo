@@ -269,7 +269,8 @@ No table changes.
 | Connector tools in the copilot | Not ported | No RFC 0001 entry point runs them. A tool call reaches a user URL, so it needs a network step in the worker's tool loop and in approval. Connector `assignments` and `toolPolicies` are stored only. |
 | Imported connector secrets | Unreadable | The source sealed them with its own key. A refresh then answers `Authorization required`: enter the bearer token again, or authorize again. |
 | Document upload of an original file, PDF text extraction | Not ported | Needs a PDF parser dependency and a new `framework/files.ts` purpose. Documents take text or Markdown. |
-| Widget assistant deployment, Slack settings | Not ported | Widget and Slack slices. |
+| Widget assistant deployment | Not ported | Widget slice. |
+| Slack assistant | Ported in part | Settings, the event hook and one threaded answer: `integrations/ROUTES-OAUTH.md`, "Agent channels". |
 | `my_tone` transform | Not ported | Needs a read of the teammate's replies before the provider call. |
 | Feedback posts as a copilot read tool | Not ported | Needs a project-visibility read for the requester inside the worker. |
 | `searchQuillsWorkspace` (Ask search) | Not ported | Not in this slice's list. |

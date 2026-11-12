@@ -79,6 +79,13 @@ export const providers = {
     events: [],
     channels: false,
   },
+  segment: {
+    name: "Segment",
+    category: "user_data",
+    description: "Receive identify calls that update customer attributes.",
+    events: [],
+    channels: false,
+  },
   // OAuth providers (providers/). A channel is a repository, project or chat channel.
   // Issue trackers deliver creates only, so an inbound status change never echoes back.
   ...oauthProviders,
