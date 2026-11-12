@@ -10,7 +10,7 @@ import { events } from "../../database/quills/schema/events";
 import { importRuns } from "../../database/quills/schema/import-runs";
 import { jobQueue } from "../../database/quills/schema/job-queue";
 import * as kaneo from "../../database/schema";
-import { recordQuillsChange } from "../events";
+import { RECEIPT_MAX_BYTES, recordQuillsChange } from "../events";
 import quillsRouter from "../index";
 import {
   contractApp,
@@ -30,6 +30,7 @@ import { brandingReceipt } from "./branding";
 import { developerReceipt } from "./developer";
 import { labsReceipt } from "./labs";
 import { portalReceipt } from "./portal";
+import { RECEIPT_LIMIT_BYTES } from "./receipt-fields";
 import { widgetReceipt } from "./widget";
 
 let pool: Pool;
@@ -143,6 +144,15 @@ describe.skipIf(!url)("Quills settings receipts and undo", () => {
     const write = await call("PUT", "/settings/labs", { statusPage: true });
     expect(write.status).toBe(200);
     const receiptId = write.body.receiptId as string;
+    // The first labs write stores no defaults, so its receipt holds only the flag it changed.
+    const [first] = await receiptRow(receiptId);
+    expect(first!.metadata).toEqual({
+      receipt: {
+        area: "labs",
+        before: {},
+        after: { "featureFlags.statusPage": true },
+      },
+    });
     const archive = await withQuillsWorkspace(
       { workspaceId: env.a, userId: env.owner },
       (tx) => exportWorkspaceArchive(tx, env.a),
@@ -392,7 +402,9 @@ describe.skipIf(!url)("Quills settings receipts and undo", () => {
   });
 
   it("answers 404 for an unknown ID or a row that is no receipt, and 403 without manage_settings", async () => {
+    const env = contractEnv();
     expect((await undo(createId("audit_log"))).status).toBe(404);
+    await call("POST", "/settings/widget/secret");
     const [rotation] = await inA<{ id: string }[]>((db) =>
       db
         .select({ id: auditLog.id })
@@ -412,6 +424,92 @@ describe.skipIf(!url)("Quills settings receipts and undo", () => {
     // Unchanged values write no receipt.
     const same = await call("PUT", "/settings/labs", { supportInbox: true });
     expect(same.body.receiptId).toBeNull();
+
+    // A receipt of another workspace is unknown here: 404, not the import 409.
+    const foreign = await call(
+      "PUT",
+      "/settings/labs",
+      { supportTickets: true },
+      undefined,
+      target,
+    );
+    expect(foreign.body.receiptId).toMatch(/^audit_/);
+    const crossed = await undo(foreign.body.receiptId);
+    expect(crossed.status).toBe(404);
+    expect(crossed.body.message).toBe("Settings receipt not found");
+
+    // A stored receipt with a key outside the area's allowlist restores nothing.
+    const crafted = createId("audit_log");
+    await inA((db, actor) =>
+      recordQuillsChange(db, actor, {
+        type: "settings.branding_updated",
+        entityType: "settings",
+        entityId: env.a,
+        receiptId: crafted,
+        receipt: {
+          area: "branding",
+          before: { logoKey: "planted-object-key" },
+          after: { logoKey: null },
+        },
+      }),
+    );
+    const refused = await undo(crafted);
+    expect(refused.status).toBe(409);
+    expect(refused.body.message).toBe("This change cannot be undone.");
+    const [row] = await inA<(typeof settings.$inferSelect)[]>((db) =>
+      db.select().from(settings),
+    );
+    expect(row!.logoKey).toBeNull();
+  });
+
+  it("lets only one of two undos of the same receipt through", async () => {
+    const write = await call("PUT", "/settings/labs", { supportTickets: true });
+    const results = await Promise.all([
+      undo(write.body.receiptId),
+      undo(write.body.receiptId),
+    ]);
+    expect(results.map((res) => res.status).sort()).toEqual([200, 409]);
+    expect(
+      await inA((db) =>
+        db
+          .select({ id: auditLog.id })
+          .from(auditLog)
+          .where(
+            and(
+              eq(auditLog.eventType, "settings.undone"),
+              eq(auditLog.targetId, write.body.receiptId),
+            ),
+          ),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("saves a change that its audit row cannot hold, without a receipt", async () => {
+    expect(RECEIPT_LIMIT_BYTES).toBe(RECEIPT_MAX_BYTES);
+    // 51,200 characters fit the schema; two-byte characters before and after pass the byte limit.
+    const first = await call("PUT", "/settings/branding", {
+      customCss: "é".repeat(50 * 1024),
+    });
+    expect(first.status).toBe(200);
+    const large = await call("PUT", "/settings/branding", {
+      customCss: "ü".repeat(50 * 1024),
+    });
+    expect(large.status).toBe(200);
+    expect(large.body.receiptId).toBeNull();
+    // jsonb refuses a NUL character that a JSON text column holds.
+    const nul = await call("PUT", "/settings/widget", {
+      launcherGreeting: "a\u0000b",
+    });
+    expect(nul.status).toBe(200);
+    expect(nul.body.receiptId).toBeNull();
+    // A stored value of either kind does not block later writes of the key.
+    for (const [area, body] of [
+      ["branding", { customCss: "" }],
+      ["widget", { launcherGreeting: "" }],
+    ] as const) {
+      const reset = await call("PUT", `/settings/${area}`, body);
+      expect(reset.status).toBe(200);
+    }
   });
 
   it("never puts a receipt in an event row, a job, a webhook body or a response", async () => {
@@ -423,6 +521,7 @@ describe.skipIf(!url)("Quills settings receipts and undo", () => {
     const undone = await undo(write.body.receiptId);
     expect(undone.status).toBe(200);
     const audits = await call("GET", "/audit-events?limit=100");
+    expect(audits.status).toBe(200);
     for (const text of [write.text, undone.text, audits.text])
       expect(text).not.toContain("marker-before");
     const leaked = await inA<unknown[]>(async (db) => {

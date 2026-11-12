@@ -180,7 +180,14 @@ Merged: `routes/api/v1/settings/receipts.$receiptId.undo.ts#POST`.
   Never in a receipt: the widget secret, install codes, file and object keys (logo, favicon, hero
   image), portal access data, moderation defaults, the Kaneo name and slug, or any token.
 - The update response returns `receiptId`, the audit row ID of its receipt (minted by the handler and
-  passed to `recordQuillsChange`), or null when no allowlisted key changed.
+  passed to `recordQuillsChange`), or null when no allowlisted key changed. It is also null when the
+  audit row cannot hold the receipt: over 128 KiB (custom CSS is limited in characters, a receipt in
+  bytes), or a value that jsonb refuses (a NUL character or a lone surrogate, which a JSON text column
+  holds). The change still saves; only its undo is not available.
+- A receipt row takes the time of its insert (`clock_timestamp()`), under the settings row lock, so
+  "later" follows the lock order and not the start of the transaction.
+- A labs write stores only the flags that are set, not the defaults, so its receipt holds only the
+  flags it changed.
 - Undo locks the settings row, as every settings write does. It answers 404 for an unknown or
   foreign ID, or a row that is no settings receipt. It answers 409 when:
   - a `settings.undone` row already names the receipt;

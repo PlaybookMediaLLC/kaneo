@@ -45,11 +45,18 @@ export default settingsArea({
   read: (row) => resolveFlags(parseJson(row.featureFlags)),
   patch: flags.partial(),
   receipt: labsReceipt,
-  // Unknown and retired flags are dropped on write.
-  apply: (row, patch) => ({
-    featureFlags: JSON.stringify({
-      ...resolveFlags(parseJson(row.featureFlags)),
-      ...defined(patch),
-    }),
-  }),
+  // Unknown and retired flags are dropped on write. A flag that was never set keeps no stored
+  // value (its default applies), so a receipt holds only the flags that the write changed.
+  apply: (row, patch) => {
+    const stored = parseJson(row.featureFlags);
+    const kept = Object.keys(defaults).flatMap((key) =>
+      typeof stored[key] === "boolean" ? [[key, stored[key]]] : [],
+    );
+    return {
+      featureFlags: JSON.stringify({
+        ...Object.fromEntries(kept),
+        ...defined(patch),
+      }),
+    };
+  },
 });

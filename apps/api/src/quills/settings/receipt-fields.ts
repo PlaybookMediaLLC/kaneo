@@ -15,6 +15,11 @@ export type Receipt = {
   after: ReceiptValues;
 };
 
+/** events.ts RECEIPT_MAX_BYTES; a route module cannot import events.ts (receipts.test.ts checks both). */
+export const RECEIPT_LIMIT_BYTES = 128 * 1024;
+/** jsonb refuses a NUL character and a lone surrogate, which a JSON text column can still hold. */
+const UNSTORABLE = /\\u0000|\\ud[89a-f]/i;
+
 const JSON_COLUMNS = new Set([
   "portalConfig",
   "widgetConfig",
@@ -59,7 +64,11 @@ export const sameValue = (a: unknown, b: unknown) => {
   return canonical(a) === canonical(b);
 };
 
-/** The allowlisted values that a write changed; null when it changed none. */
+/**
+ * The allowlisted values that a write changed; null when it changed none, or when its audit row
+ * cannot hold them (over the size limit, or a value that jsonb refuses). The change still saves; it
+ * only cannot be undone.
+ */
 export function receiptOf(
   area: string,
   keys: readonly string[],
@@ -74,7 +83,11 @@ export function receiptOf(
     if (was !== undefined) receipt.before[key] = was;
     if (is !== undefined) receipt.after[key] = is;
   }
-  return Object.keys(receipt.before).length + Object.keys(receipt.after).length
+  if (!(Object.keys(receipt.before).length + Object.keys(receipt.after).length))
+    return null;
+  const text = JSON.stringify(receipt);
+  return Buffer.byteLength(text) <= RECEIPT_LIMIT_BYTES &&
+    !UNSTORABLE.test(text)
     ? receipt
     : null;
 }
