@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 import { and, count, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
+import { toUuid } from "@kaneo/ids";
 import { principal, user } from "../../database/quills/schema/auth";
 import { boards } from "../../database/quills/schema/boards";
 import { conversations } from "../../database/quills/schema/conversation";
@@ -421,5 +422,25 @@ describe.skipIf(!url)("Quills directory", () => {
     const res = await call("DELETE", `/users/${author}`);
     expect(res.status).toBe(409);
     expect((await call("GET", `/users/${author}`)).status).toBe(200);
+  });
+
+  it("answers 409, not 500, for a restrict violation (SQLSTATE 23001 on PostgreSQL 18)", async () => {
+    const env = contractEnv();
+    const author = await customer(env, env.a);
+    // PostgreSQL 18 reports an ON DELETE RESTRICT violation as 23001. This trigger raises it on any version.
+    const name = `quills_test_restrict_${Date.now().toString(36)}`;
+    await pool.query(
+      `CREATE FUNCTION public.${name}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'restricted' USING ERRCODE = 'restrict_violation'; END $$`,
+    );
+    await pool.query(
+      `CREATE TRIGGER ${name} BEFORE DELETE ON quills.principal FOR EACH ROW WHEN (OLD.id = '${toUuid(author)}') EXECUTE FUNCTION public.${name}()`,
+    );
+    try {
+      expect((await call("DELETE", `/users/${author}`)).status).toBe(409);
+      expect((await call("GET", `/users/${author}`)).status).toBe(200);
+    } finally {
+      await pool.query(`DROP TRIGGER ${name} ON quills.principal`);
+      await pool.query(`DROP FUNCTION public.${name}()`);
+    }
   });
 });

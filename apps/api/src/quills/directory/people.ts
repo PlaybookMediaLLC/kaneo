@@ -446,7 +446,8 @@ const deleteUser = defineQuillsRoute({
         (error as { code?: string; cause?: { code?: string } }).cause?.code ??
         (error as { code?: string }).code;
       // ponytail: authored content blocks removal; Quackback re-attributes it to a deleted-user placeholder.
-      if (code === "23503")
+      // PostgreSQL 18 reports an ON DELETE RESTRICT violation as 23001; older versions as 23503.
+      if (code === "23503" || code === "23001")
         throw new HTTPException(409, {
           message: "The person still authors content",
         });
