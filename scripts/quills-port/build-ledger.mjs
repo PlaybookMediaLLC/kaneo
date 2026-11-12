@@ -270,8 +270,12 @@ function addCapability(id, type, source, facts, domain, proposal, override) {
         .replace(/[^a-zA-Z0-9]+(.)?/g, (_, c) => (c ?? "").toUpperCase())
         .replace(/^./, (c) => c.toUpperCase());
     operationIds.set(row.operationId, id);
-    // The operation that closed it, when it differs from the proposal.
-    if (override?.operationId) row.operationId = override.operationId;
+    // The operation that closed it, when it differs from the proposal. The proposed endpoint does
+    // not name that operation's path, so it is cleared; the OpenAPI document has the real one.
+    if (override?.operationId) {
+      row.operationId = override.operationId;
+      row.endpoint = "";
+    }
   }
   row.tests = testProfile(row);
   capabilities.set(id, row);
