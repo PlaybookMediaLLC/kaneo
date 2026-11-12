@@ -67,7 +67,7 @@ Source: Quackback `42ef2e01b2b48db87f1a9dadabbe6d57af0dd10c`. Rerun: `node scrip
 
 ## Tables
 
-Quackback tables referenced by ported capabilities: 133. Kaneo `quills` tables: 147.
+Quackback tables referenced by ported capabilities: 133. Kaneo `quills` tables: 149.
 
 Referenced but absent in Kaneo: account, identity_provider, invitation, session, sso_recovery_code, sso_verified_domain, user. These are the source's auth tables. Kaneo owns identity, so they are not copied.
 

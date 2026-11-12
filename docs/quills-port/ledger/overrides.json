@@ -1,4 +1,15 @@
 {
-	"routes": {},
+	"routes": {
+		"api/v1/apps/boards.ts": { "closed": "RFC 0001 lane X1" },
+		"api/v1/apps/link.ts": { "closed": "RFC 0001 lane X1" },
+		"api/v1/apps/linked.ts": { "closed": "RFC 0001 lane X1" },
+		"api/v1/apps/posts.ts": { "closed": "RFC 0001 lane X1" },
+		"api/v1/apps/search.ts": { "closed": "RFC 0001 lane X1" },
+		"api/v1/apps/suggest.ts": { "closed": "RFC 0001 lane X1" },
+		"api/v1/apps/unlink.ts": { "closed": "RFC 0001 lane X1" },
+		"api/integrations/$type/hooks/$kind.ts": { "closed": "RFC 0001 lane G1" },
+		"api/integrations/$type/identify.ts": { "closed": "RFC 0001 lane G1" },
+		"oauth/connector.callback.ts": { "closed": "RFC 0001 lane C1" }
+	},
 	"capabilities": {}
 }
