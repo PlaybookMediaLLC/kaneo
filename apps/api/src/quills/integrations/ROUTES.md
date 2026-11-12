@@ -61,6 +61,8 @@ Merged: 5 (`fetchQuillsIntegrationsList`, `fetchQuillsIntegrationCatalog`, `fetc
 Merged: 3. A channel is a set of event mappings with one target (`target_key`). Only providers whose target is
 an item in the account (Shortcut groups) accept channels; a webhook provider sends to its connection and uses
 the default-target mappings on `updateQuillsIntegration` (409 otherwise). `boardIds` (≤ 50) must be live boards.
+A channel has 1 to 100 characters without `/`, `\`, `?`, `#`, `%` or control characters. Adding one also
+checks the provider's own rule (`target` in `providers/`; Shortcut keeps `[A-Za-z0-9_.:-]`), 400 otherwise.
 
 ## Sync operations
 
@@ -134,9 +136,10 @@ Integration deliveries run on the `quills.webhook` queue with the payload `{ ope
 |---|---|
 | Fan-out | After the `quills.event` job's webhook fan-out, `fanOutIntegrations` writes one `integration_sync_operations` row per active integration, enabled mapping and target, and enqueues its job. Only events with the delivery mark, and only for connections made before the event. The operation key deduplicates a rerun; a create (`post.created`, resync) has one operation per post and destination. Private comments and other boards (mapping filter) are skipped. The row stores the trigger and status in `destination` (no event-retention dependency) and `source_record_id`, so the shared purge trigger cancels queued deliveries and clears remote data when a post or comment is deleted or unpublished. |
 | Claim | Re-reads the live integration (active, same installation), mapping, board filter and source (live and published; a comment's post too). A changed one cancels the operation. Then it records an attempt and sets `running`, `dispatched_at` and a 5-minute lease before the external call. |
-| Outcome | `succeeded`; `retry_wait` (HTTP 408, 429, webhook 5xx, DNS failure) with job backoff, `failed` on the job's last attempt; `failed` (other 4xx, non-public destination); `auth_required` (401, 403, unreadable credentials); `uncertain` (timeout, broken connection, Shortcut 5xx, a create without an ID). |
+| Outcome | `succeeded`; `retry_wait` (HTTP 408, 429, webhook 5xx, DNS failure) with job backoff, `failed` on the job's last attempt; `failed` (other 4xx, non-public destination); `auth_required` (401, 403, unreadable credentials, missing write scopes); `uncertain` (timeout, broken connection, a create's 5xx, a create without an ID). |
+| Provider seam | A provider in `providers/` sends through its `deliver` (`jobs/handlers/integration-send.ts`). Without its `deliveryScopes` in `config.scopes`: `auth_required` (`write_access_required`), no call. A 401 with `refresh`: one refresh and one more send. |
 | Uncertain | Never sent again. A job that finds its operation still `running` (an earlier attempt stopped after its claim) marks it `uncertain`; with no job left, the routes show it as `uncertain`. |
-| Links | A Shortcut story writes a `post_external_links` row (origin `event`), unless the connection was deleted during the call; the operation keeps the remote ID either way. |
+| Links | A created item (Shortcut, GitHub, GitLab, Jira, Linear, Azure DevOps) writes a `post_external_links` row (origin `event`) in the outcome's transaction, unless the connection was deleted during the call; the operation keeps the remote ID either way. Fan-out creates no second item for a post that an earlier installation linked in the same channel. |
 | Health | Success sets `last_outbound_at` and clears the error; a failure sets a mapped `last_error`. |
 
 Payloads: Make, n8n and Zapier get the source's generic JSON (`event`, `timestamp`, `post`, `status_change`,
