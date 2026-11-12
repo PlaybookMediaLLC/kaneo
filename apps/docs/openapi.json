@@ -10449,7 +10449,8 @@
                 "asana",
                 "clickup",
                 "monday",
-                "notion"
+                "notion",
+                "teams"
               ]
             },
             "required": true,
@@ -87219,7 +87220,8 @@
                       "asana",
                       "clickup",
                       "monday",
-                      "notion"
+                      "notion",
+                      "teams"
                     ]
                   },
                   "client": {
@@ -87359,7 +87361,8 @@
                 "asana",
                 "clickup",
                 "monday",
-                "notion"
+                "notion",
+                "teams"
               ]
             },
             "required": true,
@@ -87453,7 +87456,8 @@
                 "asana",
                 "clickup",
                 "monday",
-                "notion"
+                "notion",
+                "teams"
               ]
             },
             "required": true,
@@ -88188,6 +88192,81 @@
           "Quills"
         ],
         "summary": "Start a Notion OAuth connection",
+        "description": "Returns the provider's authorization URL. Open it in the same browser session: the state expires after ten minutes, is bound to the caller and this workspace, and works once.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The provider authorization URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "authorizeUrl": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "authorizeUrl"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient permission",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No OAuth app credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/oauth/teams/connect": {
+      "get": {
+        "operationId": "startQuillsTeamsOAuthConnect",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Start a Microsoft Teams OAuth connection",
         "description": "Returns the provider's authorization URL. Open it in the same browser session: the state expires after ten minutes, is bound to the caller and this workspace, and works once.",
         "parameters": [
           {
