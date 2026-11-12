@@ -12,6 +12,7 @@ contain at least one field.
 
 ```
 Tables and owning schema:      quills: principal, customer_identity, companies,
+                               conversations and tickets (company activity counts),
                                company_attribute_definitions, user_attribute_definitions,
                                user_tags, user_tag_assignments, segments, user_segments,
                                teams, audit_log, settings, kv_store; the lead merge also
@@ -76,6 +77,7 @@ Merged: 7. `listQuillsUserTags`, `listQuillsUserTagsForPrincipal`, `assignQuills
 | `updateQuillsCompany` | `PUT /companies/{companyId}` | update | same | `company.updated` |
 | `deleteQuillsCompany` | `DELETE /companies/{companyId}` | delete | `companies` (people keep a null company) | `company.deleted` |
 | `listQuillsCompanyMembers` | `GET /companies/{companyId}/members` | read | `principal`, `customer_identity` | - |
+| `getQuillsCompanyActivity` | `GET /companies/{companyId}/activity` (conversation and ticket counts) | read | `companies`, `conversations`, `principal`, `tickets`, `ticket_conversations` | - |
 | `getQuillsUserCompany` | `GET /users/{principalId}/company` | read | `principal`, `companies` | - |
 | `setQuillsUserCompany` | `PUT /users/{principalId}/company` (`companyId`, or `name` to find or create) | update | `principal`, `companies` | `user.company_set` |
 | `removeQuillsUserCompany` | `DELETE /users/{principalId}/company` | update | `principal` | `user.company_removed` |
@@ -88,7 +90,11 @@ Merged: 22. `listQuillsCompaniesIndex` (v1), `listQuillsCompanies`, `listQuillsC
 `countQuillsCompanies`; `getQuillsCompanies` (v1), `getQuillsCompany`; `createQuillsCompany`;
 `updateQuillsCompany`; `deleteQuillsCompany`; `listQuillsCompanyMembers`;
 `getQuillsCompanyForPrincipal`; `attachQuillsPrincipalToCompany`, `qualifyQuillsCompany`;
-`detachQuillsPrincipalFromCompany`; the four user and four company attribute rows.
+`detachQuillsPrincipalFromCompany`; the four user and four company attribute rows;
+`getQuillsCompanyActivity` (RFC 0001, lane M1: `companies.ts#getCompanyActivityFn`).
+Company activity counts the conversations whose visitor is a person of the company and the live
+tickets of the company. Test customers' conversations and tickets are left out, as in the source.
+Every teammate with `quills:read` sees every conversation (decision D2), so no other filter applies.
 Attribute definitions take `manage_settings` (section 3); the source used `COMPANY_MANAGE` for companies.
 
 ## Segments
@@ -157,9 +163,8 @@ The workspace name and slug are Kaneo's and are never written.
 | Source capability | Status | Reason |
 |---|---|---|
 | `setQuillsTeamMembers` | not ported | Reuse Kaneo: the roster of a bound team is Kaneo's. |
-| `deleteQuillsTestConversations` | deferred to P5 | It deletes conversations, which the support phase owns. |
-| `getQuillsCompanyActivity` | deferred to P5 | It aggregates conversations and tickets. |
-| `createQuillsSettingsReceiptsUndo` | not ported | Needs the settings receipt model (before and after values per change). |
+| `deleteQuillsTestConversations` | moved | Built in RFC 0001 lane M1 as `DELETE /test-conversations` in `support/test-conversations.ts`; see `support/CONVERSATIONS.md`. |
+| `createQuillsSettingsReceiptsUndo` | blocked | Decision D11 puts the receipt in the metadata of the settings write's own audit row. `recordQuillsChange` (`events.ts`, owned by lane S0) writes one `payload` into both the audit row and the outbox event, and each value is a string of at most 500 characters. A receipt there would reach webhook subscribers and cannot hold the theme, custom CSS, navigation or widget cards. Lane M1 reported the `events.ts` change to lane Z. |
 | `getQuillsSettings`, `updateQuillsSettings` | part | Areas `office_hours`, `messenger`, `modules`, `changelog` belong to later phases. No ETag, If-Match or dry run. |
 | `getQuillsUser` | part | No `engagedPosts` list. |
 | `listQuillsUsers` | part | No count, email-domain or custom-attribute filters; no last-seen sort (sessions are Kaneo's). |

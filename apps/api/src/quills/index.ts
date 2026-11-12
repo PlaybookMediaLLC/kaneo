@@ -13,6 +13,7 @@ import links from "./links";
 import portalAccessSettings from "./portal/access-settings";
 import operations from "./operations/index";
 import portalInvites from "./portal/invites";
+import { profileTeamContext } from "./portal/public-profile";
 import quillsSettings from "./settings/index";
 import websiteBranding from "./settings/website-branding";
 import reporting from "./reporting/index";
@@ -26,6 +27,7 @@ import supportTyping from "./support/customer/typing";
 import supportPresence from "./support/presence";
 import supportLinkPreview from "./support/link-preview";
 import supportReadBatch from "./support/read-batch";
+import testConversations from "./support/test-conversations";
 import { brandText } from "@kaneo/branding";
 import { apiRouter, z, type BaseVariables } from "../openapi";
 import { settings } from "../database/quills/schema/auth";
@@ -92,7 +94,9 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", supportPresence)
   .route("/", supportLinkPreview)
   .route("/", supportReadBatch)
+  .route("/", testConversations)
   .route("/", portalInvites)
+  .route("/", profileTeamContext)
   .route("/", reporting)
   .route("/", automation)
   .route("/", assistant)

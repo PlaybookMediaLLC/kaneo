@@ -43,6 +43,15 @@ export async function customer(db: Db, email: string, test?: string) {
   return row!.id;
 }
 
+/** The teammate's test customer: a teammate owns at most one, so an earlier seed's is reused. */
+export async function testCustomer(db: Db, ownerId: string, email: string) {
+  const [existing] = await db
+    .select({ id: principal.id })
+    .from(principal)
+    .where(eq(principal.testOwnerPrincipalId, ownerId as never));
+  return existing?.id ?? (await customer(db, email, ownerId));
+}
+
 /** An open conversation with a visitor message, an agent reply and an internal note. */
 export async function conversation(
   db: Db,

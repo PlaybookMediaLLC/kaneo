@@ -43,6 +43,11 @@ Completion checks:         authenticated endpoint, tenant/object access, read/ex
 - Known limit (unchanged from the source): page-view partitions keep 90 days, so the `12m` top lists cover
   about 90 days.
 - Post activity (`activity.ts#fetchActivityForPost`) is already `listQuillsPostActivity` in `feedback/posts.ts`.
+- `getQuillsAnalyticsData` also merges `changelog.ts#topViewedChangelogsFn` (RFC 0001, lane M1).
+  `changelogLimit` (1 to 20, default 5, as the source's `limit`) sets the length of
+  `changelog.topEntries`, and each entry has its `publishedAt`. The list keeps its rule: published,
+  not deleted, not scheduled, most views first. The source required `CHANGELOG_VIEW_DRAFT`; here
+  the route's `read` applies, as for the other changelog reports.
 
 ## Visitor tracking beacon (`track.ts`, public)
 

@@ -4,9 +4,15 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { principal, user } from "../../database/quills/schema/auth";
 import { boards } from "../../database/quills/schema/boards";
+import { conversations } from "../../database/quills/schema/conversation";
 import { posts, postVotes } from "../../database/quills/schema/posts";
 import { segments, userSegments } from "../../database/quills/schema/segments";
 import { postStatuses } from "../../database/quills/schema/statuses";
+import {
+  ticketConversations,
+  tickets,
+  ticketStatuses,
+} from "../../database/quills/schema/tickets";
 import * as kaneo from "../../database/schema";
 import { apiRouter, type BaseVariables } from "../../openapi";
 import quillsRouter from "../index";
@@ -22,7 +28,7 @@ import {
 } from "../framework/define-route";
 import { registry } from "../framework/registry";
 import { MAX_DYNAMIC_MEMBERS } from "./segment-rules";
-import { customer, segment } from "./seed.fixture";
+import { company, customer, segment } from "./seed.fixture";
 
 let pool: Pool;
 vi.mock("../../database/index", () => ({
@@ -329,6 +335,83 @@ describe.skipIf(!url)("Quills directory", () => {
           ),
       ).toHaveLength(1);
     });
+  });
+
+  it("counts a company's activity without test data, deleted tickets, other companies or workspace B", async () => {
+    const env = contractEnv();
+    const companyId = await company(env, env.a);
+    const otherCompany = await company(env, env.a);
+    const person = await customer(env, env.a, { companyId });
+    const otherPerson = await customer(env, env.a, { companyId: otherCompany });
+    const loner = await customer(env, env.a);
+    const tester = await customer(env, env.a, { companyId });
+    // Any principal can own a test customer; a fresh owner keeps the owner's own tester free.
+    const testOwner = await customer(env, env.a);
+    const foreignCompany = await company(env, env.b);
+    const foreignPerson = await customer(env, env.b, {
+      companyId: foreignCompany,
+    });
+    await env.scoped(env.b, (db) =>
+      db.insert(conversations).values({
+        visitorPrincipalId: foreignPerson as never,
+        channel: "messenger",
+      }),
+    );
+    await inA(async (db) => {
+      await db
+        .update(principal)
+        .set({ testOwnerPrincipalId: testOwner as never })
+        .where(eq(principal.id, tester as never));
+      const [, test] = await db
+        .insert(conversations)
+        .values(
+          [person, tester, otherPerson, loner].map((visitor) => ({
+            visitorPrincipalId: visitor as never,
+            channel: "messenger" as const,
+          })),
+        )
+        .returning({ id: conversations.id });
+      const [status] = await db
+        .select({ id: ticketStatuses.id })
+        .from(ticketStatuses)
+        .where(eq(ticketStatuses.isDefault, true));
+      const ticket = (values: Partial<typeof tickets.$inferInsert> = {}) => ({
+        title: "Activity",
+        statusId: status!.id,
+        companyId: companyId as never,
+        ...values,
+      });
+      const [, , , linked] = await db
+        .insert(tickets)
+        .values([
+          ticket({ requesterPrincipalId: person as never }),
+          ticket({ deletedAt: new Date() }),
+          ticket({ requesterPrincipalId: tester as never }),
+          ticket({ type: "back_office" }),
+          ticket({
+            companyId: otherCompany as never,
+            requesterPrincipalId: otherPerson as never,
+          }),
+          ticket({ companyId: null, requesterPrincipalId: loner as never }),
+        ])
+        .returning({ id: tickets.id });
+      // A back-office ticket linked to the test thread is test data too.
+      await db.insert(ticketConversations).values({
+        ticketId: linked!.id,
+        conversationId: test!.id,
+        ticketType: "back_office",
+      });
+    });
+
+    const res = await call("GET", `/companies/${companyId}/activity`);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ conversations: 1, tickets: 1 });
+    expect(
+      (await call("GET", `/companies/${otherCompany}/activity`)).body,
+    ).toEqual({ conversations: 1, tickets: 1 });
+    expect(
+      (await call("GET", `/companies/${foreignCompany}/activity`)).status,
+    ).toBe(404);
   });
 
   it("refuses to remove a customer who still authors content", async () => {

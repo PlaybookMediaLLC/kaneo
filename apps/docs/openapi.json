@@ -11756,6 +11756,191 @@
         }
       }
     },
+    "/quills-public/{workspace}/portal/profiles/{principalId}": {
+      "get": {
+        "operationId": "getQuillsPublicUserProfile",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get a person's public portal profile",
+        "description": "The display name, avatar, join date and the posts and comments that the caller can see. Never an email, a company or votes. 404 when the person is unknown, blocked, a test customer or has no activity that the caller can see.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "principalId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The public profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "principalId": {
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "type": "string"
+                    },
+                    "avatarUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "isTeamMember": {
+                      "type": "boolean"
+                    },
+                    "joinedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "postCount": {
+                      "type": "number"
+                    },
+                    "commentCount": {
+                      "type": "number"
+                    },
+                    "posts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "postId": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "boardSlug": {
+                            "type": "string"
+                          },
+                          "statusName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "statusColor": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "occurredAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "postId",
+                          "title",
+                          "boardSlug",
+                          "statusName",
+                          "statusColor",
+                          "occurredAt"
+                        ]
+                      }
+                    },
+                    "comments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "postId": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "boardSlug": {
+                            "type": "string"
+                          },
+                          "statusName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "statusColor": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "occurredAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "postId",
+                          "title",
+                          "boardSlug",
+                          "statusName",
+                          "statusColor",
+                          "occurredAt"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "principalId",
+                    "displayName",
+                    "avatarUrl",
+                    "isTeamMember",
+                    "joinedAt",
+                    "postCount",
+                    "commentCount",
+                    "posts",
+                    "comments"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Portal access required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Profile not found; Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/quills-public/{workspace}/portal/invites/{inviteId}/accept": {
       "post": {
         "operationId": "acceptQuillsPortalInvite",
@@ -54881,6 +55066,93 @@
                   "required": [
                     "items",
                     "nextOffset"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Company not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/companies/{companyId}/activity": {
+      "get": {
+        "operationId": "getQuillsCompanyActivity",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Count the conversations and tickets of a company",
+        "description": "Conversations whose visitor belongs to the company, and the company's live tickets. Test customers' conversations and tickets are left out.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "companyId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Activity counts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "conversations": {
+                      "type": "number"
+                    },
+                    "tickets": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "conversations",
+                    "tickets"
                   ]
                 }
               }
@@ -116109,6 +116381,71 @@
         }
       }
     },
+    "/quills/{workspaceId}/test-conversations": {
+      "delete": {
+        "operationId": "deleteQuillsTestConversations",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Delete every test conversation",
+        "description": "Deletes each conversation whose visitor is a teammate's test customer, with its messages, and the pair ticket that the test customer requested. Other conversations and tickets stay; attachment cleanup is queued by the storage triggers.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The number of deleted conversations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "deleted"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
     "/quills/{workspaceId}/portal/invites": {
       "post": {
         "operationId": "sendQuillsPortalInvite",
@@ -116725,6 +117062,164 @@
         }
       }
     },
+    "/quills/{workspaceId}/profiles/{principalId}/team-context": {
+      "get": {
+        "operationId": "getQuillsProfileTeamContext",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get the team context of a profile",
+        "description": "The email, company, segments, last device visit and the verified and blocked flags of a person with a profile. The email is the customer account's, else the contact email; a teammate's account email stays in Kaneo.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "principalId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The team context",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "email": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "company": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "plan": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "mrrCents": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "plan",
+                        "mrrCents"
+                      ]
+                    },
+                    "segments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "color": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "color"
+                        ]
+                      }
+                    },
+                    "lastSeenAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "emailVerified": {
+                      "type": "boolean"
+                    },
+                    "blocked": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "email",
+                    "company",
+                    "segments",
+                    "lastSeenAt",
+                    "emailVerified",
+                    "blocked"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Profile not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
     "/quills/{workspaceId}/reporting/analytics": {
       "get": {
         "operationId": "getQuillsAnalyticsData",
@@ -116732,7 +117227,7 @@
           "Quills"
         ],
         "summary": "Get feedback analytics for a period",
-        "description": "Counts only what the caller can see: posts on boards the caller can open, no deleted posts or comments and no test customers. Deltas compare with the period before.",
+        "description": "Counts only what the caller can see: posts on boards the caller can open, no deleted posts or comments and no test customers. Deltas compare with the period before. The changelog lists the changelogLimit most viewed published entries.",
         "parameters": [
           {
             "schema": {
@@ -116757,6 +117252,17 @@
             },
             "required": false,
             "name": "period",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20,
+              "default": 5
+            },
+            "required": false,
+            "name": "changelogLimit",
             "in": "query"
           }
         ],
@@ -116987,12 +117493,17 @@
                               },
                               "viewCount": {
                                 "type": "number"
+                              },
+                              "publishedAt": {
+                                "type": "string",
+                                "format": "date-time"
                               }
                             },
                             "required": [
                               "id",
                               "title",
-                              "viewCount"
+                              "viewCount",
+                              "publishedAt"
                             ]
                           }
                         }

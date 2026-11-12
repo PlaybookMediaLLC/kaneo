@@ -4,6 +4,7 @@ import config from "./config";
 import inviteAccept from "./invite-accept";
 import preferences from "./preferences";
 import profile from "./profile";
+import publicProfile from "./public-profile";
 import subscriptions from "./subscriptions";
 import unsubscribe from "./unsubscribe";
 
@@ -13,6 +14,7 @@ export default apiRouter()
   .route("/", config)
   .route("/", access)
   .route("/", profile)
+  .route("/", publicProfile)
   .route("/", inviteAccept)
   .route("/", subscriptions)
   .route("/", preferences)
