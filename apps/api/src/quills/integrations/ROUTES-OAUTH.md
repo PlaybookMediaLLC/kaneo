@@ -389,17 +389,36 @@ Delivery (FU3b, the worker; no route):
 - Destinations: `destinationKinds: { space: {}, list: { parent: "space" } }`. Spaces come from the
   stored team. Lists are the folderless lists of one space. The route lists the team's spaces first
   and refuses a space that is not among them (404), so the token never reads another team's space.
-  The route keeps only IDs of 1 to 30 letters and digits.
+  The route keeps only IDs of 1 to 30 digits.
 - Tests: `providers/clickup.test.ts` (local provider server): connect with a sealed token, spaces by
   default and by kind, lists with the limit of 200, a foreign space refused before the list call,
   refused kind and parent values, an account without a team (400), and malformed answers (400 and
   502 with fixed text).
 
+Delivery (FU3b, the worker; no route):
+
+- Events: `post.created` only, as in the source hook. A channel is a list ID (the child destination;
+  1 to 30 digits). The rule cannot tell a list from a space, which is also digits: add a list. A
+  task call for an ID that is not a list gets ClickUp's 4xx (`failed`).
+- Scopes: none to add. ClickUp has no OAuth scopes (the token acts as the teammate), so existing
+  connections do not reconnect. ClickUp tokens do not expire: a 401 or 403 asks for a reconnect.
+- `POST https://api.clickup.com/api/v2/list/<list ID>/task` with `{ name, description }`. The list ID
+  is encoded. The name is one line of at most 255 characters. The description is plain text (not
+  `markdown_description`): each line of the post (at most 2000 characters), a blank line, the author
+  and the board. ClickUp shows it as typed, so nothing is escaped.
+- The task ID (1 to 64 letters and digits) is the link's external ID. The link URL is `url` only on
+  `https://app.clickup.com/`; otherwise it is empty. A 2xx answer without a task ID is `uncertain`.
+- Tests: `jobs/handlers/clickup-delivery.test.ts` (the worker evidence table, the plain-text body, the
+  channel rule and the link host rule).
+
 | Difference from the source | Reason |
 |---|---|
 | A connect without a ClickUp team fails. The source stored `unknown`. | The space list needs the team. |
 | A list request names a space of the stored team. The source listed any space ID it got. | Authorization: the token may reach more teams. |
-| No task creation, status sync or webhook. | Delivery and status sync are out of scope for #131. |
+| The description is plain text. The source sent Markdown in `description`, which ClickUp shows as typed. | The same text, without Markdown marks that do not render. |
+| No "View in …" link in the description. | No portal URL exists for a post yet. |
+| The link URL is kept only on `https://app.clickup.com/`; a 2xx without a task ID is `uncertain`. The source kept any answer. | A link comes only from the provider's own host; the task may exist. |
+| No status sync or webhook. | Status sync is out of scope. |
 
 ### Trello
 
