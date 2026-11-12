@@ -16,6 +16,7 @@ import { notion } from "./notion";
 import { salesforce } from "./salesforce";
 import { slack } from "./slack";
 import { teams } from "./teams";
+import { trello } from "./trello";
 import { zendesk } from "./zendesk";
 
 // The OAuth and key providers, one file each. To add a provider, add its file, its import above and
@@ -41,6 +42,7 @@ export const oauthProviders = {
   intercom,
   zendesk,
   salesforce,
+  trello,
 } satisfies Record<string, OAuthProvider>;
 type Registry = typeof oauthProviders;
 export const oauthProvider = (type: string): OAuthProvider | undefined =>

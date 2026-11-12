@@ -1,11 +1,13 @@
 import { integrationEventMappings } from "../../database/quills/schema/integrations";
 import { fixture, type ContractEnv } from "../framework/contract";
 import { mintOAuthState } from "../framework/signed";
+import { signedUrl } from "./oauth-providers";
 import {
   APP_SECRET,
   oauthConnection,
   platformCredentials,
 } from "./oauth-seed.fixture";
+import { TRELLO_TOKEN } from "./providers/trello.fixture";
 
 export const saveQuillsPlatformCredentials = fixture({
   seed: async () => ({}),
@@ -46,6 +48,7 @@ export const startQuillsMondayOAuthConnect = connect("monday");
 export const startQuillsNotionOAuthConnect = connect("notion");
 export const startQuillsSalesforceOAuthConnect = connect("salesforce");
 export const startQuillsTeamsOAuthConnect = connect("teams");
+export const startQuillsTrelloOAuthConnect = connect("trello");
 export const startQuillsZendeskOAuthConnect = connect("zendesk", {
   subdomain: "contract",
 });
@@ -147,6 +150,117 @@ export const completeQuillsOAuthConnect = fixture({
   },
   hidden: () => ["gho_contract_token", APP_SECRET],
   // The audit row names the teammate who started the connect.
+  actor: (env: ContractEnv) =>
+    env.scoped(env.a, async (_db, actor) => actor.principalId),
+});
+
+/** A Trello bridge request: the state, the session account (in the headers) and the provider path. */
+const fragment = (
+  state: { workspaceId: string; userId: string; type?: string; ttlMs?: number },
+  headers: Record<string, string> = { "x-test-user": state.userId },
+) => ({
+  params: { type: "trello" },
+  query: {
+    state: mintOAuthState(
+      {
+        workspaceId: state.workspaceId,
+        userId: state.userId,
+        type: state.type ?? "trello",
+      },
+      state.ttlMs,
+    ),
+  },
+  headers,
+});
+/** The same request as the bridge page posts it: from this API's origin, with the token. */
+const fromPage = (request: ReturnType<typeof fragment>) => ({
+  ...request,
+  headers: { ...request.headers, origin: new URL(signedUrl("")).origin },
+  raw: JSON.stringify({ token: TRELLO_TOKEN }),
+});
+/** States that this instance did not sign for Trello: the bridge page refuses them too. */
+const unsigned = (env: ContractEnv) => {
+  const good = fragment({ workspaceId: env.a, userId: env.owner });
+  const [payload, signature] = good.query.state.split(".");
+  return [
+    // A changed claim: the signature no longer matches.
+    {
+      ...good,
+      query: {
+        state: `${Buffer.from(
+          Buffer.from(payload!, "base64url").toString().replace(env.a, env.b),
+        ).toString("base64url")}.${signature}`,
+      },
+    },
+    fragment({ workspaceId: env.a, userId: env.owner, type: "github" }),
+    { ...good, query: { state: "not.signed" } },
+  ];
+};
+/** Signed states that only the token post refuses: expired, or in another session or none. */
+const fragmentForged = (env: ContractEnv) => {
+  const good = fragment({ workspaceId: env.a, userId: env.owner });
+  return [
+    ...unsigned(env),
+    fragment({ workspaceId: env.a, userId: env.owner, ttlMs: -1000 }),
+    fragment(
+      { workspaceId: env.a, userId: env.owner },
+      { "x-test-user": env.customerA },
+    ),
+    { ...good, headers: {} },
+  ];
+};
+const fragmentCrossed = (env: ContractEnv) => {
+  const ownerB = env.owner.replace(/_owner$/, "_outsider");
+  return [
+    // Workspace B's state, in A's owner's session.
+    fragment(
+      { workspaceId: env.b, userId: ownerB },
+      { "x-test-user": env.owner },
+    ),
+    // Workspace B's own valid request: it reaches B only.
+    fragment({ workspaceId: env.b, userId: ownerB }),
+  ];
+};
+export const openQuillsOAuthBridge = fixture({
+  seed: async (env: ContractEnv) => env,
+  valid: (env: ContractEnv) =>
+    fragment({ workspaceId: env.a, userId: env.owner }),
+  forged: unsigned,
+  crossed: fragmentCrossed,
+  hidden: () => [APP_SECRET],
+});
+const tokenPost = (env: ContractEnv) =>
+  fromPage(fragment({ workspaceId: env.a, userId: env.owner }));
+export const completeQuillsOAuthFragmentConnect = fixture({
+  seed: async (env: ContractEnv) => {
+    await platformCredentials(env, env.a, "trello");
+    await platformCredentials(env, env.b, "trello");
+    return env;
+  },
+  valid: tokenPost,
+  forged: (env: ContractEnv) => {
+    const good = tokenPost(env);
+    const { origin: _, ...noOrigin } = good.headers;
+    return [
+      ...fragmentForged(env).map(fromPage),
+      // Not from the bridge page of this instance.
+      { ...good, headers: noOrigin },
+      {
+        ...good,
+        headers: { ...good.headers, origin: "https://other.example" },
+      },
+      { ...good, headers: { ...good.headers, "sec-fetch-site": "same-site" } },
+    ];
+  },
+  crossed: (env: ContractEnv) => fragmentCrossed(env).map(fromPage),
+  invalid: (env: ContractEnv) =>
+    [
+      JSON.stringify({ token: 7 }),
+      JSON.stringify({ token: "x".repeat(2049) }),
+      JSON.stringify({}),
+      "not json",
+    ].map((raw) => ({ ...tokenPost(env), raw })),
+  hidden: () => [TRELLO_TOKEN, APP_SECRET],
   actor: (env: ContractEnv) =>
     env.scoped(env.a, async (_db, actor) => actor.principalId),
 });

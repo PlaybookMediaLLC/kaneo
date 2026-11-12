@@ -86,6 +86,15 @@
 		"integrations/notion/server/functions.ts#fetchNotionDatabasesFn": {
 			"closed": "RFC 0001 lane P2"
 		},
+		"integrations/trello/server/functions.ts#getTrelloConnectUrl": {
+			"closed": "RFC 0001 follow-up FU1"
+		},
+		"integrations/trello/server/functions.ts#fetchTrelloBoardsFn": {
+			"closed": "RFC 0001 follow-up FU1"
+		},
+		"integrations/trello/server/functions.ts#fetchTrelloListsFn": {
+			"closed": "RFC 0001 follow-up FU1"
+		},
 		"integrations/hubspot/server/functions.ts#getHubSpotConnectUrl": {
 			"closed": "RFC 0001 lane P3"
 		},

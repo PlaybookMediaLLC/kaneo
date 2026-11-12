@@ -14,8 +14,9 @@ Tables and owning schema:  quills: integrations, integration_platform_credential
 Actor and workspace:       teammate routes: authenticated context. OAuth callback: the signed state's
                            workspace and teammate, re-checked against the session. Webhook: the
                            workspace of the integration row (quills.integration_workspace).
-Permissions:               teammate routes: workspace:read + quills:<action>. OAuth callback: the
-                           session account still holds quills:manage_settings. Webhook: the signature.
+Permissions:               teammate routes: workspace:read + quills:<action>. OAuth callbacks and the
+                           bridge page: the session account still holds quills:manage_settings; the
+                           token post also needs this API's Origin. Webhook: the signature.
 Transactions:              a provider call never runs in a transaction: `prepare` reads in one scoped
                            transaction, `call` reaches the provider, the handler writes in a new one.
 External effects:          OAuth exchange, destinations and search, webhook registration (requests);
@@ -30,7 +31,9 @@ External effects:          OAuth exchange, destinations and search, webhook regi
 | `getQuillsPlatformCredentials` | `GET /integration-platform-credentials?type=` | manage_settings | same | - | contract; secret never returned |
 | `deleteQuillsPlatformCredentials` | `DELETE /integration-platform-credentials?type=` | manage_settings | same | `integration.platform_credentials_deleted` | contract, rollback |
 | `startQuillsGithubOAuthConnect`, `…Gitlab…`, `…Slack…`, `…Discord…` | `GET /oauth/{github,gitlab,slack,discord}/connect` | manage_settings | `integration_platform_credentials` | - | contract |
-| `completeQuillsOAuthConnect` | `GET /quills-public/signed/oauth/{type}/callback?state&code` (signed) | manage_settings (session) | `integrations`, `principal`, `kv_store` | `integration.connected` | contract signed table: forged, expired, wrong provider, other session, workspace B, replay |
+| `completeQuillsOAuthConnect` | `GET /quills-public/signed/oauth/{type}/callback?state&code` (signed; not for a fragment provider) | manage_settings (session) | `integrations`, `principal`, `kv_store` | `integration.connected` | contract signed table: forged, expired, wrong provider, other session, workspace B, replay |
+| `openQuillsOAuthBridge` | `GET /quills-public/signed/oauth/{type}/bridge?state` (signed, HTML; fragment providers) | a state signed for this provider (the POST checks the session and the permission) | `kv_store` | none | contract signed table; `providers/trello-routes.test.ts`: exact headers, no secret, once per state; `oauth-bridge.test.ts`: the scripts run |
+| `completeQuillsOAuthFragmentConnect` | `POST /quills-public/signed/oauth/{type}/callback?state` with `{ token }` (signed; fragment providers) | manage_settings (session) | `integrations`, `integration_platform_credentials`, `principal`, `kv_store` | `integration.connected` | contract signed table, plus missing or foreign `Origin`; `providers/trello-routes.test.ts` |
 
 - The OAuth app belongs to the workspace (`integration_platform_credentials` is workspace-owned). The
   responses return the public client ID and the redirect URI to register:
@@ -289,47 +292,58 @@ External effects:          project and work item type lists (dev.azure.com). No 
 
 ### Trello
 
-The connect is deferred: Trello returns the token in the URL fragment, and no page reads it yet.
-`providers/trello.ts` exists but is not in `providers/index.ts`. So Trello stays "not available" in
-the catalog, and none of its three entry points has a route.
+Trello returns the token in the URL fragment, which no server receives. A bridge page reads it and
+posts it to the callback (follow-up FU1; `providers/README.md`, "Fragment providers").
 
-| Source | Route when registered | State |
+| Source | Route | operationId |
 |---|---|---|
-| `getTrelloConnectUrl` | `GET /oauth/trello/connect` (`startQuillsTrelloOAuthConnect`) | Open: the callback cannot complete |
-| `fetchTrelloBoardsFn` | `GET /integrations/{integrationId}/destinations` (default kind, or `?kind=board`) | Open: no connection can exist |
-| `fetchTrelloListsFn` | `GET /integrations/{integrationId}/destinations?kind=list&parent=<board ID>` | Open: no connection can exist |
+| `getTrelloConnectUrl` | `GET /oauth/trello/connect` | `startQuillsTrelloOAuthConnect` |
+| (the source's fragment bridge) | `GET /quills-public/signed/oauth/{type}/bridge?state` (HTML) | `openQuillsOAuthBridge` |
+| (the source's fragment callback) | `POST /quills-public/signed/oauth/{type}/callback?state` | `completeQuillsOAuthFragmentConnect` |
+| `fetchTrelloBoardsFn` | `GET /integrations/{integrationId}/destinations` (default kind, or `?kind=board`) | `listQuillsIntegrationDestinations` |
+| `fetchTrelloListsFn` | `GET /integrations/{integrationId}/destinations?kind=list&parent=<board ID>` | `listQuillsIntegrationDestinations` |
 
-Built in `providers/trello.ts` (tests: `providers/trello.test.ts`, with fetch answered in the test):
-
-- `authorizeUrl`: `https://trello.com/1/authorize` with `callback_method=fragment`,
-  `response_type=token`, `scope=read,write`, `expiration=never`, and `return_url` set to the signed
-  callback with the state. The client ID is the Trello API key.
-- `exchange(token)`: refuses a token that is not 32 to 256 letters and digits (it goes into a
-  header). Then it checks the token with `GET https://api.trello.com/1/members/me` and returns it as
-  the only secret. The username is the account label.
-- `destinationKinds: { board: {}, list: { parent: "board" } }`. Boards are the member's open boards;
-  lists are the open lists of one board. Only 24-digit hexadecimal IDs pass. A list answer that is
-  not a list is 502.
+- Boundary: the map at the top of this file. The connect route and the token post check
+  `manage_settings` for the session account in the state's workspace. Trello is called only at
+  `trello.com` and `api.trello.com`, with no transaction open.
+- Connect: `authorizeUrl` is `https://trello.com/1/authorize` with `callback_method=fragment`,
+  `response_type=token`, `scope=read,write`, `expiration=never`, and `return_url` set to the bridge
+  page with the state. The client ID is the Trello API key. The credentials routes return the bridge
+  URL as `redirectUri`: add its origin to the allowed origins of the key.
+- Bridge page: a static page with one inline script, allowed by the hash of the script that the route
+  declares. It reads the token, removes the fragment, then posts `{ token }` to `callback` next to it.
+  Headers: a CSP with `default-src 'none'`, `connect-src 'self'` and `frame-ancestors 'none'`,
+  `Cache-Control: no-store`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`. It
+  needs only a state that this instance signed for Trello (401 otherwise), also an expired one or one
+  from another session, so the token leaves the address even when the post must fail. It opens once for
+  each state (its own receipt) and does not use the state up. A second visit gets a page that only
+  removes the fragment.
+- Token post, in order: `Origin` is the API origin and `Sec-Fetch-Site`, when sent, is `same-origin`
+  (else 401); the state signature, expiry and provider (401); the session account is the state's
+  (401); it still holds `quills:manage_settings` (403); the body is `{ token }` with at most 2,048
+  characters (400); a used state answers `already_used` (200, no change); the OAuth app is saved (409).
+  Then `exchange(token)` with no transaction open: a token that is not 32 to 256 letters and digits
+  is 400 before any call; Trello's refusal is 409; an answer without a username is 400; no answer is
+  502. Last, one scoped transaction seals the token, creates or replaces the connection and records
+  `integration.connected`. A failure before that leaves the state usable.
+- The page's scripts: `oauth-bridge.test.ts` runs them with stub browser objects: the fragment goes
+  before the post, the post goes to `callback` with the state, and the text is fixed on a failure.
+- The token goes only into `secrets`. It is never in a URL, a response, an audit row, an event or a
+  log line.
+- Destinations: `destinationKinds: { board: {}, list: { parent: "board" } }`. Boards are the member's
+  open boards; lists are the open lists of one board. The route lists the boards first and refuses a
+  board that is not among them (404) before the list call. Only 24-digit hexadecimal IDs pass. A list
+  answer that is not a list is 502.
 - Each call sends the key and the token in the `Authorization: OAuth …` header, never in the URL.
-  Hosts: `trello.com` and `api.trello.com`.
-
-Missing (from `providers/README.md`, "Trello"):
-
-1. An HTML answer for a signed route. `framework/define-route.ts` allows `raw` answers only as RSS and
-   XML for portal, widget and public reads. Lane X1 owns that file.
-2. A `callback: "fragment"` option on the provider type, and the GET callback in `oauth.ts` answering
-   the bridge page for such a provider without consuming the state. The page reads `token` from
-   `location.hash`, removes the fragment with `history.replaceState`, and posts `{ token }` as JSON to
-   the same URL with `credentials: "same-origin"`. Headers:
-   `Content-Security-Policy: default-src 'none'; script-src 'nonce-…'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'`,
-   `Cache-Control: no-store`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`.
-3. `POST /quills-public/signed/oauth/{type}/callback?state=…` for fragment providers only, with the
-   same `oauthState` verifier (valid signature, unexpired, same session account, still holds
-   `quills:manage_settings`, single use), an `Origin` header equal to the API origin, and a body of at
-   most 4 KiB. The token never enters a log, an event or a response. The handler calls
-   `exchange(token, …)`, then `connect`.
-4. Then two lines in `providers/index.ts`, a connect fixture `startQuillsTrelloOAuthConnect` in
-   `oauth.fixture.ts`, and route tests against the local provider server, as for the other providers.
+- Tests: `providers/trello.test.ts` (provider calls, fetch answered in the test) and
+  `providers/trello-routes.test.ts` (local provider server and PostgreSQL): the return URL, the bridge
+  page headers and body, once per state, also for an expired state or another session; connect with a
+  sealed token that is absent from responses, audit rows, events, jobs and every log line of the file;
+  replay; forged, expired and foreign states, another session, no session, workspace B, a removed
+  member, a lost permission, a GitHub state and the code callback refused; missing, foreign and
+  cross-site `Origin`; Trello's refusal (409), a malformed answer (400), no answer (502) and no OAuth
+  app (409), each with the state still usable; boards, lists, and a board that is not listed (404
+  before the list call). `oauth-bridge.test.ts` runs the page scripts.
 
 | Difference from the source | Reason |
 |---|---|
@@ -337,6 +351,11 @@ Missing (from `providers/README.md`, "Trello"):
 | The API key comes from the OAuth app credentials at each call. The source copied it into `config`. | One place for the key. |
 | `exchange` checks the token format before the call. | The token comes from the browser. |
 | Lists keep Trello's order. The source sorted them by `pos`. | Trello already answers in board order. |
+| The page is at `/bridge` and posts to `/callback`. The source used one URL for both. | The code callback already owns `GET /callback`. |
+| The page allows its script by hash, not a nonce. | The page is static; the route declares the script and the framework hashes it once. |
+| The page opens for any state signed for Trello; the post checks the rest. | The page must load to take the token out of the address. |
+| The token post needs this API's `Origin`. | Only the bridge page of this instance can post a token. |
+| After the post, the page shows a result. The source redirected to its settings page. | The callback answers JSON; a web page is a follow-up. |
 
 ### Monday
 
@@ -710,7 +729,6 @@ External effects:          GitHub webhook update (request, `call`); Slack users.
 
 | Source rows | Reason |
 |---|---|
-| Trello | Connect deferred: Trello returns the token in the URL fragment, and no page reads it yet. `providers/trello.ts` is built but not registered (see "Trello"). |
 | Segment outbound sync (segment membership pushed to Segment) | Lane G1 built the Segment connection (`saveQuillsSegmentConnection`) and the identify hook (`receiveQuillsIdentify`), because identify has no other provider. The outbound sync is not ported: RFC 0001 section 11 leaves Segment out of scope. |
 | GitLab self-managed instances | The provider host would come from user input; needs the SSRF-checked outbound path and a host field. gitlab.com only. |
 | `api/integrations/{type}/hooks/{kind}` kinds `interactions`, `commands`, `options` | The Slack `events` kind is built ("Agent channels"); buttons, the slash command and shortcuts are not ported. |

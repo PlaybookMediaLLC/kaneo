@@ -11,8 +11,8 @@ import {
   type OAuthProvider,
 } from "../oauth-providers";
 
-// Not registered in index.ts: Trello returns its token in the URL fragment, and no page reads it yet.
-// providers/README.md ("Trello") gives the design that completes the connect.
+// Trello returns its token in the URL fragment. The bridge page reads it and posts it to the callback
+// (`callback: "fragment"`, see providers/README.md, "Trello").
 
 const hosts = /^(api\.)?trello\.com$/;
 const api = "https://api.trello.com/1";
@@ -45,6 +45,7 @@ export const trello = {
   channels: true,
   // The client ID is the Trello API key.
   credentials: ["clientId", "clientSecret"],
+  callback: "fragment",
   authorizeUrl: (creds, redirectUri, state) =>
     `https://trello.com/1/authorize?${form({
       key: creds.clientId!,

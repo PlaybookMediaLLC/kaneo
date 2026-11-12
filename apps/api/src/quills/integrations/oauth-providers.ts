@@ -48,6 +48,13 @@ export type OAuthConnect = {
    * fixed domain suffix.
    */
   connectFields?: Record<string, RegExp>;
+  /**
+   * "fragment": the provider returns a token in the URL fragment (Trello), not a code in the query.
+   * The redirect URI is then the bridge page (`GET /oauth/<type>/bridge`), which posts the token to
+   * `POST /oauth/<type>/callback`. `exchange` gets the token as `code` and must check it with the
+   * provider before it returns it as a secret.
+   */
+  callback?: "fragment";
   authorizeUrl: (
     creds: Record<string, string>,
     redirectUri: string,

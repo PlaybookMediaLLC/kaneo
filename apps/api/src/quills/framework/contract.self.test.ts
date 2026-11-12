@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 import { eq, isNotNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -39,6 +40,7 @@ import {
 import {
   buildQuillsRoute,
   defineQuillsRoute,
+  htmlHeaders,
   type AnyQuillsRoute,
 } from "./define-route";
 import { registry } from "./registry";
@@ -1209,6 +1211,70 @@ describe("raw, textBody and prepare declaration rules", () => {
         handler: async () => "",
       }),
     ).toThrow(/raw response/);
+  });
+  it("takes an HTML response only on a signed read, and RSS or XML never there", () => {
+    const signed = {
+      ...base,
+      audience: "signed" as const,
+      verifier: {
+        name: "rules",
+        locate: () => ({ scope: { workspace: "rules" }, deliveryId: "rules" }),
+      },
+      replay: "",
+      event: { none: "Rules" },
+      response: z.string(),
+      handler: async () => "",
+    };
+    expect(() =>
+      buildQuillsRoute({ ...signed, raw: "text/html" }),
+    ).not.toThrow();
+    expect(() =>
+      buildQuillsRoute({ ...signed, raw: "application/xml" }),
+    ).toThrow(/raw response/);
+    expect(() =>
+      buildQuillsRoute({
+        ...signed,
+        raw: "text/html",
+        method: "post",
+      }),
+    ).toThrow(/raw response/);
+    for (const audience of ["public", "portal", "widget"] as const)
+      expect(() =>
+        buildQuillsRoute({
+          ...base,
+          audience,
+          raw: "text/html",
+          response: z.string(),
+          handler: async () => "",
+        }),
+      ).toThrow(/raw response/);
+  });
+  it("lets an HTML page run only the scripts that its route declares", () => {
+    const policy = (scripts?: string[]) =>
+      htmlHeaders(scripts)["content-security-policy"];
+    const hash = (script: string) =>
+      `'sha256-${createHash("sha256").update(script).digest("base64")}'`;
+    expect(policy(["go()", "stop()"])).toContain(
+      `script-src ${hash("go()")} ${hash("stop()")}; connect-src 'self';`,
+    );
+    expect(policy()).toContain("script-src 'none';");
+    expect(htmlHeaders()).toMatchObject({
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+      "referrer-policy": "no-referrer",
+      "x-content-type-options": "nosniff",
+    });
+    expect(policy()).toContain("frame-ancestors 'none'");
+    expect(() =>
+      buildQuillsRoute({
+        ...base,
+        audience: "public",
+        raw: "application/xml",
+        scripts: ["go()"],
+        response: z.string(),
+        handler: async () => "",
+      }),
+    ).toThrow(/scripts are for an HTML page/);
   });
   it("takes textBody only on a public route with a body", () => {
     const route = {

@@ -10116,7 +10116,7 @@
           "Quills"
         ],
         "summary": "Receive a GitHub or GitLab issue event for status sync",
-        "description": "GitHub signs the body (X-Hub-Signature-256); GitLab sends the secret (X-Gitlab-Token). A repeated delivery changes nothing. The caller signs the raw request body; the body is parsed only after the signature check.",
+        "description": "GitHub signs the body (X-Hub-Signature-256); GitLab sends the secret (X-Gitlab-Token). A repeated delivery changes nothing. The route checks the caller's credential (for example a signature over the raw body) before it parses the body.",
         "security": [],
         "parameters": [
           {
@@ -10266,7 +10266,7 @@
           "Quills"
         ],
         "summary": "Receive a Slack app event for the assistant",
-        "description": "Slack signs the body (x-slack-signature, x-slack-request-timestamp; five minutes). Answers the URL verification challenge. A repeated event changes nothing. The caller signs the raw request body; the body is parsed only after the signature check.",
+        "description": "Slack signs the body (x-slack-signature, x-slack-request-timestamp; five minutes). Answers the URL verification challenge. A repeated event changes nothing. The route checks the caller's credential (for example a signature over the raw body) before it parses the body.",
         "security": [],
         "parameters": [
           {
@@ -10377,7 +10377,7 @@
           "Quills"
         ],
         "summary": "Receive a Segment identify call",
-        "description": "Segment signs the body (x-signature: base64 HMAC-SHA1). Only existing customers change, and only attributes that a user attribute definition names. A repeated call changes nothing. The caller signs the raw request body; the body is parsed only after the signature check.",
+        "description": "Segment signs the body (x-signature: base64 HMAC-SHA1). Only existing customers change, and only attributes that a user attribute definition names. A repeated call changes nothing. The route checks the caller's credential (for example a signature over the raw body) before it parses the body.",
         "security": [],
         "parameters": [
           {
@@ -10483,7 +10483,7 @@
           "Quills"
         ],
         "summary": "Complete an OAuth connection",
-        "description": "The provider redirects the browser here. The signed state must be unexpired, unused, for this provider and for the signed-in account, which must still hold quills:manage_settings in the state's workspace. The caller signs the raw request body; the body is parsed only after the signature check.",
+        "description": "The provider redirects the browser here. The signed state must be unexpired, unused, for this provider and for the signed-in account, which must still hold quills:manage_settings in the state's workspace.",
         "security": [],
         "parameters": [
           {
@@ -10629,6 +10629,202 @@
             }
           }
         }
+      },
+      "post": {
+        "operationId": "completeQuillsOAuthFragmentConnect",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Complete an OAuth connection with a token from the URL fragment",
+        "description": "The bridge page posts the JSON body `{ \"token\": \"…\" }` (at most 2,048 characters) here. `Origin` must be this API's origin. The signed state in the query must be unexpired, unused, for this provider and for the signed-in account, which must still hold quills:manage_settings in the state's workspace. The provider checks the token before it is stored; it is never returned. The route checks the caller's credential (for example a signature over the raw body) before it parses the body.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "trello"
+              ]
+            },
+            "required": true,
+            "name": "type",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "required": true,
+            "name": "state",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The connection without its tokens",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "connected",
+                        "already_used"
+                      ]
+                    },
+                    "integration": {
+                      "$ref": "#/components/schemas/QuillsIntegrationSummary"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "integration"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is not a valid token, or the provider rejected the token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid signature",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The account no longer manages Quills settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not configured, or no workspace owns the credential",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No OAuth app credentials, or the provider rejected the credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The provider could not be reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/signed/oauth/{type}/bridge": {
+      "get": {
+        "operationId": "openQuillsOAuthBridge",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Open the bridge page of an OAuth connection with a fragment token",
+        "description": "Trello sends the browser here with the token in the URL fragment, which no server receives. The page removes the fragment, then posts the token to `completeQuillsOAuthFragmentConnect` with the same state, which checks the session, the permission and the expiry. The page needs a state that this instance signed for this provider. It opens once for each state, and opening it does not use the state up.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "trello"
+              ]
+            },
+            "required": true,
+            "name": "type",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "required": true,
+            "name": "state",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The bridge page",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid signature",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not configured, or no workspace owns the credential",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/quills-public/signed/oauth/connectors/{connectorId}/callback": {
@@ -10638,7 +10834,7 @@
           "Quills"
         ],
         "summary": "Complete a connector's OAuth authorization",
-        "description": "The authorization server redirects the browser here. The signed state must be unexpired, unused, for this connector and for the signed-in account, which must still hold quills:manage_settings in the state's workspace. Exchanges the code, then refreshes the connector's tools. `connected` means that the authorization is complete; the connector's own status tells whether its tools were read. The caller signs the raw request body; the body is parsed only after the signature check.",
+        "description": "The authorization server redirects the browser here. The signed state must be unexpired, unused, for this connector and for the signed-in account, which must still hold quills:manage_settings in the state's workspace. Exchanges the code, then refreshes the connector's tools. `connected` means that the authorization is complete; the connector's own status tells whether its tools were read.",
         "security": [],
         "parameters": [
           {
@@ -11000,7 +11196,7 @@
           "Quills"
         ],
         "summary": "Receive a mail for a workspace address (Resend inbound webhook)",
-        "description": "404 until EMAIL_INBOUND_SIGNING_SECRET and EMAIL_INBOUND_DOMAIN are set. The body is fetched from Resend when the event carries none (EMAIL_RESEND_API_KEY). The caller signs the raw request body; the body is parsed only after the signature check.",
+        "description": "404 until EMAIL_INBOUND_SIGNING_SECRET and EMAIL_INBOUND_DOMAIN are set. The body is fetched from Resend when the event carries none (EMAIL_RESEND_API_KEY). The route checks the caller's credential (for example a signature over the raw body) before it parses the body.",
         "security": [],
         "responses": {
           "200": {
@@ -11097,7 +11293,7 @@
           "Quills"
         ],
         "summary": "Record a delivery event for a sent mail (Resend webhook)",
-        "description": "404 until EMAIL_EVENTS_SIGNING_SECRET (or EMAIL_INBOUND_SIGNING_SECRET) is set, and for a mail that carries no signed workspace tags. email.bounced and email.complained mark the mail's log row. The caller signs the raw request body; the body is parsed only after the signature check.",
+        "description": "404 until EMAIL_EVENTS_SIGNING_SECRET (or EMAIL_INBOUND_SIGNING_SECRET) is set, and for a mail that carries no signed workspace tags. email.bounced and email.complained mark the mail's log row. The route checks the caller's credential (for example a signature over the raw body) before it parses the body.",
         "security": [],
         "responses": {
           "200": {
@@ -87421,7 +87617,8 @@
                       "hubspot",
                       "intercom",
                       "zendesk",
-                      "salesforce"
+                      "salesforce",
+                      "trello"
                     ]
                   },
                   "client": {
@@ -87579,7 +87776,8 @@
                 "hubspot",
                 "intercom",
                 "zendesk",
-                "salesforce"
+                "salesforce",
+                "trello"
               ]
             },
             "required": true,
@@ -87678,7 +87876,8 @@
                 "hubspot",
                 "intercom",
                 "zendesk",
-                "salesforce"
+                "salesforce",
+                "trello"
               ]
             },
             "required": true,
@@ -88808,6 +89007,81 @@
           "Quills"
         ],
         "summary": "Start the Salesforce OAuth connection",
+        "description": "Returns the provider's authorization URL. Open it in the same browser session: the state expires after ten minutes, is bound to the caller and this workspace, and works once.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The provider authorization URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "authorizeUrl": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "authorizeUrl"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient permission",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No OAuth app credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/oauth/trello/connect": {
+      "get": {
+        "operationId": "startQuillsTrelloOAuthConnect",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Start the Trello OAuth connection",
         "description": "Returns the provider's authorization URL. Open it in the same browser session: the state expires after ten minutes, is bound to the caller and this workspace, and works once.",
         "parameters": [
           {

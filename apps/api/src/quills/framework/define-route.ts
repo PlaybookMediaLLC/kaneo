@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { RouteHandler } from "@hono/zod-openapi";
 import type { Context, MiddlewareHandler } from "hono";
 import { HTTPException } from "hono/http-exception";
@@ -81,7 +82,7 @@ const SIGNED_BODY_BYTES = 1_048_576;
 /** A `textBody` route reads at most this much body. */
 const TEXT_BODY_BYTES = 8192;
 /** Content types of a raw (non-JSON) response. */
-export type RawType = "application/rss+xml" | "application/xml";
+export type RawType = "application/rss+xml" | "application/xml" | "text/html";
 
 export type QuillsRouteInput<P, Q, B> = {
   params: Output<P>;
@@ -169,10 +170,16 @@ export type QuillsRouteDeclaration<
   /** Non-teammate writes: attempts per client IP and workspace, counted even when the request fails. */
   rateLimit?: { limit: number; windowSeconds: number };
   /**
-   * Portal, widget and public reads: the handler returns the document as a string (the response
-   * schema is a string), sent with this content type instead of JSON.
+   * Portal, widget and public reads (RSS, XML) and signed reads (HTML): the handler returns the
+   * document as a string (the response schema is a string), sent with this content type instead of
+   * JSON. An HTML page gets the headers of `htmlHeaders`.
    */
   raw?: X;
+  /**
+   * HTML pages: the only inline scripts that the page may run. The CSP allows each one by the hash
+   * computed here, once. A script that the page holds but does not declare does not run.
+   */
+  scripts?: readonly string[];
   /**
    * Public routes with a body: also read a text/plain body as JSON, so a browser can send it with
    * sendBeacon and no CORS preflight. Never on a portal or widget route: a simple cross-site request
@@ -342,6 +349,32 @@ type QuillsRoute<
   >;
 };
 
+/**
+ * The headers of an HTML page (a signed read with `raw: "text/html"`). The page runs only the
+ * declared inline scripts, allowed by their SHA-256 hash, never one taken from the page itself, and
+ * may call only its own origin. It is never cached, framed or named in a Referer.
+ */
+export function htmlHeaders(scripts: readonly string[] = []) {
+  const hashes = scripts.map(
+    (script) =>
+      `'sha256-${createHash("sha256").update(script).digest("base64")}'`,
+  );
+  return {
+    "content-type": "text/html; charset=utf-8",
+    "content-security-policy": [
+      "default-src 'none'",
+      `script-src ${hashes.join(" ") || "'none'"}`,
+      "connect-src 'self'",
+      "base-uri 'none'",
+      "form-action 'none'",
+      "frame-ancestors 'none'",
+    ].join("; "),
+    "cache-control": "no-store",
+    "referrer-policy": "no-referrer",
+    "x-content-type-options": "nosniff",
+  };
+}
+
 // Without a JSON content type, @hono/zod-openapi passes an optional body through as an unvalidated {}.
 function emptyBody(schema: z.ZodType) {
   const result = schema.safeParse({});
@@ -418,15 +451,26 @@ export function buildQuillsRoute<
   const prepare = d.prepare as ((input: object) => Promise<H>) | undefined;
   const audience: Audience = d.audience ?? "teammate";
   const customer = audience === "portal" || audience === "widget";
+  // HTML only from a signed route, and only the declared scripts run (htmlHeaders).
   if (
     d.raw &&
-    (!(customer || audience === "public") ||
+    (!(d.raw === "text/html"
+      ? audience === "signed"
+      : customer || audience === "public") ||
       d.method !== "get" ||
       !(d.response instanceof z.ZodString))
   )
     throw new Error(
-      `${d.operationId}: a raw response is for a portal, widget or public read with a string response`,
+      `${d.operationId}: a raw response is for a read with a string response: HTML on a signed route, RSS or XML on a portal, widget or public route`,
     );
+  if (d.scripts && d.raw !== "text/html")
+    throw new Error(`${d.operationId}: scripts are for an HTML page`);
+  const ok = d.raw
+    ? {
+        description: d.responseDescription,
+        content: { [d.raw]: { schema: d.response } },
+      }
+    : jsonResponse(d.responseDescription, d.response);
   if (d.textBody && (audience !== "public" || !d.body))
     throw new Error(
       `${d.operationId}: textBody is for a public route with a body`,
@@ -495,7 +539,8 @@ export function buildQuillsRoute<
       description: [
         d.description,
         signed &&
-          "The caller signs the raw request body; the body is parsed only after the signature check.",
+          d.body &&
+          "The route checks the caller's credential (for example a signature over the raw body) before it parses the body.",
       ]
         .filter(Boolean)
         .join(" "),
@@ -506,7 +551,7 @@ export function buildQuillsRoute<
       // Signed routes read and verify the raw body before parsing it, so no validator reads it first.
       request: { params: d.params, query: d.query },
       responses: {
-        200: jsonResponse(d.responseDescription, d.response),
+        200: ok,
         401: errorResponse(signed ? "Invalid signature" : "Invalid token"),
         ...(signed &&
           d.body && {
@@ -547,6 +592,7 @@ export function buildQuillsRoute<
       return [route, handler] as const;
     }
     const verifier = d.verifier!;
+    const html = d.raw && htmlHeaders(d.scripts);
     const handler = (async (
       c: Context<{ Variables: BaseVariables }, string, any>,
     ) => {
@@ -561,6 +607,8 @@ export function buildQuillsRoute<
         query: d.query ? (c.req.valid("query") as Record<string, string>) : {},
       };
       const located = await verifier.locate(request);
+      const answer = (value: unknown) =>
+        html ? c.body(value as string, 200, html) : c.json(value, 200);
       let body: unknown;
       const open = <T>(
         work: (
@@ -602,7 +650,7 @@ export function buildQuillsRoute<
                 prepared: await prepare({ ...input, db, credential, located }),
               },
         );
-        if (first === REPLAY) return c.json(d.replay, 200);
+        if (first === REPLAY) return answer(d.replay);
         called = await d.call!(first.prepared, first.input);
       }
       const result = await open(async (db, input, credential) => {
@@ -630,7 +678,7 @@ export function buildQuillsRoute<
           );
         return result;
       });
-      return c.json(result === REPLAY ? d.replay : result, 200);
+      return answer(result === REPLAY ? d.replay : result);
     }) as unknown as RouteHandler<typeof route, RouteEnv<A>>;
     return [route, handler] as const;
   }
@@ -699,12 +747,7 @@ export function buildQuillsRoute<
         },
       },
       responses: {
-        200: d.raw
-          ? {
-              description: d.responseDescription,
-              content: { [d.raw]: { schema: d.response } },
-            }
-          : jsonResponse(d.responseDescription, d.response),
+        200: ok,
         ...(signIn && {
           401: errorResponse(
             audience === "portal"
