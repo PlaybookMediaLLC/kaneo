@@ -356,7 +356,7 @@ This RFC is complete when:
 ## 13. Status after lane Z
 
 Lane Z merged S0 and the eleven lanes into `feat/quills-131-integration`. The route registry has
-741 declarations (679 before), and the OpenAPI document has 1,002 operations (940 before). No
+742 declarations (679 before), and the OpenAPI document has 1,009 operations (940 before). No
 existing operation ID changed.
 
 | Lane | Entry points | State |
@@ -368,7 +368,7 @@ existing operation ID changed.
 | G2 | 4 | Built |
 | S1 | 6 | Built |
 | B1 | 6 | Built |
-| M1 | 6 | 5 built. The settings receipt undo is pending (a follow-up on this branch). |
+| M1 | 6 | Built. The settings receipt undo followed on `feat/quills-131-m1-undo`. |
 | P1 | 8 | Built |
 | P2 | 12 | 9 built. Trello (3) is deferred: its connect needs the fragment bridge page. |
 | P3 | 8 | Built |
@@ -376,15 +376,15 @@ existing operation ID changed.
 
 | Entry points of #131 | Count |
 |---|---|
-| Built | 69 |
-| Pending: settings receipt undo | 1 |
+| Built | 70 |
 | Deferred: Trello connect, boards and lists | 3 |
 | Blocked by a product decision: widget handoff (#129) | 1 |
 | Web-only: portal header setters (#130) | 2 |
 | Total | 76 |
 
-Completion criterion 2 cannot be met as written. `build-ledger.mjs` reads only `domain`,
-`disposition`, `reason` and `mergedInto` from `overrides.capabilities`, and `capabilities.csv` has
-no `closed` column. Lane Z marked closed the 10 route files whose handlers the lanes built
-(`overrides.routes`). The 59 other closed rows are server functions; they need a builder change
-before they can be marked.
+Completion criterion 2: `build-ledger.mjs` now takes `closed` (and an optional `operationId`) on a
+capability override and writes a `closed` column to `capabilities.csv`. `overrides.json` closes the
+59 server functions and the 11 route files that the lanes built (70 of the 73 entry points assigned
+to lanes). Open: Trello (3); outside the lanes, the widget handoff (#129) and the two web-only
+header setters (#130). The ledger reports 70 closed capabilities (the 59 functions and the 11 route
+handlers) and exits 0.
