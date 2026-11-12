@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Accepted. The owner decided D7 to D11 on 2026-11-11 (section 3). Lane Z merged ten lanes into `feat/quills-131-integration` (section 13). Lane P3 and the settings undo are pending. |
+| Status | Accepted. The owner decided D7 to D11 on 2026-11-11 (section 3). Lane Z merged the eleven lanes into `feat/quills-131-integration` (section 13). The settings undo is pending. |
 | Issue | [#131](https://github.com/PlaybookMediaLLC/kaneo/issues/131) (76 entry points) |
 | Target | `apps/api/src/quills` in this repository |
 | Reference | `../quackback/apps/web/src` at commit `42ef2e01` (read-only) |
@@ -355,9 +355,9 @@ This RFC is complete when:
 
 ## 13. Status after lane Z
 
-Lane Z merged S0 and ten lanes into `feat/quills-131-integration`. The route registry has 735
-declarations (679 before), and the OpenAPI document has 996 operations (940 before). No existing
-operation ID changed.
+Lane Z merged S0 and the eleven lanes into `feat/quills-131-integration`. The route registry has
+741 declarations (679 before), and the OpenAPI document has 1,002 operations (940 before). No
+existing operation ID changed.
 
 | Lane | Entry points | State |
 |---|---|---|
@@ -371,15 +371,14 @@ operation ID changed.
 | M1 | 6 | 5 built. The settings receipt undo is pending (a follow-up on this branch). |
 | P1 | 8 | Built |
 | P2 | 12 | 9 built. Trello (3) is deferred: its connect needs the fragment bridge page. |
-| P3 | 8 | Pending. It lands on this branch later. |
+| P3 | 8 | Built |
 | P4 | 3 | Built |
 
 | Entry points of #131 | Count |
 |---|---|
-| Built | 61 |
-| Pending: lane P3 | 8 |
+| Built | 69 |
 | Pending: settings receipt undo | 1 |
-| Deferred: Trello connect and lists | 3 |
+| Deferred: Trello connect, boards and lists | 3 |
 | Blocked by a product decision: widget handoff (#129) | 1 |
 | Web-only: portal header setters (#130) | 2 |
 | Total | 76 |
@@ -387,5 +386,5 @@ operation ID changed.
 Completion criterion 2 cannot be met as written. `build-ledger.mjs` reads only `domain`,
 `disposition`, `reason` and `mergedInto` from `overrides.capabilities`, and `capabilities.csv` has
 no `closed` column. Lane Z marked closed the 10 route files whose handlers the lanes built
-(`overrides.routes`). The 51 other closed rows are server functions; they need a builder change
+(`overrides.routes`). The 59 other closed rows are server functions; they need a builder change
 before they can be marked.

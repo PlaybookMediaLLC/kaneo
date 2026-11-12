@@ -5,12 +5,11 @@ Status: all phases P0 to P10 are implemented in `apps/api/src/quills/`, with the
 what it deferred and why.
 
 [RFC 0001](rfc-0001-remaining-capabilities.md) (issue #131, 76 remaining entry points) is integrated
-on `feat/quills-131-integration`. The route registry has 735 declarations (679 before RFC 0001).
+on `feat/quills-131-integration`. The route registry has 741 declarations (679 before RFC 0001).
 
 | Entry points of #131 | Count |
 |---|---|
-| Built (lanes X1, C1, G1, G2, S1, B1, M1, P1, P2, P4) | 61 |
-| Pending: lane P3 (HubSpot, Intercom, Zendesk, Salesforce, customer context) | 8 |
+| Built (lanes X1, C1, G1, G2, S1, B1, M1, P1, P2, P3, P4) | 69 |
 | Pending: settings receipt undo (lane M1 follow-up) | 1 |
 | Deferred: Trello connect, boards and lists | 3 |
 | Blocked: widget handoff (#129) | 1 |
