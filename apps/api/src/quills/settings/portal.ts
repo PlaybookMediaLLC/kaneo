@@ -41,6 +41,18 @@ const strings = (value: unknown) =>
     ? value.filter((v): v is string => typeof v === "string")
     : [];
 
+/**
+ * Receipt fields: what this area writes. Access data, moderation and the welcome card have other
+ * writers and stay out. `features` and `support` are whole objects, so undo can remove one again.
+ */
+export const portalReceipt = [
+  "portalConfig.enabled",
+  "portalConfig.features",
+  "portalConfig.openSignup",
+  "portalConfig.support",
+  "portalConfig.nav",
+] as const;
+
 export default settingsArea({
   name: "portal",
   title: "Portal",
@@ -131,6 +143,7 @@ export default settingsArea({
     /** The ordered top-nav, saved whole. */
     nav: z.array(navItem).max(20).optional(),
   }),
+  receipt: portalReceipt,
   apply: (row, patch) => {
     const config = parseJson(row.portalConfig);
     return {

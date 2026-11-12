@@ -5,6 +5,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as kaneo from "../../database/schema";
 import quillsRouter from "../index";
+import * as appFixtures from "../apps/index.fixture";
 import * as automationFixtures from "../automation/index.fixture";
 import * as assistantFixtures from "../assistant/index.fixture";
 import * as contentFixtures from "../content/index.fixture";
@@ -100,6 +101,7 @@ const fixtures: Record<string, Fixture> = {
   ...assistantFixtures,
   ...inboundFixtures,
   ...wakeFixtures,
+  ...appFixtures,
 };
 const app = contractApp(quillsRouter, publicRouter);
 
@@ -114,10 +116,11 @@ describe.skipIf(!url)("Quills route contract", () => {
     pool = new Pool({ connectionString: url, max: 5 });
     await startContract(pool, url!);
   }, 120000);
+  // The teardown deletes two workspaces with the rows of every route. It needs more than the 10-second default.
   afterAll(async () => {
     vi.unstubAllEnvs();
     await stopContract();
-  });
+  }, 120000);
 
   it("mounts every Quills route through defineQuillsRoute", () => {
     expect(registry.size).toBeGreaterThan(0);

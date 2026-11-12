@@ -1,6 +1,7 @@
 export * from "./channels.fixture";
 export * from "./external-links.fixture";
 export * from "./freshdesk.fixture";
+export * from "./providers/azure-devops.fixture";
 export * from "./integrations.fixture";
 export * from "./make.fixture";
 export * from "./n8n.fixture";
@@ -12,3 +13,5 @@ export * from "./zapier.fixture";
 export * from "./inbound.fixture";
 export * from "./oauth.fixture";
 export * from "./status-sync.fixture";
+export * from "./contacts.fixture";
+export * from "./customer-context.fixture";

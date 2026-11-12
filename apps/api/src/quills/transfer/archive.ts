@@ -23,6 +23,8 @@ export const OMITTED_TABLES = [
   "onboarding_emails",
   // A domain points at this instance and belongs to one workspace; the target sets and verifies its own.
   "custom_domains",
+  // An app is bound to an API key of this instance (RFC 0001, D12); an import must not bind it again.
+  "apps",
 ] as const;
 export const portableTables = Object.values(schema)
   .filter((value) => is(value, PgTable))

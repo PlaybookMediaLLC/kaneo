@@ -33,7 +33,8 @@ Transaction:               one scoped transaction per request. A provider call n
                            data is a run or an event that the quills.ai worker answers (read,
                            release, call, then write with the job's completion).
 External effects:          provider calls (OpenAI-compatible, 60-second timeout, fixed error text);
-                           web-source fetches through the public-destination guard. No mail.
+                           web-source fetches through the public-destination guard; connector
+                           requests (see "Connectors"). No mail.
 ```
 
 ## Provider
@@ -96,6 +97,71 @@ and the key never reach a response, a run or `ai_usage_log`. Each call writes on
 
 Merged: the source's seven per-section settings updates are one PATCH. Widget deployment
 settings stay with the widget slice.
+
+## Connectors (RFC 0001, lane C1)
+
+A connector is a remote MCP server that a settings manager adds. These routes add, read, change,
+refresh and authorize a connector. `connector-client.ts` is the MCP client. The copilot does not
+call connector tools yet (see "Not ported").
+
+### Boundary map
+
+```
+Tables and owning schema:  quills: connectors, principal (read: the callback's teammate), kv_store
+                           (signed delivery receipts), events, audit_log, job_queue. public: none in
+                           the route module (the callback's verifier reads the membership and role
+                           through framework/platform-reads.ts, as the integration callback does).
+Actor and workspace:       teammate routes: authenticated context. Callback: the signed state's
+                           workspace and teammate, re-checked against the session. The state also
+                           names the connector, and the path must name the same connector.
+Permissions:               teammate routes: workspace:read + quills:manage_settings. Callback: the
+                           session account still holds quills:manage_settings in the state's workspace.
+Persisted relationships:   none. A connector belongs to its workspace (RLS); each ID is read in the
+                           caller's scope, so a connector of workspace B is 404.
+Transactions:              the connector URL is never reached in a transaction. `prepare` reads in one
+                           scoped transaction, `call` reaches the server, and the handler writes in a
+                           new one. The handler answers 409 when the URL, the auth mode or the
+                           secrets changed between the read and the write.
+External effects:          requests to the connector URL and its authorization server: MCP initialize
+                           and tools/list, OAuth discovery, client registration, token exchange and
+                           refresh. Each request goes through createGuardedFetch (each redirect and the
+                           socket address are checked), under one 10-second deadline for each step,
+                           and each answer is at most 1 MB. No worker, mail or webhook.
+Secrets:                   the bearer token, the OAuth client registration, the code verifier and the
+                           tokens are sealed with sealCredentials (NOTIFICATION_SECRET_ENCRYPTION_KEY),
+                           as integrations.secrets are. No response, event, audit row or stored error
+                           holds them. Server and provider text never reaches a response or last_error.
+```
+
+### Routes
+
+| operationId | Route | Action | Tables | Event |
+|---|---|---|---|---|
+| `getQuillsConnector` | `GET /assistant/connectors/{connectorId}` | manage_settings | `connectors` | - |
+| `createQuillsConnector` | `POST /assistant/connectors` (at most 100; reaches the URL unless `authMode` is `oauth`) | manage_settings | `connectors` | `assistant_connector.created` |
+| `updateQuillsConnector` | `PATCH /assistant/connectors/{connectorId}` (no network) | manage_settings | `connectors` | `assistant_connector.updated` |
+| `refreshQuillsConnector` | `POST /assistant/connectors/{connectorId}/refresh` | manage_settings | `connectors` | `assistant_connector.refreshed` |
+| `startQuillsConnectorOAuth` | `POST /assistant/connectors/{connectorId}/oauth` (returns the authorization URL) | manage_settings | `connectors` | `assistant_connector.updated` |
+| `completeQuillsConnectorOAuth` | `GET /quills-public/signed/oauth/connectors/{connectorId}/callback?state&code` (signed) | manage_settings (session) | `connectors`, `principal`, `kv_store` | `assistant_connector.connected` |
+
+Tests: the contract suite (a local MCP and OAuth server in `connector-edge.fixture.ts`) and
+`connectors.test.ts` (the OAuth flow, token refresh, private addresses, the URL change, bounds).
+
+### Differences from the source
+
+| Source | Kaneo |
+|---|---|
+| `createConnectorFn` with OAuth creates the connector and returns `authorizationUrl`. | Create never starts OAuth. An `oauth` connector, or a `none` connector whose server answers 401, is stored with status `error` and `Authorization required`. The client then calls `startQuillsConnectorOAuth`. |
+| The callback is `/oauth/connector/callback` and redirects to the settings page. | The callback is a signed route that names the connector, and it answers JSON (`connected` or `already_used`), as the integration callback does. The state is Kaneo's signed state: bound to the teammate, the workspace and the connector, ten minutes, one use. Each connector registers its own OAuth client with its own redirect URI. |
+| `startConnectorOAuthFn` refreshes stored tokens and then answers "already authorized". | Start always begins a new authorization. The stored tokens stay until the callback replaces them. Refresh uses the stored refresh token through the SDK when the server answers 401. |
+| The URL is checked once at save time (`checkUrlSafety`), then fetched with a pinned address. | Each request goes through `createGuardedFetch`, so update does not reach the network and a refresh records a refusal as `error`. Create answers 400 for a refused address. |
+| A URL change keeps the stored token. | A URL change removes the stored secrets, unless the same request sets a new bearer token, and sets status `error`. A token never goes to a URL that it was not given for. |
+| `last_error` and error responses hold the server's message. | Fixed texts only. |
+| The tool catalogue is stored as the server sends it. | At most 100 tools from the first `tools/list` page; names of 1 to 128 characters, titles of 200, descriptions of 2,000; an input schema over 20,000 characters is dropped. The tool view has no `isNew` (the source's value is never true after a sync) and no `isOverride` (`toolPolicies.tools` holds the overrides). |
+| `getConnectorFn("quackback")` returns the built-in tools. | `listQuillsAssistantTools` lists them; get answers 404 for an unknown ID. |
+| Each assignment needs its AI permission. | Every connector route needs `manage_settings`, as all assistant configuration does. |
+| No limit. | At most 100 connectors (the list shows 100). |
+| The OAuth tokens get an `expiresAt` and a 5-minute refresh buffer. | The tokens are stored as the SDK returns them. The SDK refreshes them when the server answers 401. |
 
 ## Runtime
 
@@ -188,6 +254,64 @@ The write and the job's completion share one transaction. A background provider 
 retries (three attempts); a run's failure is stored on the run. Each job starts no provider
 call after three minutes, so it ends inside its lease.
 
+## Workspace search (RFC 0001, lane G2)
+
+Module: `assistant/search.ts`, ranking helpers in `assistant/search-match.ts`. Feature tests:
+`assistant/search.test.ts` (real PostgreSQL, workspaces A and B, a private project).
+
+```
+Tables and owning schema:  quills (read only): posts, boards, board_projects, conversations,
+                           conversation_messages, ticket_conversations, tickets, kb_articles,
+                           changelog_entries, principal, user, companies. public (read only, through
+                           framework/platform-reads.ts): project access and the member roster.
+Actor and workspace:       authenticated context (helper). Never a body or query copy.
+Permissions:               workspace:read + quills:read. No native permissions.
+Persisted relationships:   board_projects (a post shows only on a board the caller can see).
+Transaction:               one scoped transaction. The projects and the roster are read in `load`.
+External effects:          none. No provider call.
+Completion checks:         authenticated endpoint, tenant/object access, read/search/export.
+```
+
+| operationId | Route | Action | Tables | Event |
+|---|---|---|---|---|
+| `searchQuillsWorkspace` | `GET /search` (`q` ≤ 200, `kind`, `offset` ≤ 100, `limit` ≤ 50) | read | as the boundary map | - |
+
+Each kind applies the visibility rule of its own list in the `WHERE` clause, before its `LIMIT`:
+
+| Kind | Rule (reused helper) | Matched on |
+|---|---|---|
+| `post` | `filterConditions` of the posts list: live, not merged, no test author, a live board the caller can see | full text, or the title contains the query |
+| `conversation` | the inbox list: `realConversation` and `notSpam` | the subject, or a live message (notes too) |
+| `ticket` | live, and the requester is not a test customer (`testRequester`, as the inbox) | the title, or a live message on the ticket or its paired conversation |
+| `article` | live (drafts too, as `listQuillsHelpCenterArticles`) | full text, or the title |
+| `changelog` | live (drafts too, as `listQuillsChangelog`) | full text, or the title |
+| `person` | `isCustomer` and identified (as `listQuillsUsers`) | name, display name or email contains the query |
+| `teammate` | the teammate principal of a current member (as `listQuillsPrincipals`) | display name contains the query |
+| `company` | every company (as `listQuillsCompanies`) | name or domain contains the query |
+
+Ranking follows the source: score = title tier (3 equal, 2 starts with, 1 contains) + `ts_rank`
+normalised under 1. Ties go to the newest update, then kind and ID. Each kind reads its best
+`offset + limit + 1` rows, so the merged page and `hasMore` are exact up to 100 results.
+A "contains" match needs 3 characters; a query of 2 characters uses full text only, and a shorter
+query returns nothing.
+
+Known limit, as in the source and the inbox search: the `@@` and `ILIKE` operators are not leakproof,
+so under row security no text index serves them. A search without `kind` reads the workspace's live
+messages twice (conversations and tickets) and every subject and title; a `kind` narrows the work to
+one query. The excerpt of a message match is read by primary key for the kept rows only.
+
+Differences from the source, on purpose:
+
+- Every kind needs only `quills:read`: Kaneo has no `changelog.view_draft`, `help_center.manage`,
+  `people.view`, `member.view` or `company.view` split (D2). Drafts are found, as in the lists.
+- No product flag narrows the kinds. No Kaneo teammate route checks a product flag.
+- Results carry no `href`: Kaneo's web app has no Quills pages yet. The client builds links from
+  `kind` and `id`.
+- Teammates match on the display name only and return no email, as `listQuillsPrincipals`.
+- Full text uses `websearch_to_tsquery('english')`, as the Kaneo lists, not the source's own parser.
+- No meaning (semantic) matches: the `semantic` option is not offered. It needs an embedding call in
+  `load` and vector reads for each kind.
+
 ## Migration
 
 `drizzle/quills/0017_assistant_queue.sql` adds `quills.ai` to `quills.runnable_workspaces`.
@@ -199,13 +323,14 @@ No table changes.
 |---|---|---|
 | Copilot streaming (AG-UI SSE) | Not ported | A provider call cannot run inside the request transaction, and the framework has one transaction per request. The copilot is a run that the worker answers. A two-phase declaration (read, call, write) is a framework change. |
 | Workspace assistant threads | Not ported | The source retired them (`workspace-assistant.ts`: nothing creates or reads these threads). |
-| Customer-facing agent (Quinn in conversations), involvements, inbox assistant counts and activity | Not ported | Needs the conversation reply pipeline and channel delivery; the analytics routes read the existing tables. |
-| Connector create, update, refresh and OAuth; connector tools | Not ported | Needs an MCP client and OAuth handling. Imported connectors can be listed and removed. |
+| Customer-facing agent (Quinn in conversations), involvements | Not ported | Needs the conversation reply pipeline and channel delivery; the analytics routes, the inbox assistant counts and the conversation activity read the existing tables (`support/CONVERSATIONS.md`). |
+| Connector tools in the copilot | Not ported | No RFC 0001 entry point runs them. A tool call reaches a user URL, so it needs a network step in the worker's tool loop and in approval. Connector `assignments` and `toolPolicies` are stored only. |
+| Imported connector secrets | Unreadable | The source sealed them with its own key. A refresh then answers `Authorization required`: enter the bearer token again, or authorize again. |
 | Document upload of an original file, PDF text extraction | Not ported | Needs a PDF parser dependency and a new `framework/files.ts` purpose. Documents take text or Markdown. |
-| Widget assistant deployment, Slack settings | Not ported | Widget and Slack slices. |
+| Widget assistant deployment | Not ported | Widget slice. |
+| Slack assistant | Ported in part | Settings, the event hook and one threaded answer: `integrations/ROUTES-OAUTH.md`, "Agent channels". |
 | `my_tone` transform | Not ported | Needs a read of the teammate's replies before the provider call. |
 | Feedback posts as a copilot read tool | Not ported | Needs a project-visibility read for the requester inside the worker. |
-| `searchQuillsWorkspace` (Ask search) | Not ported | Not in this slice's list. |
 | Pending-action expiry sweep | Not ported | An expired action returns 409 on decision; its stored status stays `proposed`. |
 | Usage rows for a failed `load` call (transform, draft, semantic search) | Not logged | `load` has no transaction; a failed call returns 502 and writes nothing. |
 | API-key scope in the worker | Partial | A request's handler cannot see the API key, so the worker checks the requester's role, not the key's scope. A read-only key can lead to a proposal; approval still checks the approver's role and key scope. |

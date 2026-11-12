@@ -43,6 +43,8 @@ const allowedImport = (file: string, specifier: string) => {
     (routePaths.has(target) ||
       [
         "framework/define-route",
+        "framework/app",
+        "framework/app-keys",
         "framework/files",
         "framework/integration-config",
         "framework/platform-reads",
@@ -50,8 +52,17 @@ const allowedImport = (file: string, specifier: string) => {
         "framework/audience",
         "framework/signed",
         "framework/internal",
+        "framework/read-batch",
         // Static widget page and bundles: reads files, never the database (see the module).
         "widget/host",
+        // MCP connector client: reaches a connector URL only through the destination guard, never
+        // the database (see the module).
+        "assistant/connector-client",
+        // Link unfurl: the guarded fetch for route modules, no database (link-preview.test.ts pins its imports).
+        "support/link-fetch",
+        // Website branding: a guarded site fetch, a logo upload and the personal email domain list;
+        // never the database (see the module).
+        "settings/website-fetch",
         "../openapi",
       ].includes(target) ||
       target.startsWith("../database/quills/schema/"))
@@ -138,6 +149,24 @@ describe("Quills module boundaries", () => {
     ).toEqual(["node:crypto", "node:fs", "node:path", "node:url", "hono"]);
   });
 
+  it("keeps the exempt connector client to the MCP SDK and the destination guard: no database", () => {
+    const client = quills.find(
+      (file) => file.path === "assistant/connector-client.ts",
+    )!;
+    expect(
+      [...client.source.matchAll(/from "([^"]+)"/g)].map((match) => match[1]),
+    ).toEqual([
+      "@modelcontextprotocol/sdk/client/auth.js",
+      "@modelcontextprotocol/sdk/client/index.js",
+      "@modelcontextprotocol/sdk/client/streamableHttp.js",
+      "@modelcontextprotocol/sdk/server/auth/errors.js",
+      "@modelcontextprotocol/sdk/shared/transport.js",
+      "../../database/quills/schema/connectors",
+      "../../import/destination-fetch",
+      "../../import/guarded-fetch",
+    ]);
+  });
+
   it("does not spread request bodies into writes", () => {
     expect(
       matching(
@@ -151,6 +180,8 @@ describe("Quills module boundaries", () => {
     expect(
       matching(quills, /from "(\.\.\/)+database(\/index|\/schema)?"/),
     ).toEqual([
+      // An app's API key in public.apikey: mint, scope and undo (RFC 0001, D14).
+      "framework/app-keys.ts",
       // Test harness: seeds the platform rows that the contract checks need.
       "framework/contract-checks.ts",
       "framework/contract-world.ts",

@@ -184,7 +184,7 @@ Both show what an anonymous visitor of a public portal sees; a private portal gi
 | Tag filters, owner and segment filters, facets, `minVotes`, `responded`, `dateFrom` on the post list | Team-only or not needed by the widget RFC; add when the portal UI needs them. |
 | Voter avatars (`FeedbackPost.voters`) | Not served: names of voters are private by default. |
 | Edit history display (`showPublicEditHistory`) | No read route for edit history yet. |
-| Public user profiles (`public-profile.ts`) | Not in this slice's list. |
+| Public user profiles (`public-profile.ts`) | Built in RFC 0001 lane M1; see `../ROUTES.md`, "Public profiles". |
 | Changelog reactions and read markers (RFC 0003 `PUT /updates/:id/read`, update reactions) | No table; needs a migration. |
 | Request activity (RFC 0005), article feedback, attachments (RFC 0004) | Out of scope; need tables and the storage flow. |
 | `holdImages` | Customer content is plain text, so it has no images. Links are found with a plain-text pattern. |

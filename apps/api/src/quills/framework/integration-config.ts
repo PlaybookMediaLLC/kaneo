@@ -56,21 +56,27 @@ export class ProviderCallError extends Error {
 /**
  * One request to a fixed OAuth provider host: HTTPS, no redirect, no retry, a 10-second timeout and no
  * HTTP telemetry (tokens travel in headers). Returns the JSON answer. Provider text never reaches a caller.
+ * `hosts` is the calling provider's own host pattern (integrations/providers/); the whole host name must
+ * match it, and its flags are ignored. Without it, the hosts of the first providers apply.
  */
 export async function providerJson(
   url: string,
   init: {
-    method?: "GET" | "POST";
+    method?: "GET" | "POST" | "PATCH";
     headers?: Record<string, string>;
     body?: string;
   } = {},
+  hosts?: RegExp,
 ): Promise<unknown> {
   const target = new URL(url);
+  const allowed = hosts
+    ? new RegExp(`^(?:${hosts.source})$`)
+    : OAUTH_PROVIDER_HOST;
   if (
     target.protocol !== "https:" ||
     target.username ||
     target.password ||
-    !OAUTH_PROVIDER_HOST.test(target.hostname)
+    !allowed.test(target.hostname)
   )
     throw new Error("Provider host not allowed");
   let response: Response;

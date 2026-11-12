@@ -35,6 +35,7 @@ export const createQuillsCompany = fixture({
 export const updateQuillsCompany = byCompany({ plan: "enterprise" });
 export const deleteQuillsCompany = byCompany();
 export const listQuillsCompanyMembers = byCompany();
+export const getQuillsCompanyActivity = byCompany();
 export const getQuillsUserCompany = byPerson;
 export const setQuillsUserCompany = fixture({
   seed,

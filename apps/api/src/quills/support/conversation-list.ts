@@ -98,7 +98,8 @@ const afterCursor = (
 };
 
 const escapeLike = (value: string) => `%${value.replace(/[\\%_]/g, "\\$&")}%`;
-const notSpam = or(
+/** Not ended as spam: the inbox list's rule outside the spam view. */
+export const notSpam = or(
   isNull(conversations.endReason),
   ne(conversations.endReason, "spam"),
 );

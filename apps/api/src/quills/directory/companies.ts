@@ -9,6 +9,11 @@ import {
 } from "../../openapi";
 import { principal, user } from "../../database/quills/schema/auth";
 import { companies } from "../../database/quills/schema/companies";
+import { conversations } from "../../database/quills/schema/conversation";
+import {
+  ticketConversations,
+  tickets,
+} from "../../database/quills/schema/tickets";
 import { companyAttributeDefinitions } from "../../database/quills/schema/company-attributes";
 import { defineQuillsRoute } from "../framework/define-route";
 import {
@@ -24,7 +29,9 @@ import {
   type Db,
 } from "./customer";
 
-const memberCount = sql<number>`(select count(*)::int from ${principal} m where m.company_id = ${companies.id} and m.kaneo_user_id is null and m.test_owner_principal_id is null)`;
+// Table-qualified: in a one-table select, drizzle writes ${companies.id} as a bare "id", which the
+// subquery would bind to m.id.
+const memberCount = sql<number>`(select count(*)::int from ${principal} m where m.company_id = ${companies}.id and m.kaneo_user_id is null and m.test_owner_principal_id is null)`;
 const companyFields = {
   id: companies.id,
   name: companies.name,
@@ -340,6 +347,40 @@ const listMembers = defineQuillsRoute({
   },
 });
 
+// Test customers' threads and tickets stay out, as in database/quills/test-data.ts: a ticket is test
+// when a test customer requested it or it is linked to a test customer's conversation. The outer
+// company is named with its table: a bare column in a select list renders unqualified.
+const activityCounts = {
+  conversations: sql<number>`(select count(*)::int from ${conversations} c join ${principal} v on v.id = c.visitor_principal_id where v.company_id = ${companies}.id and v.test_owner_principal_id is null)`,
+  tickets: sql<number>`(select count(*)::int from ${tickets} t where t.company_id = ${companies}.id and t.deleted_at is null
+    and not exists (select 1 from ${principal} r where r.id = t.requester_principal_id and r.test_owner_principal_id is not null)
+    and not exists (select 1 from ${ticketConversations} l join ${conversations} lc on lc.id = l.conversation_id join ${principal} lv on lv.id = lc.visitor_principal_id
+      where l.ticket_id = t.id and lv.test_owner_principal_id is not null))`,
+};
+
+const companyActivity = defineQuillsRoute({
+  method: "get",
+  path: "/companies/{companyId}/activity",
+  operationId: "getQuillsCompanyActivity",
+  summary: "Count the conversations and tickets of a company",
+  description:
+    "Conversations whose visitor belongs to the company, and the company's live tickets. Test customers' conversations and tickets are left out.",
+  action: "read",
+  params: companyParams,
+  response: z.object({ conversations: z.number(), tickets: z.number() }),
+  responseDescription: "Activity counts",
+  errors: notFound,
+  handler: async ({ db, params }) => {
+    const [row] = await db
+      .select(activityCounts)
+      .from(companies)
+      .where(eq(companies.id, params.companyId))
+      .limit(1);
+    if (!row) throw new HTTPException(404, { message: "Company not found" });
+    return row;
+  },
+});
+
 const getPersonCompany = defineQuillsRoute({
   method: "get",
   path: "/users/{principalId}/company",
@@ -454,6 +495,7 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .openapi(...updateCompany)
   .openapi(...deleteCompany)
   .openapi(...listMembers)
+  .openapi(...companyActivity)
   .openapi(...getPersonCompany)
   .openapi(...setPersonCompany)
   .openapi(...removePersonCompany);

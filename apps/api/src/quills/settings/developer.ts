@@ -11,6 +11,14 @@ const config = z.object({
   personalApiKeysEnabled: z.boolean(),
 });
 
+/** Receipt fields: the four switches. Kaneo API keys and their secrets are not settings here. */
+export const developerReceipt = [
+  "developerConfig.mcpEnabled",
+  "developerConfig.mcpPortalAccessEnabled",
+  "developerConfig.oauthDynamicClientRegistrationEnabled",
+  "developerConfig.personalApiKeysEnabled",
+] as const;
+
 export default settingsArea({
   name: "developer",
   title: "Developer",
@@ -29,6 +37,7 @@ export default settingsArea({
     };
   },
   patch: config.partial(),
+  receipt: developerReceipt,
   apply: (row, patch) => ({
     developerConfig: JSON.stringify({
       ...parseJson(row.developerConfig),

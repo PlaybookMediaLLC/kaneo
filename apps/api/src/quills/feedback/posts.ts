@@ -30,7 +30,11 @@ import {
   postVotes,
 } from "../../database/quills/schema/posts";
 import { postStatuses } from "../../database/quills/schema/statuses";
-import { defineQuillsRoute, type Database } from "../framework/define-route";
+import {
+  defineQuillsRoute,
+  type Database,
+  type QuillsActor,
+} from "../framework/define-route";
 import { memberUserIds } from "../framework/platform-reads";
 import { activityMetadata, recordActivity } from "./activity";
 import {
@@ -284,6 +288,57 @@ const getPost = defineQuillsRoute({
   },
 });
 
+/**
+ * Creates a post on a visible board, with its author's vote and subscription. The author is the
+ * actor, or `author` (for example a customer); then the actor is recorded as the teammate who tracks it.
+ */
+export async function insertPost(
+  db: Database,
+  actor: QuillsActor,
+  projects: string[],
+  input: {
+    boardId: TypeId<"board">;
+    title: string;
+    content: string;
+    statusId?: TypeId<"post_status">;
+    tagIds: TypeId<"post_tag">[];
+    author?: TypeId<"principal">;
+  },
+) {
+  const board = await findBoard(db, input.boardId, projects);
+  const status = await findStatus(db, input.statusId);
+  const tagIds = await checkTags(db, input.tagIds);
+  const author = input.author ?? actor.principalId;
+  const [post] = await db
+    .insert(posts)
+    .values({
+      boardId: board.id,
+      title: input.title,
+      content: input.content,
+      statusId: status?.id ?? null,
+      principalId: author,
+      ...(author !== actor.principalId && {
+        trackedByPrincipalId: actor.principalId,
+      }),
+      voteCount: 1,
+    })
+    .returning({ id: posts.id });
+  const postId = post!.id;
+  await db.insert(postVotes).values({ postId, principalId: author });
+  if (tagIds.length)
+    await db
+      .insert(postTagAssignments)
+      .values(tagIds.map((tagId) => ({ postId, tagId })));
+  await db
+    .insert(postSubscriptions)
+    .values({ postId, principalId: author, reason: "author" });
+  await recordActivity(db, actor, postId, {
+    type: "post.created",
+    metadata: { boardName: board.name },
+  });
+  return postId;
+}
+
 const createPost = defineQuillsRoute({
   method: "post",
   path: "/posts",
@@ -309,38 +364,8 @@ const createPost = defineQuillsRoute({
     payload: { boardId: result.boardId },
   }),
   load: loadProjects,
-  handler: async ({ db, actor, body, loaded: projects }) => {
-    const board = await findBoard(db, body.boardId, projects);
-    const status = await findStatus(db, body.statusId);
-    const tagIds = await checkTags(db, body.tagIds);
-    const [post] = await db
-      .insert(posts)
-      .values({
-        boardId: board.id,
-        title: body.title,
-        content: body.content,
-        statusId: status?.id ?? null,
-        principalId: actor.principalId,
-        voteCount: 1,
-      })
-      .returning({ id: posts.id });
-    const postId = post!.id;
-    await db
-      .insert(postVotes)
-      .values({ postId, principalId: actor.principalId });
-    if (tagIds.length)
-      await db
-        .insert(postTagAssignments)
-        .values(tagIds.map((tagId) => ({ postId, tagId })));
-    await db
-      .insert(postSubscriptions)
-      .values({ postId, principalId: actor.principalId, reason: "author" });
-    await recordActivity(db, actor, postId, {
-      type: "post.created",
-      metadata: { boardName: board.name },
-    });
-    return loadPost(db, postId);
-  },
+  handler: async ({ db, actor, body, loaded: projects }) =>
+    loadPost(db, await insertPost(db, actor, projects, body)),
 });
 
 const updatePost = defineQuillsRoute({

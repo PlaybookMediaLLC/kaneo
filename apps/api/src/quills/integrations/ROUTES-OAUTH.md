@@ -107,19 +107,607 @@ again; Slack's `ok: false` errors map to `auth_required` or `failed`; a due GitL
 before the call (never retried; a rejected refresh is `auth_required`) and the new tokens are stored
 with the outcome.
 
+Each provider is one file in `providers/`. `providers/index.ts` collects them in one registry.
+`providers/README.md` gives the steps to add a provider and the rules. It also describes the
+destination kinds (`kind` and `parent` on the destinations route) and the connect fields (query
+values of a connect route, carried in the signed state).
+
+## Providers in RFC 0001
+
+Decision D7 (RFC 0001) puts these providers in scope. Each provider lane fills only its own heading:
+the boundary map, the routes, the tests and the differences from the source. Follow
+`providers/README.md`.
+
+### Jira
+
+```
+Tables and owning schema:  quills: integrations, integration_platform_credentials, principal, kv_store
+                           (state nonce), events, job_queue, audit_log. public: none.
+Actor and workspace:       connect and destinations: authenticated context. Callback: the signed state.
+Permissions:               workspace:read + quills:manage_settings (callback: the session account still holds it).
+Transactions:              read, call Atlassian with no transaction open, then write in a new one.
+External effects:          token exchange and refresh (auth.atlassian.com), accessible resources,
+                           project and issue type lists (api.atlassian.com). No issue is created.
+```
+
+| Source function | operationId | Route | Action | Tests |
+|---|---|---|---|---|
+| `getJiraConnectUrl` | `startQuillsJiraOAuthConnect` | `GET /oauth/jira/connect` | manage_settings | contract; `providers/jira.test.ts` |
+| `fetchJiraProjectsFn` | `listQuillsIntegrationDestinations` | `GET /integrations/{integrationId}/destinations?kind=project` (or no `kind`) | manage_settings | contract (GitHub); `providers/jira.test.ts` |
+| `fetchJiraIssueTypesFn` | `listQuillsIntegrationDestinations` | `GET /integrations/{integrationId}/destinations?kind=issue-type&parent=<project ID>` | manage_settings | `providers/jira.test.ts` |
+
+- The callback stores the cloud ID of the first site in `accessible-resources` in `config.cloudId`. A cloud
+  ID that is not a UUID refuses the connect (400). Each list checks the stored cloud ID again before it
+  builds `https://api.atlassian.com/ex/jira/<cloudId>/…`; a bad value answers 409 with no call.
+- Project and issue type IDs are numeric; the route drops any other ID. An issue type list needs a project
+  that the project list contains (404 otherwise, with no issue type call).
+- The project list is one page of 100 projects (Jira's maximum page). On a site with more projects, a
+  project after the first 100 is not listed and cannot be a parent.
+- Access tokens expire after one hour. A due token is refreshed before the call; Atlassian rotates the
+  refresh token. A rejected refresh (400 or 403) answers 409 "Reconnect".
+- Tests against the local provider server: exchange, both kinds, a foreign project, a bad stored cloud
+  ID, refresh and rejected refresh, a malformed `accessible-resources` (400) and project list (502).
+
+| Difference from the source | Reason |
+|---|---|
+| Scope `read:jira-work offline_access`, not `write:jira-work manage:jira-webhook` | Issue #131 lists projects and issue types only. Delivery and status sync add their scopes and a reconnect. |
+| No `events` and no status sync | Out of scope for #131. |
+| A connect with no valid cloud ID fails; the source stored `unknown` | The cloud ID enters every API path. |
+| `siteUrl` is the connection's `account`, not a `config` value | Only the issue links of delivery use it. |
+| A malformed list answer is 502, not an empty list or a raw error | Provider text never reaches a response. |
+
+### Linear
+
+```
+Tables and owning schema:  quills: integrations, integration_platform_credentials, principal, kv_store
+                           (state nonce), events, job_queue, audit_log. public: none.
+Actor and workspace:       connect and destinations: authenticated context. Callback: the signed state.
+Permissions:               workspace:read + quills:manage_settings (callback: the session account still holds it).
+Transactions:              read, call Linear with no transaction open, then write in a new one.
+External effects:          token exchange and refresh (api.linear.app/oauth/token), organization and team
+                           queries (api.linear.app/graphql). No issue is created.
+```
+
+| Source function | operationId | Route | Action | Tests |
+|---|---|---|---|---|
+| `getLinearConnectUrl` | `startQuillsLinearOAuthConnect` | `GET /oauth/linear/connect` | manage_settings | contract; `providers/linear.test.ts` |
+| `fetchLinearTeamsFn` | `listQuillsIntegrationDestinations` | `GET /integrations/{integrationId}/destinations` (one kind: teams) | manage_settings | contract (GitHub); `providers/linear.test.ts` |
+
+- The connection's name and account are the organization's name and URL key. No `config` value is stored.
+- The list asks for the first 100 teams. A team ID has 1 to 64 letters, digits and `-`; the route drops
+  any other ID. The route refuses a `kind`
+  or a `parent` (400): Linear has one kind.
+- A due token is refreshed before the call; Linear rotates the refresh token. A rejected refresh (400)
+  answers 409 "Reconnect".
+- Tests against the local provider server: exchange, the team list, a refused kind and parent, refresh
+  and rejected refresh, a token answer without a token (400) and a GraphQL answer without teams (502).
+
+| Difference from the source | Reason |
+|---|---|
+| Scope `read`, not `read,write,issues:create,admin` | Issue #131 lists teams only. Delivery and status sync add their scopes and a reconnect. |
+| No `events` and no status sync | Out of scope for #131. |
+| An organization query that Linear refuses (an HTTP error) fails the connect; the source named it `Linear` | One rule for every call: a refused call is a fixed error. An answer without a name still gives `Linear`, as in the source. |
+| `orgId` is not stored | Only the webhooks of status sync use it. |
+| A disconnect does not revoke the token | The shared disconnect route revokes no provider token. |
+
+### Azure DevOps
+
+```
+Tables and owning schema:  quills: integrations, events, job_queue, audit_log. public: none.
+Actor and workspace:       authenticated context.
+Permissions:               workspace:read + quills:manage_settings.
+Transactions:              connect: `load` checks the token with no transaction open, then one scoped
+                           transaction writes the connection and its `integration.connected` event.
+                           Destinations: read, call Azure DevOps, then a handler transaction that
+                           writes nothing (a personal access token has no refresh).
+External effects:          project and work item type lists (dev.azure.com). No work item is created.
+```
+
+| Source function | operationId | Route | Action | Tests |
+|---|---|---|---|---|
+| `connectAzureDevOpsFn` | `saveQuillsAzureDevopsKey` | `PUT /integrations/azure-devops/connection` (`token` ≤ 500, `organization` ≤ 50) | manage_settings | contract, rollback; `providers/azure-devops.test.ts` |
+| `fetchAzureDevOpsProjectsFn` | `listQuillsIntegrationDestinations` | `GET /integrations/{integrationId}/destinations?kind=project` (or no `kind`) | manage_settings | contract (GitHub); `providers/azure-devops.test.ts` |
+| `fetchAzureDevOpsWorkItemTypesFn` | `listQuillsIntegrationDestinations` | `GET /integrations/{integrationId}/destinations?kind=work-item-type&parent=<project name>` | manage_settings | `providers/azure-devops.test.ts` |
+
+- A key provider: no OAuth connect route, no callback and no OAuth app credentials. The token is a
+  personal access token, sent as `Basic base64(":" + token)`. It is sealed before the check and never
+  returned.
+- The organization is letters, digits and inner hyphens (at most 50). The route refuses any other value
+  (400) before a call. Each list checks the stored value again; a bad value answers 409 with no call.
+- The destination ID is the project or work item type name, as in the source. The project name is
+  encoded in the path. A work item type list needs a project that the project list contains (404
+  otherwise).
+- Each call sends `X-TFS-FedAuthRedirect: Suppress`, so a refused token gets 401 and not a sign-in page.
+  On connect, 401 or 403 answers 400. An answer without a list is 502.
+- Tests against the local provider server: connect, ten bad organization names with no call, a rejected
+  token, both kinds, a foreign project, a bad stored organization, malformed answers (502).
+
+| Difference from the source | Reason |
+|---|---|
+| The body takes the organization name, not `organizationUrl` | The name enters the URL; a strict pattern checks it. The host is always `dev.azure.com`. |
+| No `*.visualstudio.com` organization URLs | The host is fixed. The same organization is on `dev.azure.com`. |
+| `config` holds `organization` only, not `organizationUrl` and `organizationName` | One value builds every URL. |
+| No `events` and no status sync | Out of scope for #131. |
+| A rejected token is 400 with a fixed message; the source returned the provider error | Provider text never reaches a response. |
+
+### Asana
+
+| Source | Route | operationId |
+|---|---|---|
+| `getAsanaConnectUrl` | `GET /oauth/asana/connect` | `startQuillsAsanaOAuthConnect` |
+| `fetchAsanaProjectsFn` | `GET /integrations/{integrationId}/destinations` | `listQuillsIntegrationDestinations` |
+
+- Boundary: the map at the top of this file. Both routes need `manage_settings`. The provider calls
+  only `app.asana.com`, with no transaction open.
+- Connect: the callback exchanges the code at `/-/oauth_token`, then reads `/api/1.0/users/me`. It
+  stores the first Asana workspace of the account in `config.workspaceGid`. The sealed secrets are
+  `accessToken`, `refreshToken` and `expiresAt`.
+- Destinations: one kind, the projects of that workspace (one page of 100, `archived=false`). The
+  route keeps only IDs of 1 to 30 letters and digits.
+- Refresh: an access token that is due within a minute is refreshed first. Asana keeps the refresh
+  token. A refused refresh (400) is 409: reconnect. A missing or out-of-range `expires_in` stores no
+  expiry, so that token is never refreshed.
+- Tests: `providers/asana.test.ts` (local provider server): connect with sealed tokens, the limit of
+  200, the ID filter and `archived=false`, a refused `kind`, refresh with the new expiry, refused
+  refresh, an account without a workspace (400), an out-of-range expiry, and malformed answers (400
+  and 502 with fixed text).
+
+| Difference from the source | Reason |
+|---|---|
+| A connect without an Asana workspace, or with a failed profile read, fails. The source stored `unknown` and the name "Asana". | The project list needs the workspace. |
+| Asana filters archived projects (`archived=false`). The source filtered them after the call. | A page of 100 holds only active projects. |
+| The refresh also sends `redirect_uri`. | Asana's token endpoint documents it for both grants. |
+| No task creation, status sync, webhook or token revoke at disconnect. | Delivery and status sync are out of scope for #131. |
+
+### ClickUp
+
+| Source | Route | operationId |
+|---|---|---|
+| `getClickUpConnectUrl` | `GET /oauth/clickup/connect` | `startQuillsClickupOAuthConnect` |
+| `fetchClickUpSpacesFn` | `GET /integrations/{integrationId}/destinations` (default kind, or `?kind=space`) | `listQuillsIntegrationDestinations` |
+| `fetchClickUpListsFn` | `GET /integrations/{integrationId}/destinations?kind=list&parent=<space ID>` | `listQuillsIntegrationDestinations` |
+
+- Boundary: the map at the top of this file. Both routes need `manage_settings`. The provider calls
+  only `app.clickup.com` and `api.clickup.com`, with no transaction open.
+- Connect: the callback exchanges the code at `/api/v2/oauth/token`, then reads `/api/v2/team`. It
+  stores the first ClickUp workspace (a team in the API) in `config.teamId`. The sealed secret is
+  `accessToken`; ClickUp tokens do not expire.
+- Destinations: `destinationKinds: { space: {}, list: { parent: "space" } }`. Spaces come from the
+  stored team. Lists are the folderless lists of one space. The route lists the team's spaces first
+  and refuses a space that is not among them (404), so the token never reads another team's space.
+  The route keeps only IDs of 1 to 30 letters and digits.
+- Tests: `providers/clickup.test.ts` (local provider server): connect with a sealed token, spaces by
+  default and by kind, lists with the limit of 200, a foreign space refused before the list call,
+  refused kind and parent values, an account without a team (400), and malformed answers (400 and
+  502 with fixed text).
+
+| Difference from the source | Reason |
+|---|---|
+| A connect without a ClickUp team fails. The source stored `unknown`. | The space list needs the team. |
+| A list request names a space of the stored team. The source listed any space ID it got. | Authorization: the token may reach more teams. |
+| No task creation, status sync or webhook. | Delivery and status sync are out of scope for #131. |
+
+### Trello
+
+The connect is deferred: Trello returns the token in the URL fragment, and no page reads it yet.
+`providers/trello.ts` exists but is not in `providers/index.ts`. So Trello stays "not available" in
+the catalog, and none of its three entry points has a route.
+
+| Source | Route when registered | State |
+|---|---|---|
+| `getTrelloConnectUrl` | `GET /oauth/trello/connect` (`startQuillsTrelloOAuthConnect`) | Open: the callback cannot complete |
+| `fetchTrelloBoardsFn` | `GET /integrations/{integrationId}/destinations` (default kind, or `?kind=board`) | Open: no connection can exist |
+| `fetchTrelloListsFn` | `GET /integrations/{integrationId}/destinations?kind=list&parent=<board ID>` | Open: no connection can exist |
+
+Built in `providers/trello.ts` (tests: `providers/trello.test.ts`, with fetch answered in the test):
+
+- `authorizeUrl`: `https://trello.com/1/authorize` with `callback_method=fragment`,
+  `response_type=token`, `scope=read,write`, `expiration=never`, and `return_url` set to the signed
+  callback with the state. The client ID is the Trello API key.
+- `exchange(token)`: refuses a token that is not 32 to 256 letters and digits (it goes into a
+  header). Then it checks the token with `GET https://api.trello.com/1/members/me` and returns it as
+  the only secret. The username is the account label.
+- `destinationKinds: { board: {}, list: { parent: "board" } }`. Boards are the member's open boards;
+  lists are the open lists of one board. Only 24-digit hexadecimal IDs pass. A list answer that is
+  not a list is 502.
+- Each call sends the key and the token in the `Authorization: OAuth …` header, never in the URL.
+  Hosts: `trello.com` and `api.trello.com`.
+
+Missing (from `providers/README.md`, "Trello"):
+
+1. An HTML answer for a signed route. `framework/define-route.ts` allows `raw` answers only as RSS and
+   XML for portal, widget and public reads. Lane X1 owns that file.
+2. A `callback: "fragment"` option on the provider type, and the GET callback in `oauth.ts` answering
+   the bridge page for such a provider without consuming the state. The page reads `token` from
+   `location.hash`, removes the fragment with `history.replaceState`, and posts `{ token }` as JSON to
+   the same URL with `credentials: "same-origin"`. Headers:
+   `Content-Security-Policy: default-src 'none'; script-src 'nonce-…'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'`,
+   `Cache-Control: no-store`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`.
+3. `POST /quills-public/signed/oauth/{type}/callback?state=…` for fragment providers only, with the
+   same `oauthState` verifier (valid signature, unexpired, same session account, still holds
+   `quills:manage_settings`, single use), an `Origin` header equal to the API origin, and a body of at
+   most 4 KiB. The token never enters a log, an event or a response. The handler calls
+   `exchange(token, …)`, then `connect`.
+4. Then two lines in `providers/index.ts`, a connect fixture `startQuillsTrelloOAuthConnect` in
+   `oauth.fixture.ts`, and route tests against the local provider server, as for the other providers.
+
+| Difference from the source | Reason |
+|---|---|
+| The key and the token travel in the `Authorization` header. The source put them in the query string. | A URL reaches logs and proxies. |
+| The API key comes from the OAuth app credentials at each call. The source copied it into `config`. | One place for the key. |
+| `exchange` checks the token format before the call. | The token comes from the browser. |
+| Lists keep Trello's order. The source sorted them by `pos`. | Trello already answers in board order. |
+
+### Monday
+
+| Source | Route | operationId |
+|---|---|---|
+| `getMondayConnectUrl` | `GET /oauth/monday/connect` | `startQuillsMondayOAuthConnect` |
+| `fetchMondayBoardsFn` | `GET /integrations/{integrationId}/destinations` | `listQuillsIntegrationDestinations` |
+
+- Boundary: the map at the top of this file. Both routes need `manage_settings`. The provider calls
+  only `auth.monday.com` and `api.monday.com`, with no transaction open.
+- Connect: the callback exchanges the code at `auth.monday.com/oauth2/token`, then reads the account
+  name with the GraphQL query `me`. The sealed secret is `accessToken`; Monday.com tokens do not
+  expire.
+- Destinations: one kind, the boards (`boards(limit: 100, order_by: used_at)`). The route keeps only
+  IDs of 1 to 30 letters and digits.
+- A failed GraphQL query (200 with `errors` and no `data`) is 502, for the connect and for the list.
+- Tests: `providers/monday.test.ts` (local provider server): connect with a sealed token, the limit
+  of 200 and the ID filter, a refused `kind`, and malformed answers (400 on the token call, 502 for a
+  failed query on the connect and on the list, with fixed text).
+
+| Difference from the source | Reason |
+|---|---|
+| A failed account read fails the connect. The source connected with the name "Monday.com". | The same rule as the other providers: a connect that cannot read the account is not complete. |
+| The account label is the Monday.com user name. The source stored no account label. | The integration summary shows `account`. |
+| No item creation. | Delivery is out of scope for #131. |
+
+### Notion
+
+| Source | Route | operationId |
+|---|---|---|
+| `getNotionConnectUrl` | `GET /oauth/notion/connect` | `startQuillsNotionOAuthConnect` |
+| `fetchNotionDatabasesFn` | `GET /integrations/{integrationId}/destinations` | `listQuillsIntegrationDestinations` |
+
+- Boundary: the map at the top of this file. Both routes need `manage_settings`. The provider calls
+  only `api.notion.com`, with no transaction open.
+- Connect: the callback exchanges the code at `/v1/oauth/token`. The OAuth app authenticates with
+  HTTP Basic, so the client secret is never in the body. The answer names the workspace and the
+  owner. The sealed secret is `accessToken`; Notion tokens do not expire.
+- Destinations: one kind, the databases that the teammate shared with the integration
+  (`POST /v1/search`, one page of 100, `Notion-Version: 2022-06-28`). The route keeps only UUID IDs.
+  `target` accepts the same UUIDs as channel IDs; the default rule (30 letters and digits) would
+  refuse them.
+- Tests: `providers/notion.test.ts` (local provider server): connect with HTTP Basic and a sealed
+  token, the limit of 200, UUID filter and titles, the channel ID rule, a refused `kind`, and
+  malformed answers (400 and 502 with fixed text).
+
+| Difference from the source | Reason |
+|---|---|
+| The Notion workspace ID is not stored. | No route uses it. |
+| The account label is the owner's name. The source stored no account label. | The integration summary shows `account`. |
+| No page creation. | Delivery is out of scope for #131. |
+
+### HubSpot
+
+Lane P3. File `providers/hubspot.ts`, type `hubspot`. Connect route `startQuillsHubspotOAuthConnect`
+(`GET /oauth/hubspot/connect`, manage_settings, contract). Contact lookup: see "Contacts and customer
+context".
+
+- Hosts: `app.hubspot.com` (the sign-in page) and `api.hubapi.com` (the token and CRM API).
+- Scopes: `crm.objects.contacts.read`, `crm.objects.companies.read` and `crm.objects.deals.read`, as in
+  the source.
+- `exchange` seals the access token, the refresh token and the expiry. It then reads the token
+  information once (`GET /oauth/v1/access-tokens/<token>`) for the portal ID (`config.portalId`, digits
+  only) and the hub domain (the account label). That read is optional: without a portal ID, a contact
+  has no link.
+- `refresh`: access tokens expire after 30 minutes. A rejected refresh token (400) asks for a reconnect.
+- `contact`: one search with an exact email filter. Then one association read and one batch read of at
+  most 100 deals. A failed deal read leaves the deal fields out.
+- Fields: Lifecycle, Deal value (account currency) and Deals (their count). The value is the sum of
+  `amount_in_home_currency`: the `amount` of a deal can be in another currency.
+
+### Intercom
+
+Lane P3. File `providers/intercom.ts`, type `intercom`. Connect route `startQuillsIntercomOAuthConnect`
+(`GET /oauth/intercom/connect`, manage_settings, contract).
+
+- Hosts: `app.intercom.com` (the sign-in page) and `api.intercom.io` (the token and the API). Regional
+  data hosts (`api.eu.intercom.io`, `api.au.intercom.io`) are not supported, as in the source.
+- `exchange` posts the code to `/auth/eagle/token` and seals the token. It reads `/me` once for the app
+  name (the account label). Intercom tokens do not expire, so there is no `refresh`.
+- `contact`: one search for the exact email (API version 2.14). The search gives company and tag
+  references without names, so the lookup then reads `/contacts/<id>/companies` and `/contacts/<id>/tags`
+  at the same time. A failed name read leaves its field out. Fields: Plan (the `plan` attribute) and
+  Tags. The link opens the contact in the teammate's current app (`/a/apps/_/users/<id>`).
+
+### Zendesk
+
+Lane P3. File `providers/zendesk.ts`, type `zendesk`. Connect route `startQuillsZendeskOAuthConnect`
+(`GET /oauth/zendesk/connect?subdomain=`, manage_settings, contract).
+
+- Connect field `subdomain`: one DNS label, `[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?`. The connect route
+  refuses another value (400). The signed state carries it, and an altered value breaks the signature
+  (401). The callback checks it again (400) before any provider call.
+- Hosts: `<subdomain>.zendesk.com` only. `exchange` stores `config.subdomain`, and each lookup checks it
+  against the pattern again. A changed value asks for a reconnect (409) and sends nothing.
+- Scope `users:read organizations:read`. Zendesk tokens do not expire by default, so there is no
+  `refresh`.
+- `contact`: the user search also matches names and parts of addresses, so the lookup keeps only the
+  user whose email is equal (case-insensitive). Then one optional read of the user's organization.
+  Fields: Role and Tags.
+
+### Salesforce
+
+Lane P3. File `providers/salesforce.ts`, type `salesforce`. Connect route
+`startQuillsSalesforceOAuthConnect` (`GET /oauth/salesforce/connect`, manage_settings, contract).
+
+- Sign-in and tokens at `login.salesforce.com`. Scope `api refresh_token`. No connect field.
+- The token answer names the org's instance (`instance_url`). `exchange` accepts it only with HTTPS, a
+  host under `salesforce.com`, no credentials and no port. Otherwise the callback answers 400 and
+  stores nothing. `config.instanceUrl` holds the origin only.
+- `contact` checks `config.instanceUrl` again before the call (409 otherwise). The query is SOQL with an
+  escaped string literal: `SELECT Id, Name, Account.Name FROM Contact WHERE Email = '…' LIMIT 1`.
+- `refresh` returns the token fields only, so a refresh answer cannot change the stored instance.
+- The token answer gives no lifetime, and each org sets its own session timeout (15 minutes to 24 hours).
+  The token counts as due after 15 minutes, so a call after that refreshes it first. Without a refresh
+  token (the app does not allow the `refresh_token` scope), the token has no expiry: it works until the
+  org's session ends, and then a lookup asks for a reconnect.
+
+### Microsoft Teams
+
+Lane P4. Key `teams`, file `providers/teams.ts`. Connect and list only: delivery to a channel is out
+of scope for #131, so `events` and `statuses` stay empty.
+
+```
+Tables and owning schema:  quills: integration_platform_credentials (the OAuth app), integrations
+                           (sealed tokens), and the callback's kv_store, events, job_queue, audit_log.
+                           public: none.
+Actor and workspace:       the generic routes above: authenticated context; the callback uses the
+                           signed state.
+Permissions:               quills:manage_settings (connect, callback, destinations).
+Transactions:              no provider call in a transaction (prepare, call, handler).
+External effects:          requests to login.microsoftonline.com (token) and graph.microsoft.com
+                           (lists). Nothing is written in Microsoft.
+```
+
+Consent flow:
+
+1. Register the Microsoft Entra app as multitenant ("accounts in any organizational directory"). Add
+   the redirect URI of the credentials route as a Web redirect URI. Save the client ID and a client
+   secret with `saveQuillsPlatformCredentials`.
+2. The connect route returns
+   `https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize` with the delegated scopes
+   `Team.ReadBasic.All Channel.ReadBasic.All offline_access`. The `organizations` endpoint accepts work
+   and school accounts of any tenant. It refuses personal Microsoft accounts, which cannot use the
+   Teams Graph APIs.
+3. Microsoft marks none of these delegated scopes "admin consent required". A user can consent for
+   themselves when the tenant's user consent policy allows it.
+4. Many tenants restrict user consent (for example to verified publishers only, or to no apps). Then
+   Microsoft shows "Need admin approval" and sends no code. A tenant admin grants consent one time for
+   the organization: through the same connect, with "Consent on behalf of your organization", or in
+   the Microsoft Entra admin center (Enterprise applications, Permissions). Then any teammate can
+   connect.
+5. Failures, each with a fixed error. Microsoft's error text never reaches a response.
+   - The redirect has `error` (for example `access_denied` or `consent_required`) and no `code`: the
+     callback answers 400 "The provider did not grant access." It calls nothing.
+   - The token endpoint refuses the code (400, for example `invalid_grant` with AADSTS65001 when
+     consent was removed): 400 "The provider rejected the request."
+   - A refused refresh (400 or 401): 409 "The provider rejected the saved credentials. Reconnect."
+   - Graph refuses a list (403): 409 "The connected account may not do this in the provider."
+6. No application (app-only) permission and no bot registration. The lists use the signed-in user's
+   delegated token. Sending to a channel (`ChannelMessage.Send` or a bot) is delivery.
+7. A single-tenant app registration fails at the `organizations` endpoint (AADSTS50194). A tenant ID
+   option needs a connect field or a credential field. That is a follow-up.
+
+| operationId | Route | Action | Source | Tests |
+|---|---|---|---|---|
+| `startQuillsTeamsOAuthConnect` | `GET /oauth/teams/connect` | manage_settings | `getTeamsConnectUrl` | contract |
+| `listQuillsIntegrationDestinations` | `GET /integrations/{integrationId}/destinations` (or `?kind=team`) | manage_settings | `fetchTeamsTeamsFn` | `providers/teams.test.ts` |
+| `listQuillsIntegrationDestinations` | `…/destinations?kind=channel&parent=<team ID>` | manage_settings | `fetchTeamsChannelsFn` | `providers/teams.test.ts` |
+
+- Teams: `GET https://graph.microsoft.com/v1.0/me/joinedTeams`. A team ID that is not a GUID is
+  dropped.
+- Channels: the route first lists the teams and refuses a team that is not in that list (404). The
+  provider checks the GUID again before it builds
+  `GET https://graph.microsoft.com/v1.0/teams/<team ID>/channels?$select=id,displayName`. A channel
+  ID that is not `19:…@thread.…` is dropped.
+- Paging follows `@odata.nextLink` only on `https://graph.microsoft.com`, for at most 10 pages and
+  200 items. A link to another host ends the list. An answer without a `value` list is 502.
+- The access token expires after about one hour. `refresh` uses the same `organizations` token
+  endpoint and keeps the new refresh token.
+- For delivery (not in #131): a channel ID has `@`, which the channel route and the default
+  `validTarget` refuse. A Graph channel message also needs the team ID. The delivery lane adds a
+  `target` rule and a target key that holds both IDs. With `events: []`, no channel can be saved now.
+
+| Source | Kaneo |
+|---|---|
+| `common` endpoint | `organizations` endpoint (work and school accounts only) |
+| Scope `ChannelMessage.Send` | Not requested: it is for delivery |
+| `/organization` read for the tenant name and ID | Not read: it needs `User.Read`, which is not requested. The name is "Microsoft Teams", with no account |
+| Two list functions; any `teamId` | The destinations route with kinds; the team must be one the connection lists |
+| Channels carry `isPrivate` | ID and name only |
+| First page only | `@odata.nextLink` on the Graph host, up to 200 items |
+| Provider error text in thrown errors | Fixed errors |
+
+### Contacts and customer context
+
+Lane P3. Files `contacts.ts` and `customer-context.ts`, with fixtures and `customer-context.test.ts`.
+
+```
+Tables and owning schema:  quills: integrations and integration_platform_credentials (read; refreshed
+                           tokens written back), principal and user (customer context, read only).
+                           public: none.
+Actor and workspace:       authenticated context (helper).
+Permissions:               workspace:read + quills:update, both routes.
+Persisted relationships:   the person must be a customer of the workspace (directory `loadCustomer`):
+                           a teammate, a person of another workspace or a removed person is 404.
+Transactions:              `prepare` reads in one scoped transaction. The provider calls run with no
+                           transaction open. The handler stores refreshed tokens in a new one. No other
+                           write, no event and no audit row.
+External effects:          a lookup per connected provider (HubSpot, Intercom and Zendesk make up to
+                           three requests, and a due token adds one) to fixed hosts. The email leaves
+                           Kaneo to each connected provider.
+```
+
+| operationId | Route | Action | Tables | Event | Tests |
+|---|---|---|---|---|---|
+| `searchQuillsIntegrationContact` | `GET /integrations/{integrationId}/contacts?email=` (email ≤ 254) | update | `integrations`, `integration_platform_credentials` | - | contract, local provider server |
+| `getQuillsCustomerContext` | `GET /people/{principalId}/context` | update | `principal`, `user`, `integrations`, `integration_platform_credentials` | - | contract, local provider server |
+
+Merged: `searchHubSpotContactFn`, `searchIntercomContactFn` and `searchZendeskUserFn` into
+`searchQuillsIntegrationContact`; `fetchCustomerContextFn` into `getQuillsCustomerContext`.
+
+- Action: both routes need `quills:update`, as `searchQuillsExternalItems` does. A lookup sends an email
+  to the connected account and returns records that the token can read. A viewer does not query the
+  connected accounts. The source used `INTEGRATION_VIEW` (read).
+- The contact route answers 409 for an OAuth connection without a contact lookup, and 404 for a
+  connection that is not OAuth (the customer context reads Freshdesk and Stripe). It answers a provider
+  failure after commit: 409 (reconnect, or no permission in the provider), 400 or 502. Provider text
+  never reaches a response.
+- The customer context reads the person's email (a lead's contact email when the account email is a
+  placeholder). It looks the email up in each active connection with a lookup: HubSpot, Intercom,
+  Zendesk, Salesforce, Freshdesk and Stripe. A workspace has one connection for each type, so there are
+  at most six entries. Each entry has `status` (`found`, `not_found` or `failed`) and, when it failed, a
+  fixed error text. One failure does not fail the read. A person without an email gives no entries and
+  no calls.
+- Freshdesk uses the saved key and the help desk host that the Freshdesk save route stores as the
+  account label. The lookup checks the host against `<label>.freshdesk.com` before the call. Stripe
+  uses the saved key and the first customer with the email.
+- A contact has at most these fields: `name` and `company` (≤ 200 characters), `url` (an HTTPS link that
+  the provider module builds from its fixed host and a checked record ID) and `fields` (≤ 10 label and
+  value pairs, ≤ 50 and ≤ 500 characters). A response never holds a raw provider record, a token or a
+  provider error.
+- Nothing is logged. The handler stores a refreshed token as `listQuillsIntegrationDestinations` does.
+
+Tests (`customer-context.test.ts`, against the local provider server): the code exchange of each
+provider and the stored refresh token and expiry; a Salesforce answer without a refresh token; the
+Zendesk subdomain outside the pattern and an altered subdomain in the state; a Salesforce token answer
+that names another instance; a refresh that names another instance, its request and the stored token;
+the SOQL quote escape; contact found, not found and malformed answers, and the email in the search; the
+exact-email rule and a changed stored subdomain in Zendesk; the Intercom company and tag names;
+Freshdesk and Stripe found, and a changed Freshdesk host; context with the customer's email, a lead's
+contact email, no email, a refresh and a `not_found` entry; context with two providers where one fails;
+context refused for a teammate, a teammate's portal profile, a person of workspace B and a removed
+person; no email or token in audit, event or job rows.
+
+| Source | This port | Reason |
+|---|---|---|
+| Three search functions (POST, `INTEGRATION_VIEW`), the raw provider record | One route by integration ID, `quills:update`, selected and bounded fields | One capability (`contact`) for each CRM. A viewer does not query the connected accounts. |
+| `fetchCustomerContextFn` takes any email | The route takes a person ID and reads that customer's email | A lookup of any email goes through the contact route. |
+| A failed provider is left out and logged | An entry with `failed` and a fixed text; nothing is logged | The caller sees which provider failed. Logs hold no personal data. |
+| Salesforce refreshes after a rejected read, and a refresh can change the stored instance | Refresh after 15 minutes; a refresh never changes the instance | `withToken` refreshes due tokens only. The instance is checked once and kept. |
+| Zendesk keeps the first search result | Only the user with the exact email | The search also matches other people. |
+| Zendesk scope `read write`; the agent's name labels the connection | Scope `users:read organizations:read`; the help desk domain labels it | The lookup reads users and organizations only. One request less. |
+| HubSpot link without the portal; five deal reads; "Open deals"; `$` and the raw `amount` | Link with the portal ID; one batch read of at most 100; "Deals"; the amount in the account currency, with no symbol | The count includes closed deals. A deal's `amount` can be in another currency. |
+| Intercom company and tags from the search answer | Two more reads for their names | The search answer has references without names. |
+| Freshdesk reads `config.subdomain` | Freshdesk reads the account label (`<subdomain>.freshdesk.com`) | The Freshdesk save route stores that label. |
+| HubSpot and Zendesk revoke the token on disconnect | Not built | The delete route makes no provider call. |
+
+## Agent channels (RFC 0001, lane G1)
+
+The Slack assistant, the GitHub inbox channel, the inbound app hook and the identify hook.
+Decision D10: each setting comes with the hook route and the worker handler that it turns on.
+
+### Boundary map
+
+```
+Tables and owning schema:  quills: settings (assistant_config), integrations,
+                           integration_platform_credentials, channel_accounts, channel_threads,
+                           channel_identities, conversations, conversation_messages, principal,
+                           user, user_attribute_definitions, slack_user_links, teams (read),
+                           kv_store (hook payloads and signed receipts), hook_deliveries (send
+                           receipts), help_center_articles and assistant_snippets (read),
+                           ai_usage_log, events, job_queue, audit_log.
+                           public (read only, through framework/platform-reads.ts): workspace
+                           members, roles, and the account email of a member.
+Actor and workspace:       teammate routes: authenticated context. Signed routes: the workspace of
+                           the integration in the path (quills.integration_workspace). Workers:
+                           withQuillsSystemWorkspace with the job's workspace. The Slack asker is
+                           the teammate that slack_user_links names; a first link needs a current
+                           member whose verified account email is the Slack profile email.
+Permissions:               settings and status: quills:manage_settings. Retry: quills:update.
+                           Slack hook: the Slack signing secret of the workspace's Slack app.
+                           GitHub events: the status-sync webhook secret. Identify: the Segment
+                           shared secret. The Slack worker answers only a current member whose
+                           role holds quills:read now.
+Persisted relationships:   channel_accounts.config.integrationId (the inbox's connection);
+                           channel_threads (issue `owner/repo#n` to conversation);
+                           channel_identities (GitHub user to principal); slack_user_links.
+Transactions:              one scoped transaction per request. Provider calls run in `call`
+                           (GitHub webhook update) or in a worker with no transaction open.
+External effects:          GitHub webhook update (request, `call`); Slack users.info and
+                           chat.postMessage, GitHub issue comment create and list (workers, after
+                           commit, with a hook_deliveries receipt before each send).
+```
+
+### Routes
+
+| operationId | Route | Audience | Action | Tables | Event |
+|---|---|---|---|---|---|
+| `getQuillsSlackAgentSettings` | `GET /assistant/slack` | teammate | manage_settings | `settings`, `integrations`, `integration_platform_credentials` | - |
+| `setQuillsSlackAssistantEnabled` | `PUT /assistant/slack` (`expectedRevision`, `enabled`) | teammate | manage_settings | `settings` | `slack_agent.settings_updated` |
+| `getQuillsGitHubChannelStatus` | `GET /channels/github` | teammate | manage_settings | `integrations`, `channel_accounts` | - |
+| `setQuillsGitHubInboxEnabled` | `PUT /channels/github/inbox` (`enabled`) | teammate | manage_settings | `integrations`, `channel_accounts`, `teams` | `github_inbox.settings_updated` |
+| `retryQuillsGitHubAgentMessage` | `POST /conversation-messages/{messageId}/github-retry` | teammate | update | `conversation_messages`, `conversations` | `github_inbox.message_retried` |
+| `saveQuillsSegmentConnection` | `PUT /integrations/segment/connection` (`incomingSecret`) | teammate | manage_settings | `integrations` | `integration.connected` |
+| `receiveQuillsAppHook` | `POST /quills-public/signed/integrations/slack/{integrationId}/hooks/events` | signed (Slack) | create | `kv_store`, `settings` | `integration.hook_received` |
+| `receiveQuillsIdentify` | `POST /quills-public/signed/integrations/segment/{integrationId}/identify` | signed (Segment) | update | `user`, `user_attribute_definitions` | `user.identified` |
+| `receiveQuillsIntegrationWebhook` (extended) | `POST /quills-public/signed/integrations/github/{integrationId}/webhook` | signed (GitHub) | update | `channel_accounts`, `channel_threads`, `channel_identities`, `principal`, `conversations`, `conversation_messages` | `message.created`, `message.updated`, `message.deleted`, `conversation.status_changed` |
+
+- Slack: register `<KANEO_API_URL origin>/api/quills-public/signed/integrations/slack/<integration ID>/hooks/events`
+  (the settings read returns it) as the Event Subscriptions URL, and subscribe to `app_mention` and
+  `message.im`. Save the app's signing secret with the platform credentials (`signingSecret`). The
+  connection ID is stable across reconnects. The hook stores the question in `kv_store` for one day,
+  never in the event or audit row.
+- GitHub inbox: it uses the status-sync webhook of the connection. Enabling adds `issue_comment` to
+  that webhook's events; disabling sets them back to `issues`. A webhook update that fails keeps the
+  switch and records `lastError`, as the source does. Enabling or disabling status sync turns the
+  inbox off (`status-sync.ts#inboxOff`): a new webhook has `issues` only, and a removed one sends
+  nothing. An edit or a delete in GitHub changes only a customer's message, never a teammate reply,
+  and events older than the replay horizon change nothing.
+- Slack answers: the team ceiling in a direct message, the public ceiling in a channel (a channel can
+  hold Slack guests and Slack Connect members).
+- Identify: connect Segment with its shared secret, then send identify calls to
+  `/api/quills-public/signed/integrations/segment/<integration ID>/identify` (`x-signature`:
+  base64 HMAC-SHA1 of the body).
+
+### Worker handlers
+
+| Event | Queue | Handler | Deduplication and reconciliation |
+|---|---|---|---|
+| `integration.hook_received` (Slack) | `quills.ai` | `assistant/engine/slack.ts` | Receipt key `slack-answer:<hook key>` in `hook_deliveries`, written before `chat.postMessage`. A rerun, a lost lease or an expired lease that finds the receipt does not post: `processing` from a stopped attempt becomes `uncertain` and is never posted again. |
+| `message.created` (agent reply on a GitHub conversation), `github_inbox.message_retried` | `quills.webhook` (payload without `webhookId` or `operationId`) | `jobs/handlers/github-comment.ts` | Receipt key `github-comment:<message ID>` (a retry adds its event ID), written before the comment. Each comment carries `<!-- kaneo:<message ID> -->`. A retry first lists the issue's comments since the message and marks the message sent when one has the marker. An uncertain send is never repeated automatically. |
+
+### Behavior differences from the source
+
+| Source | Kaneo |
+|---|---|
+| Slack: streamed replies, slash command, message shortcut, proposal buttons, feedback reactions, App Home prompts, Stop, thread follow-ups, revocation events | Not ported. The assistant answers an `app_mention` or a direct message with one reply in the thread, from the help center and knowledge (team ceiling, copilot knowledge settings). |
+| Slack: the workspace assistant with every workspace tool, with the asker's access in any channel | One provider call over the retrieved sources; no write tools. A channel answer uses public sources only. |
+| Slack: an attempt that the job reruns calls the model again before it finds the receipt | The same: a rerun or a replacement worker after a lost lease calls the provider again, then posts nothing. |
+| GitHub inbox close and reopen order | The last event to commit wins; ordering needs the issue's remote state time on `channel_threads` (a migration). |
+| Slack routing check (`routing`, pooled tenancy) | Not applicable: Kaneo serves each workspace directly. The read returns `hookUrl` and `signingConfigured` instead. |
+| Slack signing secret in instance platform credentials | In the workspace's Slack platform credentials (`signingSecret`). |
+| GitHub inbox: its own webhook on `config.channelId` | The status-sync webhook; status sync must be on (409 otherwise). |
+| GitHub agent replies after the inbox is off still post | The worker posts only while the inbox is on (the message is marked failed). |
+| GitHub retry resets any message and posts again | Only a `failed` delivery, or a `pending` one older than ten minutes; a marker check runs first. |
+| `retryGitHubAgentMessageFn` takes `messageId` in the body | The message ID is a path parameter. |
+| Identify updates only existing users | The same: an unknown email changes nothing (`status: unknown`). `_externalUserId` goes into the metadata, as in the source. No ordering check against newer identify calls. |
+| Segment connection through the admin UI | `saveQuillsSegmentConnection` with the shared secret only; outbound Segment sync is not ported. |
+| Delivery ticks over SSE | The worker writes `channelDelivery`; clients see it on the next read. |
+
 ## Deferred or not implemented
 
 | Source rows | Reason |
 |---|---|
-| Microsoft Teams | Graph channel messages need tenant consent and a bot registration; not small. By demand (D6). |
-| Asana, Azure DevOps, ClickUp, HubSpot, Intercom, Jira, Linear, Monday, Notion, Salesforce, Segment, Trello, Zendesk | Decision D6: they come by demand. |
+| Trello | Connect deferred: Trello returns the token in the URL fragment, and no page reads it yet. `providers/trello.ts` is built but not registered (see "Trello"). |
+| Segment outbound sync (segment membership pushed to Segment) | Lane G1 built the Segment connection (`saveQuillsSegmentConnection`) and the identify hook (`receiveQuillsIdentify`), because identify has no other provider. The outbound sync is not ported: RFC 0001 section 11 leaves Segment out of scope. |
 | GitLab self-managed instances | The provider host would come from user input; needs the SSRF-checked outbound path and a host field. gitlab.com only. |
-| `api/integrations/{type}/hooks/{kind}` (Slack interactivity, app hooks) | Their consumers are the Slack assistant and message shortcuts (P8 assistant slice). |
-| `api/integrations/{type}/identify` | User-sync providers (Segment and similar) are not in this provider set. |
-| `api/v1/apps/**`, `apps*`, `setQuillsIframeHeaders` | The app sidebar authenticates a third-party app with its own token and needs iframe headers; neither fits the signed nor the teammate audience without a new app-token model. |
-| `oauth/connector/callback` | Assistant connectors (P8 assistant slice). |
+| `api/integrations/{type}/hooks/{kind}` kinds `interactions`, `commands`, `options` | The Slack `events` kind is built ("Agent channels"); buttons, the slash command and shortcuts are not ported. |
+| `setQuillsIframeHeaders` | Web-only (#130). Lane X1 built the app sidebar routes (`api/v1/apps/**`) and the app registrations with the `app` audience: `apps/ROUTES.md`. |
 | `updateTicketStatusMappingsFn`, `updatePushStatusMappingsFn` | Ticket status sync and outbound status push need ticket links to tracker issues first. |
 | Ticket issue status sync | Inbound issue events update post links only. Ticket issue links are built (`support/TICKETS.md`, "Tracker issue links"). |
 | `verifyQuillsIntegrationSyncReference`, recovery `reconcile`/`keep_remote`/`link_existing` | Remote item inspection per provider; search exists, inspection does not. |
 | Post activity entry for an inbound status change | `recordActivity` takes a teammate actor; the change is audited as a system change. |
-| GitHub inbox channel (issue comments into conversations) | The source's second webhook consumer; needs the GitHub channel account flow. |

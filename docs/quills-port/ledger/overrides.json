@@ -1,4 +1,221 @@
 {
-	"routes": {},
-	"capabilities": {}
+	"routes": {
+		"api/v1/apps/boards.ts": {
+			"closed": "RFC 0001 lane X1"
+		},
+		"api/v1/apps/link.ts": {
+			"closed": "RFC 0001 lane X1"
+		},
+		"api/v1/apps/linked.ts": {
+			"closed": "RFC 0001 lane X1"
+		},
+		"api/v1/apps/posts.ts": {
+			"closed": "RFC 0001 lane X1"
+		},
+		"api/v1/apps/search.ts": {
+			"closed": "RFC 0001 lane X1"
+		},
+		"api/v1/apps/suggest.ts": {
+			"closed": "RFC 0001 lane X1"
+		},
+		"api/v1/apps/unlink.ts": {
+			"closed": "RFC 0001 lane X1"
+		},
+		"api/integrations/$type/hooks/$kind.ts": {
+			"closed": "RFC 0001 lane G1"
+		},
+		"api/integrations/$type/identify.ts": {
+			"closed": "RFC 0001 lane G1"
+		},
+		"oauth/connector.callback.ts": {
+			"closed": "RFC 0001 lane C1"
+		},
+		"api/v1/settings/receipts.$receiptId.undo.ts": {
+			"closed": "RFC 0001 lane M1"
+		}
+	},
+	"capabilities": {
+		"integrations/jira/server/functions.ts#getJiraConnectUrl": {
+			"closed": "RFC 0001 lane P1"
+		},
+		"integrations/jira/server/functions.ts#fetchJiraProjectsFn": {
+			"closed": "RFC 0001 lane P1"
+		},
+		"integrations/jira/server/functions.ts#fetchJiraIssueTypesFn": {
+			"closed": "RFC 0001 lane P1"
+		},
+		"integrations/linear/server/functions.ts#getLinearConnectUrl": {
+			"closed": "RFC 0001 lane P1"
+		},
+		"integrations/linear/server/functions.ts#fetchLinearTeamsFn": {
+			"closed": "RFC 0001 lane P1"
+		},
+		"integrations/azure-devops/server/functions.ts#connectAzureDevOpsFn": {
+			"closed": "RFC 0001 lane P1"
+		},
+		"integrations/azure-devops/server/functions.ts#fetchAzureDevOpsProjectsFn": {
+			"closed": "RFC 0001 lane P1"
+		},
+		"integrations/azure-devops/server/functions.ts#fetchAzureDevOpsWorkItemTypesFn": {
+			"closed": "RFC 0001 lane P1"
+		},
+		"integrations/asana/server/functions.ts#getAsanaConnectUrl": {
+			"closed": "RFC 0001 lane P2"
+		},
+		"integrations/asana/server/functions.ts#fetchAsanaProjectsFn": {
+			"closed": "RFC 0001 lane P2"
+		},
+		"integrations/clickup/server/functions.ts#getClickUpConnectUrl": {
+			"closed": "RFC 0001 lane P2"
+		},
+		"integrations/clickup/server/functions.ts#fetchClickUpSpacesFn": {
+			"closed": "RFC 0001 lane P2"
+		},
+		"integrations/clickup/server/functions.ts#fetchClickUpListsFn": {
+			"closed": "RFC 0001 lane P2"
+		},
+		"integrations/monday/server/functions.ts#getMondayConnectUrl": {
+			"closed": "RFC 0001 lane P2"
+		},
+		"integrations/monday/server/functions.ts#fetchMondayBoardsFn": {
+			"closed": "RFC 0001 lane P2"
+		},
+		"integrations/notion/server/functions.ts#getNotionConnectUrl": {
+			"closed": "RFC 0001 lane P2"
+		},
+		"integrations/notion/server/functions.ts#fetchNotionDatabasesFn": {
+			"closed": "RFC 0001 lane P2"
+		},
+		"integrations/hubspot/server/functions.ts#getHubSpotConnectUrl": {
+			"closed": "RFC 0001 lane P3"
+		},
+		"integrations/hubspot/server/functions.ts#searchHubSpotContactFn": {
+			"closed": "RFC 0001 lane P3"
+		},
+		"integrations/intercom/server/functions.ts#getIntercomConnectUrl": {
+			"closed": "RFC 0001 lane P3"
+		},
+		"integrations/intercom/server/functions.ts#searchIntercomContactFn": {
+			"closed": "RFC 0001 lane P3"
+		},
+		"integrations/zendesk/server/functions.ts#getZendeskConnectUrl": {
+			"closed": "RFC 0001 lane P3"
+		},
+		"integrations/zendesk/server/functions.ts#searchZendeskUserFn": {
+			"closed": "RFC 0001 lane P3"
+		},
+		"integrations/salesforce/server/functions.ts#getSalesforceConnectUrl": {
+			"closed": "RFC 0001 lane P3"
+		},
+		"lib/server/functions/customer-context.ts#fetchCustomerContextFn": {
+			"closed": "RFC 0001 lane P3"
+		},
+		"integrations/teams/server/functions.ts#getTeamsConnectUrl": {
+			"closed": "RFC 0001 lane P4"
+		},
+		"integrations/teams/server/functions.ts#fetchTeamsTeamsFn": {
+			"closed": "RFC 0001 lane P4"
+		},
+		"integrations/teams/server/functions.ts#fetchTeamsChannelsFn": {
+			"closed": "RFC 0001 lane P4"
+		},
+		"lib/server/functions/assistant-connectors.ts#createConnectorFn": {
+			"closed": "RFC 0001 lane C1"
+		},
+		"lib/server/functions/assistant-connectors.ts#getConnectorFn": {
+			"closed": "RFC 0001 lane C1"
+		},
+		"lib/server/functions/assistant-connectors.ts#updateConnectorFn": {
+			"closed": "RFC 0001 lane C1"
+		},
+		"lib/server/functions/assistant-connectors.ts#refreshConnectorFn": {
+			"closed": "RFC 0001 lane C1"
+		},
+		"lib/server/functions/assistant-connectors.ts#startConnectorOAuthFn": {
+			"closed": "RFC 0001 lane C1"
+		},
+		"integrations/slack/server/agent/settings.ts#getSlackAgentSettingsFn": {
+			"closed": "RFC 0001 lane G1"
+		},
+		"integrations/slack/server/agent/settings.ts#setSlackAssistantEnabledFn": {
+			"closed": "RFC 0001 lane G1"
+		},
+		"integrations/github/server/functions.ts#getGitHubChannelStatusFn": {
+			"closed": "RFC 0001 lane G1"
+		},
+		"integrations/github/server/functions.ts#setGitHubInboxEnabledFn": {
+			"closed": "RFC 0001 lane G1"
+		},
+		"integrations/github/server/functions.ts#retryGitHubAgentMessageFn": {
+			"closed": "RFC 0001 lane G1"
+		},
+		"lib/server/functions/conversation.ts#startAgentConversationFn": {
+			"closed": "RFC 0001 lane G2"
+		},
+		"lib/server/functions/conversation.ts#fetchAssistantInboxCountsFn": {
+			"closed": "RFC 0001 lane G2"
+		},
+		"lib/server/functions/conversation.ts#getConversationAssistantActivityFn": {
+			"closed": "RFC 0001 lane G2"
+		},
+		"lib/server/functions/ask-search.ts#searchWorkspaceFn": {
+			"closed": "RFC 0001 lane G2"
+		},
+		"lib/server/functions/embeds.ts#getEmbedPreviewFn": {
+			"closed": "RFC 0001 lane S1"
+		},
+		"lib/server/functions/link-preview.ts#unfurlLinkFn": {
+			"closed": "RFC 0001 lane S1"
+		},
+		"lib/server/functions/read-batch.ts#readTogetherFn": {
+			"closed": "RFC 0001 lane S1"
+		},
+		"lib/server/functions/settings.ts#getEmailChannelStatusFn": {
+			"closed": "RFC 0001 lane S1"
+		},
+		"lib/server/functions/support-reporting.ts#attributeBreakdownFn": {
+			"closed": "RFC 0001 lane S1"
+		},
+		"lib/server/functions/conversation.ts#getConversationPresenceFn": {
+			"closed": "RFC 0001 lane S1"
+		},
+		"lib/server/functions/website-branding.ts#acceptWebsiteBrandingOfferFn": {
+			"closed": "RFC 0001 lane B1"
+		},
+		"lib/server/functions/website-branding.ts#declineWebsiteBrandingOfferFn": {
+			"closed": "RFC 0001 lane B1"
+		},
+		"lib/server/functions/website-branding.ts#getAutomaticWebsiteBrandingStatusFn": {
+			"closed": "RFC 0001 lane B1"
+		},
+		"lib/server/functions/website-branding.ts#lookupWebsiteBrandingFn": {
+			"closed": "RFC 0001 lane B1"
+		},
+		"lib/server/functions/website-branding.ts#startAutomaticWebsiteBrandingFn": {
+			"closed": "RFC 0001 lane B1"
+		},
+		"lib/server/functions/website-branding.ts#undoAutomaticWebsiteBrandingFn": {
+			"closed": "RFC 0001 lane B1"
+		},
+		"lib/server/functions/public-profile.ts#getPublicUserProfileFn": {
+			"closed": "RFC 0001 lane M1",
+			"operationId": "getQuillsPublicUserProfile"
+		},
+		"lib/server/functions/public-profile.ts#getProfileTeamContextFn": {
+			"closed": "RFC 0001 lane M1",
+			"operationId": "getQuillsProfileTeamContext"
+		},
+		"lib/server/functions/companies.ts#getCompanyActivityFn": {
+			"closed": "RFC 0001 lane M1",
+			"operationId": "getQuillsCompanyActivity"
+		},
+		"lib/server/functions/test-customer.ts#deleteTestConversationsFn": {
+			"closed": "RFC 0001 lane M1",
+			"operationId": "deleteQuillsTestConversations"
+		},
+		"lib/server/functions/changelog.ts#topViewedChangelogsFn": {
+			"closed": "RFC 0001 lane M1",
+			"operationId": "getQuillsAnalyticsData"
+		}
+	}
 }

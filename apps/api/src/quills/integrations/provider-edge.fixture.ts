@@ -1,11 +1,12 @@
 import { createServer, type IncomingMessage } from "node:http";
 import { vi } from "vite-plus/test";
+import { oauthProviders } from "./providers";
 
 /**
  * The provider HTTP edge for contract checks. A credential check to a P7a provider host gets a small
- * JSON answer. A request to an OAuth provider host (GitHub, GitLab, Slack, Discord, Resend) goes to a
- * local HTTP server, at `/<host><path>`, which answers like the provider. Every other request goes to
- * the real fetch.
+ * JSON answer. A request to an OAuth provider host (the `hosts` of each provider in providers/, and
+ * Resend) goes to a local HTTP server, at `/<host><path>`, which answers like the provider. Every
+ * other request goes to the real fetch.
  */
 export const providerCalls: {
   method: string;
@@ -21,9 +22,19 @@ const read = (request: IncomingMessage) =>
     request.on("end", () => resolve(body));
   });
 
+/**
+ * Answers that a provider's own fixture file adds, by `METHOD /<host><path>`; undefined when it does
+ * not know the route. A new provider adds its answers here, not in providerAnswer.
+ */
+export const providerAnswers: ((route: string) => unknown)[] = [];
+
 /** The answers of the local provider server, by method and `/<host><path>` without the query. */
 export function providerAnswer(method: string, path: string): unknown {
   const route = `${method} ${path}`;
+  for (const answer of providerAnswers) {
+    const value = answer(route);
+    if (value !== undefined) return value;
+  }
   if (route === "POST /github.com/login/oauth/access_token")
     return { access_token: "gho_contract_token" };
   if (route === "GET /api.github.com/user")
@@ -117,8 +128,9 @@ vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       workspace2: { name: "Contract", url_slug: "contract" },
     });
   if (
-    /^(github\.com|api\.github\.com|gitlab\.com|slack\.com|discord\.com|api\.resend\.com)$/.test(
-      url.hostname,
+    url.hostname === "api.resend.com" ||
+    Object.values(oauthProviders).some((provider) =>
+      provider.hosts.test(url.hostname),
     )
   )
     return real(`${base}/${url.hostname}${url.pathname}${url.search}`, {

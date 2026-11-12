@@ -110,6 +110,9 @@ describe("OAuth deliveries", () => {
       state: "failed",
     });
     expect(calls("/api.github.com")).toEqual([]);
+    // A GitLab target is a numeric project ID: "acme" passes the default rule, not GitLab's.
+    await deliver(delivery({ provider: "gitlab", target: "acme" }));
+    expect(calls("/gitlab.com")).toEqual([]);
   });
   it("refreshes a due GitLab token first and returns the new secrets", async () => {
     providerOverrides.set("POST /gitlab.com/api/v4/projects/12/issues", {

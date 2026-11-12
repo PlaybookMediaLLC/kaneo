@@ -160,6 +160,22 @@ export function readConfig(row: SettingsRow) {
   };
 }
 
+/**
+ * Receipt fields: what this area writes. Never the signing secret, install codes or the hero image
+ * key (a column). Messenger settings and translations stay out: the messenger area owns them.
+ */
+export const widgetReceipt = [
+  "widgetConfig.enabled",
+  "widgetConfig.defaultBoard",
+  "widgetConfig.position",
+  "widgetConfig.launcherGreeting",
+  "widgetConfig.launcherLabel",
+  "widgetConfig.visitorAnalytics",
+  "widgetConfig.visitorDeviceTracking",
+  "widgetConfig.tabs",
+  "widgetConfig.home",
+] as const;
+
 const area = settingsArea({
   name: "widget",
   title: "Widget",
@@ -178,6 +194,7 @@ const area = settingsArea({
     /** Merged into the stored Home settings; the hero image key is never written here. */
     home: home.optional(),
   }),
+  receipt: widgetReceipt,
   apply: (row, patch) => {
     const stored = parseJson(row.widgetConfig);
     const storedHome = record(stored.home);

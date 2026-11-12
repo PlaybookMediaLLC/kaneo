@@ -25,15 +25,30 @@ export const deleteQuillsPlatformCredentials = fixture({
   seed: (env: ContractEnv) => platformCredentials(env, env.a),
   valid: () => ({ query: { type: "github" } }),
 });
-const connect = (type: string) =>
+const connect = (type: string, query?: Record<string, string>) =>
   fixture({
     seed: (env: ContractEnv) => platformCredentials(env, env.a, type),
-    valid: () => ({}),
+    valid: () => (query ? { query } : {}),
   });
 export const startQuillsGithubOAuthConnect = connect("github");
 export const startQuillsGitlabOAuthConnect = connect("gitlab");
 export const startQuillsSlackOAuthConnect = connect("slack");
 export const startQuillsDiscordOAuthConnect = connect("discord");
+// The RFC 0001 OAuth providers (lanes P1 to P4), so that a provider lane edits no fixture for its
+// connect route. The contract suite uses only the fixtures of registered routes.
+export const startQuillsAsanaOAuthConnect = connect("asana");
+export const startQuillsClickupOAuthConnect = connect("clickup");
+export const startQuillsHubspotOAuthConnect = connect("hubspot");
+export const startQuillsIntercomOAuthConnect = connect("intercom");
+export const startQuillsJiraOAuthConnect = connect("jira");
+export const startQuillsLinearOAuthConnect = connect("linear");
+export const startQuillsMondayOAuthConnect = connect("monday");
+export const startQuillsNotionOAuthConnect = connect("notion");
+export const startQuillsSalesforceOAuthConnect = connect("salesforce");
+export const startQuillsTeamsOAuthConnect = connect("teams");
+export const startQuillsZendeskOAuthConnect = connect("zendesk", {
+  subdomain: "contract",
+});
 
 const connections = async (env: ContractEnv) => ({
   a: await oauthConnection(env, env.a),

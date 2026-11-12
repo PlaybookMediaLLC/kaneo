@@ -10,7 +10,10 @@ import { APIError } from "better-auth/api";
 import { and, eq } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import type { Database, SignedScope } from "../../database/quills/client";
-import { integrations } from "../../database/quills/schema/integrations";
+import {
+  integrationPlatformCredentials,
+  integrations,
+} from "../../database/quills/schema/integrations";
 import { kvStore } from "../../database/quills/schema/kv";
 import {
   openCredentials,
@@ -184,6 +187,127 @@ export const integrationWebhook: SignedVerifier<IntegrationCredential> = {
       type: row.type,
       config: row.config as Record<string, unknown>,
     };
+  },
+};
+
+/** The active connection of `type` that the path names, with its secrets opened, or 401. */
+async function pathIntegration(
+  db: Database,
+  params: Record<string, string>,
+  type: string,
+) {
+  const id = params.integrationId ?? "";
+  if (!isTypeId(id, "integration")) throw unauthorized();
+  const [row] = await db
+    .select({
+      id: integrations.id,
+      type: integrations.integrationType,
+      config: integrations.config,
+      secrets: integrations.secrets,
+    })
+    .from(integrations)
+    .where(
+      and(
+        eq(integrations.id, id),
+        eq(integrations.integrationType, type),
+        eq(integrations.status, "active"),
+      ),
+    );
+  if (!row) throw unauthorized();
+  return {
+    credential: {
+      integrationId: row.id,
+      type: row.type,
+      config: row.config as Record<string, unknown>,
+    } satisfies IntegrationCredential,
+    secrets: openCredentials(row.secrets),
+  };
+}
+const locateIntegration = (
+  params: Record<string, string>,
+  deliveryId: string,
+) => {
+  const id = params.integrationId ?? "";
+  if (!isTypeId(id, "integration")) throw unauthorized();
+  return { scope: { integration: toUuid(id) }, deliveryId };
+};
+
+const SLACK_TOLERANCE_SECONDS = 5 * 60;
+/**
+ * Slack app events of a connected Slack integration (the assistant's hook). The path names the
+ * integration; the signing secret of the workspace's Slack app (its platform credentials) checks
+ * `x-slack-signature`: `v0=` and the hex HMAC-SHA256 of `v0:<x-slack-request-timestamp>:<body>`,
+ * with a five-minute window. Slack's `event_id` in the signed body is the delivery ID, so a Slack
+ * retry is a replay; a body without one uses its digest.
+ */
+export const slackHook: SignedVerifier<IntegrationCredential> = {
+  name: "slack-hook",
+  locate: ({ raw, headers, params }) => {
+    const seconds = Number(headers.get("x-slack-request-timestamp"));
+    if (
+      !Number.isInteger(seconds) ||
+      Math.abs(Math.floor(Date.now() / 1000) - seconds) >
+        SLACK_TOLERANCE_SECONDS
+    )
+      throw unauthorized();
+    let eventId: unknown;
+    try {
+      eventId = (JSON.parse(raw) as { event_id?: unknown } | null)?.event_id;
+    } catch {
+      // The body schema answers 400 after the signature check.
+    }
+    return locateIntegration(
+      params,
+      typeof eventId === "string" && /^[A-Za-z0-9]{1,100}$/.test(eventId)
+        ? `event:${eventId}`
+        : digest(raw),
+    );
+  },
+  verify: async (db, { raw, headers, params }) => {
+    const { credential } = await pathIntegration(db, params, "slack");
+    const [app] = await db
+      .select({ secrets: integrationPlatformCredentials.secrets })
+      .from(integrationPlatformCredentials)
+      .where(eq(integrationPlatformCredentials.integrationType, "slack"));
+    const secret = app && openCredentials(app.secrets)?.signingSecret;
+    const timestamp = headers.get("x-slack-request-timestamp") ?? "";
+    if (
+      !secret ||
+      !safeEqual(
+        headers.get("x-slack-signature") ?? "",
+        `v0=${createHmac("sha256", secret).update(`v0:${timestamp}:${raw}`).digest("hex")}`,
+      )
+    )
+      throw unauthorized();
+    return credential;
+  },
+};
+
+/**
+ * Segment identify calls of a connected Segment integration. The path names the integration; its
+ * sealed shared secret checks `x-signature`: the base64 HMAC-SHA1 of the body. Segment signs no
+ * timestamp, so the delivery ID is the digest of the signed body. Handlers ignore calls older than
+ * `replayHorizon()`.
+ */
+export const segmentIdentify: SignedVerifier<IntegrationCredential> = {
+  name: "segment-identify",
+  locate: ({ raw, params }) => locateIntegration(params, digest(raw)),
+  verify: async (db, { raw, headers, params }) => {
+    const { credential, secrets } = await pathIntegration(
+      db,
+      params,
+      "segment",
+    );
+    const secret = secrets?.incomingSecret;
+    if (
+      !secret ||
+      !safeEqual(
+        headers.get("x-signature") ?? "",
+        createHmac("sha1", secret).update(raw).digest("base64"),
+      )
+    )
+      throw unauthorized();
+    return credential;
   },
 };
 
@@ -506,9 +630,15 @@ const sign = (payload: string) =>
 /**
  * A signed, expiring OAuth state that binds the redirect to the teammate who started it, the
  * workspace and the provider. The callback accepts each state once (its nonce is the delivery ID).
+ * `fields` are the provider's connect fields (a Zendesk subdomain): the signature covers them too.
  */
 export function mintOAuthState(
-  claims: { workspaceId: string; userId: string; type: string },
+  claims: {
+    workspaceId: string;
+    userId: string;
+    type: string;
+    fields?: Record<string, string>;
+  },
   ttlMs = STATE_TTL_MS,
 ) {
   const payload = Buffer.from(
@@ -518,6 +648,8 @@ export function mintOAuthState(
       t: claims.type,
       n: randomBytes(16).toString("base64url"),
       e: Date.now() + ttlMs,
+      ...(claims.fields &&
+        Object.keys(claims.fields).length > 0 && { f: claims.fields }),
     }),
   ).toString("base64url");
   return `${payload}.${sign(payload)}`;
@@ -534,6 +666,7 @@ function readState(state: string) {
       t?: unknown;
       n?: unknown;
       e?: unknown;
+      f?: unknown;
     };
     if (
       typeof value.w !== "string" ||
@@ -541,10 +674,20 @@ function readState(state: string) {
       typeof value.t !== "string" ||
       typeof value.n !== "string" ||
       typeof value.e !== "number" ||
-      Date.now() > value.e
+      Date.now() > value.e ||
+      (value.f !== undefined &&
+        (typeof value.f !== "object" ||
+          value.f === null ||
+          Object.values(value.f).some((field) => typeof field !== "string")))
     )
       return null;
-    return { w: value.w, u: value.u, t: value.t, n: value.n };
+    return {
+      w: value.w,
+      u: value.u,
+      t: value.t,
+      n: value.n,
+      f: value.f as Record<string, string> | undefined,
+    };
   } catch {
     return null;
   }
@@ -579,7 +722,11 @@ export const oauthState: SignedVerifier = {
     return {
       scope: { workspace: state.w },
       deliveryId: `oauth:${state.n}`,
-      claims: { userId: state.u, type: state.t },
+      claims: {
+        userId: state.u,
+        type: state.t,
+        ...(state.f && { fields: JSON.stringify(state.f) }),
+      },
     };
   },
 };
