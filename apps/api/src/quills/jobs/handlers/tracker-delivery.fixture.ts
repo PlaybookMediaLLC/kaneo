@@ -95,6 +95,8 @@ export type DeliveryCase = {
   query: string;
   /** The token route, for a provider with refresh. */
   token?: string;
+  /** The workspace's OAuth app, for a provider whose delivery reads it without a token route. */
+  app?: (workspaceId: string) => Record<string, string>;
   /** The access and refresh tokens of the local server's refresh answer. */
   refreshedToken?: string;
   refreshedRefreshToken?: string;
@@ -154,10 +156,15 @@ async function connect(
     await db
       .delete(integrationPlatformCredentials)
       .where(eq(integrationPlatformCredentials.integrationType, t.type));
-    if (t.token)
+    if (t.token || t.app)
       await db.insert(integrationPlatformCredentials).values({
         integrationType: t.type,
-        secrets: seal({ clientId: "client", clientSecret: "app-secret" }),
+        secrets: seal(
+          t.app?.(workspaceId) ?? {
+            clientId: "client",
+            clientSecret: "app-secret",
+          },
+        ),
       });
     const [row] = await db
       .insert(integrations)

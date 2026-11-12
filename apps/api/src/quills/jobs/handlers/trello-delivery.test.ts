@@ -1,15 +1,7 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { drizzle } from "drizzle-orm/node-postgres";
 import type { Pool } from "pg";
 import * as kaneo from "../../../database/schema";
-import { encryptSecret } from "../../../notification-preferences/secrets";
 import {
   providerCalls,
   providerOverrides,
@@ -207,6 +199,11 @@ const trello: DeliveryCase = {
   secrets: (workspaceId) => ({ accessToken: token(workspaceId) }),
   authorization: (workspaceId) =>
     header(keyOf(workspaceId), token(workspaceId)),
+  // Each workspace saves its own key, so the isolation test sees a key from the wrong workspace.
+  app: (workspaceId) => ({
+    clientId: keyOf(workspaceId),
+    clientSecret: "app-secret",
+  }),
   create: CARDS,
   contentType: "application/json",
   query: "",
@@ -225,38 +222,4 @@ const trello: DeliveryCase = {
     }),
 };
 
-// Seam gap: the evidence table saves the workspace's OAuth app only for a provider with a token
-// route (`token`). Trello has no refresh, but its delivery needs the app's API key. Until the shared
-// fixture saves the app for such a provider, a trigger saves it whenever the table adds a Trello
-// connection. Each workspace gets its own key, so the isolation test sees a key from the wrong
-// workspace. Remove this block with that fixture change.
-describe("Trello with the workspace's OAuth app", () => {
-  const seed = "fu3b_trello_app";
-  const sealed = (workspace: string) =>
-    encryptSecret(
-      JSON.stringify({
-        clientId: keyOf(workspace),
-        clientSecret: "app-secret",
-      }),
-    )!;
-  beforeEach(async () => {
-    await pool.query(
-      `CREATE OR REPLACE FUNCTION public.${seed}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
-         INSERT INTO quills.integration_platform_credentials (workspace_id, id, integration_type, secrets)
-         VALUES (NEW.workspace_id, gen_random_uuid(), 'trello',
-           CASE WHEN right(NEW.workspace_id, 2) = '_b' THEN '${sealed("_b")}' ELSE '${sealed("_a")}' END)
-         ON CONFLICT DO NOTHING;
-         RETURN NEW;
-       END $$`,
-    );
-    await pool.query(
-      `CREATE OR REPLACE TRIGGER ${seed} AFTER INSERT ON quills.integrations FOR EACH ROW
-       WHEN (NEW.integration_type = 'trello') EXECUTE FUNCTION public.${seed}()`,
-    );
-  });
-  afterEach(async () => {
-    await pool.query(`DROP TRIGGER IF EXISTS ${seed} ON quills.integrations`);
-    await pool.query(`DROP FUNCTION IF EXISTS public.${seed}()`);
-  });
-  describeDelivery([trello], (testPool) => (pool = testPool));
-});
+describeDelivery([trello], (testPool) => (pool = testPool));
