@@ -150,7 +150,8 @@ const approveAction = defineQuillsRoute({
   action: "update",
   params,
   response: z.object({ action: actionSchema, change: changeSchema.nullable() }),
-  responseDescription: "The executed action and the change it made",
+  responseDescription:
+    "The executed action and the change it made, or an approved connector action that a worker runs next",
   errors,
   event: ({ params }, result) =>
     result.change

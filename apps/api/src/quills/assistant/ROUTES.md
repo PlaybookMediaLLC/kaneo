@@ -211,19 +211,28 @@ tool calls for each. Connector tools join the built-in tools under these limits:
 
 | Limit | Value |
 |---|---|
-| Connector tools offered in a run | 32 (connectors by name, tools in catalogue order) |
+| Connector tools offered in a run | 32, with at most 40,000 characters of descriptions and schemas in all (connectors by name, tools in catalogue order; a tool that does not fit is skipped) |
 | Tool name | `connector_<slug>__<tool>`, at most 64 characters of `[A-Za-z0-9_-]`. A tool name that does not fit gets a cut and an 8-character hash. A name that is already offered is skipped. |
 | Tool description to the model | the connector's name and at most 500 characters of the server's text |
 | Arguments | a JSON object of at most 8,000 characters, valid for the tool's stored input schema |
 | Connector calls that reach the network in a run | 5 |
-| Time for all connector calls of a run | 30 seconds; each call has at most 10 seconds and the time that is left |
+| Time for all connector calls of a run | 30 seconds of call time (the provider's time does not count); each call has at most 10 seconds and the time that is left; no call starts with less than 1 second left |
 | Answer from the server | 1 MB (the client) |
 | Result text to the model | 8,000 characters; then `[truncated]` |
 
-The input schema is the stored one (C1 drops a schema over 20,000 characters). The worker removes
-`pattern` and `patternProperties` (a server's regular expression must not block the worker), and
-refuses a schema that is not an object, is nested deeper than 32 levels, or that the converter
-cannot read. A tool without a usable schema is not offered.
+The input schema is the stored one (C1 drops a schema over 20,000 characters). The worker makes a
+copy whose checks cost work in proportion to its size:
+
+- It removes `pattern` and `patternProperties`: a server's regular expression must not block the
+  worker.
+- It removes a repeated `type` entry: zod converts the node again for each entry.
+- It replaces each local `$ref` with a copy of its target: zod checks a shared target again for
+  each use. A remote reference or an anchor is refused.
+- It refuses a copy of more than 5,000 nodes or 32 levels (also a reference cycle), a schema that
+  is not an object, and a schema that the converter cannot read.
+
+A tool without a usable schema is not offered. The converter gets a registry of its own, so an
+`id` in a server's schema does not stay in memory.
 
 ### Policies
 
@@ -247,9 +256,14 @@ cannot read. A tool without a usable schema is not offered.
 - A tool result goes to the model in a `tool` message, inside `<tool_result>` with the
   `untrusted()` note. It is never part of the system message. NUL and lone surrogates become
   U+FFFD. A server error (`isError`) and a failed call return fixed text, never the server's text.
+- `untrusted()` changes each closing tag of its label in the text (any case or spacing) to
+  `<\/label>` in one pass, so the text cannot close the block early. This also protects the
+  thread and the other wrapped texts.
 - A result cannot change the run: the workspace, the actor, the tool list and the policies are
   fixed before the first provider call. A tool that the result names is still checked against the
-  list, and the worker fetches no URL from a result.
+  list, and the worker fetches no URL from a result. Each call checks again that its connector is
+  enabled, connected and assigned to the copilot, so a connector that a manager turns off gets no
+  more calls from a run in progress.
 - Tool names and descriptions come from the server: they are namespaced, bounded, and cannot match
   a built-in tool (built-in names never start with `connector_`).
 
@@ -257,7 +271,8 @@ cannot read. A tool without a usable schema is not offered.
 
 1. The copilot stores a pending action (`originRole` `copilot_qa`). Its tool name is the offered
    name. Its arguments are `{connectorId, tool, arguments}`. Its summary names the connector and
-   the tool and shows at most 300 characters of the arguments.
+   the tool and shows all the arguments (at most 8,000 characters), so the approver sees each
+   value that will run.
 2. `approveQuillsAssistantAction` (update) checks in its transaction that the connector is in this
    workspace and still offers the tool with a policy other than `never`, and that the arguments fit
    the current schema. It sets the action `approved` and records `assistant_action.approved`. It
@@ -266,8 +281,10 @@ cannot read. A tool without a usable schema is not offered.
    `approved` connector action. It checks the approver's `update` and the connector again, claims
    the call (tool-call key `action:<actionId>`), calls once, and sets the action `executed` or
    `failed` (`result`: `{ok}` only) with `assistant_action.completed`.
-4. A second approval answers 409. A repeated job finds the claim and never calls again: it copies
-   the recorded outcome, or sets `failed` when the outcome is unknown.
+4. A second approval answers 409. A repeated job reads the claim first, before any check that may
+   have changed since, and never calls again: it copies the recorded outcome, or sets `failed`
+   when the outcome is unknown (the worker stopped during the call; the tool-call row stays
+   `started`).
 
 ### Records
 
@@ -279,11 +296,15 @@ arguments go to an outside service and can hold any text from the thread, so its
 size only. The pending action keeps the arguments, as a built-in proposal does: the approval needs
 them.
 
-The call key is `<runId>:connector:<hash of name and arguments>` in a run: a repeated job attempt
-does not call the same tool with the same arguments again. The connector row gets `last_call_at`,
+The call key is `<runId>:connector:<hash of name and arguments>:<repeat>`, where `<repeat>`
+counts the same call in this attempt. The model can call the same tool with the same arguments
+again in one run, and a repeated job attempt that makes the same calls skips the ones that ran. The connector row gets `last_call_at`,
 and on a failure a fixed `last_error`. Rotated OAuth tokens are stored only when the stored secrets
 did not change during the call and the new secrets still hold tokens (C1's rule). These health
 fields record no event.
+
+An import (`transfer/import-archive.ts`) turns each imported connector off (`enabled` false), as
+it pauses webhooks and integrations: it sends no thread text until a manager here enables it.
 
 ### Events
 
@@ -460,6 +481,7 @@ No table changes.
 | `my_tone` transform | Not ported | Needs a read of the teammate's replies before the provider call. |
 | Feedback posts as a copilot read tool | Not ported | Needs a project-visibility read for the requester inside the worker. |
 | Pending-action expiry sweep | Not ported | An expired action returns 409 on decision; its stored status stays `proposed`. |
+| Sweep of approved connector actions | Not ported | When the worker job fails three times before it claims the call (for example a database outage), the action stays `approved`: approve and reject answer 409, and nothing runs it. |
 | Usage rows for a failed `load` call (transform, draft, semantic search) | Not logged | `load` has no transaction; a failed call returns 502 and writes nothing. |
 | API-key scope in the worker | Partial | A request's handler cannot see the API key, so the worker checks the requester's role, not the key's scope. A read-only key can lead to a proposal; approval still checks the approver's role and key scope. |
 | Snippet and document embeddings | Not ported | No retrieval reads them yet; `search_knowledge` matches words. Imported embeddings are kept and cleared on edit. |

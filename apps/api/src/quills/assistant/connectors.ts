@@ -34,6 +34,7 @@ import { uniqueConflict } from "../support/conversation-model";
 import {
   catalog,
   discover,
+  failureText,
   finishAuthorization,
   MAX_TOOLS,
   startAuthorization,
@@ -242,13 +243,6 @@ async function unchanged(
   return row;
 }
 
-const failureText: Record<Failure, string> = {
-  destination: "That address cannot be reached from this workspace.",
-  unauthorized: "Authorization required",
-  rejected: "The authorization server rejected the request.",
-  unreachable:
-    "The MCP server could not be reached, or it did not answer as an MCP server.",
-};
 /** A failed step as the route's answer. The server's own text never reaches the caller. */
 const failed = (failure: Failure) =>
   new HTTPException(failure === "unreachable" ? 502 : 400, {

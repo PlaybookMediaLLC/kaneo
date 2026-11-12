@@ -31,7 +31,7 @@ const MAX_BYTES = 1_000_000;
 export const MAX_TOOLS = 100;
 const MAX_SCHEMA = 20_000;
 /** The characters of a tool result that reach the model. */
-export const MAX_RESULT = 8_000;
+const MAX_RESULT = 8_000;
 
 /** Plain secrets: `bearerToken`; for OAuth `client` and `tokens` (the SDK's JSON) and `codeVerifier`. */
 export type Secrets = Record<string, string>;
@@ -48,6 +48,14 @@ export type Failure =
   | "unauthorized"
   | "rejected"
   | "unreachable";
+/** The fixed text of each failure, for responses and `last_error`. */
+export const failureText: Record<Failure, string> = {
+  destination: "That address cannot be reached from this workspace.",
+  unauthorized: "Authorization required",
+  rejected: "The authorization server rejected the request.",
+  unreachable:
+    "The MCP server could not be reached, or it did not answer as an MCP server.",
+};
 export type DiscoveredTool = Omit<CachedConnectorTool, "firstSeenAt">;
 
 /** The socket-level fetch under the guard. Tests point it at a local server; the guard still checks each URL. */

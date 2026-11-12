@@ -9,7 +9,7 @@ import {
   sealCredentials,
 } from "../../framework/integration-config";
 import { signedUrl } from "../../integrations/oauth-providers";
-import { callTool, type Failure } from "../connector-client";
+import { callTool, failureText, type Failure } from "../connector-client";
 import {
   connectorCall,
   isConnectorTool,
@@ -30,8 +30,9 @@ import { nothing, requesterActions, type Work, type Write } from "./shared";
 const MAX_CALLS = 5;
 const BUDGET_MS = 30_000;
 const STEP_MS = 10_000;
+const MIN_STEP_MS = 1_000;
 
-const toModel: Record<Failure | "tool_error", string> = {
+const toModel: Record<Failure | "tool_error" | "unavailable", string> = {
   destination:
     "Failed: the connector's address cannot be reached from this workspace.",
   unauthorized: "Failed: the connector needs a new authorization.",
@@ -39,15 +40,15 @@ const toModel: Record<Failure | "tool_error", string> = {
   unreachable:
     "Failed: the connector did not answer in time, or it could not be reached.",
   tool_error: "Failed: the connector's tool reported an error.",
+  unavailable: "Failed: the connector was turned off or removed.",
 };
-/** The connector's last_error, as connectors.ts writes it after a refresh. */
-const lastError: Record<Failure, string> = {
-  destination: "That address cannot be reached from this workspace.",
-  unauthorized: "Authorization required",
-  rejected: "The authorization server rejected the request.",
-  unreachable:
-    "The MCP server could not be reached, or it did not answer as an MCP server.",
-};
+
+/** A connector that offers tools to the copilot: enabled, connected and assigned to it. */
+const live = and(
+  eq(connectors.enabled, true),
+  eq(connectors.status, "connected"),
+  sql`${connectors.assignments} @> '{"copilot": true}'::jsonb`,
+);
 
 /** The connector tools offered to one copilot run, read in the job's workspace. */
 export const loadConnectorTools = (workspaceId: string) =>
@@ -56,23 +57,30 @@ export const loadConnectorTools = (workspaceId: string) =>
       await db
         .select(offerColumns)
         .from(connectors)
-        .where(
-          and(eq(connectors.enabled, true), eq(connectors.status, "connected")),
-        )
+        .where(live)
         .orderBy(asc(connectors.name))
         .limit(100),
     ),
   );
 
-/** The time for the next connector call of a run, or 0 when the run used its calls or its time. */
+/**
+ * The connector calls of one run: at most MAX_CALLS calls and BUDGET_MS of call time in all (the
+ * provider's time does not count), each call at most STEP_MS. `work` gets its deadline; the
+ * answer is null, and nothing runs, when the run used its calls or has less than MIN_STEP_MS left.
+ */
 export function connectorBudget() {
   let calls = 0;
-  const ends = Date.now() + BUDGET_MS;
-  return () => {
-    const left = Math.min(STEP_MS, ends - Date.now());
-    if (calls >= MAX_CALLS || left <= 0) return 0;
+  let used = 0;
+  return async <T>(work: (timeoutMs: number) => Promise<T>) => {
+    const left = Math.min(STEP_MS, BUDGET_MS - used);
+    if (calls >= MAX_CALLS || left < MIN_STEP_MS) return null;
     calls++;
-    return left;
+    const started = Date.now();
+    try {
+      return await work(left);
+    } finally {
+      used += Date.now() - started;
+    }
   };
 }
 
@@ -136,7 +144,8 @@ export async function callConnector(
         sealed: connectors.secrets,
       })
       .from(connectors)
-      .where(eq(connectors.id, tool.connectorId as never));
+      // A connector turned off during the run gets no more calls.
+      .where(and(eq(connectors.id, tool.connectorId as never), live));
     return { id: row.id, stored };
   });
   if (!claimed.id) return { duplicate: claimed.prior ?? "started" };
@@ -158,7 +167,9 @@ export async function callConnector(
       )
     : { secrets, failure: "unreachable" };
   const { failure, text } = answer;
-  const kind = failure ?? (answer.error ? "tool_error" : null);
+  const kind = !stored
+    ? "unavailable"
+    : (failure ?? (answer.error ? "tool_error" : null));
   const rotated =
     stored && answer.secrets.tokens && answer.secrets.tokens !== secrets.tokens;
   await withQuillsSystemWorkspace(workspaceId, async (db) => {
@@ -182,7 +193,7 @@ export async function callConnector(
       .set({
         lastCallAt: new Date(),
         ...(failure && {
-          lastError: lastError[failure],
+          lastError: failureText[failure],
           lastErrorAt: new Date(),
           errorCount: sql`${connectors.errorCount} + 1`,
         }),
@@ -230,17 +241,24 @@ export const runApprovedAction: Work = async (workspaceId, event) => {
       .where(eq(assistantPendingActions.id, event.entityId as never));
     if (action?.status !== "approved" || !isConnectorTool(action.toolName))
       return null;
+    // A claim from an earlier attempt decides the outcome before any check that may have changed.
+    const [claim] = await db
+      .select({ status: assistantToolCalls.status })
+      .from(assistantToolCalls)
+      .where(eq(assistantToolCalls.idempotencyKey, `action:${action.id}`));
     const call = connectorCall.safeParse(action.args);
     return {
       action,
+      claim,
       call: call.success ? call.data : null,
-      tool: call.success
-        ? await liveTool(db, call.data, action.toolName)
-        : null,
+      tool:
+        call.success && !claim
+          ? await liveTool(db, call.data, action.toolName)
+          : null,
     };
   });
   if (!found) return nothing;
-  const { action, call, tool } = found;
+  const { action, claim, call, tool } = found;
   const key = `action:${action.id}`;
   const finish =
     (ok: boolean, refused?: string): Write =>
@@ -284,6 +302,8 @@ export const runApprovedAction: Work = async (workspaceId, event) => {
           payload: { status: ok ? "executed" : "failed" },
         });
     };
+  // A claim that never got its outcome (the worker stopped during the call) counts as failed.
+  if (claim) return finish(claim.status === "succeeded");
   if (!call || !tool)
     return finish(false, "Not run: the connector or its tool changed");
   if (
@@ -305,7 +325,6 @@ export const runApprovedAction: Work = async (workspaceId, event) => {
     },
     STEP_MS,
   );
-  // A repeated attempt copies the recorded outcome; a claim with no outcome counts as failed.
   return finish(
     "duplicate" in outcome ? outcome.duplicate === "succeeded" : outcome.ok,
   );

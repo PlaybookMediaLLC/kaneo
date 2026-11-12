@@ -136057,7 +136057,7 @@
         ],
         "responses": {
           "200": {
-            "description": "The executed action and the change it made",
+            "description": "The executed action and the change it made, or an approved connector action that a worker runs next",
             "content": {
               "application/json": {
                 "schema": {

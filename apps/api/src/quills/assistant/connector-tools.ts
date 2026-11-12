@@ -12,16 +12,20 @@ import type { Database } from "../framework/define-route";
 
 // The connector tools that the copilot may offer, shared by the worker and the approval route. A
 // tool's name, description and input schema come from the remote server, so they are untrusted:
-// the name is namespaced and bounded, the description is cut, and the schema loses its regular
-// expressions before it validates the model's arguments. ROUTES.md, "Connector tools".
+// the name is namespaced and bounded, the description is cut, and the schema becomes a copy whose
+// checks cost work in proportion to its size before it validates the model's arguments.
+// ROUTES.md, "Connector tools".
 
 /** Built-in tool names never start with this prefix, so a connector tool cannot shadow one. */
 export const CONNECTOR_PREFIX = "connector_";
-export const MAX_OFFERED = 32;
+const MAX_OFFERED = 32;
+/** The characters of all offered descriptions and schemas in one run. */
+const MAX_OFFERED_SIZE = 40_000;
 const MAX_NAME = 64;
 const MAX_DESCRIPTION = 500;
 const MAX_ARGS = 8_000;
 const MAX_DEPTH = 32;
+const MAX_NODES = 5_000;
 
 /** The columns that decide which tools a connector offers. */
 export const offerColumns = {
@@ -34,9 +38,10 @@ export const offerColumns = {
   tools: connectors.tools,
   toolPolicies: connectors.toolPolicies,
 };
-type ConnectorRow = {
-  [K in keyof typeof offerColumns]: (typeof offerColumns)[K]["_"]["data"];
-};
+type ConnectorRow = Pick<
+  typeof connectors.$inferSelect,
+  keyof typeof offerColumns
+>;
 
 export type OfferedTool = {
   /** The name the model sees. */
@@ -58,7 +63,7 @@ export const connectorCall = z.object({
   tool: z.string().min(1).max(128),
   arguments: z.record(z.string(), z.unknown()),
 });
-export type ConnectorCall = z.output<typeof connectorCall>;
+type ConnectorCall = z.output<typeof connectorCall>;
 
 export const isConnectorTool = (name: string) =>
   name.startsWith(CONNECTOR_PREFIX);
@@ -104,61 +109,91 @@ export function policyOf(
 }
 
 /** Keywords whose values map names to schemas, and keywords whose values are data. */
-const SCHEMA_MAPS = new Set([
-  "properties",
+const SCHEMA_MAPS = new Set(["properties", "dependentSchemas"]);
+const DATA = new Set(["enum", "const", "default", "examples"]);
+const DROPPED = new Set([
+  "pattern",
+  "patternProperties",
   "$defs",
   "definitions",
-  "dependentSchemas",
 ]);
-const DATA = new Set(["enum", "const", "default", "examples"]);
+const isMap = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+/** The target of a local reference (`#` or `#/a/b`). Throws for any other reference. */
+function target(root: unknown, ref: unknown) {
+  if (typeof ref !== "string" || (ref !== "#" && !ref.startsWith("#/")))
+    throw new Error("Only local references are allowed");
+  return ref
+    .split("/")
+    .slice(1)
+    .reduce<unknown>((node, part) => {
+      const key = decodeURIComponent(part)
+        .replaceAll("~1", "/")
+        .replaceAll("~0", "~");
+      if (!isMap(node) || !Object.hasOwn(node, key))
+        throw new Error("Unknown reference");
+      return node[key];
+    }, root);
+}
+
 /**
- * The schema without `pattern` and `patternProperties`: a server's regular expression must not
- * block the worker on the model's arguments. Throws when the schema is nested too deeply.
+ * A copy of the schema whose checks cost work in proportion to its size. It has no `pattern` or
+ * `patternProperties` (a server's regular expression must not block the worker), no repeated
+ * `type` entries (each one converts the node again), and each local `$ref` replaced by a copy of
+ * its target (a shared target is checked again for each use). Throws for a remote reference, more
+ * than MAX_NODES nodes or more than MAX_DEPTH levels (also a reference cycle).
  */
-function withoutPatterns(node: unknown, depth: number): unknown {
-  if (depth > MAX_DEPTH) throw new Error("The schema is nested too deeply");
-  if (Array.isArray(node))
-    return node.map((item) => withoutPatterns(item, depth + 1));
-  if (!node || typeof node !== "object") return node;
-  return Object.fromEntries(
-    Object.entries(node).flatMap(([key, value]): [string, unknown][] => {
-      if (key === "pattern" || key === "patternProperties") return [];
-      if (DATA.has(key)) return [[key, value]];
-      if (
-        SCHEMA_MAPS.has(key) &&
-        value &&
-        typeof value === "object" &&
-        !Array.isArray(value)
-      )
-        return [
-          [
-            key,
-            Object.fromEntries(
-              Object.entries(value).map(([name, schema]) => [
-                name,
-                withoutPatterns(schema, depth + 1),
-              ]),
-            ),
-          ],
-        ];
-      return [[key, withoutPatterns(value, depth + 1)]];
-    }),
-  );
+function safeSchema(root: Record<string, unknown>) {
+  let nodes = 0;
+  const visit = (node: unknown, depth: number): unknown => {
+    if (++nodes > MAX_NODES || depth > MAX_DEPTH)
+      throw new Error("The schema is too large");
+    if (Array.isArray(node)) return node.map((item) => visit(item, depth + 1));
+    if (!isMap(node)) return node;
+    // ponytail: the target replaces the node, so keywords beside a $ref are dropped (looser check).
+    if (Object.hasOwn(node, "$ref"))
+      return visit(target(root, node.$ref), depth + 1);
+    return Object.fromEntries(
+      Object.entries(node).flatMap(([key, value]): [string, unknown][] => {
+        if (DROPPED.has(key)) return [];
+        if (DATA.has(key)) return [[key, value]];
+        if (key === "type" && Array.isArray(value))
+          return [[key, [...new Set(value)]]];
+        if (SCHEMA_MAPS.has(key) && isMap(value))
+          return [
+            [
+              key,
+              Object.fromEntries(
+                Object.entries(value).map(([name, schema]) => [
+                  name,
+                  visit(schema, depth + 1),
+                ]),
+              ),
+            ],
+          ];
+        return [[key, visit(value, depth + 1)]];
+      }),
+    );
+  };
+  return visit(root, 0) as Record<string, unknown>;
 }
 
 /** The schema for the model and the validator of its arguments, or null when the schema cannot be used. */
 export function inputOf(schema: Record<string, unknown> | undefined) {
   if (schema?.type !== "object") return null;
   try {
-    const parameters = withoutPatterns(schema, 0) as Record<string, unknown>;
-    return { parameters, args: z.fromJSONSchema(parameters) as z.ZodType };
+    const parameters = safeSchema(schema);
+    // A registry of its own: an `id` in a server's schema must not stay in zod's global registry.
+    const args = z.fromJSONSchema(parameters, { registry: z.registry() });
+    return { parameters, args: args as z.ZodType };
   } catch {
     return null;
   }
 }
 
 /** The tool as the copilot offers it now, or null: `never`, a connector that is off, or no usable schema. */
-export function offer(
+function offer(
   row: ConnectorRow,
   tool: CachedConnectorTool,
 ): OfferedTool | null {
@@ -185,14 +220,25 @@ export function offer(
   };
 }
 
-/** The tools of these connectors, at most MAX_OFFERED, by offered name. A repeated name is skipped. */
+/**
+ * The tools of these connectors by offered name: at most MAX_OFFERED, with descriptions and schemas
+ * of at most MAX_OFFERED_SIZE characters in all. A repeated name, or a tool that does not fit the
+ * size that is left, is skipped.
+ */
 export function offeredTools(rows: ConnectorRow[]) {
   const offered = new Map<string, OfferedTool>();
+  let size = 0;
   for (const row of rows)
     for (const tool of row.tools) {
       if (offered.size >= MAX_OFFERED) return offered;
       const one = offer(row, tool);
-      if (one && !offered.has(one.name)) offered.set(one.name, one);
+      const cost = one
+        ? one.description.length + JSON.stringify(one.parameters).length
+        : 0;
+      if (!one || offered.has(one.name) || size + cost > MAX_OFFERED_SIZE)
+        continue;
+      size += cost;
+      offered.set(one.name, one);
     }
   return offered;
 }
@@ -214,11 +260,9 @@ export function checkArgs(tool: OfferedTool, args: unknown) {
   }
 }
 
-/** The pending action's summary: the connector, the tool and at most 300 characters of the arguments. */
-export function summaryOf(tool: OfferedTool, args: Record<string, unknown>) {
-  const json = JSON.stringify(args);
-  return `Run ${tool.tool} on ${tool.connectorName} with ${json.length > 300 ? `${json.slice(0, 300)}…` : json}`;
-}
+/** The pending action's summary: the connector, the tool and all the arguments, so the approver sees what runs. */
+export const summaryOf = (tool: OfferedTool, args: Record<string, unknown>) =>
+  `Run ${tool.tool} on ${tool.connectorName} with ${JSON.stringify(args)}`;
 
 /**
  * The tool of a stored connector action when it may still run: the connector is in this

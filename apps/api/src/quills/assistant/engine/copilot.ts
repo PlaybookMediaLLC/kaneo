@@ -196,6 +196,8 @@ export async function answerCopilot(
       },
     });
   const budget = connectorBudget();
+  // The same call again in one attempt runs again; a later job attempt repeats the same keys.
+  const repeats = new Map<string, number>();
   const system = [
     `You are ${config.identity.name}, a private copilot for a support teammate. Answer the teammate's question about the ${item.conversationId ? "conversation" : "ticket"} below.`,
     "Use the search tools for facts; cite a source as [article:ID] or [snippet:ID]. Say so when you do not know.",
@@ -331,22 +333,26 @@ export async function answerCopilot(
         });
         return `Proposed for approval: ${summary}.`;
       }
-      const timeoutMs = budget();
-      if (!timeoutMs) {
+      const same = digest([name, checked]);
+      repeats.set(same, (repeats.get(same) ?? 0) + 1);
+      const key = `${runId}:connector:${same}:${repeats.get(same)}`;
+      const outcome = await budget((timeoutMs) =>
+        callConnector(
+          workspaceId,
+          connector,
+          checked,
+          {
+            key,
+            principalId: run.principalId,
+            conversationId: item.conversationId,
+          },
+          timeoutMs,
+        ),
+      );
+      if (!outcome) {
         record({ status: "denied", resultSummary: "Call limit reached" });
         return "Denied: this run reached its limit of connector calls.";
       }
-      const outcome = await callConnector(
-        workspaceId,
-        connector,
-        checked,
-        {
-          key: `${runId}:connector:${digest([name, checked])}`,
-          principalId: run.principalId,
-          conversationId: item.conversationId,
-        },
-        timeoutMs,
-      );
       return "duplicate" in outcome
         ? "Skipped: this call already ran in an earlier attempt of this run."
         : outcome.content;
