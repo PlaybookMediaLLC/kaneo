@@ -1,12 +1,16 @@
 // Route-module helper: framework/boundaries.test.ts checks its imports like a module that uses ../framework/define-route.
 import { ProviderCallError } from "../../framework/integration-config";
 import type { OAuthConnect, OAuthProvider } from "../oauth-providers";
+import { asana } from "./asana";
 import { azureDevops } from "./azure-devops";
+import { clickup } from "./clickup";
 import { discord } from "./discord";
 import { github } from "./github";
 import { gitlab } from "./gitlab";
 import { jira } from "./jira";
 import { linear } from "./linear";
+import { monday } from "./monday";
+import { notion } from "./notion";
 import { slack } from "./slack";
 
 // The OAuth and key providers, one file each. To add a provider, add its file, its import above and
@@ -23,6 +27,10 @@ export const oauthProviders = {
   jira,
   linear,
   azure_devops: azureDevops,
+  asana,
+  clickup,
+  monday,
+  notion,
 } satisfies Record<string, OAuthProvider>;
 type Registry = typeof oauthProviders;
 export const oauthProvider = (type: string): OAuthProvider | undefined =>

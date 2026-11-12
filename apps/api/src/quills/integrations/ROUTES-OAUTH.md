@@ -232,24 +232,162 @@ External effects:          project and work item type lists (dev.azure.com). No 
 
 ### Asana
 
-Filled by lane P2.
+| Source | Route | operationId |
+|---|---|---|
+| `getAsanaConnectUrl` | `GET /oauth/asana/connect` | `startQuillsAsanaOAuthConnect` |
+| `fetchAsanaProjectsFn` | `GET /integrations/{integrationId}/destinations` | `listQuillsIntegrationDestinations` |
+
+- Boundary: the map at the top of this file. Both routes need `manage_settings`. The provider calls
+  only `app.asana.com`, with no transaction open.
+- Connect: the callback exchanges the code at `/-/oauth_token`, then reads `/api/1.0/users/me`. It
+  stores the first Asana workspace of the account in `config.workspaceGid`. The sealed secrets are
+  `accessToken`, `refreshToken` and `expiresAt`.
+- Destinations: one kind, the projects of that workspace (one page of 100, `archived=false`). The
+  route keeps only IDs of 1 to 30 letters and digits.
+- Refresh: an access token that is due within a minute is refreshed first. Asana keeps the refresh
+  token. A refused refresh (400) is 409: reconnect. A missing or out-of-range `expires_in` stores no
+  expiry, so that token is never refreshed.
+- Tests: `providers/asana.test.ts` (local provider server): connect with sealed tokens, the limit of
+  200, the ID filter and `archived=false`, a refused `kind`, refresh with the new expiry, refused
+  refresh, an account without a workspace (400), an out-of-range expiry, and malformed answers (400
+  and 502 with fixed text).
+
+| Difference from the source | Reason |
+|---|---|
+| A connect without an Asana workspace, or with a failed profile read, fails. The source stored `unknown` and the name "Asana". | The project list needs the workspace. |
+| Asana filters archived projects (`archived=false`). The source filtered them after the call. | A page of 100 holds only active projects. |
+| The refresh also sends `redirect_uri`. | Asana's token endpoint documents it for both grants. |
+| No task creation, status sync, webhook or token revoke at disconnect. | Delivery and status sync are out of scope for #131. |
 
 ### ClickUp
 
-Filled by lane P2.
+| Source | Route | operationId |
+|---|---|---|
+| `getClickUpConnectUrl` | `GET /oauth/clickup/connect` | `startQuillsClickupOAuthConnect` |
+| `fetchClickUpSpacesFn` | `GET /integrations/{integrationId}/destinations` (default kind, or `?kind=space`) | `listQuillsIntegrationDestinations` |
+| `fetchClickUpListsFn` | `GET /integrations/{integrationId}/destinations?kind=list&parent=<space ID>` | `listQuillsIntegrationDestinations` |
+
+- Boundary: the map at the top of this file. Both routes need `manage_settings`. The provider calls
+  only `app.clickup.com` and `api.clickup.com`, with no transaction open.
+- Connect: the callback exchanges the code at `/api/v2/oauth/token`, then reads `/api/v2/team`. It
+  stores the first ClickUp workspace (a team in the API) in `config.teamId`. The sealed secret is
+  `accessToken`; ClickUp tokens do not expire.
+- Destinations: `destinationKinds: { space: {}, list: { parent: "space" } }`. Spaces come from the
+  stored team. Lists are the folderless lists of one space. The route lists the team's spaces first
+  and refuses a space that is not among them (404), so the token never reads another team's space.
+  The route keeps only IDs of 1 to 30 letters and digits.
+- Tests: `providers/clickup.test.ts` (local provider server): connect with a sealed token, spaces by
+  default and by kind, lists with the limit of 200, a foreign space refused before the list call,
+  refused kind and parent values, an account without a team (400), and malformed answers (400 and
+  502 with fixed text).
+
+| Difference from the source | Reason |
+|---|---|
+| A connect without a ClickUp team fails. The source stored `unknown`. | The space list needs the team. |
+| A list request names a space of the stored team. The source listed any space ID it got. | Authorization: the token may reach more teams. |
+| No task creation, status sync or webhook. | Delivery and status sync are out of scope for #131. |
 
 ### Trello
 
-Filled by lane P2. The connect is deferred: the token returns in a URL fragment, and no page reads it
-yet. The design and what is missing are in `providers/README.md` ("Trello").
+The connect is deferred: Trello returns the token in the URL fragment, and no page reads it yet.
+`providers/trello.ts` exists but is not in `providers/index.ts`. So Trello stays "not available" in
+the catalog, and none of its three entry points has a route.
+
+| Source | Route when registered | State |
+|---|---|---|
+| `getTrelloConnectUrl` | `GET /oauth/trello/connect` (`startQuillsTrelloOAuthConnect`) | Open: the callback cannot complete |
+| `fetchTrelloBoardsFn` | `GET /integrations/{integrationId}/destinations` (default kind, or `?kind=board`) | Open: no connection can exist |
+| `fetchTrelloListsFn` | `GET /integrations/{integrationId}/destinations?kind=list&parent=<board ID>` | Open: no connection can exist |
+
+Built in `providers/trello.ts` (tests: `providers/trello.test.ts`, with fetch answered in the test):
+
+- `authorizeUrl`: `https://trello.com/1/authorize` with `callback_method=fragment`,
+  `response_type=token`, `scope=read,write`, `expiration=never`, and `return_url` set to the signed
+  callback with the state. The client ID is the Trello API key.
+- `exchange(token)`: refuses a token that is not 32 to 256 letters and digits (it goes into a
+  header). Then it checks the token with `GET https://api.trello.com/1/members/me` and returns it as
+  the only secret. The username is the account label.
+- `destinationKinds: { board: {}, list: { parent: "board" } }`. Boards are the member's open boards;
+  lists are the open lists of one board. Only 24-digit hexadecimal IDs pass. A list answer that is
+  not a list is 502.
+- Each call sends the key and the token in the `Authorization: OAuth …` header, never in the URL.
+  Hosts: `trello.com` and `api.trello.com`.
+
+Missing (from `providers/README.md`, "Trello"):
+
+1. An HTML answer for a signed route. `framework/define-route.ts` allows `raw` answers only as RSS and
+   XML for portal, widget and public reads. Lane X1 owns that file.
+2. A `callback: "fragment"` option on the provider type, and the GET callback in `oauth.ts` answering
+   the bridge page for such a provider without consuming the state. The page reads `token` from
+   `location.hash`, removes the fragment with `history.replaceState`, and posts `{ token }` as JSON to
+   the same URL with `credentials: "same-origin"`. Headers:
+   `Content-Security-Policy: default-src 'none'; script-src 'nonce-…'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'`,
+   `Cache-Control: no-store`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`.
+3. `POST /quills-public/signed/oauth/{type}/callback?state=…` for fragment providers only, with the
+   same `oauthState` verifier (valid signature, unexpired, same session account, still holds
+   `quills:manage_settings`, single use), an `Origin` header equal to the API origin, and a body of at
+   most 4 KiB. The token never enters a log, an event or a response. The handler calls
+   `exchange(token, …)`, then `connect`.
+4. Then two lines in `providers/index.ts`, a connect fixture `startQuillsTrelloOAuthConnect` in
+   `oauth.fixture.ts`, and route tests against the local provider server, as for the other providers.
+
+| Difference from the source | Reason |
+|---|---|
+| The key and the token travel in the `Authorization` header. The source put them in the query string. | A URL reaches logs and proxies. |
+| The API key comes from the OAuth app credentials at each call. The source copied it into `config`. | One place for the key. |
+| `exchange` checks the token format before the call. | The token comes from the browser. |
+| Lists keep Trello's order. The source sorted them by `pos`. | Trello already answers in board order. |
 
 ### Monday
 
-Filled by lane P2.
+| Source | Route | operationId |
+|---|---|---|
+| `getMondayConnectUrl` | `GET /oauth/monday/connect` | `startQuillsMondayOAuthConnect` |
+| `fetchMondayBoardsFn` | `GET /integrations/{integrationId}/destinations` | `listQuillsIntegrationDestinations` |
+
+- Boundary: the map at the top of this file. Both routes need `manage_settings`. The provider calls
+  only `auth.monday.com` and `api.monday.com`, with no transaction open.
+- Connect: the callback exchanges the code at `auth.monday.com/oauth2/token`, then reads the account
+  name with the GraphQL query `me`. The sealed secret is `accessToken`; Monday.com tokens do not
+  expire.
+- Destinations: one kind, the boards (`boards(limit: 100, order_by: used_at)`). The route keeps only
+  IDs of 1 to 30 letters and digits.
+- A failed GraphQL query (200 with `errors` and no `data`) is 502, for the connect and for the list.
+- Tests: `providers/monday.test.ts` (local provider server): connect with a sealed token, the limit
+  of 200 and the ID filter, a refused `kind`, and malformed answers (400 on the token call, 502 for a
+  failed query on the connect and on the list, with fixed text).
+
+| Difference from the source | Reason |
+|---|---|
+| A failed account read fails the connect. The source connected with the name "Monday.com". | The same rule as the other providers: a connect that cannot read the account is not complete. |
+| The account label is the Monday.com user name. The source stored no account label. | The integration summary shows `account`. |
+| No item creation. | Delivery is out of scope for #131. |
 
 ### Notion
 
-Filled by lane P2.
+| Source | Route | operationId |
+|---|---|---|
+| `getNotionConnectUrl` | `GET /oauth/notion/connect` | `startQuillsNotionOAuthConnect` |
+| `fetchNotionDatabasesFn` | `GET /integrations/{integrationId}/destinations` | `listQuillsIntegrationDestinations` |
+
+- Boundary: the map at the top of this file. Both routes need `manage_settings`. The provider calls
+  only `api.notion.com`, with no transaction open.
+- Connect: the callback exchanges the code at `/v1/oauth/token`. The OAuth app authenticates with
+  HTTP Basic, so the client secret is never in the body. The answer names the workspace and the
+  owner. The sealed secret is `accessToken`; Notion tokens do not expire.
+- Destinations: one kind, the databases that the teammate shared with the integration
+  (`POST /v1/search`, one page of 100, `Notion-Version: 2022-06-28`). The route keeps only UUID IDs.
+  `target` accepts the same UUIDs as channel IDs; the default rule (30 letters and digits) would
+  refuse them.
+- Tests: `providers/notion.test.ts` (local provider server): connect with HTTP Basic and a sealed
+  token, the limit of 200, UUID filter and titles, the channel ID rule, a refused `kind`, and
+  malformed answers (400 and 502 with fixed text).
+
+| Difference from the source | Reason |
+|---|---|
+| The Notion workspace ID is not stored. | No route uses it. |
+| The account label is the owner's name. The source stored no account label. | The integration summary shows `account`. |
+| No page creation. | Delivery is out of scope for #131. |
 
 ### HubSpot
 
