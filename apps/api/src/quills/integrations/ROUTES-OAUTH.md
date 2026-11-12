@@ -216,7 +216,7 @@ Consent flow:
 | operationId | Route | Action | Source | Tests |
 |---|---|---|---|---|
 | `startQuillsTeamsOAuthConnect` | `GET /oauth/teams/connect` | manage_settings | `getTeamsConnectUrl` | contract |
-| `listQuillsIntegrationDestinations` | `GET /integrations/{integrationId}/destinations` (or `?kind=team`) | manage_settings | `fetchTeamsTeamsFn` | contract, `providers/teams.test.ts` |
+| `listQuillsIntegrationDestinations` | `GET /integrations/{integrationId}/destinations` (or `?kind=team`) | manage_settings | `fetchTeamsTeamsFn` | `providers/teams.test.ts` |
 | `listQuillsIntegrationDestinations` | `…/destinations?kind=channel&parent=<team ID>` | manage_settings | `fetchTeamsChannelsFn` | `providers/teams.test.ts` |
 
 - Teams: `GET https://graph.microsoft.com/v1.0/me/joinedTeams`. A team ID that is not a GUID is
@@ -229,6 +229,9 @@ Consent flow:
   200 items. A link to another host ends the list. An answer without a `value` list is 502.
 - The access token expires after about one hour. `refresh` uses the same `organizations` token
   endpoint and keeps the new refresh token.
+- For delivery (not in #131): a channel ID has `@`, which the channel route and the default
+  `validTarget` refuse. A Graph channel message also needs the team ID. The delivery lane adds a
+  `target` rule and a target key that holds both IDs. With `events: []`, no channel can be saved now.
 
 | Source | Kaneo |
 |---|---|

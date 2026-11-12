@@ -183,7 +183,10 @@ describe.skipIf(!url)("Microsoft Teams provider", () => {
       accessToken: "teams-contract-token",
       refreshToken: "teams-contract-refresh",
     });
-    expect(Date.parse(secrets.expiresAt!)).toBeGreaterThan(Date.now());
+    // expires_in is 3600 seconds.
+    expect(Date.parse(secrets.expiresAt!)).toBeGreaterThan(
+      Date.now() + 3500_000,
+    );
   });
 
   it("answers consent and token failures with fixed errors and no provider text", async () => {
@@ -423,7 +426,57 @@ describe.skipIf(!url)("Microsoft Teams provider", () => {
       accessToken: "teams-contract-token",
       refreshToken: "teams-contract-refresh",
     });
-    expect(Date.parse(secrets.expiresAt!)).toBeGreaterThan(Date.now());
+    // expires_in is 3600 seconds.
+    expect(Date.parse(secrets.expiresAt!)).toBeGreaterThan(
+      Date.now() + 3500_000,
+    );
+
+    // No new refresh token: the old one stays.
+    id = await connection({
+      accessToken: "expired",
+      refreshToken: "old-refresh",
+      expiresAt: due,
+    });
+    expect(
+      (
+        await answering(
+          {
+            [TOKEN]: {
+              status: 200,
+              body: { access_token: "rotated", expires_in: 3600 },
+            },
+          },
+          () => list(id),
+        )
+      ).status,
+    ).toBe(200);
+    expect(await stored()).toMatchObject({
+      accessToken: "rotated",
+      refreshToken: "old-refresh",
+    });
+
+    // A malformed answer without an access token stores nothing.
+    id = await connection({
+      accessToken: "expired",
+      refreshToken: "old-refresh",
+      expiresAt: due,
+    });
+    expect(
+      await answering(
+        { [TOKEN]: { status: 200, body: { token_type: "Bearer" } } },
+        () => list(id),
+      ),
+    ).toEqual({
+      status: 409,
+      body: expect.objectContaining({
+        message: "The provider rejected the saved credentials. Reconnect.",
+      }),
+    });
+    expect(await stored()).toEqual({
+      accessToken: "expired",
+      refreshToken: "old-refresh",
+      expiresAt: due,
+    });
 
     // invalid_grant: the refresh token or the consent is gone.
     id = await connection({
