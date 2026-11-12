@@ -9,3 +9,4 @@ export * from "./conversation-views.fixture";
 export * from "./conversations.fixture";
 export * from "./inbox.fixture";
 export * from "./conversation-assistant.fixture";
+export * from "./read-batch.fixture";

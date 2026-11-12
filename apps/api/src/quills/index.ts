@@ -22,6 +22,9 @@ import supportConversations from "./support/conversations-router";
 import supportAssistant from "./support/conversation-assistant";
 import workspaceSearch from "./assistant/search";
 import supportTyping from "./support/customer/typing";
+import supportPresence from "./support/presence";
+import supportLinkPreview from "./support/link-preview";
+import supportReadBatch from "./support/read-batch";
 import { brandText } from "@kaneo/branding";
 import { apiRouter, z, type BaseVariables } from "../openapi";
 import { settings } from "../database/quills/schema/auth";
@@ -84,6 +87,9 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", supportAssistant)
   .route("/", workspaceSearch)
   .route("/", supportTyping)
+  .route("/", supportPresence)
+  .route("/", supportLinkPreview)
+  .route("/", supportReadBatch)
   .route("/", portalInvites)
   .route("/", reporting)
   .route("/", automation)

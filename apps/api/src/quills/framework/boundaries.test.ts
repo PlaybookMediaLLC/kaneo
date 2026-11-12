@@ -52,11 +52,14 @@ const allowedImport = (file: string, specifier: string) => {
         "framework/audience",
         "framework/signed",
         "framework/internal",
+        "framework/read-batch",
         // Static widget page and bundles: reads files, never the database (see the module).
         "widget/host",
         // MCP connector client: reaches a connector URL only through the destination guard, never
         // the database (see the module).
         "assistant/connector-client",
+        // Link unfurl: the guarded fetch for route modules, no database (link-preview.test.ts pins its imports).
+        "support/link-fetch",
         "../openapi",
       ].includes(target) ||
       target.startsWith("../database/quills/schema/"))

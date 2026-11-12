@@ -26708,14 +26708,14 @@
         }
       }
     },
-    "/quills-public/{workspace}/widget/presence": {
+    "/quills-public/{workspace}/support/presence": {
       "get": {
-        "operationId": "getQuillsWidgetPresence",
+        "operationId": "getQuillsConversationPresence",
         "tags": [
           "Quills"
         ],
-        "summary": "Get the team's messenger availability",
-        "description": "withinOfficeHours follows the workspace office hours. agentsOnline is null: the API keeps no live agent presence, so it is unknown.",
+        "summary": "Get the team's availability for the portal support pages",
+        "description": "agentsOnline is true while a teammate who is not set to away has the inbox open. withinOfficeHours follows the workspace office hours. 404 while the portal or its support switch is off.",
         "security": [],
         "parameters": [
           {
@@ -26740,10 +26740,497 @@
                   "type": "object",
                   "properties": {
                     "agentsOnline": {
+                      "type": "boolean"
+                    },
+                    "withinOfficeHours": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "agentsOnline",
+                    "withinOfficeHours"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Portal or support not found; Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/portal/embed-preview": {
+      "get": {
+        "operationId": "getQuillsEmbedPreview",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get an embed preview card for the portal",
+        "description": "`id` is the post, changelog entry or ticket ID, or the article slug (visible ASCII). A record the caller may not see, or that does not exist, answers unavailable: true. A ticket shows only to its requester.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "post",
+                "changelog",
+                "article",
+                "ticket"
+              ]
+            },
+            "required": true,
+            "name": "kind",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^[\\x21-\\x7e]+$"
+            },
+            "required": true,
+            "name": "id",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The card, or unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "unavailable": {
+                      "type": "boolean"
+                    },
+                    "post": {
                       "type": [
-                        "boolean",
+                        "object",
                         "null"
+                      ],
+                      "properties": {
+                        "title": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "postId": {
+                          "type": "string"
+                        },
+                        "excerpt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "voteCount": {
+                          "type": "number"
+                        },
+                        "statusName": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "statusColor": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "boardName": {
+                          "type": "string"
+                        },
+                        "boardSlug": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "title",
+                        "url",
+                        "postId",
+                        "excerpt",
+                        "voteCount",
+                        "statusName",
+                        "statusColor",
+                        "boardName",
+                        "boardSlug",
+                        "createdAt"
                       ]
+                    },
+                    "changelog": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "title": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "entryId": {
+                          "type": "string"
+                        },
+                        "publishedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "title",
+                        "url",
+                        "entryId",
+                        "publishedAt"
+                      ]
+                    },
+                    "article": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "title": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "articleId": {
+                          "type": "string"
+                        },
+                        "slug": {
+                          "type": "string"
+                        },
+                        "excerpt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "categorySlug": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "title",
+                        "url",
+                        "articleId",
+                        "slug",
+                        "excerpt",
+                        "categorySlug"
+                      ]
+                    },
+                    "ticket": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "title": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "ticketId": {
+                          "type": "string"
+                        },
+                        "conversationId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "reference": {
+                          "type": "string"
+                        },
+                        "stageLabel": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "createdAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "title",
+                        "url",
+                        "ticketId",
+                        "conversationId",
+                        "reference",
+                        "stageLabel",
+                        "createdAt"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "unavailable",
+                    "post",
+                    "changelog",
+                    "article",
+                    "ticket"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Blocked account or no portal access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Portal not found; Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/support/link-preview": {
+      "get": {
+        "operationId": "unfurlQuillsPortalLink",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get a link preview for a web page",
+        "description": "A private, loopback, link-local or metadata address, a redirect to one, more than 3 redirects, more than 5 seconds, a body that is not HTML, more than 2 previews at once in the API process, or any failure answers preview: null. Needs the portal and its support pages. At most 30 requests a minute for each client address. A private address is always refused here, also when the instance allows private destinations.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 2048,
+              "format": "uri"
+            },
+            "required": true,
+            "name": "url",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The preview, or null",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "preview": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "url": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "description": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "siteName": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "url",
+                        "title",
+                        "description",
+                        "siteName"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "preview"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Support surface not found; Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The caller changed during the request; retry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/widget/presence": {
+      "get": {
+        "operationId": "getQuillsWidgetPresence",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get the team's messenger availability",
+        "description": "agentsOnline is true while a teammate who is not set to away has the inbox open (sendQuillsAgentHeartbeat). withinOfficeHours follows the workspace office hours.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The team's availability",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "agentsOnline": {
+                      "type": "boolean"
                     },
                     "withinOfficeHours": {
                       "type": "boolean"
@@ -29560,6 +30047,437 @@
           },
           "404": {
             "description": "Ticket, conversation, ticket type or tickets surface not found; Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/widget/embed-preview": {
+      "get": {
+        "operationId": "getQuillsWidgetEmbedPreview",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get an embed preview card for the widget",
+        "description": "`id` is the post, changelog entry or ticket ID, or the article slug (visible ASCII). A record the caller may not see, or that does not exist, answers unavailable: true. A ticket shows only to its requester.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "post",
+                "changelog",
+                "article",
+                "ticket"
+              ]
+            },
+            "required": true,
+            "name": "kind",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^[\\x21-\\x7e]+$"
+            },
+            "required": true,
+            "name": "id",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The card, or unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "unavailable": {
+                      "type": "boolean"
+                    },
+                    "post": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "title": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "postId": {
+                          "type": "string"
+                        },
+                        "excerpt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "voteCount": {
+                          "type": "number"
+                        },
+                        "statusName": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "statusColor": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "boardName": {
+                          "type": "string"
+                        },
+                        "boardSlug": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "title",
+                        "url",
+                        "postId",
+                        "excerpt",
+                        "voteCount",
+                        "statusName",
+                        "statusColor",
+                        "boardName",
+                        "boardSlug",
+                        "createdAt"
+                      ]
+                    },
+                    "changelog": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "title": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "entryId": {
+                          "type": "string"
+                        },
+                        "publishedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "title",
+                        "url",
+                        "entryId",
+                        "publishedAt"
+                      ]
+                    },
+                    "article": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "title": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "articleId": {
+                          "type": "string"
+                        },
+                        "slug": {
+                          "type": "string"
+                        },
+                        "excerpt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "categorySlug": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "title",
+                        "url",
+                        "articleId",
+                        "slug",
+                        "excerpt",
+                        "categorySlug"
+                      ]
+                    },
+                    "ticket": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "title": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "ticketId": {
+                          "type": "string"
+                        },
+                        "conversationId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "reference": {
+                          "type": "string"
+                        },
+                        "stageLabel": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "createdAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "title",
+                        "url",
+                        "ticketId",
+                        "conversationId",
+                        "reference",
+                        "stageLabel",
+                        "createdAt"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "unavailable",
+                    "post",
+                    "changelog",
+                    "article",
+                    "ticket"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Valid widget session required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Blocked account or no portal access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Widget not found; Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/widget/link-preview": {
+      "get": {
+        "operationId": "unfurlQuillsWidgetLink",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get a link preview for a web page",
+        "description": "A private, loopback, link-local or metadata address, a redirect to one, more than 3 redirects, more than 5 seconds, a body that is not HTML, more than 2 previews at once in the API process, or any failure answers preview: null. Needs the widget and its messenger. At most 30 requests a minute for each client address. A private address is always refused here, also when the instance allows private destinations.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 2048,
+              "format": "uri"
+            },
+            "required": true,
+            "name": "url",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The preview, or null",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "preview": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "url": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "description": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "siteName": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "url",
+                        "title",
+                        "description",
+                        "siteName"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "preview"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Valid widget session required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Support surface not found; Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The caller changed during the request; retry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
             "content": {
               "application/json": {
                 "schema": {
@@ -97270,6 +98188,99 @@
         }
       }
     },
+    "/quills/{workspaceId}/support/email-channel/status": {
+      "get": {
+        "operationId": "getQuillsEmailChannelStatus",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get the status of the instance's email transport",
+        "description": "Names only, never a credential. provider is the outbound provider (console: none, mail is only logged), or null when more than one is configured. inboundConfigured is true when the inbound mail route accepts deliveries.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The email transport status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "provider": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "enum": [
+                        "ses",
+                        "smtp",
+                        "resend",
+                        "console",
+                        null
+                      ]
+                    },
+                    "fromAddress": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "inboundConfigured": {
+                      "type": "boolean"
+                    },
+                    "inboundDomain": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "provider",
+                    "fromAddress",
+                    "inboundConfigured",
+                    "inboundDomain"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
     "/quills/{workspaceId}/support/email-channel": {
       "get": {
         "operationId": "getQuillsEmailChannelConfig",
@@ -99602,6 +100613,125 @@
                     "slaByPolicy",
                     "slaHeatmap",
                     "slaTimeAfterMiss"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/support/reporting/attribute-breakdown": {
+      "get": {
+        "operationId": "attributeQuillsBreakdown",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Count conversations per value of one attribute",
+        "description": "Conversations created in [from, to), at most 400 days, without test conversations. A multi-select value counts the conversation once for each option. unset counts conversations with no value. values holds the 100 most frequent values, most frequent first; truncated is true when more exist.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "format": "date-time"
+            },
+            "required": true,
+            "name": "from",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "format": "date-time"
+            },
+            "required": true,
+            "name": "to",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-z0-9_.-]+$"
+            },
+            "required": true,
+            "name": "key",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conversation counts per attribute value",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "unset": {
+                      "type": "number"
+                    },
+                    "values": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "value": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "value",
+                          "count"
+                        ]
+                      }
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "unset",
+                    "values",
+                    "truncated"
                   ]
                 }
               }
@@ -114141,6 +115271,307 @@
           },
           "404": {
             "description": "Conversation not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/support/presence": {
+      "put": {
+        "operationId": "sendQuillsAgentHeartbeat",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Mark the caller as online in the support inbox",
+        "description": "Send it about every 30 seconds while the inbox is open. The mark lapses 90 seconds after the last heartbeat. A teammate set to away does not count as online.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The heartbeat is stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/support/link-preview": {
+      "get": {
+        "operationId": "unfurlQuillsLink",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get a link preview for a web page",
+        "description": "A private, loopback, link-local or metadata address, a redirect to one, more than 3 redirects, more than 5 seconds, a body that is not HTML, more than 2 previews at once in the API process, or any failure answers preview: null. The instance switch KANEO_ALLOW_PRIVATE_WEBHOOK_DESTINATIONS lets teammates preview private addresses, as for imports and webhooks.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 2048,
+              "format": "uri"
+            },
+            "required": true,
+            "name": "url",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The preview, or null",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "preview": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "url": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "description": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "siteName": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "url",
+                        "title",
+                        "description",
+                        "siteName"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "preview"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/read-batch": {
+      "post": {
+        "operationId": "readQuillsTogether",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Run up to 20 teammate reads in one request",
+        "description": "Each read names a teammate GET route by operationId, with its query values. A route with path parameters, native permissions, a project or a step outside its handler is not batchable (status 404), and neither is this route. Each result carries the status that the route itself answers this caller (200, 400, 403, 404 or 409) and, for 200, the route's JSON answer as text. One refused read does not fail the others; an unexpected server error fails the batch. An API key spends one request of its rate limit and quota on the whole batch.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reads": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "operationId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        },
+                        "query": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string",
+                            "maxLength": 2000
+                          }
+                        }
+                      },
+                      "required": [
+                        "operationId"
+                      ]
+                    },
+                    "minItems": 1,
+                    "maxItems": 20
+                  }
+                },
+                "required": [
+                  "reads"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "One result for each read, in order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "operationId": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "number"
+                          },
+                          "body": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "operationId",
+                          "status",
+                          "body"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "results"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
             "content": {
               "application/json": {
                 "schema": {
