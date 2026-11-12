@@ -73,6 +73,8 @@ describe("batchable reads", () => {
       { alsoRequires: ["update"] },
       { callerActions: true },
       { audience: "portal" },
+      { audience: "app" },
+      { sessionOnly: true },
       { method: "post" },
     ])
       expect([extra, batchable({ ...read, ...extra } as never)]).toEqual([

@@ -10,7 +10,8 @@ import { registry } from "./registry";
 // its handler. A route with path parameters, native permissions, a project resolver, `load`,
 // `after` or `prepare` has checks outside the handler, so it is never batchable. Nor is a route
 // with `alsoRequires` or `callerActions`: its single route checks the actions together in one
-// role, where the batch has only each action alone.
+// role, where the batch has only each action alone. Nor is a `sessionOnly` route: the batch can
+// come with an API key. An app route is no teammate route, so it is never batchable either.
 
 /** A teammate GET route whose checks all run in withQuillsRequest and in its handler. */
 export const batchable = (d: AnyQuillsRoute) =>
@@ -23,7 +24,8 @@ export const batchable = (d: AnyQuillsRoute) =>
   !d.after &&
   !d.prepare &&
   !d.alsoRequires?.length &&
-  !d.callerActions;
+  !d.callerActions &&
+  !d.sessionOnly;
 
 export type BatchedRead = {
   operationId: string;
