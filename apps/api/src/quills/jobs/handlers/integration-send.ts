@@ -10,6 +10,7 @@ import { provider, type DeliveredEvent } from "../../integrations/catalog";
 import {
   callFailed,
   clip,
+  hasScopes,
   statusOutcome,
   uncertain,
   type Content,
@@ -187,45 +188,77 @@ async function createStory(d: Delivery): Promise<Outcome> {
   };
 }
 
+/** A refresh that failed. The delivery was not sent: never uncertain. A refused refresh needs a reconnect. */
+const refreshFailed = (error: unknown): Outcome =>
+  error instanceof ProviderCallError &&
+  error.status !== null &&
+  error.status < 500
+    ? { state: "auth_required", errorCode: "authentication" }
+    : { state: "retry_wait", errorCode: "unavailable" };
+
 /**
  * A provider in providers/ sends through its `deliver`, only for an event in its `events`. A due
  * token is refreshed first; the new secrets return in the outcome and are stored in the settling
- * transaction. A refused call that `deliver` throws becomes an outcome here.
+ * transaction. A refused call that `deliver` throws becomes an outcome here. A 401 proves that
+ * nothing was made, so a provider with `refresh` refreshes once and sends once more.
  */
 async function deliverOAuth(d: Delivery): Promise<Outcome> {
   const registered = oauthProvider(d.provider);
   if (!registered?.deliver)
     return { state: "failed", errorCode: "provider_failed" };
   if (!registered.events.includes(d.type)) return { state: "succeeded" };
+  const config = d.config ?? {};
+  const app = d.app ?? {};
+  // A connection made without the write scopes: no request that the provider must refuse.
+  if (
+    registered.deliveryScopes &&
+    !hasScopes(config, registered.deliveryScopes)
+  )
+    return { state: "auth_required", errorCode: "write_access_required" };
   let secrets = d.credentials;
   let refreshed: Record<string, string> | undefined;
   try {
-    const fresh = await freshSecrets(d.provider, d.credentials, d.app ?? {});
+    const fresh = await freshSecrets(d.provider, d.credentials, app);
     secrets = fresh.secrets;
     refreshed = fresh.refreshed ?? undefined;
   } catch (error) {
-    // The delivery was not sent: never uncertain. A failed refresh needs a reconnect.
-    return error instanceof ProviderCallError &&
-      error.status !== null &&
-      error.status < 500
-      ? { state: "auth_required", errorCode: "authentication" }
-      : { state: "retry_wait", errorCode: "unavailable" };
+    return refreshFailed(error);
   }
   // A channel ID from a mapping goes into a provider URL path: refuse `..` and other shapes.
   if (!validTarget(d.provider, d.target))
     return { state: "failed", errorCode: "provider_failed", refreshed };
+  const send = () =>
+    registered.deliver!({
+      secrets,
+      config,
+      app,
+      target: d.target,
+      type: d.type,
+      content: d.content,
+    });
+  let refused: unknown;
   try {
-    return {
-      ...(await registered.deliver({
-        secrets,
-        config: d.config ?? {},
-        app: d.app ?? {},
-        target: d.target,
-        type: d.type,
-        content: d.content,
-      })),
-      refreshed,
+    return { ...(await send()), refreshed };
+  } catch (error) {
+    refused = error;
+  }
+  if (
+    !(refused instanceof ProviderCallError && refused.status === 401) ||
+    !registered.refresh ||
+    !secrets.refreshToken ||
+    refreshed
+  )
+    return { ...callFailed(refused), refreshed };
+  try {
+    secrets = refreshed = {
+      ...secrets,
+      ...(await registered.refresh(secrets, app)),
     };
+  } catch (error) {
+    return refreshFailed(error);
+  }
+  try {
+    return { ...(await send()), refreshed };
   } catch (error) {
     return { ...callFailed(error), refreshed };
   }

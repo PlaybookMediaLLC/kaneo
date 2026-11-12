@@ -71,6 +71,35 @@ export function callFailed(error: unknown, create = true): Outcome {
   return statusOutcome(error.status, !create);
 }
 
+/**
+ * The scopes that a token answer grants, space-separated, for `config.scopes`. The answer names them
+ * as a string or a list; an answer without them granted the requested scopes (RFC 6749, 5.1).
+ */
+export function grantedScopes(
+  token: Record<string, unknown>,
+  requested: string,
+) {
+  const scope = Array.isArray(token.scope)
+    ? token.scope.join(" ")
+    : token.scope;
+  return (typeof scope === "string" && scope.trim() ? scope : requested)
+    .split(/[\s,]+/)
+    .filter(Boolean)
+    .join(" ")
+    .slice(0, 1000);
+}
+
+/** True when `config.scopes` holds every scope in `needed`. */
+export const hasScopes = (
+  config: Record<string, unknown>,
+  needed: readonly string[],
+) => {
+  const granted = new Set(
+    (typeof config.scopes === "string" ? config.scopes : "").split(" "),
+  );
+  return needed.every((scope) => granted.has(scope));
+};
+
 /** A chat message for each delivered event (Slack, Discord). */
 export const chatText = (d: { type: DeliveredEvent; content: Content }) => {
   const { post, comment, statusName } = d.content;
