@@ -1,0 +1,412 @@
+import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
+import { and, eq, sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
+import { createId } from "@kaneo/ids";
+import { withQuillsWorkspace } from "../../database/quills/client";
+import { auditLog } from "../../database/quills/schema/audit-log";
+import { principal, settings } from "../../database/quills/schema/auth";
+import { events } from "../../database/quills/schema/events";
+import { importRuns } from "../../database/quills/schema/import-runs";
+import { jobQueue } from "../../database/quills/schema/job-queue";
+import * as kaneo from "../../database/schema";
+import quillsRouter from "../index";
+import {
+  contractApp,
+  contractEnv,
+  startContract,
+  stopContract,
+} from "../framework/contract";
+import { loadEvent } from "../jobs/fanout";
+import { signedWebhook } from "../jobs/handlers/webhook";
+import { exportWorkspaceArchive } from "../transfer/archive";
+import {
+  importWorkspaceArchive,
+  prepareArchive,
+} from "../transfer/import-archive";
+import { brandingReceipt } from "./branding";
+import { developerReceipt } from "./developer";
+import { labsReceipt } from "./labs";
+import { portalReceipt } from "./portal";
+import { widgetReceipt } from "./widget";
+
+let pool: Pool;
+vi.mock("../../database/index", () => ({
+  getDatabasePool: () => pool,
+  get schema() {
+    return kaneo;
+  },
+  default: new Proxy(
+    {},
+    {
+      get(_target, property) {
+        const db = drizzle(pool, { schema: kaneo });
+        const value = Reflect.get(db, property);
+        return typeof value === "function" ? value.bind(db) : value;
+      },
+    },
+  ),
+}));
+vi.mock("../../storage/s3", async (original) => ({
+  ...(await original<typeof import("../../storage/s3")>()),
+  verifyPrivateObjectExists: vi.fn(async () => {}),
+}));
+const url = process.env.QUILLS_TEST_DATABASE_URL;
+const app = contractApp(quillsRouter);
+const member = `receipts_member_${Date.now().toString(36)}`;
+const target = `receipts_target_${Date.now().toString(36)}`;
+
+async function call(
+  method: string,
+  path: string,
+  body?: unknown,
+  as?: string,
+  workspaceId = contractEnv().a,
+) {
+  const res = await app.request(`/quills/${workspaceId}${path}`, {
+    method,
+    headers: {
+      "x-test-user": as ?? contractEnv().owner,
+      ...(body !== undefined && { "content-type": "application/json" }),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await res.text();
+  return { status: res.status, text, body: JSON.parse(text || "null") };
+}
+const undo = (receiptId: string, workspaceId?: string) =>
+  call(
+    "POST",
+    `/settings/receipts/${receiptId}/undo`,
+    undefined,
+    undefined,
+    workspaceId,
+  );
+const inA = <T>(
+  work: Parameters<ReturnType<typeof contractEnv>["scoped"]>[1],
+) => contractEnv().scoped(contractEnv().a, work) as Promise<T>;
+/** The audit row of a receipt: its metadata, as stored. */
+const receiptRow = (id: string) =>
+  inA<{ metadata: unknown; occurredAt: Date; eventType: string }[]>((db) =>
+    db
+      .select({
+        metadata: auditLog.metadata,
+        occurredAt: auditLog.occurredAt,
+        eventType: auditLog.eventType,
+      })
+      .from(auditLog)
+      .where(eq(auditLog.id, id as never)),
+  );
+
+describe.skipIf(!url)("Quills settings receipts and undo", () => {
+  beforeAll(async () => {
+    pool = new Pool({ connectionString: url, max: 5 });
+    await startContract(pool, url!);
+    const env = contractEnv();
+    await env.db.insert(kaneo.userTable).values({
+      id: member,
+      name: member,
+      email: `${member}@example.test`,
+    });
+    await env.db.insert(kaneo.workspaceUserTable).values({
+      workspaceId: env.a,
+      userId: member,
+      role: "member",
+      joinedAt: new Date(),
+    });
+    await env.db.insert(kaneo.workspaceTable).values({
+      id: target,
+      name: target,
+      slug: target,
+      createdAt: new Date(),
+    });
+    await env.db.insert(kaneo.workspaceUserTable).values({
+      workspaceId: target,
+      userId: env.owner,
+      role: "owner",
+      joinedAt: new Date(),
+    });
+  }, 120000);
+  afterAll(async () => {
+    await pool.query("DELETE FROM public.workspace WHERE id = $1", [target]);
+    await pool.query("DELETE FROM public.workspace_member WHERE user_id = $1", [
+      member,
+    ]);
+    await pool.query('DELETE FROM public."user" WHERE id = $1', [member]);
+    await stopContract();
+  });
+
+  it("refuses a receipt that came in with a workspace import", async () => {
+    const env = contractEnv();
+    const write = await call("PUT", "/settings/labs", { statusPage: true });
+    expect(write.status).toBe(200);
+    const receiptId = write.body.receiptId as string;
+    const archive = await withQuillsWorkspace(
+      { workspaceId: env.a, userId: env.owner },
+      (tx) => exportWorkspaceArchive(tx, env.a),
+    );
+    // The import maps each teammate principal of A to a member of the target.
+    const teammates = (
+      await pool.query<{ id: string }>(
+        "SELECT kaneo_user_id AS id FROM quills.principal WHERE workspace_id = $1 AND kaneo_user_id IS NOT NULL",
+        [env.a],
+      )
+    ).rows.map((row) => row.id);
+    const members = teammates.map((id) => ({ id, name: id, image: null }));
+    for (const id of teammates.filter((id) => id !== env.owner))
+      await env.db.insert(kaneo.workspaceUserTable).values({
+        workspaceId: target,
+        userId: id,
+        role: "member",
+        joinedAt: new Date(),
+      });
+    await withQuillsWorkspace(
+      { workspaceId: target, userId: env.owner },
+      (tx, actor) =>
+        importWorkspaceArchive(
+          tx,
+          actor,
+          prepareArchive(archive, {}, target, members),
+          members,
+          { name: target, slug: target },
+        ),
+      { exclusiveWorkspace: true },
+    );
+    // The receipt row is in the target now, under the same ID.
+    const copied = await withQuillsWorkspace(
+      { workspaceId: target, userId: env.owner },
+      (tx) =>
+        tx
+          .select({ id: auditLog.id })
+          .from(auditLog)
+          .where(eq(auditLog.id, receiptId as never)),
+    );
+    expect(copied).toHaveLength(1);
+    const res = await undo(receiptId, target);
+    expect(res.status).toBe(409);
+    expect(res.body.message).toBe("This change came with a workspace import.");
+
+    // The same rule in the source workspace: an archive import after the write dates it out.
+    const again = await call("PUT", "/settings/labs", { statusPage: false });
+    await inA(async (db, actor) =>
+      db.insert(importRuns).values({
+        source: "api",
+        fileName: "quills-workspace.json",
+        initiatedByPrincipalId: actor.principalId,
+        status: "completed",
+      }),
+    );
+    expect((await undo(again.body.receiptId)).status).toBe(409);
+    // A CSV import is not a workspace import.
+    const later = await call("PUT", "/settings/labs", { statusPage: true });
+    await inA(async (db, actor) =>
+      db.insert(importRuns).values({
+        source: "csv",
+        fileName: "posts.csv",
+        initiatedByPrincipalId: actor.principalId,
+      }),
+    );
+    expect((await undo(later.body.receiptId)).status).toBe(200);
+  });
+
+  it("keeps non-allowlisted fields out of every area's receipt and undoes each area", async () => {
+    const env = contractEnv();
+    const secret = (await call("POST", "/settings/widget/secret")).body
+      .secret as string;
+    await call("POST", "/settings/widget/install-code");
+    await inA((db) =>
+      db.update(settings).set({
+        logoKey: "logo-object-key",
+        widgetHeroKey: "hero-object-key",
+        portalConfig: sql`jsonb_set(coalesce(nullif(${settings.portalConfig}, ''), '{}')::jsonb, '{access}', '{"visibility":"public","allowedDomains":["access-domain.example"]}')::text`,
+        developerConfig: JSON.stringify({ unlisted: "developer-unlisted" }),
+      }),
+    );
+    const cases = [
+      [
+        "portal",
+        portalReceipt,
+        { allowAnonymous: true, nav: [{ id: "n1", type: "feedback" }] },
+      ],
+      [
+        "branding",
+        brandingReceipt,
+        { customCss: ".a{color:red}", headerDisplayName: "Shop" },
+      ],
+      [
+        "widget",
+        widgetReceipt,
+        {
+          enabled: true,
+          tabs: { help: true },
+          home: { greeting: "Hi", gradient: { from: "#000000" } },
+        },
+      ],
+      ["developer", developerReceipt, { mcpEnabled: false }],
+      ["labs", labsReceipt, { helpCenter: true }],
+    ] as const;
+    for (const [area, allowlist, body] of cases) {
+      const before = (await call("GET", `/settings/${area}`)).body;
+      const write = await call("PUT", `/settings/${area}`, body);
+      expect(write.status).toBe(200);
+      expect(write.body.receiptId).toMatch(/^audit_/);
+      expect(write.body).not.toHaveProperty("receipt");
+      const [row] = await receiptRow(write.body.receiptId);
+      const receipt = (row!.metadata as { receipt: Record<string, object> })
+        .receipt;
+      expect(receipt.area).toBe(area);
+      for (const key of Object.keys({ ...receipt.before, ...receipt.after }))
+        expect(allowlist).toContain(key);
+      const text = JSON.stringify(row!.metadata);
+      for (const hidden of [
+        secret,
+        "logo-object-key",
+        "hero-object-key",
+        "access-domain.example",
+        "developer-unlisted",
+        env.a,
+      ])
+        expect(text).not.toContain(hidden);
+      const res = await undo(write.body.receiptId);
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({
+        id: write.body.receiptId,
+        area,
+        undoneAt: expect.any(String),
+      });
+      expect((await call("GET", `/settings/${area}`)).body).toEqual(before);
+    }
+    // Undo restores only allowlisted fields: the keys that no route here writes stay.
+    const [stored] = await inA<(typeof settings.$inferSelect)[]>((db) =>
+      db.select().from(settings),
+    );
+    expect(stored!.logoKey).toBe("logo-object-key");
+    expect(stored!.widgetSecret).toBe(secret);
+    expect(stored!.portalConfig).toContain("access-domain.example");
+    await inA((db) =>
+      db.update(settings).set({ logoKey: null, widgetHeroKey: null }),
+    );
+  });
+
+  it("refuses a second undo and a stale receipt, and never edits the receipt row", async () => {
+    const first = await call("PUT", "/settings/portal", { enabled: true });
+    const other = await call("PUT", "/settings/portal", { openSignup: true });
+    const [receiptBefore] = await receiptRow(first.body.receiptId);
+    // A later change of another field does not block the undo.
+    expect((await undo(first.body.receiptId)).status).toBe(200);
+    expect(await receiptRow(first.body.receiptId)).toEqual([receiptBefore]);
+    const [undone] = await inA<{ metadata: unknown }[]>((db) =>
+      db
+        .select({ metadata: auditLog.metadata })
+        .from(auditLog)
+        .where(
+          and(
+            eq(auditLog.eventType, "settings.undone"),
+            eq(auditLog.targetId, first.body.receiptId),
+          ),
+        ),
+    );
+    expect(undone!.metadata).toEqual({
+      receipt: {
+        area: "portal",
+        before: { "portalConfig.enabled": true },
+        after: (receiptBefore!.metadata as { receipt: { before: object } })
+          .receipt.before,
+      },
+    });
+    const twice = await undo(first.body.receiptId);
+    expect(twice.status).toBe(409);
+    expect(twice.body.message).toBe("This change was already undone.");
+
+    // A later write of the same field makes the earlier receipt stale, even after its undo.
+    const a = await call("PUT", "/settings/portal", { allowAnonymous: true });
+    const b = await call("PUT", "/settings/portal", { allowAnonymous: false });
+    expect((await undo(a.body.receiptId)).status).toBe(409);
+    expect((await undo(b.body.receiptId)).status).toBe(200);
+    expect((await undo(a.body.receiptId)).status).toBe(409);
+    expect((await undo(other.body.receiptId)).status).toBe(200);
+
+    // A change with no receipt (website branding writes the theme itself) also makes it stale.
+    const theme = await call("PUT", "/settings/branding", {
+      theme: { preset: "ocean" },
+    });
+    await inA((db) =>
+      db
+        .update(settings)
+        .set({ brandingConfig: JSON.stringify({ preset: "forest" }) }),
+    );
+    const stale = await undo(theme.body.receiptId);
+    expect(stale.status).toBe(409);
+    expect(stale.body.message).toBe(
+      "These settings changed since. Undo is unavailable.",
+    );
+  });
+
+  it("answers 404 for an unknown ID or a row that is no receipt, and 403 without manage_settings", async () => {
+    expect((await undo(createId("audit_log"))).status).toBe(404);
+    const [rotation] = await inA<{ id: string }[]>((db) =>
+      db
+        .select({ id: auditLog.id })
+        .from(auditLog)
+        .where(eq(auditLog.eventType, "settings.widget_secret_rotated"))
+        .limit(1),
+    );
+    expect((await undo(rotation!.id)).status).toBe(404);
+    const write = await call("PUT", "/settings/labs", { supportInbox: true });
+    const denied = await call(
+      "POST",
+      `/settings/receipts/${write.body.receiptId}/undo`,
+      undefined,
+      member,
+    );
+    expect(denied.status).toBe(403);
+    // Unchanged values write no receipt.
+    const same = await call("PUT", "/settings/labs", { supportInbox: true });
+    expect(same.body.receiptId).toBeNull();
+  });
+
+  it("never puts a receipt in an event row, a job, a webhook body or a response", async () => {
+    const marker = ".marker-before{color:red}";
+    await call("PUT", "/settings/branding", { customCss: marker });
+    const write = await call("PUT", "/settings/branding", {
+      customCss: ".marker-after{}",
+    });
+    const undone = await undo(write.body.receiptId);
+    expect(undone.status).toBe(200);
+    const audits = await call("GET", "/audit-events?limit=100");
+    for (const text of [write.text, undone.text, audits.text])
+      expect(text).not.toContain("marker-before");
+    const leaked = await inA<unknown[]>(async (db) => {
+      const rows = await db
+        .select({ eventId: events.eventId })
+        .from(events)
+        .where(
+          sql`${events.type} in ('settings.branding_updated', 'settings.undone')`,
+        );
+      const bodies = [];
+      for (const { eventId } of rows)
+        bodies.push(
+          signedWebhook((await loadEvent(db, eventId))!, "secret", "0").body,
+        );
+      return [
+        bodies,
+        await db.select({ payload: events.payload }).from(events),
+        await db.select({ payload: jobQueue.payload }).from(jobQueue),
+      ];
+    });
+    expect(JSON.stringify(leaked)).not.toMatch(
+      /marker-before|marker-after|receipt/,
+    );
+    // The audit rows hold both.
+    const [row] = await receiptRow(write.body.receiptId);
+    expect(JSON.stringify(row!.metadata)).toContain("marker-before");
+    expect(
+      await inA((db) =>
+        db
+          .select({ id: principal.id })
+          .from(principal)
+          .where(eq(principal.kaneoUserId, contractEnv().owner)),
+      ),
+    ).toHaveLength(1);
+  });
+});

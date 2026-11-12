@@ -6,6 +6,7 @@ import branding from "./branding";
 import developer from "./developer";
 import labs, { resolveFlags } from "./labs";
 import portal from "./portal";
+import receipts from "./receipts";
 import widget from "./widget";
 
 const overview = defineQuillsRoute({
@@ -55,4 +56,5 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", branding)
   .route("/", widget)
   .route("/", developer)
-  .route("/", labs);
+  .route("/", labs)
+  .route("/", receipts);
