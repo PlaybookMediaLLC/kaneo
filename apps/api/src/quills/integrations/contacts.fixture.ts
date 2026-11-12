@@ -36,8 +36,8 @@ const answers: Record<string, unknown> = {
   },
   "POST /api.hubapi.com/crm/v3/objects/deals/batch/read": {
     results: [
-      { id: "7", properties: { amount: "1000" } },
-      { id: "8", properties: { amount: "250" } },
+      { id: "7", properties: { amount_in_home_currency: "1000" } },
+      { id: "8", properties: { amount_in_home_currency: "250" } },
     ],
   },
   "POST /api.intercom.io/auth/eagle/token": {
@@ -49,11 +49,20 @@ const answers: Record<string, unknown> = {
       {
         id: "6501",
         name: "Ada Contract",
-        companies: { data: [{ name: "Acme" }] },
+        // References without names, as the search answers them.
+        companies: { type: "list", data: [{ type: "company", id: "c1" }] },
         custom_attributes: { plan: "pro" },
-        tags: { data: [{ name: "vip" }] },
+        tags: { type: "list", data: [{ type: "tag", id: "t1" }] },
       },
     ],
+  },
+  "GET /api.intercom.io/contacts/6501/companies": {
+    type: "list",
+    data: [{ type: "company", id: "c1", name: "Acme" }],
+  },
+  "GET /api.intercom.io/contacts/6501/tags": {
+    type: "list",
+    data: [{ type: "tag", id: "t1", name: "vip" }],
   },
   "POST /contract.zendesk.com/oauth/tokens": {
     access_token: "zendesk-contract-token",

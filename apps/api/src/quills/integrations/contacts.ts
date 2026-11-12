@@ -48,7 +48,7 @@ const searchContact = defineQuillsRoute({
   operationId: "searchQuillsIntegrationContact",
   summary: "Look up a contact by email in a CRM connection",
   description:
-    "Sends the email to the connected provider and returns its first matching record, with selected fields only. Calls the provider. Only for a provider with contact lookup (HubSpot, Intercom, Zendesk, Salesforce); 409 otherwise.",
+    "Sends the email to the connected provider and returns its first matching record, with selected fields only. Calls the provider. Only for an OAuth connection with contact lookup (HubSpot, Intercom, Zendesk, Salesforce): another OAuth connection gives 409, and a connection that is not OAuth gives 404. The customer context reads Freshdesk and Stripe.",
   // The lookup sends an email to the connected account and returns its records: viewers may not.
   action: "update",
   params: integrationParams,
@@ -57,7 +57,7 @@ const searchContact = defineQuillsRoute({
   responseDescription: "The matching contact, or null",
   errors: {
     403: "Insufficient permission",
-    404: "Integration not found",
+    404: "Integration not found, or not an OAuth connection",
     409: "Reconnect the integration, or it has no contact lookup",
     502: "The provider could not be reached",
   },

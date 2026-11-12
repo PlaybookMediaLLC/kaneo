@@ -86523,7 +86523,7 @@
           "Quills"
         ],
         "summary": "Look up a contact by email in a CRM connection",
-        "description": "Sends the email to the connected provider and returns its first matching record, with selected fields only. Calls the provider. Only for a provider with contact lookup (HubSpot, Intercom, Zendesk, Salesforce); 409 otherwise.",
+        "description": "Sends the email to the connected provider and returns its first matching record, with selected fields only. Calls the provider. Only for an OAuth connection with contact lookup (HubSpot, Intercom, Zendesk, Salesforce): another OAuth connection gives 409, and a connection that is not OAuth gives 404. The customer context reads Freshdesk and Stripe.",
         "parameters": [
           {
             "schema": {
@@ -86594,7 +86594,7 @@
             }
           },
           "404": {
-            "description": "Integration not found",
+            "description": "Integration not found, or not an OAuth connection",
             "content": {
               "application/json": {
                 "schema": {

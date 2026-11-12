@@ -15,10 +15,8 @@ import {
 // The help desk's own host: one validated DNS label and the fixed Zendesk suffix.
 const subdomain = /[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?/;
 const hosts = /^[a-z0-9-]+\.zendesk\.com$/;
-const bearer = (token: string) => ({
-  authorization: `Bearer ${token}`,
-  accept: "application/json",
-});
+// The lookup reads users and their organizations only.
+const scope = "users:read organizations:read";
 /** The stored subdomain, checked again before it enters a host. A changed value asks for a reconnect. */
 const desk = (config: Record<string, unknown>) => {
   const value = text(config.subdomain);
@@ -47,7 +45,7 @@ export const zendesk = {
       response_type: "code",
       redirect_uri: redirectUri,
       state,
-      scope: "read",
+      scope,
     })}`,
   exchange: async (code, redirectUri, creds, fields) => {
     const base = desk(fields);
@@ -66,7 +64,7 @@ export const zendesk = {
             client_id: creds.clientId,
             client_secret: creds.clientSecret,
             redirect_uri: redirectUri,
-            scope: "read",
+            scope,
           }),
         },
         hosts,
@@ -86,7 +84,10 @@ export const zendesk = {
   statuses: [],
   contact: async (secrets, config, email) => {
     const base = desk(config);
-    const headers = bearer(secrets.accessToken ?? "");
+    const headers = {
+      authorization: `Bearer ${secrets.accessToken ?? ""}`,
+      accept: "application/json",
+    };
     // The search also matches names and parts of addresses: keep only the user with this email.
     const user = list(
       record(

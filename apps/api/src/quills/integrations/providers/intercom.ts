@@ -74,13 +74,14 @@ export const intercom = {
   destinations: async () => [],
   statuses: [],
   contact: async (secrets, _config, email) => {
+    const headers = bearer(secrets.accessToken ?? "");
     const [found] = list(
       record(
         await providerJson(
           "https://api.intercom.io/contacts/search",
           {
             method: "POST",
-            headers: bearer(secrets.accessToken ?? ""),
+            headers,
             body: JSON.stringify({
               query: { field: "email", operator: "=", value: email },
               pagination: { per_page: 1 },
@@ -93,12 +94,27 @@ export const intercom = {
     const id = text(found?.id);
     if (!found || !/^[A-Za-z0-9]{1,64}$/.test(id)) return null;
     const plan = record(found.custom_attributes).plan;
-    const tags = list(record(found.tags).data)
-      .map((tag) => text(record(tag).name))
-      .filter(Boolean);
+    // The search gives company and tag references without names. Read the names, both at once; a
+    // failed read leaves its field out.
+    const names = (kind: "companies" | "tags") =>
+      providerJson(
+        `https://api.intercom.io/contacts/${id}/${kind}`,
+        { headers },
+        hosts,
+      )
+        .then((answer) =>
+          list(record(answer).data)
+            .map((item) => text(record(item).name))
+            .filter(Boolean),
+        )
+        .catch(() => [] as string[]);
+    const [companies, tags] = await Promise.all([
+      names("companies"),
+      names("tags"),
+    ]);
     return {
       name: text(found.name) || null,
-      company: text(record(list(record(found.companies).data)[0]).name) || null,
+      company: companies[0] ?? null,
       // "_" opens the contact in the signed-in teammate's current app.
       url: `https://app.intercom.com/a/apps/_/users/${id}`,
       fields: [

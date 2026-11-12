@@ -43,12 +43,15 @@ async function token(values: Record<string, string>) {
   );
 }
 
-/** Up to five deals of a contact, with their amounts. A failed deal read leaves the deal fields out. */
+/**
+ * The amounts of a contact's deals (at most 100, one batch read) in the account's currency: the
+ * `amount` of a deal can be in another currency. A failed deal read leaves the deal fields out.
+ */
 async function deals(accessToken: string, contactId: string) {
   const ids = list(
     record(
       await providerJson(
-        `${api}/crm/v3/objects/contacts/${contactId}/associations/deals`,
+        `${api}/crm/v3/objects/contacts/${contactId}/associations/deals?limit=100`,
         { headers: bearer(accessToken) },
         hosts,
       ),
@@ -56,7 +59,7 @@ async function deals(accessToken: string, contactId: string) {
   )
     .map((deal) => recordId(record(deal).id))
     .filter((id): id is string => id !== null)
-    .slice(0, 5);
+    .slice(0, 100);
   if (!ids.length) return [];
   return list(
     record(
@@ -66,14 +69,18 @@ async function deals(accessToken: string, contactId: string) {
           method: "POST",
           headers: bearer(accessToken),
           body: JSON.stringify({
-            properties: ["amount"],
+            properties: ["amount_in_home_currency"],
             inputs: ids.map((id) => ({ id })),
           }),
         },
         hosts,
       ),
     ).results,
-  ).map((deal) => Number(text(record(record(deal).properties).amount)) || 0);
+  ).map(
+    (deal) =>
+      Number(text(record(record(deal).properties).amount_in_home_currency)) ||
+      0,
+  );
 }
 
 export const hubspot = {
@@ -197,8 +204,8 @@ export const hubspot = {
         ...(total
           ? [
               {
-                label: "Deal value",
-                value: `$${total.toLocaleString("en-US")}`,
+                label: "Deal value (account currency)",
+                value: total.toLocaleString("en-US"),
               },
             ]
           : []),

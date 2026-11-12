@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq } from "drizzle-orm";
 import { Pool } from "pg";
+import { principal, user } from "../../database/quills/schema/auth";
 import { integrations } from "../../database/quills/schema/integrations";
 import * as kaneo from "../../database/schema";
 import { encryptSecret } from "../../notification-preferences/secrets";
@@ -14,6 +15,7 @@ import {
   stopContract,
   type ContractEnv,
 } from "../framework/contract";
+import { openCredentials } from "../framework/integration-config";
 import { mintOAuthState } from "../framework/signed";
 import quillsRouter from "../index";
 import publicRouter from "../public";
@@ -48,6 +50,7 @@ vi.mock("../../utils/get-user-session", () => ({
 const url = process.env.QUILLS_TEST_DATABASE_URL;
 const EMAIL = "ada@example.test";
 const KEYED_EMAIL = "keyed.customer@example.test";
+const CONTEXT_EMAIL = "context.customer@example.test";
 
 describe("contact bounds", () => {
   it("selects, trims and bounds the fields of a provider contact", () => {
@@ -167,13 +170,34 @@ describe.skipIf(!url)("CRM providers and customer context", () => {
       expect(row!.config).toMatchObject(config);
       expect(row!.secrets).not.toMatch(/contract-token/);
     }
-    // HubSpot keeps the refresh token and the expiry, so a due token refreshes.
-    const hubspot = providerCalls.find(
-      (call) => call.path === "/api.hubapi.com/oauth/v1/token",
-    );
-    expect(new URLSearchParams(hubspot!.body).get("grant_type")).toBe(
-      "authorization_code",
-    );
+    // HubSpot and Salesforce keep the refresh token and an expiry, so a due token refreshes.
+    for (const type of ["hubspot", "salesforce"]) {
+      const secrets = openCredentials((await stored(type))!.secrets);
+      expect(secrets, type).toMatchObject({
+        accessToken: `${type}-contract-token`,
+        refreshToken: `${type}-contract-refresh`,
+      });
+      expect(Date.parse(secrets!.expiresAt!), type).toBeGreaterThan(Date.now());
+    }
+    // A Salesforce app without the refresh_token scope: no expiry, so no refresh that must fail.
+    const route = "POST /login.salesforce.com/services/oauth2/token";
+    providerOverrides.set(route, {
+      status: 200,
+      body: {
+        access_token: "salesforce-contract-token",
+        instance_url: "https://contract.my.salesforce.com",
+      },
+    });
+    try {
+      expect((await callback("salesforce")).status).toBe(200);
+    } finally {
+      providerOverrides.delete(route);
+    }
+    expect(openCredentials((await stored("salesforce"))!.secrets)).toEqual({
+      accessToken: "salesforce-contract-token",
+      refreshToken: "",
+      expiresAt: "",
+    });
   });
 
   it("checks the Zendesk subdomain at connect and in the signed state", async () => {
@@ -197,7 +221,9 @@ describe.skipIf(!url)("CRM providers and customer context", () => {
       ((await res.json()) as { authorizeUrl: string }).authorizeUrl,
     );
     expect(authorize.hostname).toBe("contract.zendesk.com");
-    expect(authorize.searchParams.get("scope")).toBe("read");
+    expect(authorize.searchParams.get("scope")).toBe(
+      "users:read organizations:read",
+    );
 
     const state = authorize.searchParams.get("state")!;
     const [payload, signature] = state.split(".");
@@ -276,14 +302,41 @@ describe.skipIf(!url)("CRM providers and customer context", () => {
     } finally {
       providerOverrides.delete(route);
     }
-    const query = providerCalls
-      .slice(from)
-      .find((call) => call.path.includes("/services/data/"));
+    const calls = providerCalls.slice(from);
+    const refresh = new URLSearchParams(
+      calls.find((call) => call.path.endsWith("/oauth2/token"))!.body,
+    );
+    expect(Object.fromEntries(refresh)).toMatchObject({
+      grant_type: "refresh_token",
+      client_id: "client-salesforce",
+      refresh_token: "old-refresh",
+    });
+    const query = calls.find((call) => call.path.includes("/services/data/"));
     expect(query!.path).toMatch(/^\/contract\.my\.salesforce\.com\//);
     expect(query!.authorization).toBe("Bearer salesforce-new-access");
-    expect((await stored("salesforce"))!.config).toMatchObject({
+    const row = await stored("salesforce");
+    expect(row!.config).toMatchObject({
       instanceUrl: "https://contract.my.salesforce.com",
     });
+    // The handler stored the refreshed token; Salesforce kept its refresh token.
+    expect(openCredentials(row!.secrets)).toMatchObject({
+      accessToken: "salesforce-new-access",
+      refreshToken: "old-refresh",
+    });
+
+    // The email is a SOQL string literal: a quote in it is escaped.
+    const quoted = providerCalls.length;
+    expect(
+      (
+        await get(
+          `/integrations/${id}/contacts?email=${encodeURIComponent("o'brien@example.test")}`,
+        )
+      ).status,
+    ).toBe(200);
+    const soql = new URL(
+      `http://x${providerCalls.slice(quoted).find((call) => call.path.includes("/query"))!.path}`,
+    ).searchParams.get("q");
+    expect(soql).toContain("WHERE Email = 'o\\'brien@example.test' LIMIT 1");
   });
 
   it("finds a contact, selects its fields and answers no match or a malformed answer with null", async () => {
@@ -291,6 +344,7 @@ describe.skipIf(!url)("CRM providers and customer context", () => {
       type: "hubspot",
       config: { portalId: "42" },
     });
+    const from = providerCalls.length;
     const found = await get(`/integrations/${id}/contacts?email=${EMAIL}`);
     expect(found).toEqual({
       status: 200,
@@ -301,12 +355,19 @@ describe.skipIf(!url)("CRM providers and customer context", () => {
           url: "https://app.hubspot.com/contacts/42/contact/101",
           fields: [
             { label: "Lifecycle", value: "customer" },
-            { label: "Deal value", value: "$1,250" },
+            { label: "Deal value (account currency)", value: "1,250" },
             { label: "Deals", value: "2" },
           ],
         },
       },
     });
+    // The search filters on the exact email.
+    const search = providerCalls
+      .slice(from)
+      .find((call) => call.path.endsWith("/contacts/search"));
+    expect(JSON.parse(search!.body).filterGroups).toEqual([
+      { filters: [{ propertyName: "email", operator: "EQ", value: EMAIL }] },
+    ]);
     const route = "POST /api.hubapi.com/crm/v3/objects/contacts/search";
     try {
       for (const body of [
@@ -386,6 +447,107 @@ describe.skipIf(!url)("CRM providers and customer context", () => {
       (await get(`/integrations/${id}/contacts?email=${EMAIL}`)).status,
     ).toBe(409);
     expect(providerCalls.length).toBe(calls);
+  });
+
+  it("reads the Intercom company and tag names that the search gives only as references", async () => {
+    const id = await oauthConnection(env, env.a, { type: "intercom" });
+    expect(await get(`/integrations/${id}/contacts?email=${EMAIL}`)).toEqual({
+      status: 200,
+      body: {
+        contact: {
+          name: "Ada Contract",
+          company: "Acme",
+          url: "https://app.intercom.com/a/apps/_/users/6501",
+          fields: [
+            { label: "Plan", value: "pro" },
+            { label: "Tags", value: "vip" },
+          ],
+        },
+      },
+    });
+    // A failed name read leaves its field out; the contact still answers.
+    const route = "GET /api.intercom.io/contacts/6501/tags";
+    providerOverrides.set(route, { status: 500 });
+    try {
+      expect(
+        (await get(`/integrations/${id}/contacts?email=${EMAIL}`)).body.contact
+          .fields,
+      ).toEqual([{ label: "Plan", value: "pro" }]);
+    } finally {
+      providerOverrides.delete(route);
+    }
+  });
+
+  it("looks up the customer's own email, refreshes a due token and stores it", async () => {
+    await disconnectAll();
+    await platformCredentials(env, env.a, "hubspot");
+    await dueConnection("hubspot", {});
+    const person = await customer(env, env.a, { email: CONTEXT_EMAIL });
+    const searched = (from: number) =>
+      providerCalls
+        .slice(from)
+        .filter((call) => call.path.endsWith("/contacts/search"))
+        .map((call) => JSON.parse(call.body).filterGroups[0].filters[0].value);
+
+    let from = providerCalls.length;
+    const res = await get(`/people/${person}/context`);
+    expect(res.body.providers).toEqual([
+      expect.objectContaining({ integrationType: "hubspot", status: "found" }),
+    ]);
+    expect(searched(from)).toEqual([CONTEXT_EMAIL]);
+    const refresh = new URLSearchParams(
+      providerCalls
+        .slice(from)
+        .find((call) => call.path === "/api.hubapi.com/oauth/v1/token")!.body,
+    );
+    expect(Object.fromEntries(refresh)).toMatchObject({
+      grant_type: "refresh_token",
+      client_id: "client-hubspot",
+      refresh_token: "old-refresh",
+    });
+    expect(openCredentials((await stored("hubspot"))!.secrets)).toMatchObject({
+      accessToken: "hubspot-contract-token",
+      refreshToken: "hubspot-contract-refresh",
+    });
+
+    // A lead: its account email is a placeholder, so the lookup uses its contact email.
+    const lead = await customer(env, env.a, { lead: true });
+    const [lookedUp] = await env.scoped(env.a, (db) =>
+      db
+        .select({ contactEmail: principal.contactEmail })
+        .from(principal)
+        .where(eq(principal.id, lead as never)),
+    );
+    const route = "POST /api.hubapi.com/crm/v3/objects/contacts/search";
+    providerOverrides.set(route, { status: 200, body: { results: [] } });
+    from = providerCalls.length;
+    try {
+      expect((await get(`/people/${lead}/context`)).body.providers).toEqual([
+        expect.objectContaining({
+          integrationType: "hubspot",
+          status: "not_found",
+          error: null,
+          contact: null,
+        }),
+      ]);
+    } finally {
+      providerOverrides.delete(route);
+    }
+    expect(searched(from)).toEqual([lookedUp!.contactEmail]);
+
+    // A lead without a contact email has no address to look up: no entries, no calls.
+    await env.scoped(env.a, (db) =>
+      db
+        .update(principal)
+        .set({ contactEmail: null })
+        .where(eq(principal.id, lead as never)),
+    );
+    from = providerCalls.length;
+    expect(await get(`/people/${lead}/context`)).toEqual({
+      status: 200,
+      body: { providers: [] },
+    });
+    expect(providerCalls.length).toBe(from);
   });
 
   it("reads each connected provider for a customer; one failure does not fail the read", async () => {
@@ -516,6 +678,27 @@ describe.skipIf(!url)("CRM providers and customer context", () => {
       env.a,
       async (_db, actor) => actor.principalId,
     );
+    // The owner's portal profile has an email, but it belongs to a teammate, not a customer.
+    const profile = await env.scoped(env.a, async (db) => {
+      const [identity] = await db
+        .insert(user)
+        .values({
+          name: "Teammate profile",
+          email: "teammate.profile@example.test",
+          kaneoUserId: env.owner,
+        })
+        .returning({ id: user.id });
+      const [row] = await db
+        .insert(principal)
+        .values({
+          userId: identity!.id,
+          role: "user",
+          type: "user",
+          createdAt: new Date(),
+        })
+        .returning({ id: principal.id });
+      return row!.id;
+    });
     const foreign = await customer(env, env.b);
     const deleted = await customer(env, env.a);
     const removed = await app.request(`/quills/${env.a}/users/${deleted}`, {
@@ -524,7 +707,7 @@ describe.skipIf(!url)("CRM providers and customer context", () => {
     });
     expect(removed.status).toBe(200);
     const calls = providerCalls.length;
-    for (const principalId of [teammate, foreign, deleted])
+    for (const principalId of [teammate, profile, foreign, deleted])
       expect(await get(`/people/${principalId}/context`), principalId).toEqual({
         status: 404,
         body: expect.objectContaining({ message: "Person not found" }),
@@ -536,6 +719,7 @@ describe.skipIf(!url)("CRM providers and customer context", () => {
     const secrets = [
       EMAIL,
       KEYED_EMAIL,
+      CONTEXT_EMAIL,
       "contract-token",
       "contract-refresh",
       "salesforce-new-access",

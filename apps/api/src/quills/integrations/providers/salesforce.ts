@@ -76,11 +76,14 @@ export const salesforce = {
     const accessToken = text(answer.access_token);
     const instanceUrl = salesforceInstance(answer.instance_url);
     if (!accessToken || !instanceUrl) throw rejected();
+    const refreshToken = text(answer.refresh_token);
     return {
       secrets: {
         accessToken,
-        refreshToken: text(answer.refresh_token),
-        expiresAt: expiresAt(),
+        refreshToken,
+        // Without a refresh token (the app does not allow the scope), the token works until the
+        // org's session ends; then a lookup asks for a reconnect.
+        expiresAt: refreshToken ? expiresAt() : "",
       },
       workspaceName: "Salesforce",
       account: new URL(instanceUrl).hostname,
