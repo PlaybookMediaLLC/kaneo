@@ -128,6 +128,15 @@ describe("Workspace archive validation", () => {
     expect(result.tables.integrations![0]).toMatchObject({ status: "paused" });
   });
 
+  it("turns off an imported connector so the copilot calls it only after a manager enables it", () => {
+    const archive = base();
+    archive.tables.connectors = [
+      { id: "connector", enabled: true, assignments: { copilot: true } },
+    ];
+    const result = prepareArchive(archive, {}, "target", []);
+    expect(result.tables.connectors![0]).toMatchObject({ enabled: false });
+  });
+
   it("imports portal invites without a usable token and keeps the hero image key", () => {
     const archive = base();
     archive.tables.portal_invites = [
