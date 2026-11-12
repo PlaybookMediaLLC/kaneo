@@ -12,11 +12,13 @@ export const organizationName =
   /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,48}[A-Za-z0-9])?$/;
 
 /**
- * A project or work item type name in a channel: letters, digits, spaces and `_ . & ( ) -`, at most
- * 64 characters. It starts with a letter or digit, so it is never `.` or `..`.
+ * A project or work item type name in a channel, by Azure DevOps' own naming rules: at most 64
+ * characters, none of `\ / : * ? " ' < > ; # $ { } , + = [ ] |`, no `%` (the channel route refuses it)
+ * and no control or surrogate character. It does not start with `_`, `.` or a space, and does not end
+ * with `.` or a space, so it is never `.` or `..`.
  */
 const channelName =
-  /^[\p{L}\p{N}](?:[\p{L}\p{N} _.&()-]{0,62}[\p{L}\p{N}_)])?$/u;
+  /^(?![_. ])[^\\/:*?"'<>;#$%{},+=[\]|\p{Cc}\p{Cs}]{1,64}(?<![. ])$/u;
 
 /** A channel `<project>:<work item type>`. A project name has no `:`. Undefined when either name does not match. */
 function channelOf(target: string) {
