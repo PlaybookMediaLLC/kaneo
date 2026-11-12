@@ -16,21 +16,21 @@ const json = { "content-type": "application/json", accept: "application/json" };
 // A board ID is digits. The same rule keeps it valid as a channel ID.
 const id = /^[A-Za-z0-9]{1,30}$/;
 
-/** The `data` of one GraphQL query. Monday answers a failed query with 200 and `errors`, and no `data`. */
+/** The `data` of one GraphQL query. Monday answers a failed query with 200, `errors` and no `data`: 502. */
 async function graphql(accessToken: string, query: string) {
-  return record(
-    record(
-      await providerJson(
-        "https://api.monday.com/v2",
-        {
-          method: "POST",
-          headers: { ...json, authorization: accessToken },
-          body: JSON.stringify({ query }),
-        },
-        hosts,
-      ),
-    ).data,
+  const { data } = record(
+    await providerJson(
+      "https://api.monday.com/v2",
+      {
+        method: "POST",
+        headers: { ...json, authorization: accessToken },
+        body: JSON.stringify({ query }),
+      },
+      hosts,
+    ),
   );
+  if (!data || typeof data !== "object") throw new ProviderCallError(502);
+  return record(data);
 }
 
 export const monday = {

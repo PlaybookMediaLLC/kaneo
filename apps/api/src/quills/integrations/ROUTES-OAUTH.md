@@ -251,9 +251,11 @@ Missing (from `providers/README.md`, "Trello"):
   name with the GraphQL query `me`. The sealed secret is `accessToken`; Monday.com tokens do not
   expire.
 - Destinations: one kind, the boards (`boards(limit: 100, order_by: used_at)`). The route keeps only
-  IDs of 1 to 30 letters and digits. A failed GraphQL query (200 with `errors` and no `data`) is 502.
+  IDs of 1 to 30 letters and digits.
+- A failed GraphQL query (200 with `errors` and no `data`) is 502, for the connect and for the list.
 - Tests: `providers/monday.test.ts` (local provider server): connect with a sealed token, the limit
-  of 200 and the ID filter, a refused `kind`, and malformed answers (400 and 502 with fixed text).
+  of 200 and the ID filter, a refused `kind`, and malformed answers (400 on the token call, 502 for a
+  failed query on the connect and on the list, with fixed text).
 
 | Difference from the source | Reason |
 |---|---|

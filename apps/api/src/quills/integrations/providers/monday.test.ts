@@ -151,12 +151,15 @@ describe.skipIf(!url)("Monday.com provider with PostgreSQL", () => {
     }
 
     expect((await callback(env)).status).toBe(200);
-    // A failed GraphQL query: 200, `errors` and no `data`.
+    // A failed GraphQL query: 200, `errors` and no `data`. It fails the account read and the list.
     providerOverrides.set("POST /api.monday.com/v2", {
       status: 200,
       body: { errors: [{ message: "provider text" }] },
     });
     try {
+      const connect = await callback(env);
+      expect(connect.status).toBe(502);
+      expect(await connect.text()).not.toContain("provider text");
       const res = await destinations(env);
       expect(res.status).toBe(502);
       expect(res.body).toMatchObject({
