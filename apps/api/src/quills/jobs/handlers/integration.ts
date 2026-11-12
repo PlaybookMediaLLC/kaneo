@@ -42,6 +42,7 @@ import {
   type DeliveredEvent,
 } from "../../integrations/catalog";
 import { tokenFields } from "../../integrations/oauth-providers";
+import { oauthProvider } from "../../integrations/providers";
 import { systemMessage } from "../../support/ticket-view";
 import { loadEvent, type DeliveryEvent } from "../fanout";
 import { enqueueQuillsJob, finishQuillsJob } from "../queue";
@@ -512,6 +513,7 @@ async function claimOperation(db: Database, id: string): Promise<Claim> {
           status: integrations.status,
           connectedAt: integrations.connectedAt,
           secrets: integrations.secrets,
+          config: integrations.config,
         })
         .from(integrations)
         .where(eq(integrations.id, op.integrationId))
@@ -600,8 +602,9 @@ async function claimOperation(db: Database, id: string): Promise<Claim> {
     delivery: {
       provider: integration.type,
       credentials,
-      // OAuth providers: the workspace's OAuth app (a GitLab refresh, the Discord bot token).
-      app: ["gitlab", "discord"].includes(integration.type)
+      config: integration.config,
+      // A provider with an OAuth app (platform credentials): for a token refresh or a bot token.
+      app: oauthProvider(integration.type)?.credentials.length
         ? unseal(
             (
               await db
@@ -626,7 +629,7 @@ async function claimOperation(db: Database, id: string): Promise<Claim> {
 async function settle(db: Database, claim: Claimed, outcome: Outcome) {
   const now = new Date();
   const result = outcome.result ?? null;
-  // A GitLab token refreshed before the call: kept unless the connection changed meanwhile.
+  // A token refreshed for the call: kept unless the connection changed meanwhile.
   if (outcome.refreshed && isTypeId(claim.op.integrationId, "integration")) {
     const [live] = await db
       .select({
@@ -706,6 +709,7 @@ async function settle(db: Database, claim: Claimed, outcome: Outcome) {
         integrationId: live.id,
         integrationType: claim.op.provider,
         externalId: result.externalId,
+        externalDisplayId: result.externalDisplayId ?? null,
         externalUrl: result.externalUrl,
         syncScope,
         origin: "event",
@@ -720,7 +724,7 @@ async function settle(db: Database, claim: Claimed, outcome: Outcome) {
         integrationId: live.id,
         integrationType: claim.op.provider,
         externalId: result.externalId,
-        externalDisplayId: result.externalId,
+        externalDisplayId: result.externalDisplayId ?? result.externalId,
         externalUrl: result.externalUrl,
         syncScope,
         origin: "push",

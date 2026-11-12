@@ -1,5 +1,6 @@
 // Route-module helper: framework/boundaries.test.ts checks its imports like a module that uses ../framework/define-route.
 import { providerJson } from "../../framework/integration-config";
+import { callFailed, chatText } from "../delivery";
 import {
   form,
   formHeaders,
@@ -70,4 +71,29 @@ export const discord = {
       }));
   },
   statuses: [],
+  // A message for each delivered event, posted by the OAuth app's bot, with mentions off.
+  deliver: async (d) => {
+    if (!/^\d{1,30}$/.test(d.target))
+      return { state: "failed", errorCode: "provider_failed" };
+    try {
+      await providerJson(
+        `https://discord.com/api/v10/channels/${d.target}/messages`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bot ${d.app.botToken ?? ""}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            content: chatText(d),
+            allowed_mentions: { parse: [] },
+          }),
+        },
+      );
+    } catch (error) {
+      // A message is not a create: a 5xx waits for a retry.
+      return callFailed(error, false);
+    }
+    return { state: "succeeded" };
+  },
 } satisfies OAuthProvider;

@@ -3,6 +3,7 @@ import {
   ProviderCallError,
   providerJson,
 } from "../../framework/integration-config";
+import { callFailed, chatText, uncertain } from "../delivery";
 import {
   form,
   formHeaders,
@@ -82,4 +83,39 @@ export const slack = {
       }));
   },
   statuses: [],
+  // A message for each delivered event.
+  deliver: async (d) => {
+    let answer: { ok?: unknown; error?: unknown } | null;
+    try {
+      answer = (await providerJson("https://slack.com/api/chat.postMessage", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${d.secrets.accessToken ?? ""}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ channel: d.target, text: chatText(d) }),
+      })) as { ok?: unknown; error?: unknown } | null;
+    } catch (error) {
+      // A message is not a create: a 5xx waits for a retry.
+      return callFailed(error, false);
+    }
+    if (answer?.ok === true) return { state: "succeeded" };
+    // An unreadable answer, or an error that Slack says may have partly succeeded: it may have posted.
+    if (
+      !answer ||
+      ["internal_error", "fatal_error", "request_timeout"].includes(
+        String(answer.error),
+      )
+    )
+      return uncertain;
+    // Slack answers 200 with ok: false and an error name.
+    return [
+      "invalid_auth",
+      "token_revoked",
+      "account_inactive",
+      "not_authed",
+    ].includes(String(answer.error))
+      ? { state: "auth_required", errorCode: "authentication" }
+      : { state: "failed", errorCode: "provider_failed" };
+  },
 } satisfies OAuthProvider;

@@ -19,11 +19,11 @@ import { teams } from "./teams";
 import { zendesk } from "./zendesk";
 
 // The OAuth and key providers, one file each. To add a provider, add its file, its import above and
-// one entry below. The key is the integration type. The catalog entry, the connect route (oauth.ts)
-// and the token refresh in routes follow from this registry. Deliveries do not: the worker
-// (jobs/handlers/integration-send.ts) sends only for the providers it names. Until it sends for a
-// new provider, keep that provider's `events` empty. Declare each provider with `satisfies
-// OAuthProvider`, not a type annotation: an annotated OAuth provider drops out of OAuthProviderType.
+// one entry below. The key is the integration type. The catalog entry, the connect route (oauth.ts),
+// the token refresh and the deliveries of the worker (jobs/handlers/integration-send.ts) follow from
+// this registry. A provider without `deliver` keeps its `events` empty. Declare each provider with
+// `satisfies OAuthProvider`, not a type annotation: an annotated OAuth provider drops out of
+// OAuthProviderType.
 export const oauthProviders = {
   github,
   gitlab,
