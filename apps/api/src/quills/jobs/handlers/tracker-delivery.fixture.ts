@@ -498,8 +498,8 @@ export const describeDelivery = (
       }, 20_000);
 
       // A personal access token (Azure DevOps) has no refresh: no such test, rather than a skipped one.
-      if (t.token)
-        it("retries a refresh that got a 5xx, with nothing sent, within the job's limits", async () => {
+      for (const status of t.token ? [503, 429, 408] : [])
+        it(`retries a refresh that got a ${status}, with nothing sent, within the job's limits`, async () => {
           const id = await connect(t);
           await h.system(h.a, (db) =>
             db
@@ -512,7 +512,7 @@ export const describeDelivery = (
               })
               .where(eq(integrations.id, id as never)),
           );
-          answers(t.token!, { status: 503 });
+          answers(t.token!, { status });
           await created(await makePost());
           await h.drain(h.a);
           const [waiting] = await ops(id);

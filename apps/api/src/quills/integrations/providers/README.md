@@ -359,16 +359,15 @@ The code callback (`GET /oauth/{type}/callback`) does not take a fragment provid
 - **Teams** (`teams`): `hosts: /^(login\.microsoftonline|graph\.microsoft)\.com$/`. Teams uses refresh tokens.
   - `destinationKinds: { team: {}, channel: { parent: "team" } }`.
   - Channel IDs (`19:…@thread.tacv2`) fit the parent pattern, so a channel can also be a parent.
-  - Sending channel messages needs tenant admin consent and a bot registration. It is delivery, so it
-    is out of scope for #131. The connect and list entry points need only delegated Graph scopes
-    (`Team.ReadBasic.All`, `Channel.ReadBasic.All`, `offline_access`). The reference also asks for
-    `ChannelMessage.Send`; that scope is for delivery.
+  - Delivery (FU3c) uses the delegated `ChannelMessage.Send`, with no tenant admin consent and no bot
+    registration. A tenant that restricts user consent still needs one admin approval. Connect and
+    lists also use `Team.ReadBasic.All`, `Channel.ReadBasic.All` and `offline_access`.
   - **Delivery** (follow "Add delivery to a provider"). The source hook posts a message for every event,
     so `events` lists all three delivered events.
     - Target: `<team ID>:<channel ID>`, split at the first `:` (a team ID is a GUID with no `:`; a
       channel ID such as `19:abc@thread.tacv2` has `:` and `@`). The channel route already accepts
-      both. The rule: a GUID, `:`, then `19:` and 1 to 80 of `[A-Za-z0-9._-]`, `@thread.` and
-      `[a-z0-9]{1,10}`. The total is at most 100 characters (the mapping column).
+      both. The rule: a GUID, `:`, then `19:`, 1 to 200 of `[\w.=+-]`, `@thread.` and
+      `[a-z0-9]{1,20}`. The total is at most 100 characters (the mapping column).
     - Scopes: add `ChannelMessage.Send` to the requested scopes, store
       `config.scopes: grantedScopes(answer, scope)`, and set `deliveryScopes: ["ChannelMessage.Send"]`.
       A connection made before then gets the fixed reconnect state; say in the docs that it must
