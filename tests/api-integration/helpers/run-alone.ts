@@ -5,7 +5,8 @@ import { getDatabasePool } from "../../../apps/api/src/database";
 const DRAIN_LIMIT_MS = 30_000;
 
 /**
- * Runs `work` on its own client while no other query of this process runs.
+ * Runs `work` on its own client while no other query on the app pool runs.
+ * `work` must use only `client`: a query through the pool waits for `work`.
  *
  * The app finishes some work after it responds, for example the notification
  * for a new workspace. TRUNCATE locks its tables one at a time, so a query
@@ -28,10 +29,7 @@ export async function runAlone<T>(
 
   const original = pool.connect;
   const connect = original.bind(pool);
-  let open = () => {};
-  const opened = new Promise<void>((resolve) => {
-    open = resolve;
-  });
+  const { promise: opened, resolve: open } = Promise.withResolvers<void>();
   pool.connect = ((callback?: Parameters<typeof original>[0]) =>
     callback
       ? void opened.then(() => connect(callback))

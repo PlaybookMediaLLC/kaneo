@@ -1,4 +1,3 @@
-import { setTimeout as delay } from "node:timers/promises";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vite-plus/test";
 import db from "../../../apps/api/src/database";
@@ -10,29 +9,42 @@ describe("runAlone", () => {
     await resetTestDatabase();
     // Like the notification check: "user" first, then "task", which TRUNCATE
     // locks before "user".
+    const userLocked = Promise.withResolvers<void>();
     const appWork = db.transaction(async (tx) => {
       await tx.execute(sql`select 1 from "user" limit 0`);
+      userLocked.resolve();
       await tx.execute(sql`select pg_sleep(0.3)`);
       await tx.execute(sql`select 1 from task limit 0`);
     });
-    await delay(50);
+    await userLocked.promise;
 
-    await expect(
-      Promise.all([appWork, resetTestDatabase()]),
-    ).resolves.toBeDefined();
+    await Promise.all([appWork, resetTestDatabase()]);
   });
 
-  it("holds new queries until the work ends", async () => {
+  it("holds new queries and transactions until the work ends", async () => {
     const order: string[] = [];
-    let query: Promise<unknown> = Promise.resolve();
+    let held: Promise<unknown> = Promise.resolve();
 
     await runAlone(async (client) => {
-      query = db.execute(sql`select 1`).then(() => order.push("query"));
+      held = Promise.all([
+        db.execute(sql`select 1`).then(() => order.push("query")),
+        db
+          .transaction((tx) => tx.execute(sql`select 1`))
+          .then(() => order.push("transaction")),
+      ]);
       await client.query("select pg_sleep(0.1)");
       order.push("work");
     });
-    await query;
+    await held;
 
-    expect(order).toEqual(["work", "query"]);
+    expect(order[0]).toBe("work");
+    expect(order).toHaveLength(3);
+  });
+
+  it("opens the pool again when the work fails", async () => {
+    await expect(
+      runAlone(() => Promise.reject(new Error("work failed"))),
+    ).rejects.toThrow("work failed");
+    await expect(db.execute(sql`select 1`)).resolves.toBeDefined();
   });
 });
