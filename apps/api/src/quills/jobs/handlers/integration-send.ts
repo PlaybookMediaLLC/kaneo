@@ -5,27 +5,31 @@ import {
   sendOutboundRequest,
 } from "../../../utils/outbound-request";
 import { withoutOutboundTelemetry } from "../../../utils/sensitive-outbound";
-import {
-  ProviderCallError,
-  providerJson,
-} from "../../framework/integration-config";
+import { ProviderCallError } from "../../framework/integration-config";
 import { provider, type DeliveredEvent } from "../../integrations/catalog";
-import { githubRepo } from "../../integrations/oauth-providers";
-import { freshSecrets, validTarget } from "../../integrations/providers";
+import {
+  callFailed,
+  clip,
+  hasScopes,
+  statusOutcome,
+  uncertain,
+  type Content,
+  type Outcome,
+} from "../../integrations/delivery";
+import {
+  freshSecrets,
+  oauthProvider,
+  validTarget,
+} from "../../integrations/providers";
 
-/** What a delivery says about one post, read from the live rows at claim time. */
-export type Content = {
-  board: string;
-  boardId: string;
-  post: { id: string; title: string; content: string; author: string };
-  statusName?: string;
-  comment?: { id: string; content: string; author: string };
-};
+export type { Content, Outcome };
 export type Delivery = {
   provider: string;
   credentials: Record<string, string>;
   /** The workspace's OAuth app (platform credentials), for OAuth providers. */
   app?: Record<string, string>;
+  /** The connection's non-secret values (integrations.config), for providers in providers/. */
+  config?: Record<string, unknown>;
   /** The channel, or `default` for the connection itself. */
   target: string;
   type: DeliveredEvent;
@@ -34,28 +38,6 @@ export type Delivery = {
   /** Sent to webhook receivers as `x-kaneo-delivery`, so they can drop a repeat. */
   deliveryId: string;
 };
-export type Outcome = {
-  state: "succeeded" | "retry_wait" | "failed" | "auth_required" | "uncertain";
-  errorCode?: string;
-  result?: { externalId: string; externalUrl: string | null };
-  /** GitLab: secrets refreshed before the call, to store with the outcome. */
-  refreshed?: Record<string, string>;
-};
-
-const clip = (text: string, length: number) =>
-  text.length > length ? `${text.slice(0, length - 1)}…` : text;
-const uncertain: Outcome = { state: "uncertain", errorCode: "outcome_unknown" };
-
-/** Only a status from a received response proves a rejection. */
-function rejected(status: number, retryServerErrors: boolean): Outcome {
-  if (status === 401 || status === 403)
-    return { state: "auth_required", errorCode: "authentication" };
-  if (status === 408 || status === 429 || (retryServerErrors && status >= 500))
-    return { state: "retry_wait", errorCode: "unavailable" };
-  if (status >= 400 && status < 500)
-    return { state: "failed", errorCode: "provider_failed" };
-  return uncertain;
-}
 
 /** The source's generic JSON for Make, n8n and Zapier, without author email or portal URLs. */
 export function webhookPayload(d: Delivery) {
@@ -143,7 +125,7 @@ async function postJson(
   } catch (error) {
     const reason = error instanceof OutboundRequestError ? error.reason : "";
     if (reason === "http")
-      return rejected((error as OutboundRequestError).status ?? 0, true);
+      return statusOutcome((error as OutboundRequestError).status ?? 0, true);
     if (reason === "destination")
       return { state: "failed", errorCode: "destination_rejected" };
     // A timeout or a broken connection can follow a request that the receiver accepted.
@@ -188,7 +170,7 @@ async function createStory(d: Delivery): Promise<Outcome> {
   if (!response.ok) {
     void response.body?.cancel().catch(() => {});
     // A 5xx after a create can mean the story exists.
-    return rejected(response.status, false);
+    return statusOutcome(response.status, false);
   }
   const story = (await response.json().catch(() => null)) as {
     id?: unknown;
@@ -206,188 +188,90 @@ async function createStory(d: Delivery): Promise<Outcome> {
   };
 }
 
-/** A provider call's failure as an outcome. A create that got a 5xx or no answer may exist: uncertain. */
-function callFailed(error: unknown, create: boolean): Outcome {
-  if (!(error instanceof ProviderCallError)) return uncertain;
-  if (error.status === null) return uncertain;
-  return rejected(error.status, !create);
-}
-
-const chatText = (d: Delivery) => {
-  const { post, comment, statusName } = d.content;
-  if (d.type === "post.created")
-    return clip(
-      `New feedback: ${post.title}\n${clip(post.content, 500)}`,
-      1900,
-    );
-  if (d.type === "post.status_changed")
-    return clip(
-      `Status changed: ${post.title}${statusName ? ` → ${statusName}` : ""}`,
-      1900,
-    );
-  return clip(
-    `New comment on ${post.title}\n${clip(comment?.content ?? "", 500)}`,
-    1900,
-  );
-};
-const issueBody = (d: Delivery) =>
-  [
-    d.content.post.content,
-    "",
-    "---",
-    `**Submitted by:** ${d.content.post.author}`,
-    `**Board:** ${d.content.board}`,
-  ].join("\n");
+/** A refresh that failed. The delivery was not sent: never uncertain. A refused refresh needs a reconnect. */
+// A token endpoint that times out (408) or limits the rate (429) is busy, not a lost grant: wait.
+const refreshFailed = (error: unknown): Outcome =>
+  error instanceof ProviderCallError &&
+  error.status !== null &&
+  error.status < 500 &&
+  error.status !== 408 &&
+  error.status !== 429
+    ? { state: "auth_required", errorCode: "authentication" }
+    : { state: "retry_wait", errorCode: "unavailable" };
 
 /**
- * OAuth providers (integrations/providers/): a GitHub or GitLab issue for a new post, a Slack
- * or Discord message for each delivered event. A due GitLab token is refreshed first; the new secrets
- * return in the outcome and are stored in the settling transaction.
+ * A provider in providers/ sends through its `deliver`, only for an event in its `events`. A due
+ * token is refreshed first; the new secrets return in the outcome and are stored in the settling
+ * transaction. A refused call that `deliver` throws becomes an outcome here. A 401 proves that
+ * nothing was made, so a provider with `refresh` refreshes once and sends once more.
  */
 async function deliverOAuth(d: Delivery): Promise<Outcome> {
+  const registered = oauthProvider(d.provider);
+  if (!registered?.deliver)
+    return { state: "failed", errorCode: "provider_failed" };
+  if (!registered.events.includes(d.type)) return { state: "succeeded" };
+  const config = d.config ?? {};
+  const app = d.app ?? {};
+  // A connection made without the write scopes: no request that the provider must refuse.
   if (
-    (d.provider === "github" || d.provider === "gitlab") &&
-    d.type !== "post.created"
+    registered.deliveryScopes &&
+    !hasScopes(config, registered.deliveryScopes)
   )
-    return { state: "succeeded" };
+    return { state: "auth_required", errorCode: "write_access_required" };
   let secrets = d.credentials;
   let refreshed: Record<string, string> | undefined;
   try {
-    const fresh = await freshSecrets(d.provider, d.credentials, d.app ?? {});
+    const fresh = await freshSecrets(d.provider, d.credentials, app);
     secrets = fresh.secrets;
     refreshed = fresh.refreshed ?? undefined;
   } catch (error) {
-    // The delivery was not sent: never uncertain. A failed refresh needs a reconnect.
-    return error instanceof ProviderCallError &&
-      error.status !== null &&
-      error.status < 500
-      ? { state: "auth_required", errorCode: "authentication" }
-      : { state: "retry_wait", errorCode: "unavailable" };
+    return refreshFailed(error);
   }
-  const token = secrets.accessToken ?? "";
-  const create = d.provider === "github" || d.provider === "gitlab";
   // A channel ID from a mapping goes into a provider URL path: refuse `..` and other shapes.
   if (!validTarget(d.provider, d.target))
     return { state: "failed", errorCode: "provider_failed", refreshed };
+  const send = () =>
+    registered.deliver!({
+      secrets,
+      config,
+      app,
+      target: d.target,
+      type: d.type,
+      content: d.content,
+    });
+  let refused: unknown;
   try {
-    if (d.provider === "github") {
-      const issue = (await providerJson(
-        `https://api.github.com/repos/${githubRepo(d.target)}/issues`,
-        {
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${token}`,
-            accept: "application/vnd.github+json",
-            "content-type": "application/json",
-            "user-agent": "Quills",
-          },
-          body: JSON.stringify({
-            title: clip(d.content.post.title, 256),
-            body: issueBody(d),
-          }),
-        },
-      )) as { number?: unknown; html_url?: unknown } | null;
-      if (typeof issue?.number !== "number") return { ...uncertain, refreshed };
-      return {
-        state: "succeeded",
-        refreshed,
-        result: {
-          externalId: `${githubRepo(d.target)}#${issue.number}`,
-          externalUrl:
-            typeof issue.html_url === "string" ? issue.html_url : null,
-        },
-      };
-    }
-    if (d.provider === "gitlab") {
-      const issue = (await providerJson(
-        `https://gitlab.com/api/v4/projects/${encodeURIComponent(d.target)}/issues`,
-        {
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${token}`,
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            title: clip(d.content.post.title, 255),
-            description: issueBody(d),
-          }),
-        },
-      )) as { iid?: unknown; web_url?: unknown } | null;
-      if (typeof issue?.iid !== "number") return { ...uncertain, refreshed };
-      return {
-        state: "succeeded",
-        refreshed,
-        result: {
-          externalId: `${d.target}#${issue.iid}`,
-          externalUrl: typeof issue.web_url === "string" ? issue.web_url : null,
-        },
-      };
-    }
-    if (d.provider === "slack") {
-      const answer = (await providerJson(
-        "https://slack.com/api/chat.postMessage",
-        {
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${token}`,
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({ channel: d.target, text: chatText(d) }),
-        },
-      )) as { ok?: unknown; error?: unknown } | null;
-      if (answer?.ok === true) return { state: "succeeded" };
-      // An unreadable answer, or an error that Slack says may have partly succeeded: it may have posted.
-      if (
-        !answer ||
-        ["internal_error", "fatal_error", "request_timeout"].includes(
-          String(answer.error),
-        )
-      )
-        return uncertain;
-      // Slack answers 200 with ok: false and an error name.
-      return [
-        "invalid_auth",
-        "token_revoked",
-        "account_inactive",
-        "not_authed",
-      ].includes(String(answer.error))
-        ? { state: "auth_required", errorCode: "authentication" }
-        : { state: "failed", errorCode: "provider_failed" };
-    }
-    if (d.provider === "discord") {
-      if (!/^\d{1,30}$/.test(d.target))
-        return { state: "failed", errorCode: "provider_failed" };
-      await providerJson(
-        `https://discord.com/api/v10/channels/${d.target}/messages`,
-        {
-          method: "POST",
-          headers: {
-            authorization: `Bot ${d.app?.botToken ?? ""}`,
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            content: chatText(d),
-            allowed_mentions: { parse: [] },
-          }),
-        },
-      );
-      return { state: "succeeded" };
-    }
+    return { ...(await send()), refreshed };
   } catch (error) {
-    return { ...callFailed(error, create), refreshed };
+    refused = error;
   }
-  return { state: "failed", errorCode: "provider_failed" };
+  if (
+    !(refused instanceof ProviderCallError && refused.status === 401) ||
+    !registered.refresh ||
+    !secrets.refreshToken ||
+    refreshed
+  )
+    return { ...callFailed(refused), refreshed };
+  try {
+    secrets = refreshed = {
+      ...secrets,
+      ...(await registered.refresh(secrets, app)),
+    };
+  } catch (error) {
+    return refreshFailed(error);
+  }
+  try {
+    return { ...(await send()), refreshed };
+  } catch (error) {
+    return { ...callFailed(error), refreshed };
+  }
 }
 
 /** Sends one delivery. Never retries inside; the job and the operation state decide. */
 export async function deliver(d: Delivery): Promise<Outcome> {
+  if (oauthProvider(d.provider)) return deliverOAuth(d);
   const url = d.credentials.url ?? "";
   switch (d.provider) {
-    case "github":
-    case "gitlab":
-    case "slack":
-    case "discord":
-      return deliverOAuth(d);
     case "make":
     case "n8n":
     case "zapier":

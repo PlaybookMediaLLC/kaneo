@@ -34,6 +34,7 @@ import { uniqueConflict } from "../support/conversation-model";
 import {
   catalog,
   discover,
+  failureText,
   finishAuthorization,
   MAX_TOOLS,
   startAuthorization,
@@ -46,7 +47,7 @@ import { toolCatalogue } from "./tools";
 // Remote MCP connectors and the built-in tool catalogue. A settings manager adds, changes, refreshes
 // and authorizes a connector. The URL is reached only through connector-client.ts, never inside a
 // transaction: `prepare` reads, `call` reaches the server, the handler writes. Credentials are sealed
-// with the instance key and never returned. The copilot does not call connector tools yet (ROUTES.md).
+// with the instance key and never returned. The copilot calls connector tools (ROUTES.md).
 
 const MAX_CONNECTORS = 100;
 const params = z.object({ connectorId: flexibleToTypeIdSchema("connector") });
@@ -242,13 +243,6 @@ async function unchanged(
   return row;
 }
 
-const failureText: Record<Failure, string> = {
-  destination: "That address cannot be reached from this workspace.",
-  unauthorized: "Authorization required",
-  rejected: "The authorization server rejected the request.",
-  unreachable:
-    "The MCP server could not be reached, or it did not answer as an MCP server.",
-};
 /** A failed step as the route's answer. The server's own text never reaches the caller. */
 const failed = (failure: Failure) =>
   new HTTPException(failure === "unreachable" ? 502 : 400, {
@@ -299,7 +293,7 @@ const listConnectors = defineQuillsRoute({
   operationId: "listQuillsConnectors",
   summary: "List the assistant connectors",
   description:
-    "Never returns credentials. This build cannot call a connector's tools.",
+    "Never returns credentials. The copilot calls the tools of an enabled, connected connector that is assigned to it.",
   action: "manage_settings",
   response: z.object({ items: z.array(connectorSchema) }),
   responseDescription: "The connectors, by name",

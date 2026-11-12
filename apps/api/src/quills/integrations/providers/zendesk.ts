@@ -83,7 +83,7 @@ export const zendesk = {
   },
   destinations: async () => [],
   statuses: [],
-  contact: async (secrets, config, email) => {
+  contact: async (secrets, config, email, signal) => {
     const base = desk(config);
     const headers = {
       authorization: `Bearer ${secrets.accessToken ?? ""}`,
@@ -94,7 +94,7 @@ export const zendesk = {
       record(
         await providerJson(
           `${base}/api/v2/users/search.json?${form({ query: email })}`,
-          { headers },
+          { headers, signal },
           hosts,
         ),
       ).users,
@@ -109,7 +109,7 @@ export const zendesk = {
           record(
             await providerJson(
               `${base}/api/v2/organizations/${organizationId}.json`,
-              { headers },
+              { headers, signal },
               hosts,
             ).catch(() => null),
           ).organization,

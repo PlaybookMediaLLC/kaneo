@@ -8,6 +8,7 @@ import { integrationEventMappings as mappings } from "../../database/quills/sche
 import { defineQuillsRoute, type Database } from "../framework/define-route";
 import { deliveredEvent, provider } from "./catalog";
 import { checkEvents, findIntegration, integrationParams } from "./connect";
+import { oauthProvider, validTarget } from "./providers";
 
 /** The target of the mappings that a webhook provider sends to its own connection. */
 export const DEFAULT_TARGET = "default";
@@ -53,14 +54,24 @@ export function channelsOf(
   return [...found.values()];
 }
 
-// A target inside the provider account, such as a Shortcut group ID. Never a URL.
+// A target inside the provider account, such as a Shortcut group ID or an Azure DevOps project and
+// work item type. Never a URL: no path separator, query, fragment, percent sign or control character.
+// A provider in providers/ also checks its own rule (`target`) when a channel is added.
 const channel = z
   .string()
-  .regex(/^[A-Za-z0-9_.:-]{1,100}$/)
+  .min(1)
+  .max(100)
+  .regex(/^[^/\\?#%]+$/)
+  .refine((value) => !/\p{Cc}/u.test(value), "No control characters")
   .openapi({
     description:
-      "A target in the provider account, such as a Shortcut group ID",
+      "A target in the provider account, such as a Shortcut group ID or `Project:Bug` for Azure DevOps",
   });
+/** The channel rule of a provider in providers/; the other providers (Shortcut) keep the earlier pattern. */
+const allowedChannel = (type: string, target: string) =>
+  oauthProvider(type)
+    ? validTarget(type, target)
+    : /^[A-Za-z0-9_.:-]{1,100}$/.test(target);
 const channelParams = integrationParams.extend({ channel });
 const boardIds = z.array(flexibleToTypeIdSchema("board")).max(50);
 const response = z.object({ channel: channelView });
@@ -192,7 +203,10 @@ const addChannel = defineQuillsRoute({
   }),
   response,
   responseDescription: "The channel",
-  errors,
+  errors: {
+    ...errors,
+    400: "An event the provider does not deliver, or a channel that is not a valid target for it",
+  },
   event: channelEvent("integration.channel_added"),
   handler: async ({ db, params, body }) => {
     const integration = await channelIntegration(
@@ -200,6 +214,10 @@ const addChannel = defineQuillsRoute({
       params.integrationId,
       body.channel,
     );
+    if (!allowedChannel(integration.integrationType, body.channel))
+      throw new HTTPException(400, {
+        message: "This channel is not a valid target for the integration.",
+      });
     checkEvents(integration.integrationType, body.events);
     const filter = await liveBoards(db, body.boardIds);
     await upsert(

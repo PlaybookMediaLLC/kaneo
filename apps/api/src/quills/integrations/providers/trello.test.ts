@@ -3,8 +3,8 @@ import { catalog } from "../catalog";
 import { oauthProviders } from "./index";
 import { trello } from "./trello";
 
-// Trello is not registered (connect deferred), so the local provider server does not serve its hosts.
-// These tests answer fetch here. No request reaches a network.
+// The provider's own calls. These tests answer fetch here. No request reaches a network. The routes
+// (bridge page, token post, destinations) are in trello-routes.test.ts.
 
 const KEY = "trello-key";
 const TOKEN = "a".repeat(64);
@@ -28,12 +28,13 @@ afterEach(() => {
   calls.length = 0;
 });
 
-describe("Trello provider (not registered)", () => {
-  it("stays out of the registry and not available in the catalog", () => {
-    expect(Object.keys(oauthProviders)).not.toContain("trello");
-    expect(catalog.find((entry) => entry.id === "trello")).toMatchObject({
-      available: false,
-    });
+describe("Trello provider", () => {
+  it("is registered as a fragment provider and available in the catalog", () => {
+    expect(oauthProviders.trello).toBe(trello);
+    expect(trello.callback).toBe("fragment");
+    expect(catalog.filter((entry) => entry.id === "trello")).toEqual([
+      expect.objectContaining({ available: true, events: ["post.created"] }),
+    ]);
   });
 
   it("asks Trello to return the token in the fragment of the callback URL", () => {

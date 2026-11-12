@@ -115,7 +115,7 @@ describe.skipIf(!url)("Jira provider with the local provider server", () => {
     expect(Object.fromEntries(authorize.searchParams)).toMatchObject({
       audience: "api.atlassian.com",
       client_id: "client-jira",
-      scope: "read:jira-work offline_access",
+      scope: "read:jira-work write:jira-work offline_access",
       response_type: "code",
     });
 
@@ -146,7 +146,11 @@ describe.skipIf(!url)("Jira provider with the local provider server", () => {
         .authorization,
     ).toBe("Bearer jira_contract_token");
     const row = await stored(body.integration.id);
-    expect(row.config).toMatchObject({ cloudId: JIRA_CLOUD_ID });
+    // The token answer names no scope: the requested scopes were granted (RFC 6749, 5.1).
+    expect(row.config).toMatchObject({
+      cloudId: JIRA_CLOUD_ID,
+      scopes: "read:jira-work write:jira-work offline_access",
+    });
     expect(row.secrets).toMatchObject({
       accessToken: "jira_contract_token",
       refreshToken: "jira_contract_refresh",

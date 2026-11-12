@@ -3,6 +3,7 @@ import {
   ProviderCallError,
   providerJson,
 } from "../../framework/integration-config";
+import { issueParts, uncertain } from "../delivery";
 import {
   form,
   formHeaders,
@@ -17,10 +18,20 @@ import {
 const hosts = /^app\.asana\.com$/;
 const api = "https://app.asana.com/api/1.0";
 // An Asana ID (gid) is digits. The same rule keeps it safe in a URL and valid as a channel ID.
-const gid = /^[A-Za-z0-9]{1,30}$/;
+const gid = /^\d{1,30}$/;
 const bearer = (accessToken: string) => ({
   headers: { authorization: `Bearer ${accessToken}` },
 });
+/**
+ * Text for Asana rich text, which is XML: drops the characters that XML refuses (control characters
+ * and lone surrogates), then escapes the markup characters.
+ */
+const xml = (value: string) =>
+  value
+    .replace(/[^\t\n\r\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/gu, "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 
 /** One call to the token endpoint. Access tokens expire after one hour. */
 async function tokens(
@@ -57,8 +68,8 @@ export const asana = {
   name: "Asana",
   hosts,
   category: "issue_tracking",
-  description: "Connect an Asana workspace and list its projects.",
-  events: [],
+  description: "Create Asana tasks from new feedback.",
+  events: ["post.created"],
   channels: true,
   credentials: ["clientId", "clientSecret"],
   authorizeUrl: (creds, redirectUri, state) =>
@@ -127,4 +138,49 @@ export const asana = {
     return next;
   },
   statuses: [],
+  // A project gid, the destination ID.
+  target: (target) => gid.test(target),
+  // A task for a new post. The notes are Asana rich text: every part of the post is escaped.
+  deliver: async ({ secrets, config, target, content }) => {
+    // A stored workspace that does not match: reconnect, with no task call.
+    const workspace = text(config.workspaceGid);
+    if (!gid.test(workspace))
+      return { state: "auth_required", errorCode: "authentication" };
+    const { title, paragraphs, footer } = issueParts(content);
+    const task = record(
+      record(
+        await providerJson(
+          `${api}/tasks`,
+          {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${secrets.accessToken ?? ""}`,
+              "content-type": "application/json",
+              accept: "application/json",
+            },
+            body: JSON.stringify({
+              data: {
+                name: title,
+                html_notes: `<body>${[...paragraphs, "", ...footer].map(xml).join("\n")}</body>`,
+                projects: [target],
+                workspace,
+              },
+            }),
+          },
+          hosts,
+        ),
+      ).data,
+    );
+    const id = text(task.gid);
+    // A 2xx without a task gid: the task may exist.
+    if (!gid.test(id)) return uncertain;
+    const link = URL.parse(text(task.permalink_url))?.href;
+    return {
+      state: "succeeded",
+      result: {
+        externalId: id,
+        externalUrl: link?.startsWith("https://app.asana.com/") ? link : null,
+      },
+    };
+  },
 } satisfies OAuthProvider;

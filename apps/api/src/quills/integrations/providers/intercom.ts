@@ -74,7 +74,7 @@ export const intercom = {
   },
   destinations: async () => [],
   statuses: [],
-  contact: async (secrets, _config, email) => {
+  contact: async (secrets, _config, email, signal) => {
     const headers = bearer(secrets.accessToken ?? "");
     const [found] = rows(
       record(
@@ -87,6 +87,7 @@ export const intercom = {
               query: { field: "email", operator: "=", value: email },
               pagination: { per_page: 1 },
             }),
+            signal,
           },
           hosts,
         ),
@@ -100,7 +101,7 @@ export const intercom = {
     const names = (kind: "companies" | "tags") =>
       providerJson(
         `https://api.intercom.io/contacts/${id}/${kind}`,
-        { headers },
+        { headers, signal },
         hosts,
       )
         .then((answer) =>

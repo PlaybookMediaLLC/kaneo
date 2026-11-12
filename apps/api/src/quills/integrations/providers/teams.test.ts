@@ -50,7 +50,8 @@ const url = process.env.QUILLS_TEST_DATABASE_URL;
 const TOKEN = "POST /login.microsoftonline.com/organizations/oauth2/v2.0/token";
 const TEAMS = "GET /graph.microsoft.com/v1.0/me/joinedTeams";
 const CHANNELS = `GET /graph.microsoft.com/v1.0/teams/${TEAMS_TEAM}/channels?$select=id,displayName`;
-const SCOPE = "Team.ReadBasic.All Channel.ReadBasic.All offline_access";
+const SCOPE =
+  "Team.ReadBasic.All Channel.ReadBasic.All ChannelMessage.Send offline_access";
 const team = (n: number) => ({
   id: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
   displayName: `Team ${n}`,
@@ -130,7 +131,7 @@ describe.skipIf(!url)("Microsoft Teams provider", () => {
     }
   }
 
-  it("connects with delegated scopes on the organizations endpoint and seals the tokens", async () => {
+  it("connects with delegated scopes on the organizations endpoint, seals the tokens and keeps the granted scopes", async () => {
     const env = contractEnv();
     await platformCredentials(env, env.a, "teams");
     const res = await app.request(`/quills/${env.a}/oauth/teams/connect`, as());
@@ -187,6 +188,16 @@ describe.skipIf(!url)("Microsoft Teams provider", () => {
     expect(Date.parse(secrets.expiresAt!)).toBeGreaterThan(
       Date.now() + 3500_000,
     );
+    // Delivery needs ChannelMessage.Send in the granted scopes of the token answer.
+    const [row] = await env.scoped(env.a, (db) =>
+      db
+        .select({ config: integrations.config })
+        .from(integrations)
+        .where(eq(integrations.integrationType, "teams")),
+    );
+    expect(row!.config).toMatchObject({
+      scopes: "Team.ReadBasic.All Channel.ReadBasic.All ChannelMessage.Send",
+    });
   });
 
   it("answers consent and token failures with fixed errors and no provider text", async () => {

@@ -3,6 +3,7 @@ import {
   ProviderCallError,
   providerJson,
 } from "../../framework/integration-config";
+import { grantedScopes, issueParts, uncertain } from "../delivery";
 import {
   expiresAt,
   form,
@@ -14,6 +15,15 @@ import {
 
 const hosts = /^(auth|api)\.atlassian\.com$/;
 const json = { "content-type": "application/json", accept: "application/json" };
+/** Lists projects and issue types, and creates issues. */
+const SCOPE = "read:jira-work write:jira-work offline_access";
+/** A Jira Cloud site, the connection's `account`. Issue links use it. */
+const siteUrl =
+  /^https:\/\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.atlassian\.net$/;
+const paragraph = (value: string) => ({
+  type: "paragraph",
+  content: [{ type: "text", text: value }],
+});
 /** An Atlassian cloud ID. It enters every API path, so it must match before each call. */
 const cloudIdPattern = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const jiraId = /^\d{1,20}$/;
@@ -43,17 +53,16 @@ export const jira = {
   name: "Jira",
   hosts,
   category: "issue_tracking",
-  description:
-    "Connect a Jira Cloud site and list its projects and issue types.",
-  events: [],
+  description: "Create Jira issues from new feedback.",
+  events: ["post.created"],
   channels: true,
   credentials: ["clientId", "clientSecret"],
-  // Read scope only: listing projects and issue types needs no write access.
+  deliveryScopes: ["write:jira-work"],
   authorizeUrl: (creds, redirectUri, state) =>
     `https://auth.atlassian.com/authorize?${form({
       audience: "api.atlassian.com",
       client_id: creds.clientId!,
-      scope: "read:jira-work offline_access",
+      scope: SCOPE,
       redirect_uri: redirectUri,
       state,
       response_type: "code",
@@ -92,7 +101,7 @@ export const jira = {
       },
       workspaceName: text(site?.name) || "Jira",
       account: text(site?.url) || null,
-      config: { cloudId: id },
+      config: { cloudId: id, scopes: grantedScopes(token, SCOPE) },
     };
   },
   destinationKinds: { project: {}, "issue-type": { parent: "project" } },
@@ -123,6 +132,8 @@ export const jira = {
       .map((item) => ({ id: text(item.id), name: text(item.name) }));
   },
   statuses: [],
+  // `<project ID>:<issue type ID>`, both numeric: a destination of each kind.
+  target: (target) => /^\d{1,20}:\d{1,20}$/.test(target),
   refresh: async (secrets, creds) => {
     const token = await tokenRequest({
       grant_type: "refresh_token",
@@ -144,6 +155,56 @@ export const jira = {
       accessToken,
       refreshToken: text(token.refresh_token) || (secrets.refreshToken ?? ""),
       expiresAt: expiresAt(token),
+    };
+  },
+  // An issue for a new post. The description is Jira's document format with plain text nodes, so the
+  // post text is never read as markup.
+  deliver: async ({ secrets, config, target, content }) => {
+    // A stored cloud ID that does not match: reconnect, with no issue call. It returns, not throws a
+    // 401, so the worker does not refresh the token for it (a due token was refreshed before).
+    if (!cloudIdPattern.test(text(config.cloudId)))
+      return { state: "auth_required", errorCode: "authentication" };
+    const [project, issueType] = target.split(":");
+    const parts = issueParts(content);
+    const issue = record(
+      await providerJson(
+        `https://api.atlassian.com/ex/jira/${cloudId(config)}/rest/api/3/issue`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${secrets.accessToken ?? ""}`,
+            ...json,
+          },
+          body: JSON.stringify({
+            fields: {
+              project: { id: project },
+              issuetype: { id: issueType },
+              summary: parts.title,
+              description: {
+                version: 1,
+                type: "doc",
+                content: [
+                  ...parts.paragraphs.map(paragraph),
+                  { type: "rule" },
+                  ...parts.footer.map(paragraph),
+                ],
+              },
+            },
+          }),
+        },
+        hosts,
+      ),
+    );
+    const key = text(issue.key);
+    // A 2xx without an issue key: the issue may exist.
+    if (!/^[A-Z][A-Z0-9_]{0,99}-\d{1,20}$/.test(key)) return uncertain;
+    const site = text(config.account).replace(/\/$/, "");
+    return {
+      state: "succeeded",
+      result: {
+        externalId: key,
+        externalUrl: siteUrl.test(site) ? `${site}/browse/${key}` : null,
+      },
     };
   },
 } satisfies OAuthProvider;

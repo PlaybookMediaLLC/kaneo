@@ -370,21 +370,27 @@ existing operation ID changed.
 | B1 | 6 | Built |
 | M1 | 6 | Built. The settings receipt undo followed on `feat/quills-131-m1-undo`. |
 | P1 | 8 | Built |
-| P2 | 12 | 9 built. Trello (3) is deferred: its connect needs the fragment bridge page. |
+| P2 | 12 | Built. Trello (3) followed in FU1 (see below). |
 | P3 | 8 | Built |
 | P4 | 3 | Built |
 
 | Entry points of #131 | Count |
 |---|---|
-| Built | 70 |
-| Deferred: Trello connect, boards and lists | 3 |
+| Built | 73 |
 | Blocked by a product decision: widget handoff (#129) | 1 |
 | Web-only: portal header setters (#130) | 2 |
 | Total | 76 |
 
+Follow-up FU1 (Trello connect) added the HTML answer for a signed read (`raw: "text/html"` in
+`framework/define-route.ts`, with a hash-based CSP), the provider option `callback: "fragment"`, the
+bridge page `openQuillsOAuthBridge` and the token post `completeQuillsOAuthFragmentConnect`, and
+registered Trello (`startQuillsTrelloOAuthConnect`; boards and lists through
+`listQuillsIntegrationDestinations`). The route registry has 745 declarations.
+`integrations/ROUTES-OAUTH.md` ("Trello") has the details.
+
 Completion criterion 2: `build-ledger.mjs` now takes `closed` (and an optional `operationId`) on a
 capability override and writes a `closed` column to `capabilities.csv`. `overrides.json` closes the
-59 server functions and the 11 route files that the lanes built (70 of the 73 entry points assigned
-to lanes). Open: Trello (3); outside the lanes, the widget handoff (#129) and the two web-only
-header setters (#130). The ledger reports 70 closed capabilities (the 59 functions and the 11 route
+62 server functions and the 11 route files that the lanes and FU1 built (73 of the 73 entry points
+assigned to lanes). Open, outside the lanes: the widget handoff (#129) and the two web-only header
+setters (#130). The ledger reports 73 closed capabilities (the 62 functions and the 11 route
 handlers) and exits 0.

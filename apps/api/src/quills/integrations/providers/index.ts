@@ -16,14 +16,15 @@ import { notion } from "./notion";
 import { salesforce } from "./salesforce";
 import { slack } from "./slack";
 import { teams } from "./teams";
+import { trello } from "./trello";
 import { zendesk } from "./zendesk";
 
 // The OAuth and key providers, one file each. To add a provider, add its file, its import above and
-// one entry below. The key is the integration type. The catalog entry, the connect route (oauth.ts)
-// and the token refresh in routes follow from this registry. Deliveries do not: the worker
-// (jobs/handlers/integration-send.ts) sends only for the providers it names. Until it sends for a
-// new provider, keep that provider's `events` empty. Declare each provider with `satisfies
-// OAuthProvider`, not a type annotation: an annotated OAuth provider drops out of OAuthProviderType.
+// one entry below. The key is the integration type. The catalog entry, the connect route (oauth.ts),
+// the token refresh and the deliveries of the worker (jobs/handlers/integration-send.ts) follow from
+// this registry. A provider without `deliver` keeps its `events` empty. Declare each provider with
+// `satisfies OAuthProvider`, not a type annotation: an annotated OAuth provider drops out of
+// OAuthProviderType.
 export const oauthProviders = {
   github,
   gitlab,
@@ -41,6 +42,7 @@ export const oauthProviders = {
   intercom,
   zendesk,
   salesforce,
+  trello,
 } satisfies Record<string, OAuthProvider>;
 type Registry = typeof oauthProviders;
 export const oauthProvider = (type: string): OAuthProvider | undefined =>
@@ -76,6 +78,7 @@ export async function freshSecrets(
   type: string,
   secrets: Record<string, string>,
   creds: Record<string, string>,
+  signal?: AbortSignal,
 ): Promise<{
   secrets: Record<string, string>;
   refreshed: Record<string, string> | null;
@@ -85,6 +88,6 @@ export async function freshSecrets(
   if (!refresh || !Number.isFinite(due) || due > Date.now() + 60_000)
     return { secrets, refreshed: null };
   if (!secrets.refreshToken) throw new ProviderCallError(401);
-  const next = { ...secrets, ...(await refresh(secrets, creds)) };
+  const next = { ...secrets, ...(await refresh(secrets, creds, signal)) };
   return { secrets: next, refreshed: next };
 }

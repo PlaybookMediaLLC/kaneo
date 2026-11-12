@@ -15,6 +15,14 @@ providerAnswers.push((route) => {
     "GET /dev.azure.com/contract/Contract%20App/_apis/wit/workitemtypes"
   )
     return { value: [{ name: "Bug" }, { name: "User Story" }] };
+  if (
+    route ===
+    "POST /dev.azure.com/contract/Contract%20App/_apis/wit/workitems/$Bug"
+  )
+    return {
+      id: 42,
+      _links: { html: { href: "https://dev.azure.com/contract/x/42" } },
+    };
   return undefined;
 });
 

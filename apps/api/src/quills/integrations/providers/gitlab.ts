@@ -1,5 +1,6 @@
 // Route-module helper: framework/boundaries.test.ts checks its imports like a module that uses ../framework/define-route.
 import { providerJson } from "../../framework/integration-config";
+import { clip, issueBody, uncertain } from "../delivery";
 import {
   expiresAt,
   form,
@@ -108,4 +109,29 @@ export const gitlab = {
       }),
       secrets,
     ),
+  // An issue for a new post.
+  deliver: async (d) => {
+    const issue = (await providerJson(
+      `https://gitlab.com/api/v4/projects/${encodeURIComponent(d.target)}/issues`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${d.secrets.accessToken ?? ""}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          title: clip(d.content.post.title, 255),
+          description: issueBody(d),
+        }),
+      },
+    )) as { iid?: unknown; web_url?: unknown } | null;
+    if (typeof issue?.iid !== "number") return uncertain;
+    return {
+      state: "succeeded",
+      result: {
+        externalId: `${d.target}#${issue.iid}`,
+        externalUrl: typeof issue.web_url === "string" ? issue.web_url : null,
+      },
+    };
+  },
 } satisfies OAuthProvider;

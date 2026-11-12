@@ -655,7 +655,7 @@ export function mintOAuthState(
   return `${payload}.${sign(payload)}`;
 }
 
-function readState(state: string) {
+function readState(state: string, expired = false) {
   const [payload, signature, extra] = state.split(".");
   if (!payload || !signature || extra !== undefined) return null;
   if (!safeEqual(signature, sign(payload))) return null;
@@ -674,7 +674,7 @@ function readState(state: string) {
       typeof value.t !== "string" ||
       typeof value.n !== "string" ||
       typeof value.e !== "number" ||
-      Date.now() > value.e ||
+      (!expired && Date.now() > value.e) ||
       (value.f !== undefined &&
         (typeof value.f !== "object" ||
           value.f === null ||
@@ -728,6 +728,22 @@ export const oauthState: SignedVerifier = {
         ...(state.f && { fields: JSON.stringify(state.f) }),
       },
     };
+  },
+};
+
+/**
+ * The bridge page of a fragment provider (integrations/oauth.ts). The page holds no data: it removes
+ * the token from the address and posts it to the callback, which runs every `oauthState` check. So
+ * the page needs only a state that this instance signed for this provider, also an expired one or
+ * one from another session: the page still removes the token, and the post then fails. Its receipt is
+ * its own, so opening the page does not use the state up.
+ */
+export const oauthBridge: SignedVerifier = {
+  name: "oauth-bridge",
+  locate: ({ query, params }) => {
+    const state = readState(query.state ?? "", true);
+    if (!state || state.t !== params.type) throw unauthorized();
+    return { scope: { workspace: state.w }, deliveryId: `oauth:${state.n}` };
   },
 };
 

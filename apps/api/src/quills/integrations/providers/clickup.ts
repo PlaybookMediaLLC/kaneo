@@ -3,6 +3,7 @@ import {
   ProviderCallError,
   providerJson,
 } from "../../framework/integration-config";
+import { issueParts, uncertain } from "../delivery";
 import {
   form,
   list,
@@ -15,7 +16,7 @@ import {
 const hosts = /^(app|api)\.clickup\.com$/;
 const api = "https://api.clickup.com/api/v2";
 // ClickUp team, space and list IDs are digits. The same rule keeps them safe in a URL and valid as channel IDs.
-const id = /^[A-Za-z0-9]{1,30}$/;
+const id = /^\d{1,30}$/;
 const bearer = (accessToken: string) => ({
   headers: { authorization: `Bearer ${accessToken}` },
 });
@@ -33,8 +34,8 @@ export const clickup = {
   name: "ClickUp",
   hosts,
   category: "issue_tracking",
-  description: "Connect a ClickUp workspace and list its spaces and lists.",
-  events: [],
+  description: "Create ClickUp tasks from new feedback.",
+  events: ["post.created"],
   channels: true,
   credentials: ["clientId", "clientSecret"],
   authorizeUrl: (creds, redirectUri, state) =>
@@ -103,4 +104,39 @@ export const clickup = {
     );
   },
   statuses: [],
+  // A list ID: the child destination. A task belongs to a list.
+  target: (target) => id.test(target),
+  // A task for a new post. The description is plain text, so the post text is never markup.
+  deliver: async ({ secrets, target, content }) => {
+    const { title, paragraphs, footer } = issueParts(content);
+    const task = record(
+      await providerJson(
+        `${api}/list/${encodeURIComponent(target)}/task`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${secrets.accessToken ?? ""}`,
+            "content-type": "application/json",
+            accept: "application/json",
+          },
+          body: JSON.stringify({
+            name: title,
+            description: [...paragraphs, "", ...footer].join("\n"),
+          }),
+        },
+        hosts,
+      ),
+    );
+    const taskId = text(task.id);
+    // A 2xx without a task ID: the task may exist.
+    if (!/^[A-Za-z0-9]{1,64}$/.test(taskId)) return uncertain;
+    const link = URL.parse(text(task.url))?.href;
+    return {
+      state: "succeeded",
+      result: {
+        externalId: taskId,
+        externalUrl: link?.startsWith("https://app.clickup.com/") ? link : null,
+      },
+    };
+  },
 } satisfies OAuthProvider;

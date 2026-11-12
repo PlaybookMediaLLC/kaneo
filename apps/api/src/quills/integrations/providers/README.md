@@ -8,10 +8,10 @@ Each provider is one file in this folder. `index.ts` collects the files in one r
 - the `type` values of the OAuth callback and of the platform-credential routes,
 - the destinations route (`GET /integrations/{integrationId}/destinations`),
 - the token refresh in routes (`freshSecrets`),
+- the deliveries of the worker (`deliver`, see "Add delivery to a provider"),
 - the hosts that tests send to the local provider server.
 
-Issue #131 counts the connect and list entry points only. Delivery (the worker) and status sync are
-out of scope.
+Issue #131 counts the connect and list entry points only. Status sync (inbound) is out of scope.
 
 ## Add a provider
 
@@ -50,7 +50,7 @@ out of scope.
 4. Run `pnpm openapi:check:fix` from the repository root. The connect route of an OAuth provider is
    new: `startQuills<Key>OAuthConnect`, for example `startQuillsHubspotOAuthConnect`.
 5. Do not add a connect fixture. `../oauth.fixture.ts` already holds one for each RFC 0001 OAuth
-   provider except Trello (see "Trello"). Write fixtures for your own new routes in
+   provider. Write fixtures for your own new routes in
    `providers/<file>.fixture.ts`, and add one line to `../index.fixture.ts`:
    `export * from "./providers/<file>.fixture";`.
 6. For a test that calls the provider, add the local answers in your fixture file. Do not edit the
@@ -85,12 +85,15 @@ out of scope.
   values. The integration summary shows only `workspaceName` and `account` from it.
 - **Refresh.** `refresh` returns only `accessToken`, `refreshToken` and `expiresAt`. The stores keep
   only these fields. A provider that must store another refreshed value reports it to lane Z.
-- **`events: []`.** Keep it empty until the worker (`jobs/handlers/integration-send.ts`) sends for the
-  provider. A provider with events and no worker code fails each delivery.
+- **`events: []`.** Keep it empty until the provider has `deliver`. A provider with events and no
+  `deliver` fails each delivery, and `jobs/handlers/provider-send.test.ts` fails.
 - **No transaction.** The routes call a provider with no database transaction open. A provider
   function never gets a database handle.
 - **Errors.** Use `providerJson`. It throws `ProviderCallError` with the status only; provider text
   never reaches a response.
+- **Deadline and size.** `providerJson` stops at the earlier of 10 seconds and `init.signal`. It refuses
+  an answer over 10 MiB as a 502. `refresh` and `contact` get the caller's signal as their last
+  argument. Pass it to each of their calls, so that one deadline ends the whole chain.
 - **Bot tokens.** A credential named `botToken` is required at save time (Discord).
 
 ## Capabilities
@@ -100,14 +103,77 @@ out of scope.
 | `hosts` | Every host that the provider calls | `providerJson`, test edge |
 | `credentials` | Platform credential fields of the OAuth app | credentials routes |
 | `authorizeUrl`, `exchange` | OAuth redirect and code exchange | connect route, callback |
+| `callback: "fragment"` | The token comes back in the URL fragment; `exchange` gets the token | bridge page, token post |
 | `connectFields` | Values that a teammate enters before the redirect | connect route, callback |
 | `connectWithKey` | Connect with a key, not OAuth | the provider's own route module |
 | `destinations`, `destinationKinds` | Channel targets, by kind | destinations route |
 | `search` | Issue search in one channel | external-items route |
-| `target` | Channel ID rule. Absent: 1 to 30 letters and digits | search, delivery |
-| `refresh` | New token fields for a due access token | `freshSecrets` |
+| `target` | Channel ID rule. Absent: 1 to 30 letters and digits | channel add, search, delivery |
+| `refresh` | New token fields for a due access token | `freshSecrets`, delivery (also once after a 401) |
 | `contact` | CRM lookup by email | the contacts route module (lane P3) |
 | `statuses` | Statuses that an inbound webhook reports | status sync (not in #131) |
+| `events` | The event types that `deliver` sends | channel add (`checkEvents`), fan-out |
+| `deliver` | Sends one delivery | the worker (`jobs/handlers/integration-send.ts`) |
+| `deliveryScopes` | OAuth scopes that `deliver` needs | the worker, before any call |
+
+## Add delivery to a provider
+
+The worker (`jobs/handlers/integration.ts` and `integration-send.ts`) is provider-neutral. It claims the
+operation and writes the receipt (the attempt, `running`, a 5-minute lease) before any call, then for a
+provider in this registry:
+
+1. skips an event that is not in `events` (`succeeded`, no call);
+2. asks for a reconnect (`auth_required`, code `write_access_required`, no call) when `deliveryScopes`
+   are not all in `config.scopes`;
+3. refreshes a due token with `refresh` (a refused refresh: reconnect; no answer or a 5xx: retry);
+4. refuses a channel that fails `target` (`failed`, no call);
+5. calls `deliver` with no transaction open;
+6. maps a thrown `ProviderCallError`: 401 with `refresh` refreshes once and calls `deliver` once more;
+   401 or 403 asks for a reconnect; 408 or 429 retries; another 4xx fails; a 5xx or no answer is
+   `uncertain` and is never sent again;
+7. stores the outcome, the refreshed tokens and a `post_external_links` row for `result` in one
+   transaction. Fan-out creates one create per installation, post and channel. A resync after a
+   reconnect sends none that an earlier installation sent or may have sent to the channel.
+
+A later lane edits only its provider file, its fixture and its tests:
+
+1. In `providers/<file>.ts`, set:
+   - `events`: the event types that the source's `hook.ts` delivers (a tracker: `["post.created"]`).
+   - `target`: a strict rule for the channel ID. A channel that names two values joins them with `:`
+     (Jira `<project ID>:<issue type ID>`). The channel route accepts 1 to 100 characters without
+     `/ \ ? # %` or control characters, then this rule; a rule never needs a route change.
+   - `deliver: async ({ secrets, config, app, target, type, content }) => Outcome`:
+     - Build every URL from a fixed host and the provider's `hosts`: `providerJson(url, init, hosts)`.
+       Check each `config` value again before it enters a URL; return
+       `{ state: "auth_required", errorCode: "authentication" }` for a bad one, with no call.
+     - Encode each path value with `encodeURIComponent`.
+     - Make the body with the shared builders in `../delivery.ts`: `issueParts(content)` (a one-line
+       title of at most 255 characters, paragraphs of at most 2000 characters, the footer) or
+       `issueBody({ content }, 2000)` (Markdown). Escape for the provider's format: HTML with an
+       escape function, Jira-style documents with plain text nodes, chat with `chatText`.
+     - Let a refused call throw; the worker maps it. Return `uncertain` for a 2xx answer without the
+       created ID. Return `{ state: "succeeded", result: { externalId, externalUrl, externalDisplayId? } }`;
+       keep `externalUrl` only on the provider's own HTTPS host, or build it from a fixed host.
+     - A chat message (not a create) that may resend on a 5xx catches the error and returns
+       `callFailed(error, false)`, as `slack.ts` does.
+   - `deliveryScopes` (OAuth only): the write scopes. Ask for them in `authorizeUrl`, and store
+     `config.scopes: grantedScopes(token, SCOPE)` in `exchange`. A connection made before the change
+     then gets the fixed reconnect state.
+2. In `providers/<file>.fixture.ts`, add the create answer with `providerAnswers.push`.
+3. Add `jobs/handlers/<file>-delivery.test.ts`. Copy `tracker-delivery.test.ts`: its two `vi.mock`
+   calls, one `DeliveryCase` row (the channel, config, secrets, authorization header, create route,
+   token route, link and expected request body) and `describeDelivery([row], (p) => (pool = p))`.
+   `tracker-delivery.fixture.ts` then runs the worker evidence for it: success and link, replay,
+   reconnect and resync, lost and expired leases, retries, uncertain outcomes, 401 refresh, 403 and
+   missing scopes, fixed errors, workspace isolation and an outcome rollback. Unit tests for the
+   provider's answers and target rule go in the same file or in its provider test.
+   The table assumes a create with a linked item. A chat provider (Teams) has no link and may retry a
+   5xx: it writes its own cases in that file and keeps the same evidence list.
+4. Fill the provider's heading in `../ROUTES-OAUTH.md`: events, scopes, the target and the differences
+   from the source. Existing connections must reconnect when the scopes change: say so.
+
+Nothing else changes: not `integration-send.ts`, `integration.ts`, `channels.ts`, `catalog.ts`,
+`delivery.ts`, `index.ts` or a shared test file.
 
 ## Destination kinds and parents
 
@@ -174,44 +240,42 @@ would need a different body for each provider, and a route mounted in a loop has
 in the same order as `listQuillsIntegrationDestinations`:
 
 - `prepare`: `oauthConnection(db, params.integrationId)`. Answer 409 when the provider has no `contact`.
-- `call`: `withToken(prepared, (secrets) => provider.contact(secrets, config, query.email))`.
+- `call`: `withToken(prepared, (secrets) => provider.contact(secrets, config, query.email, signal), signal)`,
+  with `signal = AbortSignal.timeout(lookupLimits.provider)` (`../contacts.ts`).
 - `failure`: `called.failure`.
 - `handler`: `keepRefreshed(db, called.connection, called.refreshed)`, then return only the selected
   and bounded `Contact` fields.
 
-## Trello (connect deferred)
+## Fragment providers (Trello)
 
 Trello returns its token in the URL fragment (`#token=…`), not as a `code` query value. A server never
-receives a fragment. A page in the browser must read it and post it back. No such page exists yet.
+receives a fragment, so a page in the browser reads it and posts it back. A provider like this declares
+`callback: "fragment"`. Then:
 
-What exists now: the connect route can build the authorization URL
-(`https://trello.com/1/authorize?key=…&return_url=<callback>?state=…&callback_method=fragment&response_type=token&scope=read,write&expiration=never`).
+1. The redirect URI is the bridge page, not the callback: `<API origin>/api/quills-public/signed/oauth/<type>/bridge`.
+   The credentials routes return it as `redirectUri`. For Trello, add its origin to the allowed origins
+   of the Trello API key.
+2. `GET /quills-public/signed/oauth/{type}/bridge?state=…` (`openQuillsOAuthBridge`) is a signed route
+   with `raw: "text/html"`. Its verifier (`oauthBridge`) needs only a state that this instance signed
+   for this provider, also an expired one or one from another session: the page must load to take the
+   token out of the address, and the POST then refuses. It has a receipt of its own, so the page opens
+   once for each state and does not use the state up; a second visit gets a page that only removes the
+   fragment. The page (`../oauth-bridge.ts`) reads `token` from `location.hash`, removes the fragment
+   with `history.replaceState`, and only then posts `{ token }` as JSON to `callback` next to it, with
+   `credentials: "same-origin"`. The route declares the two scripts (`scripts`), and the framework
+   sends `Content-Security-Policy: default-src 'none'; script-src 'sha256-…' 'sha256-…'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+   `Cache-Control: no-store`, `Referrer-Policy: no-referrer` and `X-Content-Type-Options: nosniff`.
+3. `POST /quills-public/signed/oauth/{type}/callback?state=…` (`completeQuillsOAuthFragmentConnect`), for
+   fragment providers only. `Origin` must be the API origin, and `Sec-Fetch-Site`, when sent, must be
+   `same-origin`. Then the same `oauthState` checks: valid signature, unexpired, this provider, the
+   same session account, still holds `quills:manage_settings`, single use. The token has at most 2,048
+   characters. It never enters a URL, a log, an event or a response.
+4. The route calls `exchange(token, …)` with no transaction open. For Trello, `exchange` checks the
+   token format, then the token itself with `GET https://api.trello.com/1/members/me`, and returns it
+   as the secret. Then the route calls `connect` in one scoped transaction (`integration.connected`).
 
-The design that completes it (from `lib/server/integrations/oauth-fragment.ts` in the reference):
-
-1. The provider declares `callback: "fragment"`.
-2. The GET callback for such a provider answers an HTML bridge page. It does not consume the state.
-   The page reads `token` from `location.hash`, removes the fragment with `history.replaceState`, and
-   posts `{ token }` as JSON to the same URL with `credentials: "same-origin"`. Headers:
-   `Content-Security-Policy: default-src 'none'; script-src 'nonce-…'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'`,
-   `Cache-Control: no-store`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`.
-3. A signed `POST /quills-public/signed/oauth/{type}/callback?state=…` route, for fragment providers
-   only. It uses the same `oauthState` verifier: valid signature, unexpired, same session account,
-   still holds `quills:manage_settings`, single use. It also requires an `Origin` header equal to the
-   API origin. The body is at most 4 KiB. The token is a secret: it never enters a log, an event or a
-   response.
-4. The handler calls `exchange(token, …)`. For Trello, `exchange` checks the token with
-   `GET https://api.trello.com/1/members/me` and returns it as the secret. Then it calls `connect`.
-
-What is missing:
-
-- `framework/define-route.ts` cannot answer `text/html` for a signed route. Its `raw` option allows
-  only RSS and XML for portal, widget and public reads. Lane X1 owns that file.
-- The POST route and the `callback: "fragment"` option, in `../oauth.ts`. They are small once the
-  HTML answer exists.
-
-Until then, lane P2 can write `providers/trello.ts` but must not register it. Trello then stays "not
-available" in the catalog. A registered Trello would offer a connect that cannot complete.
+The code callback (`GET /oauth/{type}/callback`) does not take a fragment provider: that path has no
+`Origin` check, and a token must not travel in a query string.
 
 ## Notes for each lane
 
@@ -234,17 +298,46 @@ available" in the catalog. A registered Trello would offer a connect that cannot
   - Auth header: `Basic base64(":" + token)`.
   - `destinationKinds: { project: {}, "work-item-type": { parent: "project" } }`. The parent is the
     project name.
+- **Delivery (FU3a):** the three providers deliver `post.created` (see `../ROUTES-OAUTH.md`). Jira and
+  Linear ask for write scopes and store `config.scopes`; a connection made before FU3a reconnects.
 
 ### P2: Asana, ClickUp, Trello, Monday, Notion
 
 - **Asana** (`asana`): `hosts: /^app\.asana\.com$/`. One kind (projects). Asana uses refresh tokens.
 - **ClickUp** (`clickup`): `hosts: /^(app|api)\.clickup\.com$/`.
   `destinationKinds: { space: {}, list: { parent: "space" } }`.
-- **Trello** (`trello`): connect deferred (see "Trello"). Its kinds would be
-  `{ board: {}, list: { parent: "board" } }`.
+- **Trello** (`trello`): `hosts: /^(api\.)?trello\.com$/`, `callback: "fragment"` (see "Fragment
+  providers"). `destinationKinds: { board: {}, list: { parent: "board" } }`.
 - **Monday** (`monday`): `hosts: /^(auth|api)\.monday\.com$/`. One kind (boards).
 - **Notion** (`notion`): `hosts: /^api\.notion\.com$/`. One kind (databases). The token exchange uses
   HTTP Basic authentication with the client ID and secret.
+- **Delivery** (follow "Add delivery to a provider"). Each source hook delivers `post.created` only, so
+  `events: ["post.created"]`. None of these OAuth apps lists scopes in `authorizeUrl` today (the app
+  settings grant them), so `deliveryScopes` is not needed; a 403 asks for a reconnect.
+  - Asana: `POST https://app.asana.com/api/1.0/tasks` with
+    `{ data: { name, html_notes, projects: [<project gid>], workspace: config.workspaceGid } }`. Check
+    `config.workspaceGid` (digits) again. `html_notes` is Asana's rich text: escape every part and use
+    only `<body>`, `<strong>` and line breaks. Target: the project gid (digits). Result: `data.gid`;
+    keep `data.permalink_url` only on `https://app.asana.com`.
+  - ClickUp: `POST https://api.clickup.com/api/v2/list/<list ID>/task` with `{ name, description }`
+    (plain text; ClickUp also takes `markdown_description`). The channel is the list (the child kind);
+    target: the list ID (digits). Result: `id`; keep `url` only on `https://app.clickup.com`.
+  - Monday: two GraphQL calls on `https://api.monday.com/v2`, `authorization: <token>` with no `Bearer`:
+    `create_item(board_id, item_name)`, then `create_update(item_id, body)`. Pass the values as GraphQL
+    variables, never in the query text. Once `create_item` answered with an ID, the item exists: catch
+    any failure of `create_update` and return `succeeded` with the item (the source returns
+    `uncertain`; either way never let it throw, or the worker would map a 4xx to `failed` and invite a
+    retry). Monday answers 200 with `errors` for a refused query: map it, as `linear.ts` does. Target:
+    the board ID (digits). The source has no URL.
+  - Notion: `POST https://api.notion.com/v1/pages` with `Notion-Version: 2022-06-28`,
+    `parent.database_id`, the title in `properties.title.title[0].text.content`, and the paragraphs as
+    `paragraph` blocks with plain `rich_text` (at most 2000 characters each). The target rule exists
+    (a UUID). Result: `id`; keep `url` only on `https://www.notion.so`.
+  - Trello (after its connect lane): `POST https://api.trello.com/1/cards` with `idList`, `name`,
+    `desc` and `pos: "top"`. Send the key and token in the
+    `authorization: OAuth oauth_consumer_key="<key>", oauth_token="<token>"` header, not in the query
+    string as the source does. Target: the list ID (24 hexadecimal characters). Result: `id`; keep
+    `shortUrl` only on `https://trello.com`.
 
 ### P3: HubSpot, Intercom, Zendesk, Salesforce and customer context
 
@@ -266,7 +359,22 @@ available" in the catalog. A registered Trello would offer a connect that cannot
 - **Teams** (`teams`): `hosts: /^(login\.microsoftonline|graph\.microsoft)\.com$/`. Teams uses refresh tokens.
   - `destinationKinds: { team: {}, channel: { parent: "team" } }`.
   - Channel IDs (`19:…@thread.tacv2`) fit the parent pattern, so a channel can also be a parent.
-  - Sending channel messages needs tenant admin consent and a bot registration. It is delivery, so it
-    is out of scope for #131. The connect and list entry points need only delegated Graph scopes
-    (`Team.ReadBasic.All`, `Channel.ReadBasic.All`, `offline_access`). The reference also asks for
-    `ChannelMessage.Send`; that scope is for delivery.
+  - Delivery (FU3c) uses the delegated `ChannelMessage.Send`, with no tenant admin consent and no bot
+    registration. A tenant that restricts user consent still needs one admin approval. Connect and
+    lists also use `Team.ReadBasic.All`, `Channel.ReadBasic.All` and `offline_access`.
+  - **Delivery** (follow "Add delivery to a provider"). The source hook posts a message for every event,
+    so `events` lists all three delivered events.
+    - Target: `<team ID>:<channel ID>`, split at the first `:` (a team ID is a GUID with no `:`; a
+      channel ID such as `19:abc@thread.tacv2` has `:` and `@`). The channel route already accepts
+      both. The rule: a GUID, `:`, then `19:`, 1 to 200 of `[\w.=+-]`, `@thread.` and
+      `[a-z0-9]{1,20}`. The total is at most 100 characters (the mapping column).
+    - Scopes: add `ChannelMessage.Send` to the requested scopes, store
+      `config.scopes: grantedScopes(answer, scope)`, and set `deliveryScopes: ["ChannelMessage.Send"]`.
+      A connection made before then gets the fixed reconnect state; say in the docs that it must
+      reconnect.
+    - Call: `POST https://graph.microsoft.com/v1.0/teams/<team ID>/channels/<channel ID>/messages`,
+      each ID with `encodeURIComponent`, body `{ body: { contentType: "html", content } }` with every
+      part escaped (`chatText(d)` gives the text).
+    - A message is not a create: return no `result` (no link), as Slack does, and catch the error to
+      return `callFailed(error, false)` if a 5xx may wait for a retry. Graph throttles with 429, which
+      the worker retries.
