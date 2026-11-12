@@ -123,6 +123,8 @@ export const jira = {
       .map((item) => ({ id: text(item.id), name: text(item.name) }));
   },
   statuses: [],
+  // `<project ID>:<issue type ID>`, both numeric: a destination of each kind.
+  target: (target) => /^\d{1,20}:\d{1,20}$/.test(target),
   refresh: async (secrets, creds) => {
     const token = await tokenRequest({
       grant_type: "refresh_token",

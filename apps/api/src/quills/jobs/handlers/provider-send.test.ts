@@ -3,7 +3,7 @@ import {
   providerCalls,
   providerOverrides,
 } from "../../integrations/provider-edge.fixture";
-import { oauthProviders } from "../../integrations/providers";
+import { oauthProviders, validTarget } from "../../integrations/providers";
 import { deliver, type Delivery } from "./integration-send";
 
 // The provider delivery seam (deliverOAuth) against the local provider server
@@ -146,5 +146,37 @@ describe("provider delivery seam", () => {
       );
       expect(providerCalls).toHaveLength(1);
     }
+  });
+});
+
+describe("channel target rules", () => {
+  const LINEAR_TEAM = "5b1f4c3e-0000-4000-8000-000000000001";
+  it.each([
+    ["jira", "10000:10001", true],
+    ["jira", "10000", false],
+    ["jira", "APP:10001", false],
+    ["jira", "10000:10001:1", false],
+    ["linear", LINEAR_TEAM, true],
+    ["linear", LINEAR_TEAM.toUpperCase(), true],
+    ["linear", "eng", false],
+    ["linear", `${LINEAR_TEAM}x`, false],
+    ["azure_devops", "Contract App:Bug", true],
+    ["azure_devops", "Équipe (web):User Story", true],
+    ["azure_devops", "Contract App", false],
+    ["azure_devops", ":Bug", false],
+    ["azure_devops", "Contract App:", false],
+    ["azure_devops", "..:Bug", false],
+    ["azure_devops", "App:..", false],
+    ["azure_devops", " App:Bug", false],
+    ["azure_devops", "App:Bug ", false],
+    ["azure_devops", "App/x:Bug", false],
+    ["azure_devops", "App:B:C", false],
+    ["azure_devops", "App\u0007:Bug", false],
+    ["azure_devops", `${"a".repeat(65)}:Bug`, false],
+    // A provider without a rule keeps the default: 1 to 30 letters and digits.
+    ["slack", "C0123ABCD", true],
+    ["slack", "C0123-ABCD", false],
+  ])("%s accepts %j: %s", (type, target, valid) => {
+    expect(validTarget(type, target)).toBe(valid);
   });
 });

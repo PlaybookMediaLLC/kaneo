@@ -105,6 +105,11 @@ export const linear = {
       .map((team) => ({ id: text(team.id), name: text(team.name) }));
   },
   statuses: [],
+  // A team ID: a UUID.
+  target: (target) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      target,
+    ),
   refresh: (secrets, creds) =>
     refreshGrant(
       tokenRequest({

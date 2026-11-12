@@ -10,6 +10,23 @@ const hosts = /^dev\.azure\.com$/;
 export const organizationName =
   /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,48}[A-Za-z0-9])?$/;
 
+/**
+ * A project or work item type name in a channel: letters, digits, spaces and `_ . & ( ) -`, at most
+ * 64 characters. It starts with a letter or digit, so it is never `.` or `..`.
+ */
+const channelName =
+  /^[\p{L}\p{N}](?:[\p{L}\p{N} _.&()-]{0,62}[\p{L}\p{N}_)])?$/u;
+
+/** A channel `<project>:<work item type>`. A project name has no `:`. Undefined when either name does not match. */
+function channelOf(target: string) {
+  const at = target.indexOf(":");
+  const project = target.slice(0, at);
+  const type = target.slice(at + 1);
+  return at > 0 && channelName.test(project) && channelName.test(type)
+    ? { project, type }
+    : undefined;
+}
+
 /** The stored organization. A value that does not match never enters a URL: the teammate reconnects. */
 function organizationOf(config: Record<string, unknown>) {
   const organization = text(config.organization);
@@ -86,4 +103,6 @@ export const azureDevops = {
       : names(token, `${organization}/_apis/projects`);
   },
   statuses: [],
+  // `<project>:<work item type>`, the names of a destination of each kind.
+  target: (target) => channelOf(target) !== undefined,
 } satisfies OAuthProvider;
