@@ -143,8 +143,10 @@ describe.skipIf(!url)("Linear provider with the local provider server", () => {
     expect(await secretsOf(body.integration.id)).toMatchObject({
       accessToken: "linear_contract_token",
       refreshToken: "linear_contract_refresh",
-      expiresAt: expect.any(String),
     });
+    expect(
+      Date.parse((await secretsOf(body.integration.id)).expiresAt),
+    ).toBeGreaterThan(Date.now());
   });
 
   it("lists teams and refuses a kind or a parent", async () => {
@@ -157,7 +159,7 @@ describe.skipIf(!url)("Linear provider with the local provider server", () => {
     });
     const list = providerCalls.find((call) => call.path === graphqlPath)!;
     expect(list.authorization).toBe(`Bearer gho_seeded_${env().a}`);
-    expect(JSON.parse(list.body).query).toContain("teams");
+    expect(JSON.parse(list.body).query).toContain("teams(first: 100)");
 
     providerCalls.length = 0;
     for (const query of ["?kind=team", `?parent=${TEAM}`])
@@ -195,10 +197,12 @@ describe.skipIf(!url)("Linear provider with the local provider server", () => {
     expect(
       providerCalls.find((call) => call.path === graphqlPath)!.authorization,
     ).toBe("Bearer linear_contract_token");
-    expect(await secretsOf(id)).toMatchObject({
+    const refreshed = await secretsOf(id);
+    expect(refreshed).toMatchObject({
       accessToken: "linear_contract_token",
       refreshToken: "linear_contract_refresh",
     });
+    expect(Date.parse(refreshed.expiresAt)).toBeGreaterThan(Date.now());
 
     // A rejected refresh token asks for a reconnect, with a fixed message.
     await due("linear_revoked");

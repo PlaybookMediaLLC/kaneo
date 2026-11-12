@@ -117,7 +117,12 @@ export const jira = {
             hosts,
           )
         : record(
-            await providerJson(`${base}/project/search`, { headers }, hosts),
+            // ponytail: one page of 100 projects (Jira's maximum); page with startAt when a site has more.
+            await providerJson(
+              `${base}/project/search?${form({ maxResults: "100" })}`,
+              { headers },
+              hosts,
+            ),
           ).values;
     return items(answer)
       .filter((item) => jiraId.test(text(item.id)))

@@ -141,6 +141,8 @@ External effects:          token exchange and refresh (auth.atlassian.com), acce
   builds `https://api.atlassian.com/ex/jira/<cloudId>/…`; a bad value answers 409 with no call.
 - Project and issue type IDs are numeric; the route drops any other ID. An issue type list needs a project
   that the project list contains (404 otherwise, with no issue type call).
+- The project list is one page of 100 projects (Jira's maximum page). On a site with more projects, a
+  project after the first 100 is not listed and cannot be a parent.
 - Access tokens expire after one hour. A due token is refreshed before the call; Atlassian rotates the
   refresh token. A rejected refresh (400 or 403) answers 409 "Reconnect".
 - Tests against the local provider server: exchange, both kinds, a foreign project, a bad stored cloud
@@ -172,7 +174,8 @@ External effects:          token exchange and refresh (api.linear.app/oauth/toke
 | `fetchLinearTeamsFn` | `listQuillsIntegrationDestinations` | `GET /integrations/{integrationId}/destinations` (one kind: teams) | manage_settings | contract (GitHub); `providers/linear.test.ts` |
 
 - The connection's name and account are the organization's name and URL key. No `config` value is stored.
-- A team ID has 1 to 64 letters, digits and `-`; the route drops any other ID. The route refuses a `kind`
+- The list asks for the first 100 teams. A team ID has 1 to 64 letters, digits and `-`; the route drops
+  any other ID. The route refuses a `kind`
   or a `parent` (400): Linear has one kind.
 - A due token is refreshed before the call; Linear rotates the refresh token. A rejected refresh (400)
   answers 409 "Reconnect".
@@ -183,7 +186,7 @@ External effects:          token exchange and refresh (api.linear.app/oauth/toke
 |---|---|
 | Scope `read`, not `read,write,issues:create,admin` | Issue #131 lists teams only. Delivery and status sync add their scopes and a reconnect. |
 | No `events` and no status sync | Out of scope for #131. |
-| A failed organization query fails the connect; the source named it `Linear` | One rule for every call: a failure is a fixed error. |
+| An organization query that Linear refuses (an HTTP error) fails the connect; the source named it `Linear` | One rule for every call: a refused call is a fixed error. An answer without a name still gives `Linear`, as in the source. |
 | `orgId` is not stored | Only the webhooks of status sync use it. |
 | A disconnect does not revoke the token | The shared disconnect route revokes no provider token. |
 
@@ -214,8 +217,8 @@ External effects:          project and work item type lists (dev.azure.com). No 
 - The destination ID is the project or work item type name, as in the source. The project name is
   encoded in the path. A work item type list needs a project that the project list contains (404
   otherwise).
-- On connect, Azure DevOps 401 or 403 answers 400. An answer without a list (for example a sign-in
-  page) is 502.
+- Each call sends `X-TFS-FedAuthRedirect: Suppress`, so a refused token gets 401 and not a sign-in page.
+  On connect, 401 or 403 answers 400. An answer without a list is 502.
 - Tests against the local provider server: connect, ten bad organization names with no call, a rejected
   token, both kinds, a foreign project, a bad stored organization, malformed answers (502).
 

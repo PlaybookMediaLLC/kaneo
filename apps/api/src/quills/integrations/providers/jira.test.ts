@@ -58,6 +58,7 @@ const url = process.env.QUILLS_TEST_DATABASE_URL;
 
 const api = `/api.atlassian.com/ex/jira/${JIRA_CLOUD_ID}/rest/api/3`;
 const tokenPath = "/auth.atlassian.com/oauth/token";
+const projects = `${api}/project/search?maxResults=100`;
 type IntegrationId = typeof integrations.$inferSelect.id;
 
 describe.skipIf(!url)("Jira provider with the local provider server", () => {
@@ -149,8 +150,8 @@ describe.skipIf(!url)("Jira provider with the local provider server", () => {
     expect(row.secrets).toMatchObject({
       accessToken: "jira_contract_token",
       refreshToken: "jira_contract_refresh",
-      expiresAt: expect.any(String),
     });
+    expect(Date.parse(row.secrets.expiresAt)).toBeGreaterThan(Date.now());
   });
 
   it("lists projects and issue types, and refuses a project that it does not list", async () => {
@@ -173,7 +174,7 @@ describe.skipIf(!url)("Jira provider with the local provider server", () => {
       ],
     });
     expect(providerCalls.map((call) => call.path)).toEqual([
-      `${api}/project/search`,
+      projects,
       `${api}/issuetype/project?projectId=10000`,
     ]);
     expect(providerCalls[1]!.authorization).toBe(
@@ -183,17 +184,16 @@ describe.skipIf(!url)("Jira provider with the local provider server", () => {
     providerCalls.length = 0;
     const foreign = await destinations(id, "?kind=issue-type&parent=10099");
     expect(foreign.status).toBe(404);
-    expect(providerCalls.map((call) => call.path)).toEqual([
-      `${api}/project/search`,
-    ]);
+    expect(providerCalls.map((call) => call.path)).toEqual([projects]);
     for (const query of ["?kind=issue-type", "?kind=project&parent=10000"])
       expect((await destinations(id, query)).status, query).toBe(400);
   });
 
   it("refuses a stored cloud ID that is not a UUID before any call", async () => {
-    const id = await connected({ cloudId: "evil.example.com/x" });
-    const res = await destinations(id);
-    expect(res.status).toBe(409);
+    for (const cloudId of ["evil.example.com/x", `${JIRA_CLOUD_ID}/../x`]) {
+      const id = await connected({ cloudId });
+      expect((await destinations(id)).status, cloudId).toBe(409);
+    }
     expect(providerCalls).toEqual([]);
   });
 
@@ -226,25 +226,28 @@ describe.skipIf(!url)("Jira provider with the local provider server", () => {
       refresh_token: "jira_old_refresh",
     });
     expect(
-      providerCalls.find((call) => call.path === `${api}/project/search`)!
-        .authorization,
+      providerCalls.find((call) => call.path === projects)!.authorization,
     ).toBe("Bearer jira_contract_token");
-    expect((await stored(id)).secrets).toMatchObject({
+    const refreshed = (await stored(id)).secrets;
+    expect(refreshed).toMatchObject({
       accessToken: "jira_contract_token",
       refreshToken: "jira_contract_refresh",
     });
+    expect(Date.parse(refreshed.expiresAt)).toBeGreaterThan(Date.now());
 
     // A rejected refresh token asks for a reconnect, with a fixed message.
-    await due("jira_revoked");
-    providerOverrides.set(`POST ${tokenPath}`, {
-      status: 403,
-      body: { error: "invalid_grant", error_description: "provider detail" },
-    });
-    const rejected = await destinations(id);
-    expect(rejected.status).toBe(409);
-    const text = await rejected.text();
-    expect(text).toContain("Reconnect");
-    expect(text).not.toContain("provider detail");
+    for (const status of [400, 403]) {
+      await due("jira_revoked");
+      providerOverrides.set(`POST ${tokenPath}`, {
+        status,
+        body: { error: "invalid_grant", error_description: "provider detail" },
+      });
+      const rejected = await destinations(id);
+      expect(rejected.status, String(status)).toBe(409);
+      const text = await rejected.text();
+      expect(text).toContain("Reconnect");
+      expect(text).not.toContain("provider detail");
+    }
   });
 
   it("answers a fixed error for a malformed provider answer", async () => {
@@ -252,20 +255,22 @@ describe.skipIf(!url)("Jira provider with the local provider server", () => {
     await env().scoped(env().a, (db) =>
       db.delete(integrations).where(eq(integrations.integrationType, "jira")),
     );
-    providerOverrides.set(
-      "GET /api.atlassian.com/oauth/token/accessible-resources",
-      { status: 200, body: [{ id: "../evil", name: "provider detail" }] },
-    );
-    const state = mintOAuthState({
-      workspaceId: env().a,
-      userId: env().owner,
-      type: "jira",
-    });
-    const res = await callback(state);
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      message: "The provider rejected the request.",
-    });
+    for (const id of ["../evil", `${JIRA_CLOUD_ID}/../x`]) {
+      providerOverrides.set(
+        "GET /api.atlassian.com/oauth/token/accessible-resources",
+        { status: 200, body: [{ id, name: "provider detail" }] },
+      );
+      const state = mintOAuthState({
+        workspaceId: env().a,
+        userId: env().owner,
+        type: "jira",
+      });
+      const res = await callback(state);
+      expect(res.status, id).toBe(400);
+      expect(await res.json()).toMatchObject({
+        message: "The provider rejected the request.",
+      });
+    }
     const rows = await env().scoped(env().a, (db) =>
       db
         .select({ id: integrations.id })

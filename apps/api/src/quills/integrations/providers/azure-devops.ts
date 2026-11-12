@@ -29,6 +29,8 @@ async function names(token: string, path: string) {
         headers: {
           authorization: `Basic ${Buffer.from(`:${token}`).toString("base64")}`,
           accept: "application/json",
+          // A refused token then gets 401, not a sign-in page with status 203.
+          "x-tfs-fedauthredirect": "Suppress",
         },
       },
       hosts,

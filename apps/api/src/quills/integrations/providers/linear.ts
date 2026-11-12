@@ -98,7 +98,7 @@ export const linear = {
       (
         await graphql(
           secrets.accessToken ?? "",
-          "{ teams { nodes { id name } } }",
+          "{ teams(first: 100) { nodes { id name } } }",
         )
       ).teams,
     ).nodes;
