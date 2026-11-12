@@ -3,6 +3,7 @@ import {
   providerCalls,
   providerOverrides,
 } from "../../integrations/provider-edge.fixture";
+import { grantedScopes, hasScopes } from "../../integrations/delivery";
 import { oauthProviders, validTarget } from "../../integrations/providers";
 import { deliver, type Delivery } from "./integration-send";
 
@@ -178,5 +179,86 @@ describe("channel target rules", () => {
     ["slack", "C0123-ABCD", false],
   ])("%s accepts %j: %s", (type, target, valid) => {
     expect(validTarget(type, target)).toBe(valid);
+  });
+});
+
+describe("granted scopes", () => {
+  it("records the answer's scopes, as a string or a list, or the requested ones", () => {
+    expect(grantedScopes({ scope: "read write" }, "x")).toBe("read write");
+    expect(grantedScopes({ scope: ["read", "issues:create"] }, "x")).toBe(
+      "read issues:create",
+    );
+    expect(grantedScopes({}, "read,issues:create")).toBe("read issues:create");
+    expect(grantedScopes({ scope: " " }, "read")).toBe("read");
+    expect(hasScopes({ scopes: "read issues:create" }, ["issues:create"])).toBe(
+      true,
+    );
+    expect(hasScopes({ scopes: "read" }, ["issues:create"])).toBe(false);
+    expect(hasScopes({}, ["issues:create"])).toBe(false);
+  });
+});
+
+describe("Linear answers", () => {
+  const GRAPHQL = "POST /api.linear.app/graphql";
+  const linear = (): Delivery => ({
+    ...gitlab(),
+    provider: "linear",
+    credentials: {
+      accessToken: "lin_token",
+      refreshToken: "lin_refresh",
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+    },
+    config: { scopes: "read issues:create" },
+    target: "5b1f4c3e-0000-4000-8000-000000000001",
+  });
+  it.each([
+    ["authentication error", "AUTHENTICATION_ERROR", "auth_required"],
+    ["forbidden", "FORBIDDEN", "auth_required"],
+    ["ratelimited", "RATELIMITED", "retry_wait"],
+    ["invalid input", "INVALID_INPUT", "failed"],
+  ])(
+    "maps a refused mutation (%s) without a resend",
+    async (type, code, state) => {
+      answers(GRAPHQL, {
+        status: 200,
+        body: {
+          data: null,
+          errors: [{ message: "provider text", extensions: { type, code } }],
+        },
+      });
+      const outcome = await deliver(linear());
+      expect(outcome.state).toBe(state);
+      expect(JSON.stringify(outcome)).not.toContain("provider text");
+      expect(providerCalls).toHaveLength(1);
+    },
+  );
+  it("records an answer with an issueCreate but no issue as uncertain, and drops a foreign URL", async () => {
+    answers(GRAPHQL, {
+      status: 200,
+      body: { data: { issueCreate: { success: false } } },
+    });
+    expect(await deliver(linear())).toMatchObject({ state: "uncertain" });
+    answers(GRAPHQL, {
+      status: 200,
+      body: {
+        data: {
+          issueCreate: {
+            issue: {
+              id: "9c2a4f1e-0000-4000-8000-000000000042",
+              identifier: "<b>",
+              url: "https://linear.app.evil.test/x",
+            },
+          },
+        },
+      },
+    });
+    expect(await deliver(linear())).toMatchObject({
+      state: "succeeded",
+      result: {
+        externalId: "9c2a4f1e-0000-4000-8000-000000000042",
+        externalDisplayId: undefined,
+        externalUrl: null,
+      },
+    });
   });
 });

@@ -109,7 +109,7 @@ describe.skipIf(!url)("Linear provider with the local provider server", () => {
     );
     expect(Object.fromEntries(authorize.searchParams)).toMatchObject({
       client_id: "client-linear",
-      scope: "read",
+      scope: "read,issues:create",
       response_type: "code",
     });
 

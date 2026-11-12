@@ -34,6 +34,7 @@ import {
   providerOverrides,
 } from "../../integrations/provider-edge.fixture";
 import { JIRA_CLOUD_ID } from "../../integrations/providers/jira.fixture";
+import { LINEAR_ISSUE } from "../../integrations/providers/linear.fixture";
 import { enqueueQuillsJob } from "../queue";
 import { harness } from "./harness.fixture";
 import { fanOutIntegrations } from "./integration";
@@ -114,10 +115,13 @@ type Tracker = {
     externalDisplayId: string | null;
   };
   /** Checks the create request body. */
-  request: (body: unknown) => void;
+  request: (body: unknown, board: string) => void;
 };
 
 const future = () => new Date(Date.now() + 3_600_000).toISOString();
+const LINEAR_TEAM = "5b1f4c3e-0000-4000-8000-000000000001";
+/** The board slug of the last post that makePost wrote. */
+let lastBoard = "";
 const CONTENT = "First line\n\n<script>alert(1)</script> & **bold**";
 
 const trackers: Tracker[] = [
@@ -143,7 +147,7 @@ const trackers: Tracker[] = [
       externalUrl: "https://contract.atlassian.net/browse/APP-1",
       externalDisplayId: null,
     },
-    request: (body) =>
+    request: (body, board) =>
       expect(body).toEqual({
         fields: {
           project: { id: "10000" },
@@ -173,11 +177,40 @@ const trackers: Tracker[] = [
               },
               {
                 type: "paragraph",
-                content: [
-                  { type: "text", text: expect.stringMatching(/^Board: /) },
-                ],
+                content: [{ type: "text", text: `Board: ${board}` }],
               },
             ],
+          },
+        },
+      }),
+  },
+  {
+    type: "linear",
+    channel: LINEAR_TEAM,
+    config: { scopes: "read issues:create" },
+    secrets: (workspaceId) => ({
+      accessToken: `linear_${workspaceId}`,
+      refreshToken: `linear_refresh_${workspaceId}`,
+      expiresAt: future(),
+    }),
+    authorization: (workspaceId) => `Bearer linear_${workspaceId}`,
+    create: "POST /api.linear.app/graphql",
+    token: "POST /api.linear.app/oauth/token",
+    refreshedToken: "linear_contract_token",
+    link: {
+      externalId: LINEAR_ISSUE,
+      externalUrl: "https://linear.app/contract/issue/ENG-1/integration-post",
+      externalDisplayId: "ENG-1",
+    },
+    request: (body, board) =>
+      expect(body).toEqual({
+        query: expect.stringContaining("issueCreate(input: $input)"),
+        variables: {
+          input: {
+            teamId: LINEAR_TEAM,
+            title: "Integration post",
+            // Markdown, as the post content is.
+            description: `${CONTENT}\n\n---\n**Submitted by:** ${h.owner}\n**Board:** ${board}`,
           },
         },
       }),
@@ -254,7 +287,7 @@ async function makePost(workspaceId = h.a) {
   return h.as(workspaceId, owner(workspaceId), async (db, actor) => {
     const [board] = await db
       .insert(boards)
-      .values({ name: "Board", slug: `board-${randomUUID()}` })
+      .values({ name: "Board", slug: (lastBoard = `board-${randomUUID()}`) })
       .returning({ id: boards.id });
     const [post] = await db
       .insert(posts)
@@ -373,7 +406,7 @@ describe.skipIf(!url)("issue tracker delivery", () => {
       });
       expect(creates()).toHaveLength(1);
       expect(creates()[0]!.authorization).toBe(t.authorization(h.a));
-      t.request(JSON.parse(creates()[0]!.body));
+      t.request(JSON.parse(creates()[0]!.body), lastBoard);
       const [connection] = await h.system(h.a, (db) =>
         db
           .select({
@@ -392,6 +425,11 @@ describe.skipIf(!url)("issue tracker delivery", () => {
           syncScope: `${installationOf(connection!)}:${t.channel}`,
         }),
       ]);
+      expect(await syncItem(op!.id)).toMatchObject({
+        state: "succeeded",
+        remoteUrl: t.link.externalUrl,
+        remoteDisplayId: t.link.externalDisplayId ?? t.link.externalId,
+      });
 
       await replay((await job(op!.id)).id);
       await h.drain(h.a);
