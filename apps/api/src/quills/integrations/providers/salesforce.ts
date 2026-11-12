@@ -6,10 +6,10 @@ import {
 import {
   form,
   formHeaders,
-  list,
   record,
   refreshGrant,
   rejected,
+  rows,
   text,
   type OAuthProvider,
 } from "../oauth-providers";
@@ -110,7 +110,7 @@ export const salesforce = {
     if (!instance) throw new ProviderCallError(401);
     // A SOQL string literal: escape the backslash and the quote.
     const literal = email.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
-    const [found] = list(
+    const [found] = rows(
       record(
         await providerJson(
           `${instance}/services/data/v62.0/query?${form({

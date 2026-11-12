@@ -8,6 +8,7 @@ import {
   list,
   record,
   rejected,
+  rows,
   text,
   type OAuthProvider,
 } from "../oauth-providers";
@@ -89,7 +90,7 @@ export const zendesk = {
       accept: "application/json",
     };
     // The search also matches names and parts of addresses: keep only the user with this email.
-    const user = list(
+    const user = rows(
       record(
         await providerJson(
           `${base}/api/v2/users/search.json?${form({ query: email })}`,

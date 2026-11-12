@@ -126,6 +126,11 @@ export type OAuthProvider = Provider & {
 export const text = (value: unknown) =>
   typeof value === "string" ? value : "";
 export const list = (value: unknown) => (Array.isArray(value) ? value : []);
+/** The list of a provider answer. An answer without it is a provider failure (502), not an empty list. */
+export const rows = (value: unknown) => {
+  if (!Array.isArray(value)) throw new ProviderCallError(502);
+  return value as unknown[];
+};
 export const record = (value: unknown) =>
   value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 export const form = (values: Record<string, string>) =>

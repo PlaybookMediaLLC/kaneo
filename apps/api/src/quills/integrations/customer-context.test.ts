@@ -339,7 +339,7 @@ describe.skipIf(!url)("CRM providers and customer context", () => {
     expect(soql).toContain("WHERE Email = 'o\\'brien@example.test' LIMIT 1");
   });
 
-  it("finds a contact, selects its fields and answers no match or a malformed answer with null", async () => {
+  it("finds a contact, selects its fields, answers no match with null and an answer without its list with 502", async () => {
     const id = await oauthConnection(env, env.a, {
       type: "hubspot",
       config: { portalId: "42" },
@@ -373,14 +373,20 @@ describe.skipIf(!url)("CRM providers and customer context", () => {
       for (const body of [
         { results: [] },
         { results: [{ id: { nested: "101" }, properties: "x" }] },
-        { results: "not a list" },
-        "not an object",
       ]) {
         providerOverrides.set(route, { status: 200, body });
         expect(
           await get(`/integrations/${id}/contacts?email=${EMAIL}`),
           JSON.stringify(body),
         ).toEqual({ status: 200, body: { contact: null } });
+      }
+      // An answer without the result list is a provider failure, not "no match".
+      for (const body of [{ results: "not a list" }, "not an object"]) {
+        providerOverrides.set(route, { status: 200, body });
+        expect(
+          (await get(`/integrations/${id}/contacts?email=${EMAIL}`)).status,
+          JSON.stringify(body),
+        ).toBe(502);
       }
       // A provider failure is a fixed answer; provider text never reaches the caller.
       providerOverrides.set(route, {

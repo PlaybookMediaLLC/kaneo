@@ -8,6 +8,7 @@ import {
   record,
   refreshGrant,
   rejected,
+  rows,
   text,
   type OAuthProvider,
 } from "../oauth-providers";
@@ -139,7 +140,7 @@ export const hubspot = {
     ),
   contact: async (secrets, config, email) => {
     const accessToken = secrets.accessToken ?? "";
-    const [found] = list(
+    const [found] = rows(
       record(
         await providerJson(
           `${api}/crm/v3/objects/contacts/search`,

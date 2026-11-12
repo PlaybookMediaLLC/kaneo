@@ -13,8 +13,8 @@ import { boundContact, contactView, lookupEmail } from "./contacts";
 import { appCredentials, keepRefreshed, withToken } from "./oauth";
 import {
   form,
-  list,
   record,
+  rows,
   text,
   type OAuthProvider,
 } from "./oauth-providers";
@@ -31,7 +31,7 @@ const freshdeskHost = /^[a-z0-9-]{1,63}\.freshdesk\.com$/;
 const freshdesk: Lookup = async (secrets, config, email) => {
   const host = text(config.account);
   if (!freshdeskHost.test(host)) throw new ProviderCallError(401);
-  const [found] = list(
+  const [found] = rows(
     await providerJson(
       `https://${host}/api/v2/contacts?${form({ email })}`,
       {
@@ -56,7 +56,7 @@ const freshdesk: Lookup = async (secrets, config, email) => {
 
 /** Stripe: the first customer with this email. */
 const stripe: Lookup = async (secrets, _config, email) => {
-  const [found] = list(
+  const [found] = rows(
     record(
       await providerJson(
         `https://api.stripe.com/v1/customers?${form({ email, limit: "1" })}`,

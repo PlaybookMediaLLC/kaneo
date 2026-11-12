@@ -5,6 +5,7 @@ import {
   list,
   record,
   rejected,
+  rows,
   text,
   type OAuthProvider,
 } from "../oauth-providers";
@@ -75,7 +76,7 @@ export const intercom = {
   statuses: [],
   contact: async (secrets, _config, email) => {
     const headers = bearer(secrets.accessToken ?? "");
-    const [found] = list(
+    const [found] = rows(
       record(
         await providerJson(
           "https://api.intercom.io/contacts/search",
