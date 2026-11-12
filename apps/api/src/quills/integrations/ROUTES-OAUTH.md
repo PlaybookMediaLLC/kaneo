@@ -166,8 +166,9 @@ context".
   has no link.
 - `refresh`: access tokens expire after 30 minutes. A rejected refresh token (400) asks for a reconnect.
 - `contact`: one search with an exact email filter. Then one association read and one batch read of at
-  most five deals. A failed deal read leaves the deal fields out.
-- Fields: Lifecycle, Deal value (the sum of at most five deals) and Deals (their count).
+  most 100 deals. A failed deal read leaves the deal fields out.
+- Fields: Lifecycle, Deal value (account currency) and Deals (their count). The value is the sum of
+  `amount_in_home_currency`: the `amount` of a deal can be in another currency.
 
 ### Intercom
 
@@ -178,7 +179,9 @@ Lane P3. File `providers/intercom.ts`, type `intercom`. Connect route `startQuil
   data hosts (`api.eu.intercom.io`, `api.au.intercom.io`) are not supported, as in the source.
 - `exchange` posts the code to `/auth/eagle/token` and seals the token. It reads `/me` once for the app
   name (the account label). Intercom tokens do not expire, so there is no `refresh`.
-- `contact`: one search for the exact email (API version 2.14). Fields: Plan (the `plan` attribute) and
+- `contact`: one search for the exact email (API version 2.14). The search gives company and tag
+  references without names, so the lookup then reads `/contacts/<id>/companies` and `/contacts/<id>/tags`
+  at the same time. A failed name read leaves its field out. Fields: Plan (the `plan` attribute) and
   Tags. The link opens the contact in the teammate's current app (`/a/apps/_/users/<id>`).
 
 ### Zendesk
@@ -191,7 +194,8 @@ Lane P3. File `providers/zendesk.ts`, type `zendesk`. Connect route `startQuills
   (401). The callback checks it again (400) before any provider call.
 - Hosts: `<subdomain>.zendesk.com` only. `exchange` stores `config.subdomain`, and each lookup checks it
   against the pattern again. A changed value asks for a reconnect (409) and sends nothing.
-- Scope `read`. Zendesk tokens do not expire by default, so there is no `refresh`.
+- Scope `users:read organizations:read`. Zendesk tokens do not expire by default, so there is no
+  `refresh`.
 - `contact`: the user search also matches names and parts of addresses, so the lookup keeps only the
   user whose email is equal (case-insensitive). Then one optional read of the user's organization.
   Fields: Role and Tags.
@@ -209,7 +213,9 @@ Lane P3. File `providers/salesforce.ts`, type `salesforce`. Connect route
   escaped string literal: `SELECT Id, Name, Account.Name FROM Contact WHERE Email = '…' LIMIT 1`.
 - `refresh` returns the token fields only, so a refresh answer cannot change the stored instance.
 - The token answer gives no lifetime, and each org sets its own session timeout (15 minutes to 24 hours).
-  The token counts as due after 15 minutes, so a call after that refreshes it first.
+  The token counts as due after 15 minutes, so a call after that refreshes it first. Without a refresh
+  token (the app does not allow the `refresh_token` scope), the token has no expiry: it works until the
+  org's session ends, and then a lookup asks for a reconnect.
 
 ### Contacts and customer context
 
@@ -226,8 +232,9 @@ Persisted relationships:   the person must be a customer of the workspace (direc
 Transactions:              `prepare` reads in one scoped transaction. The provider calls run with no
                            transaction open. The handler stores refreshed tokens in a new one. No other
                            write, no event and no audit row.
-External effects:          a lookup per connected provider (HubSpot and Zendesk make up to three
-                           requests) to fixed hosts. The email leaves Kaneo to each connected provider.
+External effects:          a lookup per connected provider (HubSpot, Intercom and Zendesk make up to
+                           three requests, and a due token adds one) to fixed hosts. The email leaves
+                           Kaneo to each connected provider.
 ```
 
 | operationId | Route | Action | Tables | Event | Tests |
@@ -241,7 +248,8 @@ Merged: `searchHubSpotContactFn`, `searchIntercomContactFn` and `searchZendeskUs
 - Action: both routes need `quills:update`, as `searchQuillsExternalItems` does. A lookup sends an email
   to the connected account and returns records that the token can read. A viewer does not query the
   connected accounts. The source used `INTEGRATION_VIEW` (read).
-- The contact route answers 409 for a connection without a contact lookup. It answers a provider
+- The contact route answers 409 for an OAuth connection without a contact lookup, and 404 for a
+  connection that is not OAuth (the customer context reads Freshdesk and Stripe). It answers a provider
   failure after commit: 409 (reconnect, or no permission in the provider), 400 or 502. Provider text
   never reaches a response.
 - The customer context reads the person's email (a lead's contact email when the account email is a
@@ -260,12 +268,15 @@ Merged: `searchHubSpotContactFn`, `searchIntercomContactFn` and `searchZendeskUs
 - Nothing is logged. The handler stores a refreshed token as `listQuillsIntegrationDestinations` does.
 
 Tests (`customer-context.test.ts`, against the local provider server): the code exchange of each
-provider; the Zendesk subdomain outside the pattern and an altered subdomain in the state; a Salesforce
-token answer that names another instance; a refresh that names another instance; contact found, not
-found and malformed answers; the exact-email rule and a changed stored subdomain in Zendesk; Freshdesk
-and Stripe found, and a changed Freshdesk host; context with two providers where one fails; context
-refused for a teammate, a person of workspace B and a removed person; no email or token in audit,
-event or job rows.
+provider and the stored refresh token and expiry; a Salesforce answer without a refresh token; the
+Zendesk subdomain outside the pattern and an altered subdomain in the state; a Salesforce token answer
+that names another instance; a refresh that names another instance, its request and the stored token;
+the SOQL quote escape; contact found, not found and malformed answers, and the email in the search; the
+exact-email rule and a changed stored subdomain in Zendesk; the Intercom company and tag names;
+Freshdesk and Stripe found, and a changed Freshdesk host; context with the customer's email, a lead's
+contact email, no email, a refresh and a `not_found` entry; context with two providers where one fails;
+context refused for a teammate, a teammate's portal profile, a person of workspace B and a removed
+person; no email or token in audit, event or job rows.
 
 | Source | This port | Reason |
 |---|---|---|
@@ -274,8 +285,9 @@ event or job rows.
 | A failed provider is left out and logged | An entry with `failed` and a fixed text; nothing is logged | The caller sees which provider failed. Logs hold no personal data. |
 | Salesforce refreshes after a rejected read, and a refresh can change the stored instance | Refresh after 15 minutes; a refresh never changes the instance | `withToken` refreshes due tokens only. The instance is checked once and kept. |
 | Zendesk keeps the first search result | Only the user with the exact email | The search also matches other people. |
-| Zendesk scope `read write`; the agent's name labels the connection | Scope `read`; the help desk domain labels it | The lookup only reads. One request less. |
-| HubSpot link without the portal; five deal reads; label "Open deals" | Link with the portal ID; one batch read; label "Deals" | The count includes closed deals. |
+| Zendesk scope `read write`; the agent's name labels the connection | Scope `users:read organizations:read`; the help desk domain labels it | The lookup reads users and organizations only. One request less. |
+| HubSpot link without the portal; five deal reads; "Open deals"; `$` and the raw `amount` | Link with the portal ID; one batch read of at most 100; "Deals"; the amount in the account currency, with no symbol | The count includes closed deals. A deal's `amount` can be in another currency. |
+| Intercom company and tags from the search answer | Two more reads for their names | The search answer has references without names. |
 | Freshdesk reads `config.subdomain` | Freshdesk reads the account label (`<subdomain>.freshdesk.com`) | The Freshdesk save route stores that label. |
 | HubSpot and Zendesk revoke the token on disconnect | Not built | The delete route makes no provider call. |
 
