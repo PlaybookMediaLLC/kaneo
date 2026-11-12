@@ -9,7 +9,12 @@ import {
   openCredentials,
   providerJson,
 } from "../framework/integration-config";
-import { boundContact, contactView, lookupEmail } from "./contacts";
+import {
+  boundContact,
+  contactView,
+  lookupEmail,
+  lookupLimits,
+} from "./contacts";
 import { appCredentials, keepRefreshed, withToken } from "./oauth";
 import {
   form,
@@ -23,12 +28,14 @@ import { oauthProvider, oauthProviders } from "./providers";
 // Customer context: one lookup of a customer's email in each connected provider that has one. A
 // provider that fails gives a fixed error text, and the others still answer. The provider calls run
 // with no database transaction open: prepare reads, call looks up, the handler keeps refreshed tokens.
+// The providers run at once. Each one stops at its own budget or at the read's deadline, whichever
+// comes first (lookupLimits in contacts.ts), and the read answers with the providers that finished.
 
 type Lookup = NonNullable<OAuthProvider["contact"]>;
 
 const freshdeskHost = /^[a-z0-9-]{1,63}\.freshdesk\.com$/;
 /** Freshdesk: the help desk host is the connection's account label, checked again before the call. */
-const freshdesk: Lookup = async (secrets, config, email) => {
+const freshdesk: Lookup = async (secrets, config, email, signal) => {
   const host = text(config.account);
   if (!freshdeskHost.test(host)) throw new ProviderCallError(401);
   const [found] = rows(
@@ -39,6 +46,7 @@ const freshdesk: Lookup = async (secrets, config, email) => {
           authorization: `Basic ${btoa(`${secrets.apiKey ?? ""}:X`)}`,
           accept: "application/json",
         },
+        signal,
       },
       freshdeskHost,
     ),
@@ -55,12 +63,15 @@ const freshdesk: Lookup = async (secrets, config, email) => {
 };
 
 /** Stripe: the first customer with this email. */
-const stripe: Lookup = async (secrets, _config, email) => {
+const stripe: Lookup = async (secrets, _config, email, signal) => {
   const [found] = rows(
     record(
       await providerJson(
         `https://api.stripe.com/v1/customers?${form({ email, limit: "1" })}`,
-        { headers: { authorization: `Bearer ${secrets.apiKey ?? ""}` } },
+        {
+          headers: { authorization: `Bearer ${secrets.apiKey ?? ""}` },
+          signal,
+        },
         /^api\.stripe\.com$/,
       ),
     ).data,
@@ -91,8 +102,11 @@ type Prepared = {
   creds: Record<string, string>;
 };
 
-/** One provider's entry. Errors are fixed texts: provider text never reaches the response. */
-async function lookup(prepared: Prepared, email: string) {
+/**
+ * One provider's entry. Errors are fixed texts: provider text never reaches the response. When
+ * `signal` aborts, the entry is `failed` at once, with a refresh that finished before it.
+ */
+async function lookup(prepared: Prepared, email: string, signal: AbortSignal) {
   const entry = {
     integrationType: prepared.type,
     connection: prepared.connection,
@@ -111,7 +125,8 @@ async function lookup(prepared: Prepared, email: string) {
   try {
     const { data, refreshed, failure } = await withToken(
       { type: prepared.type, secrets: prepared.secrets, creds: prepared.creds },
-      (secrets) => contact(secrets, prepared.config, email),
+      (secrets) => contact(secrets, prepared.config, email, signal),
+      signal,
     );
     if (failure) return { ...failed(failure.message), refreshed };
     return {
@@ -133,7 +148,7 @@ const customerContext = defineQuillsRoute({
   operationId: "getQuillsCustomerContext",
   summary: "Look up a customer in the connected CRM and support tools",
   description:
-    "Sends the customer's email to each connected provider with a contact lookup (HubSpot, Intercom, Zendesk, Salesforce, Freshdesk, Stripe) and returns one entry for each, with selected fields only. A provider that fails gives `failed` and a fixed error text; the others still answer. A customer without an email address gives no entries. Calls the providers.",
+    "Sends the customer's email to each connected provider with a contact lookup (HubSpot, Intercom, Zendesk, Salesforce, Freshdesk, Stripe) and returns one entry for each, with selected fields only. A provider that fails, or does not answer in time, gives `failed` and a fixed error text; the others still answer. A customer without an email address gives no entries. Calls the providers.",
   // The lookup sends a customer's email to the connected accounts and returns their records: viewers may not.
   action: "update",
   params: z.object({ principalId: flexibleToTypeIdSchema("principal") }),
@@ -151,12 +166,15 @@ const customerContext = defineQuillsRoute({
   responseDescription: "One entry for each connected provider with a lookup",
   errors: { 403: "Insufficient permission", 404: "Person not found" },
   prepare: async ({ db, params }) => {
+    // The read's deadline starts here, so that it also covers this database read.
+    const deadline = AbortSignal.timeout(lookupLimits.context);
     // A customer of this workspace only: a teammate, a foreign or a removed person is 404.
     const person = await loadCustomer(db, params.principalId);
     const email = lookupEmail.safeParse(
       realEmail(person.email) ?? realEmail(person.contactEmail),
     );
-    if (!email.success) return { email: "", providers: [] as Prepared[] };
+    if (!email.success)
+      return { email: "", providers: [] as Prepared[], deadline };
     const rows = await db
       .select({
         id: integrations.id,
@@ -188,10 +206,21 @@ const customerContext = defineQuillsRoute({
             (await appCredentials(db, row.integrationType))) ||
           {},
       });
-    return { email: email.data, providers };
+    return { email: email.data, providers, deadline };
   },
-  call: ({ email, providers }) =>
-    Promise.all(providers.map((prepared) => lookup(prepared, email))),
+  call: ({ email, providers, deadline }) =>
+    Promise.all(
+      providers.map((prepared) =>
+        lookup(
+          prepared,
+          email,
+          AbortSignal.any([
+            deadline,
+            AbortSignal.timeout(lookupLimits.provider),
+          ]),
+        ),
+      ),
+    ),
   handler: async ({ db, called }) => {
     for (const one of called)
       await keepRefreshed(db, one.connection, one.refreshed);

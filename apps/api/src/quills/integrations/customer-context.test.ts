@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq } from "drizzle-orm";
@@ -19,7 +20,7 @@ import { openCredentials } from "../framework/integration-config";
 import { mintOAuthState } from "../framework/signed";
 import quillsRouter from "../index";
 import publicRouter from "../public";
-import { boundContact } from "./contacts";
+import { boundContact, lookupLimits } from "./contacts";
 import "./contacts.fixture";
 import { oauthConnection, platformCredentials } from "./oauth-seed.fixture";
 import { providerCalls, providerOverrides } from "./provider-edge.fixture";
@@ -51,6 +52,8 @@ const url = process.env.QUILLS_TEST_DATABASE_URL;
 const EMAIL = "ada@example.test";
 const KEYED_EMAIL = "keyed.customer@example.test";
 const CONTEXT_EMAIL = "context.customer@example.test";
+const DEADLINE_EMAIL = "deadline.customer@example.test";
+const TIMED_OUT = "The provider did not answer in time. Try again.";
 
 describe("contact bounds", () => {
   it("selects, trims and bounds the fields of a provider contact", () => {
@@ -721,11 +724,275 @@ describe.skipIf(!url)("CRM providers and customer context", () => {
     expect(providerCalls.length).toBe(calls);
   });
 
+  describe("deadlines", () => {
+    /** Paths of the stubbed requests that saw their signal abort. */
+    const aborted: string[] = [];
+    /** A request that never answers; it ends when its signal aborts. */
+    const hang = (path: string, init?: RequestInit) =>
+      new Promise<Response>((_, reject) =>
+        init?.signal?.addEventListener("abort", () => {
+          aborted.push(path);
+          reject(init.signal!.reason);
+        }),
+      );
+    /** A request that never answers and ignores its signal, as a stuck DNS lookup does. */
+    const stuck = () => new Promise<Response>(() => {});
+    /**
+     * One read with short lookup limits and some requests answered by `answer` (by host and path),
+     * the others by the local provider server. It returns the answer, its time and the console output.
+     */
+    const read = async (
+      path: string,
+      limits: typeof lookupLimits,
+      answer: (
+        path: string,
+        init?: RequestInit,
+      ) => Promise<Response> | undefined,
+    ) => {
+      const real = { ...lookupLimits };
+      const fetchMock = vi.mocked(globalThis.fetch);
+      const edge = fetchMock.getMockImplementation()!;
+      const lines: string[] = [];
+      const spies = (["log", "info", "warn", "error", "debug"] as const).map(
+        (level) =>
+          vi.spyOn(console, level).mockImplementation((...args) => {
+            lines.push(args.map((arg) => inspect(arg, { depth: 6 })).join(" "));
+          }),
+      );
+      Object.assign(lookupLimits, limits);
+      fetchMock.mockImplementation((input, init) => {
+        const target = new URL(
+          input instanceof Request ? input.url : String(input),
+        );
+        return (
+          answer(`${target.hostname}${target.pathname}`, init) ??
+          edge(input, init)
+        );
+      });
+      aborted.length = 0;
+      const started = Date.now();
+      try {
+        const res = await get(path);
+        const ms = Date.now() - started;
+        // No email, token or provider text in the answer or in a log line.
+        for (const text of [JSON.stringify(res.body), ...lines])
+          for (const secret of [
+            DEADLINE_EMAIL,
+            "contract-token",
+            "contract-refresh",
+            "old-access",
+            "old-refresh",
+            "gho_seeded",
+          ])
+            expect(text).not.toContain(secret);
+        return { ...res, ms };
+      } finally {
+        fetchMock.mockImplementation(edge);
+        Object.assign(lookupLimits, real);
+        for (const spy of spies) spy.mockRestore();
+      }
+    };
+    let person: string | undefined;
+    const deadlineCustomer = async () =>
+      (person ??= await customer(env, env.a, { email: DEADLINE_EMAIL }));
+    const tokens = async () =>
+      openCredentials((await stored("hubspot"))!.secrets);
+
+    it("stops waiting for hung providers at their budget, and the others still answer", async () => {
+      await disconnectAll();
+      const id = await deadlineCustomer();
+      await oauthConnection(env, env.a, { type: "hubspot" });
+      await oauthConnection(env, env.a, { type: "intercom" });
+      await oauthConnection(env, env.a, {
+        type: "zendesk",
+        config: { subdomain: "contract" },
+      });
+      const res = await read(
+        `/people/${id}/context`,
+        { provider: 1_000, context: 60_000 },
+        (path, init) =>
+          path === "api.intercom.io/contacts/search"
+            ? hang(path, init)
+            : path === "contract.zendesk.com/api/v2/users/search.json"
+              ? stuck()
+              : undefined,
+      );
+      expect(res.status).toBe(200);
+      expect(res.body.providers).toEqual([
+        // The fast provider answers as before, with its whole chain (the deal reads).
+        expect.objectContaining({
+          integrationType: "hubspot",
+          status: "found",
+          error: null,
+          contact: expect.objectContaining({
+            name: "Ada Contract",
+            fields: expect.arrayContaining([{ label: "Deals", value: "2" }]),
+          }),
+        }),
+        expect.objectContaining({
+          integrationType: "intercom",
+          status: "failed",
+          error: TIMED_OUT,
+          contact: null,
+        }),
+        // It ignores the abort, and still does not delay the answer.
+        expect.objectContaining({
+          integrationType: "zendesk",
+          status: "failed",
+          error: TIMED_OUT,
+          contact: null,
+        }),
+      ]);
+      // Far less than one request's own 10 seconds, and not forever for the stuck one.
+      expect(res.ms).toBeLessThan(5_000);
+      expect(aborted).toEqual(["api.intercom.io/contacts/search"]);
+    }, 20_000);
+
+    it("ends every provider at the read's deadline, before their own budget", async () => {
+      await disconnectAll();
+      const id = await deadlineCustomer();
+      await oauthConnection(env, env.a, { type: "intercom" });
+      await oauthConnection(env, env.a, {
+        type: "zendesk",
+        config: { subdomain: "contract" },
+      });
+      const res = await read(
+        `/people/${id}/context`,
+        { provider: 60_000, context: 500 },
+        (path, init) =>
+          path === "api.intercom.io/contacts/search"
+            ? hang(path, init)
+            : path === "contract.zendesk.com/api/v2/users/search.json"
+              ? stuck()
+              : undefined,
+      );
+      expect(res.status).toBe(200);
+      expect(
+        res.body.providers.map((one: Record<string, unknown>) => [
+          one.integrationType,
+          one.status,
+          one.error,
+        ]),
+      ).toEqual([
+        ["intercom", "failed", TIMED_OUT],
+        ["zendesk", "failed", TIMED_OUT],
+      ]);
+      expect(res.ms).toBeLessThan(5_000);
+      expect(aborted).toEqual(["api.intercom.io/contacts/search"]);
+    }, 20_000);
+
+    it("stops HubSpot's chained reads at its budget", async () => {
+      await disconnectAll();
+      const id = await deadlineCustomer();
+      await oauthConnection(env, env.a, { type: "hubspot" });
+      const deals =
+        "api.hubapi.com/crm/v3/objects/contacts/101/associations/deals";
+      const from = providerCalls.length;
+      const res = await read(
+        `/people/${id}/context`,
+        { provider: 500, context: 60_000 },
+        (path, init) => (path === deals ? hang(path, init) : undefined),
+      );
+      expect(res.body.providers).toEqual([
+        expect.objectContaining({
+          integrationType: "hubspot",
+          status: "failed",
+          error: TIMED_OUT,
+          contact: null,
+        }),
+      ]);
+      expect(res.ms).toBeLessThan(5_000);
+      // The search answered, the deal read in flight was aborted, and the batch read never left.
+      expect(aborted).toEqual([deals]);
+      expect(providerCalls.slice(from).map((call) => call.path)).toEqual([
+        "/api.hubapi.com/crm/v3/objects/contacts/search",
+      ]);
+    }, 20_000);
+
+    it("stores a refresh that finished before the deadline, in both routes", async () => {
+      await disconnectAll();
+      const id = await deadlineCustomer();
+      await platformCredentials(env, env.a, "hubspot");
+      await dueConnection("hubspot", {});
+      const search = "api.hubapi.com/crm/v3/objects/contacts/search";
+      const late = (path: string, init?: RequestInit) =>
+        path === search ? hang(path, init) : undefined;
+      const context = await read(
+        `/people/${id}/context`,
+        { provider: 500, context: 60_000 },
+        late,
+      );
+      expect(context.body.providers).toEqual([
+        expect.objectContaining({
+          integrationType: "hubspot",
+          status: "failed",
+          error: TIMED_OUT,
+        }),
+      ]);
+      expect(aborted).toEqual([search]);
+      expect(await tokens()).toMatchObject({
+        accessToken: "hubspot-contract-token",
+        refreshToken: "hubspot-contract-refresh",
+      });
+
+      // The contact route: the same budget, a fixed 502 after the refreshed tokens commit.
+      const connection = await dueConnection("hubspot", {});
+      const contact = await read(
+        `/integrations/${connection}/contacts?email=${DEADLINE_EMAIL}`,
+        { provider: 500, context: 60_000 },
+        late,
+      );
+      expect(contact.status).toBe(502);
+      expect(contact.body).toEqual(
+        expect.objectContaining({ message: TIMED_OUT }),
+      );
+      expect(contact.ms).toBeLessThan(5_000);
+      expect(aborted).toEqual([search]);
+      expect(await tokens()).toMatchObject({
+        accessToken: "hubspot-contract-token",
+        refreshToken: "hubspot-contract-refresh",
+      });
+    }, 20_000);
+
+    it("keeps the old tokens when the deadline ends a refresh", async () => {
+      await disconnectAll();
+      const id = await deadlineCustomer();
+      await platformCredentials(env, env.a, "hubspot");
+      const token = "api.hubapi.com/oauth/v1/token";
+      // A refresh aborted in flight, then one that ignores the abort.
+      for (const answer of [hang, stuck]) {
+        await dueConnection("hubspot", {});
+        const from = providerCalls.length;
+        const res = await read(
+          `/people/${id}/context`,
+          { provider: 500, context: 60_000 },
+          (path, init) => (path === token ? answer(path, init) : undefined),
+        );
+        expect(res.body.providers, answer.name).toEqual([
+          expect.objectContaining({
+            integrationType: "hubspot",
+            status: "failed",
+            error: TIMED_OUT,
+          }),
+        ]);
+        expect(res.ms).toBeLessThan(5_000);
+        expect(aborted).toEqual(answer === hang ? [token] : []);
+        // No lookup with a token that may be gone, and the stored tokens did not change.
+        expect(providerCalls.length).toBe(from);
+        expect(await tokens()).toMatchObject({
+          accessToken: "old-access",
+          refreshToken: "old-refresh",
+        });
+      }
+    }, 20_000);
+  });
+
   it("writes no email and no token to audit, event or job rows", async () => {
     const secrets = [
       EMAIL,
       KEYED_EMAIL,
       CONTEXT_EMAIL,
+      DEADLINE_EMAIL,
       "contract-token",
       "contract-refresh",
       "salesforce-new-access",

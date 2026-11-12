@@ -42,6 +42,15 @@ export const boundContact = (
 /** An email address to look up. The same bounds as the people directory. */
 export const lookupEmail = z.string().trim().email().max(254);
 
+/**
+ * The time limits of a lookup, in milliseconds. Tests shorten them.
+ * - `provider`: one provider's whole chain (a token refresh, the lookup and its follow-up reads, up
+ *   to four requests for HubSpot). A healthy provider answers each one in well under a second.
+ * - `context`: a customer context read, from its start. Its providers run at once, so this is the
+ *   provider budget plus 2 seconds for the read's own database work.
+ */
+export const lookupLimits = { provider: 8_000, context: 10_000 };
+
 const searchContact = defineQuillsRoute({
   method: "get",
   path: "/integrations/{integrationId}/contacts",
@@ -59,7 +68,7 @@ const searchContact = defineQuillsRoute({
     403: "Insufficient permission",
     404: "Integration not found, or not an OAuth connection",
     409: "Reconnect the integration, or it has no contact lookup",
-    502: "The provider could not be reached",
+    502: "The provider could not be reached or did not answer in time",
   },
   prepare: async ({ db, params }) => {
     const { row, provider, secrets, creds } = await oauthConnection(
@@ -81,16 +90,23 @@ const searchContact = defineQuillsRoute({
       config: row.config,
     };
   },
-  call: async (prepared, { query }) => ({
-    connection: prepared.connection,
-    ...(await withToken(prepared, (secrets) =>
-      oauthProvider(prepared.type)!.contact!(
-        secrets,
-        prepared.config,
-        query.email,
-      ),
-    )),
-  }),
+  call: async (prepared, { query }) => {
+    const signal = AbortSignal.timeout(lookupLimits.provider);
+    return {
+      connection: prepared.connection,
+      ...(await withToken(
+        prepared,
+        (secrets) =>
+          oauthProvider(prepared.type)!.contact!(
+            secrets,
+            prepared.config,
+            query.email,
+            signal,
+          ),
+        signal,
+      )),
+    };
+  },
   failure: (called) => called.failure,
   handler: async ({ db, called }) => {
     await keepRefreshed(db, called.connection, called.refreshed);
