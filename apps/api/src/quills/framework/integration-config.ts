@@ -54,10 +54,70 @@ export class ProviderCallError extends Error {
 }
 
 /**
+ * The largest provider answer that providerJson reads. The largest real answers are lists of 100
+ * items: GitHub repositories (about 0.6 MB), Notion databases and GitHub comments (a few MB at most).
+ * A larger answer is refused as a malformed one (502) before more of it is read.
+ */
+const MAX_ANSWER_BYTES = 10 * 1024 * 1024;
+
+/** The JSON of an answer, read in chunks up to MAX_ANSWER_BYTES. Null when the body breaks or is not JSON. */
+async function answerJson(response: Response): Promise<unknown> {
+  const reader = response.body?.getReader();
+  if (!reader) return null;
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_ANSWER_BYTES) {
+        void reader.cancel().catch(() => {});
+        throw new ProviderCallError(502);
+      }
+      chunks.push(value);
+    }
+  } catch (error) {
+    if (error instanceof ProviderCallError) throw error;
+    return null;
+  }
+  try {
+    return JSON.parse(new TextDecoder().decode(Buffer.concat(chunks)));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Settles with `work`, or rejects with a fixed 502 as soon as `signal` aborts. It does not wait for
+ * work that ignores the abort (a stuck DNS lookup): that work ends later and its result is dropped.
+ */
+export function beforeDeadline<T>(
+  work: Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  if (!signal) return work;
+  return Promise.race([
+    work,
+    new Promise<never>((_, reject) => {
+      const late = () =>
+        reject(
+          new HTTPException(502, {
+            message: "The provider did not answer in time. Try again.",
+          }),
+        );
+      if (signal.aborted) late();
+      else signal.addEventListener("abort", late, { once: true });
+    }),
+  ]);
+}
+
+/**
  * One request to a fixed OAuth provider host: HTTPS, no redirect, no retry, a 10-second timeout and no
  * HTTP telemetry (tokens travel in headers). Returns the JSON answer. Provider text never reaches a caller.
  * `hosts` is the calling provider's own host pattern (integrations/providers/); the whole host name must
- * match it, and its flags are ignored. Without it, the hosts of the first providers apply.
+ * match it, and its flags are ignored. Without it, the hosts of the first providers apply. `signal`
+ * is the caller's deadline: the earlier of it and the 10 seconds ends the request.
  */
 export async function providerJson(
   url: string,
@@ -65,6 +125,7 @@ export async function providerJson(
     method?: "GET" | "POST" | "PATCH";
     headers?: Record<string, string>;
     body?: string;
+    signal?: AbortSignal;
   } = {},
   hosts?: RegExp,
 ): Promise<unknown> {
@@ -79,13 +140,14 @@ export async function providerJson(
     !allowed.test(target.hostname)
   )
     throw new Error("Provider host not allowed");
+  const timeout = AbortSignal.timeout(10_000);
   let response: Response;
   try {
     response = await withoutOutboundTelemetry(() =>
       fetch(target, {
         ...init,
         redirect: "error",
-        signal: AbortSignal.timeout(10_000),
+        signal: init.signal ? AbortSignal.any([init.signal, timeout]) : timeout,
       }),
     );
   } catch {
@@ -95,7 +157,7 @@ export async function providerJson(
     void response.body?.cancel().catch(() => {});
     throw new ProviderCallError(response.status);
   }
-  return response.json().catch(() => null);
+  return answerJson(response);
 }
 
 /** The provider API hosts a request may reach. A Freshdesk subdomain is one DNS label. */
