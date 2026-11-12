@@ -60,6 +60,9 @@ const allowedImport = (file: string, specifier: string) => {
         "assistant/connector-client",
         // Link unfurl: the guarded fetch for route modules, no database (link-preview.test.ts pins its imports).
         "support/link-fetch",
+        // Website branding: a guarded site fetch, a logo upload and the personal email domain list;
+        // never the database (see the module).
+        "settings/website-fetch",
         "../openapi",
       ].includes(target) ||
       target.startsWith("../database/quills/schema/"))

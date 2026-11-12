@@ -14,6 +14,7 @@ import portalAccessSettings from "./portal/access-settings";
 import operations from "./operations/index";
 import portalInvites from "./portal/invites";
 import quillsSettings from "./settings/index";
+import websiteBranding from "./settings/website-branding";
 import reporting from "./reporting/index";
 import sharedTeams from "./teams";
 import taxonomy from "./feedback/taxonomy";
@@ -75,6 +76,7 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", sharedTeams)
   .route("/", directory)
   .route("/", quillsSettings)
+  .route("/", websiteBranding)
   .route("/", feedback)
   .route("/", delivery)
   .route("/", taxonomy)
