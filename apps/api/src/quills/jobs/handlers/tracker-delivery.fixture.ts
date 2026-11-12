@@ -50,12 +50,18 @@ process.env.NOTIFICATION_SECRET_ENCRYPTION_KEY ||=
 
 /** Runs before each provider request, with its `METHOD /<host><path>`; it may wait. */
 let beforeSend: ((route: string) => Promise<void> | void) | undefined;
+/** The content type and query of each provider request, in order (the edge records neither). */
+const sent: { route: string; contentType: string; search: string }[] = [];
 const edge = vi.mocked(globalThis.fetch).getMockImplementation()!;
 vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
   const target = new URL(input instanceof Request ? input.url : String(input));
-  await beforeSend?.(
-    `${init?.method ?? "GET"} /${target.hostname}${target.pathname}`,
-  );
+  const route = `${init?.method ?? "GET"} /${target.hostname}${target.pathname}`;
+  sent.push({
+    route,
+    contentType: new Headers(init?.headers).get("content-type") ?? "",
+    search: target.search,
+  });
+  await beforeSend?.(route);
   return edge(input, init);
 });
 /** Answers `route` with each value in turn, then with the server's own answer. */
@@ -76,17 +82,22 @@ export type DeliveryCase = {
   type: string;
   /** A valid channel; it is added through the channel route. */
   channel: string;
+  /** A second valid channel of the same connection. */
+  otherChannel: string;
   config: Record<string, unknown>;
   /** The connection's secrets in a workspace. */
   secrets: (workspaceId: string) => Record<string, string>;
   /** The authorization header that the secrets send. */
   authorization: (workspaceId: string) => string;
-  /** `METHOD /<host><path>` of the create call. */
+  /** `METHOD /<host><path>` of the create call, its content type and its query (`?…` or ""). */
   create: string;
+  contentType: string;
+  query: string;
   /** The token route, for a provider with refresh. */
   token?: string;
-  /** The access token of the local server's refresh answer. */
+  /** The access and refresh tokens of the local server's refresh answer. */
   refreshedToken?: string;
+  refreshedRefreshToken?: string;
   /** The link of the local server's create answer. */
   link: {
     externalId: string;
@@ -279,6 +290,7 @@ export const describeDelivery = (
       beforeSend = undefined;
       providerOverrides.clear();
       providerCalls.length = 0;
+      sent.length = 0;
       for (const workspaceId of [h.a, h.b])
         await h.system(workspaceId, (db) => db.delete(integrations));
     });
@@ -288,6 +300,22 @@ export const describeDelivery = (
         providerCalls.filter(
           (sent) => `${sent.method} ${sent.path.split("?")[0]}` === t.create,
         );
+      /** The refresh sent the workspace's OAuth app and the stored refresh token; all new token fields are stored. */
+      const refreshedWithApp = async (id: string) => {
+        const refresh = providerCalls.find(
+          (sent) => `${sent.method} ${sent.path.split("?")[0]}` === t.token,
+        )!;
+        expect(refresh.body).toContain("app-secret");
+        expect(refresh.body).toContain(t.secrets(h.a).refreshToken!);
+        const stored = await secretsOf(id);
+        expect(stored).toMatchObject({
+          accessToken: t.refreshedToken,
+          refreshToken: t.refreshedRefreshToken,
+        });
+        expect(Date.parse(stored.expiresAt!)).toBeGreaterThan(
+          Date.now() + 30 * 60_000,
+        );
+      };
 
       it("creates one item, links it, and sends nothing new for a replayed job, fan-out or resync", async () => {
         const id = await connect(t);
@@ -302,6 +330,11 @@ export const describeDelivery = (
         });
         expect(creates()).toHaveLength(1);
         expect(creates()[0]!.authorization).toBe(t.authorization(h.a));
+        expect(sent.find((request) => request.route === t.create)).toEqual({
+          route: t.create,
+          contentType: t.contentType,
+          search: t.query,
+        });
         t.request(JSON.parse(creates()[0]!.body), {
           board: lastBoard,
           author: h.owner,
@@ -342,13 +375,22 @@ export const describeDelivery = (
         expect(await links(postId)).toHaveLength(1);
       }, 20_000);
 
-      it("creates no second item for a linked post after a reconnect and a resync", async () => {
+      it("after a reconnect, a resync sends no create that was sent or may have been, and fills a new channel", async () => {
         const id = await connect(t);
-        const postId = await makePost();
-        await created(postId);
+        const sentPost = await makePost();
+        await created(sentPost);
         await h.drain(h.a);
-        expect(creates()).toHaveLength(1);
-        // A reconnect starts a new installation; the channel and the link stay.
+        // A second post whose create got no answer: uncertain, with no link.
+        answers(t.create, "drop");
+        const unsurePost = await makePost();
+        await created(unsurePost);
+        await h.drain(h.a);
+        expect((await ops(id)).map((op) => op.state)).toEqual([
+          "succeeded",
+          "uncertain",
+        ]);
+        // A reconnect starts a new installation; channels, links and operations stay. Then a second
+        // channel is added.
         await h.system(h.a, (db) =>
           db
             .update(integrations)
@@ -356,15 +398,26 @@ export const describeDelivery = (
             .where(eq(integrations.id, id)),
         );
         expect(
-          (await call(`/posts/${postId}/integration-sync`, "POST")).status,
+          (
+            await call(`/integrations/${id}/channels`, "POST", {
+              channel: t.otherChannel,
+              events: ["post.created"],
+            })
+          ).status,
         ).toBe(200);
+        const before = providerCalls.length;
+        for (const postId of [sentPost, unsurePost])
+          expect(
+            (await call(`/posts/${postId}/integration-sync`, "POST")).status,
+          ).toBe(200);
         await h.drain(h.a);
-        expect(creates()).toHaveLength(1);
-        expect(await ops(id)).toHaveLength(1);
-        // A new post still gets its item from the new installation.
-        await created(await makePost());
-        await h.drain(h.a);
-        expect(creates()).toHaveLength(2);
+        // Only the new channel gets a create for each post; the first channel gets nothing again.
+        const resynced = (await ops(id)).slice(2);
+        expect(resynced.map((op) => op.destinationKey)).toEqual([
+          t.otherChannel,
+          t.otherChannel,
+        ]);
+        expect(providerCalls.length - before).toBe(2);
       }, 20_000);
 
       it("keeps the outcome when the job lease is lost during the send", async () => {
@@ -475,9 +528,7 @@ export const describeDelivery = (
           expect(creates()[0]!.authorization).toBe(
             `Bearer ${t.refreshedToken}`,
           );
-          expect(await secretsOf(id)).toMatchObject({
-            accessToken: t.refreshedToken,
-          });
+          await refreshedWithApp(id);
         }, 20_000);
 
       it("never resends a create that got no answer or a 5xx, and shows it for a teammate to check", async () => {
@@ -542,9 +593,7 @@ export const describeDelivery = (
           ),
         ).toEqual([t.create, t.token, t.create]);
         expect(creates()[1]!.authorization).toBe(`Bearer ${t.refreshedToken}`);
-        expect(await secretsOf(id)).toMatchObject({
-          accessToken: t.refreshedToken,
-        });
+        await refreshedWithApp(id);
 
         // A second 401 after the refresh: a reconnect, with no third call.
         providerCalls.length = 0;
@@ -638,10 +687,12 @@ export const describeDelivery = (
         expect(creates()[0]!.authorization).toBe(t.authorization(h.a));
         expect(await ops(own)).toHaveLength(1);
         expect(await ops(foreign, h.b)).toHaveLength(0);
-        // A job in A that names B's operation cannot read it.
+        // A job in A that names B's operation cannot read it, while B's operation waits to be sent.
+        answers(t.create, { status: 429 });
         await created(await makePost(h.b), h.b);
         await h.drain(h.b);
         const [foreignOp] = await ops(foreign, h.b);
+        expect(foreignOp).toMatchObject({ state: "retry_wait", attempts: 1 });
         expect(creates()[1]!.authorization).toBe(t.authorization(h.b));
         await h.system(h.a, (db) =>
           enqueueQuillsJob(
@@ -654,6 +705,16 @@ export const describeDelivery = (
         );
         await h.drain(h.a);
         expect(creates()).toHaveLength(2);
+        expect((await ops(foreign, h.b))[0]).toMatchObject({
+          state: "retry_wait",
+          attempts: 1,
+          version: foreignOp!.version,
+        });
+        // B's own job still sends it, with B's connection.
+        await h.due(h.b);
+        await h.drain(h.b);
+        expect(creates()).toHaveLength(3);
+        expect(creates()[2]!.authorization).toBe(t.authorization(h.b));
       }, 20_000);
 
       it("leaves no link when the outcome transaction rolls back, and never resends", async () => {

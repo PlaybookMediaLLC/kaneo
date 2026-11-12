@@ -4,6 +4,7 @@ import {
   providerOverrides,
 } from "../../integrations/provider-edge.fixture";
 import { grantedScopes, hasScopes } from "../../integrations/delivery";
+import "../../integrations/providers/jira.fixture";
 import { oauthProviders, validTarget } from "../../integrations/providers";
 import { deliver, type Delivery } from "./integration-send";
 
@@ -139,12 +140,14 @@ describe("provider delivery seam", () => {
   });
 
   it("never resends after a 403, a 5xx or no answer", async () => {
-    for (const answer of [{ status: 403 }, { status: 502 }, "drop"] as const) {
+    for (const [answer, state] of [
+      [{ status: 403 }, "auth_required"],
+      [{ status: 502 }, "uncertain"],
+      ["drop", "uncertain"],
+    ] as const) {
       providerCalls.length = 0;
       answers(ISSUES, answer);
-      expect((await deliver(gitlab())).state).toMatch(
-        /^(auth_required|uncertain)$/,
-      );
+      expect((await deliver(gitlab())).state).toBe(state);
       expect(providerCalls).toHaveLength(1);
     }
   });
@@ -163,6 +166,16 @@ describe("channel target rules", () => {
     ["linear", `${LINEAR_TEAM}x`, false],
     ["azure_devops", "Contract App:Bug", true],
     ["azure_devops", "Équipe (web):User Story", true],
+    // Names that Azure DevOps allows: `@ ! ^ ~ &`, symbols and combining marks.
+    ["azure_devops", "Web@Home:Bug", true],
+    ["azure_devops", "Q&A!:Product Backlog Item", true],
+    ["azure_devops", "Contoso™:Bug", true],
+    ["azure_devops", "परियोजना:Bug", true],
+    ["azure_devops", "_App:Bug", false],
+    ["azure_devops", "App.:Bug", false],
+    ["azure_devops", "App#1:Bug", false],
+    ["azure_devops", "App%2e:Bug", false],
+    ["azure_devops", "App's:Bug", false],
     ["azure_devops", "Contract App", false],
     ["azure_devops", ":Bug", false],
     ["azure_devops", "Contract App:", false],
@@ -216,6 +229,10 @@ describe("Linear answers", () => {
     ["forbidden", "FORBIDDEN", "auth_required"],
     ["ratelimited", "RATELIMITED", "retry_wait"],
     ["invalid input", "INVALID_INPUT", "failed"],
+    // An error that can follow a write: the issue may exist, so it is never sent again.
+    ["internal error", "INTERNAL_SERVER_ERROR", "uncertain"],
+    ["lock timeout", "LOCK_TIMEOUT", "uncertain"],
+    ["", "", "uncertain"],
   ])(
     "maps a refused mutation (%s) without a resend",
     async (type, code, state) => {
@@ -288,5 +305,28 @@ describe("stored values checked before each call", () => {
         await deliver({ ...gitlab(), provider, config, target }),
       ).toMatchObject({ state: "failed", errorCode: "provider_failed" });
     expect(providerCalls).toEqual([]);
+  });
+  it("links a Jira issue to its site only on an Atlassian host", async () => {
+    const jira = (account: string) =>
+      deliver({
+        ...gitlab(),
+        provider: "jira",
+        config: { cloudId: CLOUD, account, scopes: "write:jira-work" },
+        target: "10000:10001",
+      });
+    for (const [account, url] of [
+      [
+        "https://contract.atlassian.net/",
+        "https://contract.atlassian.net/browse/APP-1",
+      ],
+      ["https://contract.atlassian.net.evil.test", null],
+      ["http://contract.atlassian.net", null],
+      ["https://user@contract.atlassian.net", null],
+      ["", null],
+    ] as const)
+      expect(await jira(account), account).toMatchObject({
+        state: "succeeded",
+        result: { externalId: "APP-1", externalUrl: url },
+      });
   });
 });

@@ -93,4 +93,39 @@ describe.skipIf(!url)("notification channel targets", () => {
     expect(refused.status).toBe(400);
     expect(await refused.text()).toContain("not a valid target");
   });
+
+  it("updates and removes a channel whose name has spaces, through the encoded path", async () => {
+    const azure = await oauthConnection(env(), env().a, {
+      type: "azure_devops",
+      config: { organization: "contract" },
+    });
+    const name = "Contract App:Bug";
+    expect((await add(azure, name)).status).toBe(200);
+    const path = (channel: string) =>
+      `/quills/${env().a}/integrations/${azure}/channels/${encodeURIComponent(channel)}`;
+    const send = (channel: string, method: string, body?: unknown) =>
+      app.request(path(channel), {
+        method,
+        headers: {
+          "x-test-user": env().owner,
+          ...(body ? { "content-type": "application/json" } : {}),
+        },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+    const disable = { events: [{ eventType: "post.created", enabled: false }] };
+    const updated = await send(name, "PATCH", disable);
+    expect(updated.status).toBe(200);
+    expect(await updated.json()).toMatchObject({
+      channel: {
+        channel: name,
+        events: [{ eventType: "post.created", enabled: false }],
+      },
+    });
+    // An encoded separator or control character in the path is refused before any change.
+    for (const bad of ["Contract App/..:Bug", "Contract\u0000App:Bug"])
+      expect((await send(bad, "PATCH", disable)).status, bad).toBe(400);
+    expect((await send(name, "DELETE")).status).toBe(200);
+    expect((await mappings()).filter((row) => row.target === name)).toEqual([]);
+    expect((await send(name, "DELETE")).status).toBe(404);
+  });
 });
