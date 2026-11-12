@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { isTypeId, toUuid } from "@kaneo/ids";
+import { isTypeId, toUuid, type TypeId } from "@kaneo/ids";
 import {
   withQuillsSystemWorkspace,
   type Database,
@@ -110,6 +110,38 @@ async function sourceOf(db: Database, event: DeliveryEvent) {
   return undefined;
 }
 
+/**
+ * True when a delivery of any installation of the connection linked the post in this channel. A link's
+ * sync scope is `<integration ID>:<connected at, or "initial">:<channel>`.
+ */
+// ponytail: checked at fan-out only; a create of an old installation that settles after this check can still race a resync.
+async function linkedInChannel(
+  db: Database,
+  integrationId: TypeId<"integration">,
+  postId: TypeId<"post">,
+  channel: string,
+) {
+  const rows = await db
+    .select({ scope: postExternalLinks.syncScope })
+    .from(postExternalLinks)
+    .where(
+      and(
+        eq(postExternalLinks.postId, postId),
+        eq(postExternalLinks.integrationId, integrationId),
+      ),
+    )
+    .limit(50);
+  const installed = /^(?:initial|\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z)$/;
+  return rows.some(
+    ({ scope }) =>
+      scope.startsWith(`${integrationId}:`) &&
+      scope.endsWith(`:${channel}`) &&
+      installed.test(
+        scope.slice(integrationId.length + 1, -(channel.length + 1)),
+      ),
+  );
+}
+
 const boardAllowed = (
   filters: { boardIds?: string[] } | null,
   boardId: string,
@@ -186,6 +218,14 @@ export async function fanOutIntegrations(workspaceId: string, eventId: string) {
         continue;
       const installation = installationOf(target);
       const kind = trigger === "post.created" ? "create" : "notify";
+      // A post that an earlier installation of this connection already linked in this channel gets no
+      // second item (a reconnect, then a resync).
+      if (
+        kind === "create" &&
+        isTypeId(source.sourceId, "post") &&
+        (await linkedInChannel(db, target.id, source.sourceId, target.target))
+      )
+        continue;
       const key = createHash("sha256")
         .update(
           JSON.stringify([

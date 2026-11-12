@@ -472,6 +472,31 @@ describe.skipIf(!url)("issue tracker delivery", () => {
       expect(await links(postId)).toHaveLength(1);
     }, 20_000);
 
+    it("creates no second item for a linked post after a reconnect and a resync", async () => {
+      const id = await connect(t);
+      const postId = await makePost();
+      await created(postId);
+      await h.drain(h.a);
+      expect(creates()).toHaveLength(1);
+      // A reconnect starts a new installation; the channel and the link stay.
+      await h.system(h.a, (db) =>
+        db
+          .update(integrations)
+          .set({ connectedAt: new Date() })
+          .where(eq(integrations.id, id)),
+      );
+      expect(
+        (await call(`/posts/${postId}/integration-sync`, "POST")).status,
+      ).toBe(200);
+      await h.drain(h.a);
+      expect(creates()).toHaveLength(1);
+      expect(await ops(id)).toHaveLength(1);
+      // A new post still gets its item from the new installation.
+      await created(await makePost());
+      await h.drain(h.a);
+      expect(creates()).toHaveLength(2);
+    }, 20_000);
+
     it("keeps the outcome when the job lease is lost during the send", async () => {
       const id = await connect(t);
       beforeSend = async (route) => {
