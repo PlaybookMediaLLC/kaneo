@@ -13,3 +13,5 @@ export * from "./zapier.fixture";
 export * from "./inbound.fixture";
 export * from "./oauth.fixture";
 export * from "./status-sync.fixture";
+export * from "./contacts.fixture";
+export * from "./customer-context.fixture";

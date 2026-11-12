@@ -7,12 +7,16 @@ import { clickup } from "./clickup";
 import { discord } from "./discord";
 import { github } from "./github";
 import { gitlab } from "./gitlab";
+import { hubspot } from "./hubspot";
+import { intercom } from "./intercom";
 import { jira } from "./jira";
 import { linear } from "./linear";
 import { monday } from "./monday";
 import { notion } from "./notion";
+import { salesforce } from "./salesforce";
 import { slack } from "./slack";
 import { teams } from "./teams";
+import { zendesk } from "./zendesk";
 
 // The OAuth and key providers, one file each. To add a provider, add its file, its import above and
 // one entry below. The key is the integration type. The catalog entry, the connect route (oauth.ts)
@@ -33,6 +37,10 @@ export const oauthProviders = {
   monday,
   notion,
   teams,
+  hubspot,
+  intercom,
+  zendesk,
+  salesforce,
 } satisfies Record<string, OAuthProvider>;
 type Registry = typeof oauthProviders;
 export const oauthProvider = (type: string): OAuthProvider | undefined =>
