@@ -110,16 +110,22 @@ export type OAuthProvider = Provider & {
   /**
    * Gets new token fields for a due access token (freshSecrets in providers/index.ts calls it).
    * Absent when the provider's tokens do not expire. The stores keep only these fields (tokenFields).
+   * `signal`, when given, is the caller's deadline: pass it to each providerJson call.
    */
   refresh?: (
     secrets: Record<string, string>,
     creds: Record<string, string>,
+    signal?: AbortSignal,
   ) => Promise<ReturnType<typeof tokenFields>>;
-  /** CRM lookup by email (HubSpot, Intercom, Zendesk). Null when no record matches. */
+  /**
+   * CRM lookup by email (HubSpot, Intercom, Zendesk). Null when no record matches. `signal` is the
+   * caller's deadline: pass it to each providerJson call, so that one deadline ends the whole chain.
+   */
   contact?: (
     secrets: Record<string, string>,
     config: Record<string, unknown>,
     email: string,
+    signal?: AbortSignal,
   ) => Promise<Contact | null>;
 } & (OAuthConnect | KeyConnect);
 
