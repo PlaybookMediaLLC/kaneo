@@ -100,7 +100,9 @@ const saveCredentials = defineQuillsRoute({
     const fields = oauthProvider(body.type)!.credentials;
     if (fields.includes("botToken") && !body.botToken)
       throw new HTTPException(400, { message: "A bot token is required." });
-    // The row lock keeps a concurrent save from losing the secret that this save keeps.
+    // The row lock keeps a concurrent save of a saved row from losing the secret that this save keeps.
+    // ponytail: a first save that races another first save has no row to lock and can drop the
+    // other's secret; take an advisory lock on (workspace, type) if that race matters.
     const [stored] =
       body.signingSecret === undefined
         ? await db
