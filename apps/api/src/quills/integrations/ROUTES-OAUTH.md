@@ -547,9 +547,12 @@ Delivery (FU3b, the worker; no route):
   Any other answer (a 5xx code, no code, or a `create_item` without a valid ID) is `uncertain`.
   Provider text is never kept.
 - **Partial success.** Once `create_item` answered with an ID, the item exists. `deliver` then never
-  throws: any failure of the update (an HTTP error, no answer, GraphQL errors) still returns
-  `succeeded` with the item, and the item has no body. A thrown refusal would end `failed`, which
-  offers a retry and so a second item.
+  throws: any failure of the update (an HTTP error, no answer, GraphQL errors or no update ID) still
+  returns `succeeded` with the item, and the item has no body. A thrown refusal would end `failed`,
+  which offers a retry and so a second item. The outcome keeps the update's error code
+  (`provider_failed`, `authentication`, `unavailable` or `outcome_unknown`), so the sync history shows
+  the reason. The state alone decides the actions, so `succeeded` offers no retry. The connection's
+  health shows no error, because the delivery succeeded.
 - The item ID is the link's external ID. The link has no URL: a Monday.com item URL names the
   account's subdomain, which is not stored.
 - Tests: `jobs/handlers/monday-delivery.test.ts` (the worker evidence table, the GraphQL variables and
@@ -561,7 +564,7 @@ Delivery (FU3b, the worker; no route):
 | A failed account read fails the connect. The source connected with the name "Monday.com". | The same rule as the other providers: a connect that cannot read the account is not complete. |
 | The account label is the Monday.com user name. The source stored no account label. | The integration summary shows `account`. |
 | The values are GraphQL variables. The source put the board ID and the JSON-quoted title in the query text. | A title can never change the query. |
-| A failed update returns `succeeded` with the item. The source returned `uncertain` with no link. | The item exists: it is linked, and a retry cannot make a second one. |
+| A failed update returns `succeeded` with the item and the update's error code. The source returned `uncertain` with no link. | The item exists: it is linked, and a retry cannot make a second one. |
 | GraphQL errors with a 4xx status map to a fixed outcome. The source made every error `uncertain`. | A refusal before the write proves that no item exists. |
 | The update is escaped HTML with the author and the board. The source sent plain text and a "View in …" link. | Monday.com reads an update as HTML; no portal URL exists for a post yet. |
 | No group (`groupId`). | No route sets one; Monday.com puts the item in the board's top group. |

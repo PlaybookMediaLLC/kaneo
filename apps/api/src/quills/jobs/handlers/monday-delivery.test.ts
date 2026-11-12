@@ -49,7 +49,9 @@ Object.defineProperty(providerCalls, "push", {
   enumerable: false,
   value: (...calls: typeof providerCalls) => {
     for (const call of calls)
-      if (call.body.includes("create_update(")) updates.push(call);
+      // The query comes first in the body, so a title or a post text cannot match.
+      if (call.body.startsWith('{"query":"mutation CreateUpdate('))
+        updates.push(call);
       else Array.prototype.push.call(providerCalls, call);
     return providerCalls.length;
   },
@@ -110,7 +112,7 @@ afterEach(() => {
 describe("Monday.com item body and answers", () => {
   it("passes a hostile title and description only as GraphQL variables, and escapes the update", async () => {
     const title =
-      'Title") { id } } mutation { delete_board(board_id: 1) { id } } #\n"';
+      'Title") { id } } mutation CreateUpdate( { delete_board(board_id: 1) { id } } #\n"';
     const outcome = await deliver(
       delivery({
         content: {
@@ -128,8 +130,9 @@ describe("Monday.com item body and answers", () => {
     expect(outcome).toEqual({ state: "succeeded", result: item });
     expect(providerCalls).toHaveLength(1);
     expect(updates).toHaveLength(1);
-    // The token is the whole header, with no `Bearer`.
+    // The token is the whole header of both calls, with no `Bearer`.
     expect(providerCalls[0]!.authorization).toBe("monday_token");
+    expect(updates[0]!.authorization).toBe("monday_token");
     const create = JSON.parse(providerCalls[0]!.body);
     expect(create.query).not.toContain("Title");
     expect(create.query).toContain(
@@ -153,26 +156,40 @@ describe("Monday.com item body and answers", () => {
   });
 
   it.each([
-    ["a 400", { status: 400 }],
-    ["a 401", { status: 401 }],
-    ["a 403", { status: 403 }],
-    ["a 429", { status: 429 }],
-    ["a 500", { status: 500 }],
-    ["no answer", "drop"],
-    ["GraphQL errors", errors(400)],
-    ["no update ID", { status: 200, body: { unexpected: true } }],
+    ["a 400", { status: 400 }, "provider_failed"],
+    ["a 401", { status: 401 }, "authentication"],
+    ["a 403", { status: 403 }, "authentication"],
+    ["a 429", { status: 429 }, "unavailable"],
+    ["a 500", { status: 500 }, "outcome_unknown"],
+    ["no answer", "drop", "outcome_unknown"],
+    ["GraphQL errors", errors(400), "provider_failed"],
+    [
+      "no update ID",
+      { status: 200, body: { unexpected: true } },
+      "outcome_unknown",
+    ],
   ] as const)(
-    "keeps the item as a success when the update gets %s: no second item, no throw",
-    async (_name, answer) => {
+    "keeps the item as a success when the update gets %s, with the reason: no second item, no throw",
+    async (_name, answer, errorCode) => {
       queue.push(null, answer);
+      // `succeeded` offers no retry, whatever the code: the item is never made twice.
       expect(await deliver(delivery())).toEqual({
         state: "succeeded",
+        errorCode,
         result: item,
       });
       expect(providerCalls).toHaveLength(1);
       expect(updates).toHaveLength(1);
     },
   );
+
+  it("sends nothing for an event that Monday.com does not deliver", async () => {
+    expect(await deliver(delivery({ type: "comment.created" }))).toEqual({
+      state: "succeeded",
+    });
+    expect(providerCalls).toHaveLength(0);
+    expect(updates).toHaveLength(0);
+  });
 
   it.each([
     ["a 401", [401], "auth_required"],

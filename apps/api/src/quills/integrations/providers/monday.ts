@@ -4,6 +4,7 @@ import {
   providerJson,
 } from "../../framework/integration-config";
 import {
+  callFailed,
   issueParts,
   statusOutcome,
   uncertain,
@@ -157,17 +158,24 @@ export const monday = {
         ? uncertain
         : refusal(answer.errors);
     // The item exists, so the update must never throw: the worker would map its refusal to `failed`,
-    // which offers a retry and so a second item. A failed update leaves the item without the body;
-    // the delivery still succeeded.
-    await graphqlAnswer(token, CREATE_UPDATE, {
+    // which offers a retry and so a second item. A failed update leaves the item without the body:
+    // the delivery still succeeded, and its error code shows the sync history why.
+    const failure = await graphqlAnswer(token, CREATE_UPDATE, {
       item,
       body: [...paragraphs, ...footer]
         .map((line) => `<p>${escapeHtml(line)}</p>`)
         .join(""),
-    }).catch(() => undefined);
+    }).then(
+      (update) =>
+        id.test(text(record(record(update.data).create_update).id))
+          ? undefined
+          : refusal(update.errors).errorCode,
+      (error: unknown) => callFailed(error).errorCode,
+    );
     // Monday.com item URLs name the account's own subdomain, which is not stored: no link URL.
     return {
       state: "succeeded",
+      ...(failure && { errorCode: failure }),
       result: { externalId: item, externalUrl: null },
     };
   },
