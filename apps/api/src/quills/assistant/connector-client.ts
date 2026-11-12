@@ -23,12 +23,15 @@ import { createGuardedFetch } from "../../import/guarded-fetch";
 // goes through the destination guard: every redirect and the socket address are checked. Each step
 // has one deadline, and each answer has a size limit. This module never opens a transaction: a route
 // reads, calls one function here, then writes. Secrets go in and come out as plain values; the
-// route seals them. Server text never leaves this module: a failure is one of four kinds.
+// route seals them. Server text never leaves this module: a failure is one of four kinds. A tool
+// result is the one exception: `callTool` returns its text, bounded, as data for the model.
 
 const TIMEOUT_MS = 10_000;
 const MAX_BYTES = 1_000_000;
 export const MAX_TOOLS = 100;
 const MAX_SCHEMA = 20_000;
+/** The characters of a tool result that reach the model. */
+export const MAX_RESULT = 8_000;
 
 /** Plain secrets: `bearerToken`; for OAuth `client` and `tokens` (the SDK's JSON) and `codeVerifier`. */
 export type Secrets = Record<string, string>;
@@ -68,11 +71,11 @@ function capped(response: Response) {
 }
 
 /** The fetch of one step: guarded, under one deadline, with capped answers. */
-function edge() {
+function edge(timeoutMs = TIMEOUT_MS) {
   const guard = createGuardedFetch("MCP server", {
     baseFetch: (url, init) => connectorSocket.fetch(url, init),
   });
-  const deadline = AbortSignal.timeout(TIMEOUT_MS);
+  const deadline = AbortSignal.timeout(Math.min(timeoutMs, TIMEOUT_MS));
   const fetch: FetchLike = async (url, init) =>
     capped(
       await guard.fetch(String(url), {
@@ -187,6 +190,22 @@ const bounded = (tools: ListedTool[]): DiscoveredTool[] =>
       };
     });
 
+/** The transport to `target` with its credentials. OAuth state lives in `secrets`, changed in place. */
+function transport(target: Target, secrets: Secrets, fetch: FetchLike) {
+  const oauth =
+    target.authMode === "oauth"
+      ? oauthClient(secrets, target.redirectUrl ?? "")
+      : undefined;
+  const bearer = target.authMode === "bearer" && secrets.bearerToken;
+  return new StreamableHTTPClientTransport(new URL(target.url), {
+    fetch,
+    authProvider: oauth?.provider,
+    ...(bearer && {
+      requestInit: { headers: { authorization: `Bearer ${bearer}` } },
+    }),
+  });
+}
+
 /**
  * Connects and lists the server's tools (the first page). `secrets` is the state after the step:
  * the SDK may have refreshed the OAuth tokens, or dropped tokens that the server refused.
@@ -194,26 +213,59 @@ const bounded = (tools: ListedTool[]): DiscoveredTool[] =>
 export async function discover(target: Target) {
   const { fetch, failure, deadline } = edge();
   const secrets = { ...target.secrets };
-  const oauth =
-    target.authMode === "oauth"
-      ? oauthClient(secrets, target.redirectUrl ?? "")
-      : undefined;
-  const bearer = target.authMode === "bearer" && secrets.bearerToken;
   const client = new Client({ name: "quills-connectors", version: "1.0.0" });
   try {
     await client.connect(
-      new StreamableHTTPClientTransport(new URL(target.url), {
-        fetch,
-        authProvider: oauth?.provider,
-        ...(bearer && {
-          requestInit: { headers: { authorization: `Bearer ${bearer}` } },
-        }),
-      }),
+      transport(target, secrets, fetch),
       // A stalled event stream does not fail the request: the deadline must end it too.
       { signal: deadline },
     );
     const listed = await client.listTools(undefined, { signal: deadline });
     return { secrets, tools: bounded(listed.tools) };
+  } catch (error) {
+    return { secrets, failure: failure(error) };
+  } finally {
+    await client.close().catch(() => {});
+  }
+}
+
+/**
+ * Connects and calls one tool, under one deadline of at most 10 seconds. `secrets` is the state
+ * after the step: on a 401 the SDK refreshes the OAuth tokens once and sends the request again.
+ * `error` means that the tool answered with an error; its text is not returned. `text` is at most
+ * MAX_RESULT characters, with NUL and lone surrogates replaced; `size` is the full length.
+ */
+export async function callTool(
+  target: Target,
+  name: string,
+  args: Record<string, unknown>,
+  timeoutMs: number,
+) {
+  const { fetch, failure, deadline } = edge(timeoutMs);
+  const secrets = { ...target.secrets };
+  const client = new Client({ name: "quills-connectors", version: "1.0.0" });
+  try {
+    await client.connect(transport(target, secrets, fetch), {
+      signal: deadline,
+    });
+    const result = await client.callTool({ name, arguments: args }, undefined, {
+      signal: deadline,
+    });
+    if (result.isError) return { secrets, error: true as const };
+    const parts = Array.isArray(result.content) ? result.content : [];
+    const raw = parts.length
+      ? parts
+          .map((part) =>
+            part.type === "text" ? part.text : "[content that is not text]",
+          )
+          .join("\n")
+      : JSON.stringify(result.structuredContent ?? null);
+    return {
+      secrets,
+      text: text(raw, MAX_RESULT)!,
+      size: raw.length,
+      truncated: raw.length > MAX_RESULT,
+    };
   } catch (error) {
     return { secrets, failure: failure(error) };
   } finally {
