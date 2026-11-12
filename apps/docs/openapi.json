@@ -87595,7 +87595,7 @@
         "tags": [
           "Quills"
         ],
-        "summary": "Start a GitHub OAuth connection",
+        "summary": "Start the GitHub OAuth connection",
         "description": "Returns the provider's authorization URL. Open it in the same browser session: the state expires after ten minutes, is bound to the caller and this workspace, and works once.",
         "parameters": [
           {
@@ -87670,7 +87670,7 @@
         "tags": [
           "Quills"
         ],
-        "summary": "Start a GitLab OAuth connection",
+        "summary": "Start the GitLab OAuth connection",
         "description": "Returns the provider's authorization URL. Open it in the same browser session: the state expires after ten minutes, is bound to the caller and this workspace, and works once.",
         "parameters": [
           {
@@ -87745,7 +87745,7 @@
         "tags": [
           "Quills"
         ],
-        "summary": "Start a Slack OAuth connection",
+        "summary": "Start the Slack OAuth connection",
         "description": "Returns the provider's authorization URL. Open it in the same browser session: the state expires after ten minutes, is bound to the caller and this workspace, and works once.",
         "parameters": [
           {
@@ -87820,7 +87820,7 @@
         "tags": [
           "Quills"
         ],
-        "summary": "Start a Discord OAuth connection",
+        "summary": "Start the Discord OAuth connection",
         "description": "Returns the provider's authorization URL. Open it in the same browser session: the state expires after ten minutes, is bound to the caller and this workspace, and works once.",
         "parameters": [
           {
@@ -87895,7 +87895,7 @@
         "tags": [
           "Quills"
         ],
-        "summary": "Start a Jira OAuth connection",
+        "summary": "Start the Jira OAuth connection",
         "description": "Returns the provider's authorization URL. Open it in the same browser session: the state expires after ten minutes, is bound to the caller and this workspace, and works once.",
         "parameters": [
           {
@@ -87970,7 +87970,7 @@
         "tags": [
           "Quills"
         ],
-        "summary": "Start a Linear OAuth connection",
+        "summary": "Start the Linear OAuth connection",
         "description": "Returns the provider's authorization URL. Open it in the same browser session: the state expires after ten minutes, is bound to the caller and this workspace, and works once.",
         "parameters": [
           {
@@ -88045,7 +88045,7 @@
         "tags": [
           "Quills"
         ],
-        "summary": "Start a Asana OAuth connection",
+        "summary": "Start the Asana OAuth connection",
         "description": "Returns the provider's authorization URL. Open it in the same browser session: the state expires after ten minutes, is bound to the caller and this workspace, and works once.",
         "parameters": [
           {
@@ -88120,7 +88120,7 @@
         "tags": [
           "Quills"
         ],
-        "summary": "Start a ClickUp OAuth connection",
+        "summary": "Start the ClickUp OAuth connection",
         "description": "Returns the provider's authorization URL. Open it in the same browser session: the state expires after ten minutes, is bound to the caller and this workspace, and works once.",
         "parameters": [
           {
@@ -88195,7 +88195,7 @@
         "tags": [
           "Quills"
         ],
-        "summary": "Start a Monday.com OAuth connection",
+        "summary": "Start the Monday.com OAuth connection",
         "description": "Returns the provider's authorization URL. Open it in the same browser session: the state expires after ten minutes, is bound to the caller and this workspace, and works once.",
         "parameters": [
           {
@@ -88270,7 +88270,7 @@
         "tags": [
           "Quills"
         ],
-        "summary": "Start a Notion OAuth connection",
+        "summary": "Start the Notion OAuth connection",
         "description": "Returns the provider's authorization URL. Open it in the same browser session: the state expires after ten minutes, is bound to the caller and this workspace, and works once.",
         "parameters": [
           {
@@ -88345,7 +88345,7 @@
         "tags": [
           "Quills"
         ],
-        "summary": "Start a Microsoft Teams OAuth connection",
+        "summary": "Start the Microsoft Teams OAuth connection",
         "description": "Returns the provider's authorization URL. Open it in the same browser session: the state expires after ten minutes, is bound to the caller and this workspace, and works once.",
         "parameters": [
           {
@@ -88420,7 +88420,7 @@
         "tags": [
           "Quills"
         ],
-        "summary": "Start a HubSpot OAuth connection",
+        "summary": "Start the HubSpot OAuth connection",
         "description": "Returns the provider's authorization URL. Open it in the same browser session: the state expires after ten minutes, is bound to the caller and this workspace, and works once.",
         "parameters": [
           {
@@ -88495,7 +88495,7 @@
         "tags": [
           "Quills"
         ],
-        "summary": "Start a Intercom OAuth connection",
+        "summary": "Start the Intercom OAuth connection",
         "description": "Returns the provider's authorization URL. Open it in the same browser session: the state expires after ten minutes, is bound to the caller and this workspace, and works once.",
         "parameters": [
           {
@@ -88570,7 +88570,7 @@
         "tags": [
           "Quills"
         ],
-        "summary": "Start a Zendesk OAuth connection",
+        "summary": "Start the Zendesk OAuth connection",
         "description": "Returns the provider's authorization URL. Open it in the same browser session: the state expires after ten minutes, is bound to the caller and this workspace, and works once.",
         "parameters": [
           {
@@ -88665,7 +88665,7 @@
         "tags": [
           "Quills"
         ],
-        "summary": "Start a Salesforce OAuth connection",
+        "summary": "Start the Salesforce OAuth connection",
         "description": "Returns the provider's authorization URL. Open it in the same browser session: the state expires after ten minutes, is bound to the caller and this workspace, and works once.",
         "parameters": [
           {

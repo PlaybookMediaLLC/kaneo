@@ -11,7 +11,9 @@ import {
   stopContract,
 } from "../framework/contract";
 import { openCredentials } from "../framework/integration-config";
+import { registry } from "../framework/registry";
 import quillsRouter from "../index";
+import { oauthProvider, oauthTypes } from "./providers";
 
 let pool: Pool;
 vi.mock("../../database/index", () => ({
@@ -31,6 +33,25 @@ vi.mock("../../database/index", () => ({
   ),
 }));
 const url = process.env.QUILLS_TEST_DATABASE_URL;
+
+describe("OAuth connect routes", () => {
+  it("names the provider in each connect summary", () => {
+    void quillsRouter;
+    const summaries = Object.fromEntries(
+      [...registry.keys()]
+        .filter((d) => /^\/oauth\/[^/]+\/connect$/.test(d.path))
+        .map((d) => [d.path.split("/")[2], d.summary]),
+    );
+    expect(summaries).toEqual(
+      Object.fromEntries(
+        oauthTypes.map((type) => [
+          type,
+          `Start the ${oauthProvider(type)!.name} OAuth connection`,
+        ]),
+      ),
+    );
+  });
+});
 
 describe.skipIf(!url)("OAuth platform credentials with PostgreSQL", () => {
   const app = contractApp(quillsRouter);

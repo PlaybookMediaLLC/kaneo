@@ -219,7 +219,7 @@ const connectRoute = (type: (typeof oauthTypes)[number]) =>
     method: "get",
     path: `/oauth/${type}/connect`,
     operationId: `startQuills${type[0]!.toUpperCase()}${type.slice(1)}OAuthConnect`,
-    summary: `Start a ${oauthProvider(type)!.name} OAuth connection`,
+    summary: `Start the ${oauthProvider(type)!.name} OAuth connection`,
     description:
       "Returns the provider's authorization URL. Open it in the same browser session: the state expires after ten minutes, is bound to the caller and this workspace, and works once.",
     action: "manage_settings",
