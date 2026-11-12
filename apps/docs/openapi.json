@@ -26456,7 +26456,7 @@
           "Quills"
         ],
         "summary": "Get a link preview for a web page",
-        "description": "A private, loopback, link-local or metadata address, a redirect to one, more than 3 redirects, more than 5 seconds, a body that is not HTML or any failure answers preview: null. Needs the portal and its support pages. At most 30 requests a minute for each client address.",
+        "description": "A private, loopback, link-local or metadata address, a redirect to one, more than 3 redirects, more than 5 seconds, a body that is not HTML, more than 2 previews at once in the API process, or any failure answers preview: null. Needs the portal and its support pages. At most 30 requests a minute for each client address. A private address is always refused here, also when the instance allows private destinations.",
         "security": [],
         "parameters": [
           {
@@ -29747,7 +29747,7 @@
           "Quills"
         ],
         "summary": "Get a link preview for a web page",
-        "description": "A private, loopback, link-local or metadata address, a redirect to one, more than 3 redirects, more than 5 seconds, a body that is not HTML or any failure answers preview: null. Needs the widget and its messenger. At most 30 requests a minute for each client address.",
+        "description": "A private, loopback, link-local or metadata address, a redirect to one, more than 3 redirects, more than 5 seconds, a body that is not HTML, more than 2 previews at once in the API process, or any failure answers preview: null. Needs the widget and its messenger. At most 30 requests a minute for each client address. A private address is always refused here, also when the instance allows private destinations.",
         "security": [],
         "parameters": [
           {
@@ -113853,7 +113853,7 @@
           "Quills"
         ],
         "summary": "Get a link preview for a web page",
-        "description": "A private, loopback, link-local or metadata address, a redirect to one, more than 3 redirects, more than 5 seconds, a body that is not HTML or any failure answers preview: null.",
+        "description": "A private, loopback, link-local or metadata address, a redirect to one, more than 3 redirects, more than 5 seconds, a body that is not HTML, more than 2 previews at once in the API process, or any failure answers preview: null. The instance switch KANEO_ALLOW_PRIVATE_WEBHOOK_DESTINATIONS lets teammates preview private addresses, as for imports and webhooks.",
         "parameters": [
           {
             "schema": {
@@ -113960,7 +113960,7 @@
           "Quills"
         ],
         "summary": "Run up to 20 teammate reads in one request",
-        "description": "Each read names a teammate GET route by operationId, with its query values. A route with path parameters, native permissions, a project or a step outside its handler is not batchable (status 404), and neither is this route. Each result carries the status that the route itself answers this caller (200, 400, 403, 404 or 409) and, for 200, the route's JSON answer as text. One refused read does not fail the others; an unexpected server error fails the batch.",
+        "description": "Each read names a teammate GET route by operationId, with its query values. A route with path parameters, native permissions, a project or a step outside its handler is not batchable (status 404), and neither is this route. Each result carries the status that the route itself answers this caller (200, 400, 403, 404 or 409) and, for 200, the route's JSON answer as text. One refused read does not fail the others; an unexpected server error fails the batch. An API key spends one request of its rate limit and quota on the whole batch.",
         "parameters": [
           {
             "schema": {
