@@ -50,6 +50,21 @@ export function authorExemption(author, permission, policy) {
   return null;
 }
 
+// The nightly workflow in .github/workflows/upstream-kaneo.yml opens one pull
+// request from the upstream repository's main branch into staging. Its author is
+// github-actions[bot], the identity every workflow shares when it uses
+// GITHUB_TOKEN, so exempting that account would exempt every workflow-authored
+// pull request, including one added later. Identify the sync by its head and
+// base instead. The exemption then skips only the issue link, and only for a
+// branch this fork already merges nightly; review and CI still apply.
+export function upstreamSyncExemption(pull) {
+  return pull?.head?.repo?.full_name === "usekaneo/kaneo" &&
+    pull?.head?.ref === "main" &&
+    pull?.base?.ref === "staging"
+    ? "Upstream sync from usekaneo/kaneo:main."
+    : null;
+}
+
 export function assessIssues(issues) {
   const approved = issues.find(
     (issue) =>
