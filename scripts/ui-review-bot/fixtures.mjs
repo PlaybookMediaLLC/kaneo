@@ -1,3 +1,5 @@
+import { WORKSPACE_CAPABILITY_NAMES } from "../../packages/permissions/src/capabilities.ts";
+import { intercept } from "@kaneo/browser-test";
 const date = "2026-09-01T10:00:00.000Z";
 const user = {
   id: "ui-review-user",
@@ -217,12 +219,54 @@ export function fixture(url, method) {
     };
   if (p.endsWith("/has-permission")) return { success: true, error: null };
   if (method === "GET") {
+    if (p === `/api/workspace/${organization.id}/project-access`) return [];
+    if (p === `/api/workspace/${organization.id}/project-access/me`)
+      return { userId: user.id, projectAccess: "all", projectIds: [] };
+    if (p === `/api/workspace/${organization.id}/members`)
+      return [
+        {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: null,
+          role: "owner",
+        },
+      ];
+    if (p === "/api/task/assigned") return { tasks: [], total: 0 };
+    if (p === "/api/admin/access") return { permissions: [] };
+    if (p === "/api/user/sessions")
+      return {
+        sessions: [
+          {
+            id: "ui-review-session",
+            browser: "Chrome",
+            os: "macOS",
+            ipAddress: "127.0.0.1",
+            createdAt: date,
+            lastActiveAt: date,
+            expiresAt: "2099-01-01T00:00:00.000Z",
+            current: true,
+          },
+        ],
+      };
+    if (p === `/api/workspace/${organization.id}`)
+      return { ...organization, description: null, role: "owner" };
+    if (p === `/api/workspace/${organization.id}/capabilities`)
+      return Object.fromEntries(
+        WORKSPACE_CAPABILITY_NAMES.map((name) => [name, true]),
+      );
     if (p === "/api/project") return [project];
     if (p === `/api/project/${project.id}`) return project;
     if (
       [
         `/api/github-integration/project/${project.id}`,
         `/api/gitea-integration/project/${project.id}`,
+        `/api/gitlab-integration/project/${project.id}`,
+        `/api/slack-integration/project/${project.id}`,
+        `/api/discord-integration/project/${project.id}`,
+        `/api/mattermost-integration/project/${project.id}`,
+        `/api/telegram-integration/project/${project.id}`,
+        `/api/generic-webhook-integration/project/${project.id}`,
       ].includes(p)
     )
       return null;
@@ -257,9 +301,17 @@ export function fixture(url, method) {
   return undefined;
 }
 
-export async function installFixtures(context, origin, diagnostics, options) {
+export async function installFixtures(
+  browser,
+  page,
+  origin,
+  diagnostics,
+  options,
+  override,
+) {
   const sessionFixture = createFixtureSession(options);
-  await context.addInitScript(() => {
+  diagnostics.errors = browser.monitor(page).errors;
+  await page.addInitScript(() => {
     localStorage.setItem("theme", "light");
     localStorage.setItem("vite-ui-theme", "light");
     localStorage.setItem("i18nextLng", "en-US");
@@ -270,54 +322,88 @@ export async function installFixtures(context, origin, diagnostics, options) {
         version: 0,
       }),
     );
-  });
-  await context.route("**/*", async (route) => {
-    const request = route.request();
-    const url = new URL(request.url());
-    if (url.protocol === "data:" || url.protocol === "blob:")
-      return route.continue();
-    const isAPI =
-      url.pathname.startsWith("/api/") ||
-      url.origin === "http://127.0.0.1:4799";
-    if (isAPI) {
-      if (request.method() === "OPTIONS")
-        return route.fulfill({
-          status: 204,
-          headers: {
-            "access-control-allow-origin": origin,
-            "access-control-allow-credentials": "true",
-            "access-control-allow-headers": "*",
+    // Fixture captures use synthetic sockets, including the dev-server HMR socket.
+    window.WebSocket = new Proxy(window.WebSocket, {
+      construct(Target, args) {
+        const blocked = Object.assign(new EventTarget(), {
+          url: String(args[0]),
+          readyState: Target.CONNECTING,
+          protocol: "",
+          extensions: "",
+          bufferedAmount: 0,
+          binaryType: "blob",
+          onopen: null,
+          onclose: null,
+          onerror: null,
+          onmessage: null,
+          send() {
+            throw new DOMException(
+              "Fixture socket is closed",
+              "InvalidStateError",
+            );
+          },
+          close() {
+            if (this.readyState === Target.CLOSED) return;
+            this.readyState = Target.CLOSED;
+            const event = new CloseEvent("close", {
+              code: 1000,
+              wasClean: true,
+            });
+            this.dispatchEvent(event);
+            this.onclose?.(event);
           },
         });
-      const data = sessionFixture(
-        request.url(),
-        request.method(),
-        request.postDataJSON?.() ?? {},
-      );
-      if (data === undefined)
-        diagnostics.unhandled.push(`${request.method()} ${url.pathname}`);
-      return route.fulfill({
-        status: data === undefined ? 501 : 200,
-        contentType: "application/json",
-        headers: {
+        queueMicrotask(() => blocked.close());
+        return blocked;
+      },
+    });
+  });
+  await intercept(
+    browser,
+    page,
+    async (request) => {
+      const url = new URL(request.url);
+      if (url.protocol === "data:" || url.protocol === "blob:")
+        return undefined;
+      const isAPI =
+        url.pathname.startsWith("/api/") ||
+        url.origin === "http://127.0.0.1:4799";
+      if (isAPI) {
+        const headers = {
           "access-control-allow-origin": origin,
           "access-control-allow-credentials": "true",
-        },
-        body: JSON.stringify(
-          data === undefined
-            ? { error: "No synthetic fixture for this endpoint" }
-            : data,
-        ),
-      });
-    }
-    if (url.origin === origin && request.method() === "GET")
-      return route.continue();
-    diagnostics.blocked.push(url.origin + url.pathname);
-    return route.abort();
-  });
-  await context.routeWebSocket("**/*", (ws) => {
-    const url = new URL(ws.url());
-    if (url.host === new URL(origin).host) ws.connectToServer();
-    else ws.close();
-  });
+          "access-control-allow-headers":
+            Object.entries(request.headers ?? {}).find(
+              ([name]) =>
+                name.toLowerCase() === "access-control-request-headers",
+            )?.[1] ?? "content-type",
+          "access-control-allow-methods":
+            "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+          "content-type": "application/json",
+        };
+        if (request.method === "OPTIONS") return { status: 204, headers };
+        const body = request.postData ? JSON.parse(request.postData) : {};
+        const custom = await override?.(request.url, request.method, body);
+        const data =
+          custom === undefined
+            ? sessionFixture(request.url, request.method, body)
+            : custom;
+        if (data === undefined)
+          diagnostics.unhandled.push(`${request.method} ${url.pathname}`);
+        return {
+          status: data === undefined ? 501 : 200,
+          headers,
+          body: JSON.stringify(
+            data === undefined
+              ? { error: "No synthetic fixture for this endpoint" }
+              : data,
+          ),
+        };
+      }
+      if (url.origin === origin && request.method === "GET") return undefined;
+      diagnostics.blocked.push(url.origin + url.pathname);
+      return null;
+    },
+    diagnostics,
+  );
 }

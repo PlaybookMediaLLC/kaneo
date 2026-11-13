@@ -1,0 +1,17 @@
+{
+	"loadOlder": "Load older messages",
+	"title": "Conversation",
+	"fallbackSubject": "Support conversation",
+	"status": "Status: {{status}}",
+	"messages": "Messages",
+	"noMessages": "No messages yet.",
+	"you": "You",
+	"support": "Support",
+	"system": "System",
+	"typing": "Support is typing…",
+	"replyLabel": "Reply",
+	"replyPlaceholder": "Write a reply",
+	"send": "Send reply",
+	"readOnly": "This conversation is read-only.",
+	"attachment": "Attachment: {{name}}"
+}

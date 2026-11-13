@@ -1,0 +1,61 @@
+name: Quills web
+
+on:
+  pull_request:
+    paths:
+      - 'apps/web/src/quills/**'
+      - 'apps/web/src/routes/portal/**'
+      - 'apps/web/src/routes/quills/**'
+      - 'apps/api/src/quills/portal/paths.ts'
+      - 'apps/docs/openapi.json'
+      - 'scripts/quills-web/**'
+      - '.github/workflows/quills-web.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  framework:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
+        with:
+          version: 12.18.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.22.2
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node --test "scripts/quills-web/**/*.test.mjs"
+      - run: node scripts/quills-web/cli.mjs check
+      - run: pnpm --filter @kaneo/web typecheck
+      - run: pnpm --filter @kaneo/web test
+      - name: Compile and test generated output in a clean worktree
+        shell: bash
+        run: |
+          set -euo pipefail
+          generated_root="$(mktemp -d)"
+          cleanup() {
+            git worktree remove --force "$generated_root" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          git worktree add --detach "$generated_root" HEAD
+          cd "$generated_root"
+          pnpm install --frozen-lockfile --offline
+          node scripts/quills-web/cli.mjs feature ci-generated
+          node -e 'const fs = require("node:fs"); fs.writeFileSync("apps/web/src/quills/i18n/en-US/ci-generated.json", "{\n  \"title\": \"Generated page\"\n}\n")'
+          node scripts/quills-web/cli.mjs query getQuillsPublicPortalConfig --area ci-generated
+          # The route parameter is literal.
+          # shellcheck disable=SC2016
+          node scripts/quills-web/cli.mjs page ci-generated --route '/portal/$workspaceId/ci-generated' --audience public --feature ci-generated --operations getQuillsPublicPortalConfig
+          pnpm --filter @kaneo/web build
+          pnpm --filter @kaneo/web typecheck
+          # The route directory contains a literal dollar sign.
+          # shellcheck disable=SC2016
+          pnpm --filter @kaneo/web exec vp test run --config vitest.config.ts \
+            src/quills/api/ci-generated \
+            src/quills/hooks/ci-generated \
+            src/quills/pages/ci-generated \
+            'src/routes/portal/$workspaceId/ci-generated.test.tsx'

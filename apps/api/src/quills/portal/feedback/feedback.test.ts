@@ -22,7 +22,8 @@ import { registry } from "../../framework/registry";
 import * as portalFixtures from "../index.fixture";
 import * as contentPublicFixtures from "../../content/public/index.fixture";
 import { enableWidget } from "../../widget/seed.fixture";
-import { portalUrl, publicUrl } from "./feeds";
+import { publicUrl } from "./feeds";
+import { portalPaths } from "../paths";
 import { scene, world } from "./seed.fixture";
 
 // Feature checks for customer feedback that the per-route contract cannot express: the opt-in
@@ -211,6 +212,36 @@ describe.skipIf(!url)("Quills customer feedback", () => {
     await portal({ enabled: true });
   });
 
+  it("returns safe public branding without custom CSS", async () => {
+    const env = contractEnv();
+    await env.scoped(env.a, (db) =>
+      db.update(settings).set({
+        brandingConfig: JSON.stringify({
+          themeMode: "light",
+          light: {
+            primary: "#123456",
+            background: "url(https://tracker.example.test/pixel)",
+          },
+        }),
+        customCss: "body{background:url(https://tracker.example.test/pixel)}",
+        logoKey: "portal/demo-logo.png",
+        headerDisplayMode: "logo_only",
+        headerDisplayName: "Demo",
+      }),
+    );
+    const response = await call("GET", "/portal/config");
+    expect(response.status).toBe(200);
+    expect(response.body.branding).toMatchObject({
+      theme: { themeMode: "light", light: { primary: "#123456" } },
+      headerDisplayMode: "logo_only",
+      headerDisplayName: "Demo",
+    });
+    expect(response.body.branding.theme.light.background).toBeUndefined();
+    expect(response.body.branding.logoUrl).toMatch(/^http:/);
+    expect(JSON.stringify(response.body)).not.toContain("customCss");
+    expect(JSON.stringify(response.body)).not.toContain("tracker.example.test");
+  });
+
   it("closes a private portal to callers it does not admit, in every audience", async () => {
     const env = contractEnv();
     const s = await scene(env, "widget");
@@ -259,7 +290,7 @@ describe.skipIf(!url)("Quills customer feedback", () => {
         .set({ title: `Fixes & <improvements> "${a.entryId}"` })
         .where(eq(changelogEntries.id, a.entryId)),
     );
-    const portalBase = portalUrl(env.a);
+    const portalBase = portalPaths.home(env.a);
     expect(portalBase).toMatch(
       new RegExp(`^https?://[^/]+.*/portal/${env.a}$`),
     );
@@ -280,8 +311,8 @@ describe.skipIf(!url)("Quills customer feedback", () => {
     );
     const sitemap = await call("GET", "/sitemap.xml");
     expect(sitemap.body).toContain(`<loc>${portalBase}</loc>`);
-    expect(sitemap.body).toMatch(
-      new RegExp(`<loc>${portalBase}/b/[^<]+/posts/${a.postId}</loc>`),
+    expect(sitemap.body).toContain(
+      `<loc>${portalBase}/posts/${a.postId}</loc>`,
     );
     expect(sitemap.body).toContain(
       `<loc>${portalBase}/changelog/${a.entryId}</loc>`,
@@ -375,10 +406,49 @@ describe.skipIf(!url)("Quills customer feedback", () => {
         params: { commentId: own },
         body: { content: "Edited" },
       });
+    const commentCapabilities = async (user = env.customerA) => {
+      const response = await call("GET", "/portal/posts/{postId}/comments", {
+        user,
+        params: { postId: s.a.postId },
+      });
+      expect(response.status).toBe(200);
+      return response.body.items.find(
+        (item: { id: string }) => item.id === own,
+      );
+    };
+    expect(await commentCapabilities()).toMatchObject({
+      canEdit: true,
+      canDelete: true,
+    });
+    expect(await commentCapabilities(env.customerB)).toMatchObject({
+      canEdit: false,
+      canDelete: false,
+    });
     await reply(true);
-    expect((await editComment()).status).toBe(200);
+    const editedComment = await editComment();
+    expect(editedComment.status).toBe(200);
+    expect(editedComment.body).toMatchObject({
+      canEdit: true,
+      canDelete: true,
+    });
+    expect(await commentCapabilities()).toMatchObject({
+      canEdit: true,
+      canDelete: true,
+    });
     await reply(false);
+    expect(await commentCapabilities()).toMatchObject({
+      canEdit: false,
+      canDelete: false,
+    });
     expect((await editComment()).status).toBe(403);
+    expect(
+      (
+        await call("DELETE", "/portal/comments/{commentId}", {
+          ...a,
+          params: { commentId: own },
+        })
+      ).status,
+    ).toBe(403);
     // A deleted comment keeps its place without its text.
     const mine = await call("POST", "/portal/posts/{postId}/comments", {
       ...a,
@@ -402,6 +472,8 @@ describe.skipIf(!url)("Quills customer feedback", () => {
     );
     expect(tombstone).toMatchObject({
       deleted: true,
+      canEdit: false,
+      canDelete: false,
       content: "",
       author: { name: null },
     });

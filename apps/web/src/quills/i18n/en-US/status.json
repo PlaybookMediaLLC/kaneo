@@ -1,0 +1,17 @@
+{
+	"active": "Active incidents",
+	"componentStatus": "{{name}}: {{status}}",
+	"history": "Incident history",
+	"loadMore": "Load more history",
+	"maintenance": "Upcoming maintenance",
+	"noActive": "There are no active incidents.",
+	"noHistory": "No earlier incidents are available.",
+	"status.major_outage": "Major outage",
+	"status.partial_outage": "Partial outage",
+	"status.degraded_performance": "Degraded performance",
+	"status.operational": "All systems operational",
+	"status.under_maintenance": "Under maintenance",
+	"title": "System status",
+	"uptime": "Uptime",
+	"uptimeDay": "{{date}}: {{percent}}% uptime"
+}

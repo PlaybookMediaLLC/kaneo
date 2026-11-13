@@ -1,11 +1,19 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
-import { chromium } from "playwright";
+import {
+  launchBrowser,
+  click,
+  visible,
+  screenshot,
+  fixedTime,
+  saveFailure,
+} from "@kaneo/browser-test";
 import { fixture, installFixtures } from "./fixtures.mjs";
-import { api, fulfillJSON, origin, root, startWebApp } from "./web-app.mjs";
+import { api, origin, root, startWebApp } from "./web-app.mjs";
 
 // Real frontend, fictional data. The fixture layer blocks all live API traffic.
-const output = `${root}apps/docs/images/product`;
+const output =
+  process.env.SCREENSHOT_OUTPUT || `${root}apps/docs/images/product`;
 const workspaceId = "ui-review-workspace";
 const projectId = "ui-review-project";
 const date = "2026-09-23T10:00:00.000Z";
@@ -76,20 +84,15 @@ const views = [
   [
     "integrations",
     `/dashboard/settings/projects/${projectId}/integrations`,
-    "Telegram Integration",
+    "Telegram",
   ],
-  [
-    "notifications",
-    "/dashboard/settings/account/notifications",
-    "Task assignments",
-  ],
+  ["notifications", "/dashboard/settings/account/notifications", "Assignments"],
   ["security", "/dashboard/settings/account/security", "Current password"],
 ];
 await mkdir(output, { recursive: true });
 const server = await startWebApp();
 let browser;
 try {
-  browser = await chromium.launch();
   for (const theme of ["light", "dark"]) {
     for (const [view, path, readyText] of views) {
       if (
@@ -97,26 +100,17 @@ try {
         process.env.DOCS_SCREENSHOT_VIEW !== view
       )
         continue;
-      const context = await browser.newContext({
+      browser = await launchBrowser({
         viewport: { width: 1440, height: 1000 },
         deviceScaleFactor: 2,
         locale: "en-US",
         timezoneId: "UTC",
         colorScheme: theme,
         reducedMotion: "reduce",
-        serviceWorkers: "block",
       });
       const diagnostics = { unhandled: [], blocked: [] };
-      await installFixtures(context, origin, diagnostics);
-      await context.addInitScript((theme) => {
-        localStorage.setItem(
-          "user-preferences",
-          JSON.stringify({ state: { theme }, version: 0 }),
-        );
-      }, theme);
-      await context.route("**/api/**", async (route) => {
-        const request = route.request();
-        const p = new URL(request.url()).pathname;
+      const override = (url, method) => {
+        const p = new URL(url).pathname;
         let data;
         if (p === "/api/user/security") data = { hasPassword: true };
         else if (p.replace(/\/$/, "") === "/api/notification-preferences")
@@ -184,37 +178,77 @@ try {
         else if (p.endsWith("/organization/list-roles")) data = [];
         else if (p.endsWith("/organization/get-full-organization"))
           data = {
-            ...fixture(request.url(), request.method()),
+            ...fixture(url, method),
             name: "Studio North",
             members,
           };
         else if (p.endsWith("/organization/list"))
-          data = fixture(request.url(), request.method()).map((o) => ({
+          data = fixture(url, method).map((o) => ({
             ...o,
             name: "Studio North",
           }));
         else if (p === `/api/label/workspace/${workspaceId}`) data = labels;
-        if (data === undefined || request.method() === "OPTIONS")
-          return route.fallback();
-        await fulfillJSON(route, data);
-      });
-      const page = await context.newPage();
-      const errors = [];
-      page.on("pageerror", (e) => errors.push(e.message));
-      await page.clock.setFixedTime(new Date(date));
+        return data;
+      };
+      const page = await browser.newPage();
+      await installFixtures(
+        browser,
+        page,
+        origin,
+        diagnostics,
+        undefined,
+        override,
+      );
+      await page.addInitScript((theme) => {
+        localStorage.setItem(
+          "user-preferences",
+          JSON.stringify({ state: { theme }, version: 0 }),
+        );
+      }, theme);
+      const monitor = browser.monitor(page);
+      const errors = monitor.errors;
+      await fixedTime(page, date);
       await page.goto(`${origin}${path}`);
-      await page.getByText(readyText, { exact: true }).first().waitFor();
+      if (view === "security")
+        await click(
+          page,
+          {
+            by: "role",
+            role: "button",
+            name: "Change password",
+          },
+          { timeout: 30_000 },
+        ).catch(async (error) => {
+          await saveFailure(
+            browser,
+            page,
+            `/tmp/quills-stagehand-docs-${view}-${theme}`,
+          );
+          throw error;
+        });
+      await visible(
+        page,
+        { by: "text", name: readyText },
+        { first: true, timeout: 30_000 },
+      ).catch(async (error) => {
+        await saveFailure(
+          browser,
+          page,
+          `/tmp/quills-stagehand-docs-${view}-${theme}`,
+        );
+        throw error;
+      });
       await page.waitForLoadState("networkidle");
       await page.evaluate(() => document.fonts.ready);
-      await page.mouse.move(0, 0);
-      await page.screenshot({
-        path: `${output}/${view}-${theme}.png`,
+      await page.hover(0, 0);
+      await screenshot(page, `${output}/${view}-${theme}.png`, {
         animations: "disabled",
       });
       console.log(JSON.stringify({ view, theme, errors, ...diagnostics }));
       assert.deepEqual(errors, []);
       assert.deepEqual(diagnostics.unhandled, []);
-      await context.close();
+      await browser.close();
+      browser = undefined;
     }
   }
 } finally {

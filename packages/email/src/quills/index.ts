@@ -1044,6 +1044,7 @@ interface SendStatusChangeParams {
   newStatus: string;
   workspaceName: string;
   unsubscribeUrl: string;
+  oneClickUnsubscribeUrl?: string;
   preferencesUrl?: string;
   logoUrl?: string;
 }
@@ -1078,7 +1079,9 @@ export async function sendStatusChangeEmail(
       preferencesUrl,
       logoUrl,
     }),
-    extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
+    extraHeaders: listUnsubscribeHeaders(
+      params.oneClickUnsubscribeUrl ?? unsubscribeUrl,
+    ),
     emailType: "StatusChangeEmail",
     preview: { postUrl },
   });
@@ -1097,6 +1100,7 @@ interface SendNewCommentParams {
   isTeamMember: boolean;
   workspaceName: string;
   unsubscribeUrl: string;
+  oneClickUnsubscribeUrl?: string;
   preferencesUrl?: string;
   logoUrl?: string;
 }
@@ -1131,7 +1135,9 @@ export async function sendNewCommentEmail(
       preferencesUrl,
       logoUrl,
     }),
-    extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
+    extraHeaders: listUnsubscribeHeaders(
+      params.oneClickUnsubscribeUrl ?? unsubscribeUrl,
+    ),
     emailType: "NewCommentEmail",
     preview: { postUrl },
   });
@@ -1770,6 +1776,7 @@ interface SendStatusIncidentPublishedParams {
   affectedComponents: Array<{ name: string; status: string }>;
   incidentUrl: string;
   unsubscribeUrl: string;
+  oneClickUnsubscribeUrl?: string;
   preferencesUrl?: string;
   logoUrl?: string;
 }
@@ -1807,7 +1814,9 @@ export async function sendStatusIncidentPublishedEmail(
       preferencesUrl,
       logoUrl,
     }),
-    extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
+    extraHeaders: listUnsubscribeHeaders(
+      params.oneClickUnsubscribeUrl ?? unsubscribeUrl,
+    ),
     emailType: "StatusIncidentPublishedEmail",
     preview: { incidentUrl },
   });
@@ -1829,6 +1838,7 @@ interface SendStatusMaintenanceScheduledParams {
   affectedComponents: string[];
   incidentUrl: string;
   unsubscribeUrl: string;
+  oneClickUnsubscribeUrl?: string;
   preferencesUrl?: string;
   logoUrl?: string;
 }
@@ -1866,7 +1876,9 @@ export async function sendStatusMaintenanceScheduledEmail(
       preferencesUrl,
       logoUrl,
     }),
-    extraHeaders: listUnsubscribeHeaders(unsubscribeUrl),
+    extraHeaders: listUnsubscribeHeaders(
+      params.oneClickUnsubscribeUrl ?? unsubscribeUrl,
+    ),
     emailType: "StatusMaintenanceScheduledEmail",
     preview: { incidentUrl },
   });

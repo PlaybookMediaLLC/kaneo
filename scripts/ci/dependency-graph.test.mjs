@@ -34,13 +34,13 @@ importers:
       vite: {specifier: 'catalog:', version: '@voidzero-dev/vite-plus-core@1.4.0(qs@6.16.2)'}
       shared: {specifier: 'workspace:*', version: 'link:packages/shared'}
     devDependencies:
-      browserstack-node-sdk: {specifier: 1.75.1, version: '1.75.1(qs@6.16.2)'}
+      synthetic-browser-sdk: {specifier: 1.75.1, version: '1.75.1(qs@6.16.2)'}
   packages/shared:
     dependencies:
       node-forge: {specifier: 1.4.2, version: 1.4.2}
 packages:
   '@voidzero-dev/vite-plus-core@1.4.0': {resolution: {integrity: sha512-fixture}}
-  browserstack-node-sdk@1.75.1: {resolution: {integrity: sha512-fixture}}
+  synthetic-browser-sdk@1.75.1: {resolution: {integrity: sha512-fixture}}
   node-forge@1.4.2: {resolution: {integrity: sha512-fixture}}
   qs@6.16.2: {resolution: {integrity: sha512-fixture}}
   deepmerge@4.3.1: {resolution: {integrity: sha512-fixture}}
@@ -54,7 +54,7 @@ snapshots:
     optionalDependencies:
       fsevents: 2.3.3
     transitivePeerDependencies: [unresolved-peer]
-  browserstack-node-sdk@1.75.1(qs@6.16.2):
+  synthetic-browser-sdk@1.75.1(qs@6.16.2):
     dependencies:
       qs: 6.16.2
   node-forge@1.4.2: {}
@@ -187,7 +187,7 @@ test("selects the main graph in either document order, retaining all packages an
   assert.equal(entries["pkg:npm/qs@6.16.2"].scope, "runtime");
   assert.equal(entries["pkg:npm/node-forge@1.4.2"].relationship, "direct");
   assert.equal(
-    entries["pkg:npm/browserstack-node-sdk@1.75.1"].scope,
+    entries["pkg:npm/synthetic-browser-sdk@1.75.1"].scope,
     "development",
   );
   assert.equal(entries["pkg:npm/fsevents@2.3.3"].scope, "runtime");
@@ -199,17 +199,17 @@ test("selects the main graph in either document order, retaining all packages an
 
 test("merges edges from peer variants without losing packages or mistaking development for runtime", () => {
   const source = changedApplication((lock) => {
-    lock.snapshots["browserstack-node-sdk@1.75.1(qs@6.16.1)"] = {
+    lock.snapshots["synthetic-browser-sdk@1.75.1(qs@6.16.1)"] = {
       dependencies: { orphan: "1.0.0" },
     };
     lock.importers["."].devDependencies.second = {
-      version: "browserstack-node-sdk@1.75.1(qs@6.16.1)",
+      version: "synthetic-browser-sdk@1.75.1(qs@6.16.1)",
     };
   });
   const entries = buildManifest(source, lockPaths[0]).resolved;
   assert.equal(Object.keys(entries).length, 7);
   assert.deepEqual(
-    entries["pkg:npm/browserstack-node-sdk@1.75.1"].dependencies,
+    entries["pkg:npm/synthetic-browser-sdk@1.75.1"].dependencies,
     ["pkg:npm/orphan@1.0.0", "pkg:npm/qs@6.16.2"],
   );
   assert.equal(entries["pkg:npm/orphan@1.0.0"].scope, "development");
@@ -316,7 +316,7 @@ test("actual root and e2e locks cover every main-document package with valid pay
   }
   assert.ok(
     Object.keys(snapshot.manifests[lockPaths[1]].resolved).some((key) =>
-      key.startsWith("pkg:npm/browserstack-node-sdk@"),
+      key.startsWith("pkg:npm/%40browserbasehq/stagehand@"),
     ),
   );
 });

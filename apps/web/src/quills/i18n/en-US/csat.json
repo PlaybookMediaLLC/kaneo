@@ -1,0 +1,8 @@
+{
+	"confirm": "Send rating",
+	"done": "Thanks for your feedback",
+	"ratingLabel": "Rating {{rating}} out of 5",
+	"ratingScale": "Choose a rating",
+	"recordedRating": "You rated this conversation {{rating}} out of 5.",
+	"title": "Rate your support experience"
+}

@@ -7,12 +7,14 @@ type SignInFooterLineProps = {
   footer: SignInFooter;
   invitationId?: string;
   email?: string;
+  redirect?: string;
 };
 
 export function SignInFooterLine({
   footer,
   invitationId,
   email,
+  redirect,
 }: SignInFooterLineProps) {
   const { t } = useTranslation();
 
@@ -22,7 +24,7 @@ export function SignInFooterLine({
         {t("auth:signIn.footer.newHere")}{" "}
         <Link
           to="/auth/sign-up"
-          search={{ invitationId, email }}
+          search={{ invitationId, email, redirect }}
           className={authLinkClassName}
         >
           {t("auth:signIn.footer.createAccount")}

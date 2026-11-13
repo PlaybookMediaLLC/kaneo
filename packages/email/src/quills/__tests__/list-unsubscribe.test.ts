@@ -1,9 +1,8 @@
 /**
  * Every email carrying an unsubscribe token also carries RFC 2369
  * `List-Unsubscribe` and RFC 8058 `List-Unsubscribe-Post` headers, so the mail
- * client's own unsubscribe button works in one click. The one-click URL is the
- * emailed link itself: a POST there unsubscribes, while a GET only shows the
- * confirm page.
+ * client's own unsubscribe button works in one click. The message body links to
+ * the portal confirmation page; the one-click header keeps the POST API endpoint.
  */
 import {
   afterEach,
@@ -37,6 +36,7 @@ const ENV_KEYS = [
 const saved: Record<string, string | undefined> = {};
 const TOKEN = "6f1c1c47-3c0e-4d55-9a43-0d2a4f1c9b10";
 const PAGE = `https://acme.test/unsubscribe?token=${TOKEN}`;
+const ONE_CLICK = `https://api.acme.test/unsubscribe?token=${TOKEN}`;
 
 beforeEach(() => {
   for (const key of ENV_KEYS) {
@@ -113,8 +113,15 @@ describe("token emails carry the headers", () => {
       newStatus: "planned",
       workspaceName: "Acme",
       unsubscribeUrl: PAGE,
+      oneClickUnsubscribeUrl: ONE_CLICK,
     });
-    expect(sentHeaders()).toMatchObject({ "List-Unsubscribe": `<${PAGE}>` });
+    expect(sentHeaders()).toMatchObject({
+      "List-Unsubscribe": `<${ONE_CLICK}>`,
+      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    });
+    expect(sendMailMock.mock.calls[0][0].html).toContain(
+      PAGE.replace("&", "&amp;"),
+    );
   });
 
   it("a changelog email", async () => {

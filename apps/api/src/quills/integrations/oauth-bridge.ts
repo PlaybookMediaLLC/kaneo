@@ -24,7 +24,11 @@ else
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ token }),
   }).then(
-    (response) => show(response.ok ? "Connected. Close this page and go back to the integration settings." : failed),
+    (response) => {
+      const result = response.headers.get("x-quills-result-location");
+      if (result) location.replace(result);
+      else show(response.ok ? "Connected. Close this page and go back to the integration settings." : failed);
+    },
     () => show(failed),
   );`;
 

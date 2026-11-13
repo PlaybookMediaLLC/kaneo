@@ -3,12 +3,12 @@
 `ci.yml` runs on PRs and main, supports manual runs, and is reused by Nightly.
 It checks formatting, translations, OpenAPI, types, unit/integration tests, site links, workflow syntax, real S3 uploads, and all three Dockerfiles.
 The bundled image runs against disposable PostgreSQL and MinIO services for browser, realtime, and upgrade tests.
-Runtime failures retain container logs, a browser screenshot, and a Playwright trace for seven days.
+Runtime failures retain container logs, a browser screenshot, and a Stagehand DOM snapshot and runtime/network diagnostics for seven days.
 PRs also run the independent **Chromium smoke tests** job unless change detection confirms an allowlisted docs/site-only change.
-BrowserStack runs separately for main pushes, manual runs on main, and daily at 05:43 UTC.
-`browserstack-change-classification.mjs` skips Docker/cloud work only for proven runtime-neutral changes since a successful full validation less than 24 hours old.
+Stagehand runs separately for main pushes, manual runs on main, and daily at 05:43 UTC.
+`stagehand-change-classification.mjs` skips Docker/browser work only for proven runtime-neutral changes since a successful full validation less than 24 hours old.
 Skipped runs do not refresh that clock.
-Manual runs, scheduled runs, and uncertain evidence run both engines in full.
+Manual runs, scheduled runs, and uncertain evidence run the complete Chromium suite.
 
 The disposable S3 fixture pins Bitnami's archived MinIO 2025.7.23 image by its
 multi-platform digest because the upstream public registries no longer serve
@@ -86,7 +86,7 @@ its tests with `node --test scripts/contribution-eligibility/*.test.mjs`.
 ## Releasing dependency security fixes
 
 Integrate dependency fixes together with their lockfiles. The application and
-the BrowserStack runner have separate pnpm workspaces; validate frozen installs
+the Stagehand runner have separate pnpm workspaces; validate frozen installs
 in both. Keep Vite+ and the aliased Vite core on the same release, and commit
 dependency patches with the lockfile that references them. Keep the root Vite
 alias explicit so automatically installed test-tool peers also use the patched
@@ -117,9 +117,9 @@ Forge 1.4.2 replaces our earlier signature-verification backport. Keep its
 DigestInfo regression cases and Buffer-PEM compatibility test when updating it.
 Run `pnpm test:security:dependencies` against the installed dependency graph.
 Remove a backport only when its replacement passes the same regression cases.
-The BrowserStack cache-policy patch and its removal conditions are documented
-in [the test workspace](../../tests/e2e/patches/README.md); run its checks with
-`pnpm --dir tests/e2e test:security`.
+The browser suite uses pinned Stagehand Chromium tooling in its isolated workspace.
+Run `pnpm --dir tests/e2e test:security` to check the driver boundary. The retired cloud
+SDK and its provider-specific patches are no longer installed.
 
 Publication is a separate step:
 
@@ -164,7 +164,7 @@ GITHUB_REPOSITORY=usekaneo/kaneo GITHUB_REPOSITORY_OWNER=usekaneo bash scripts/c
 ```
 
 Install Chromium once using
-`scripts/ui-review-bot/node_modules/.bin/playwright install chromium`.
+`npm --prefix scripts/ui-review-bot run setup`.
 Stop only this stack and remove its disposable data afterwards:
 
 ```sh

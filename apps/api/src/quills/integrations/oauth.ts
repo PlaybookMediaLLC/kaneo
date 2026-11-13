@@ -22,6 +22,7 @@ import {
   type Located,
   type SignedVerifier,
 } from "../framework/signed";
+import { oauthFailureOutcome, oauthResultUrl } from "../framework/oauth-result";
 import { bridgePage, bridgeScripts, usedPage } from "./oauth-bridge";
 import {
   connect,
@@ -307,6 +308,24 @@ const callbackResult = z.object({
 /** Both callbacks, after the exchange: seal the tokens and connect as the teammate who started it. */
 const completion = {
   replay: { status: "already_used", integration: null },
+  redirect: {
+    success: (
+      result: z.output<typeof callbackResult>,
+      { params }: { params: { type: OAuthProviderType } },
+    ) =>
+      oauthResultUrl(
+        result.status,
+        oauthProvider(params.type)?.name ?? "Integration",
+      ),
+    failure: (
+      status: number,
+      { params }: { params: { type: OAuthProviderType } },
+    ) =>
+      oauthResultUrl(
+        oauthFailureOutcome(status),
+        oauthProvider(params.type)?.name ?? "Integration",
+      ),
+  },
   event: (input: unknown, result: z.output<typeof callbackResult>) =>
     result.integration
       ? connectedEvent(input, { integration: result.integration })

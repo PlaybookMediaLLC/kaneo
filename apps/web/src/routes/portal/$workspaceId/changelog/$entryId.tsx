@@ -1,0 +1,18 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
+import { ChangelogEntryPage } from "@/quills/pages/changelog-entry/changelog-entry-page";
+
+const searchSchema = z.object({});
+export const Route = createFileRoute("/portal/$workspaceId/changelog/$entryId")(
+  { validateSearch: searchSchema, component: RouteComponent },
+);
+function RouteComponent() {
+  const params = Route.useParams();
+  return (
+    <ChangelogEntryPage
+      workspaceId={"workspaceId" in params ? String(params.workspaceId) : ""}
+      params={params}
+      search={Route.useSearch()}
+    />
+  );
+}

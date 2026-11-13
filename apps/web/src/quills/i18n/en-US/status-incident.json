@@ -1,0 +1,12 @@
+{
+	"title": "Incident details",
+	"status": "Status: {{status}}",
+	"impact": "Impact: {{impact}}",
+	"started": "Started {{date}}",
+	"scheduled": "Scheduled for {{date}}",
+	"affectedComponents": "Affected components",
+	"noAffectedComponents": "No affected components.",
+	"updates": "Updates",
+	"noUpdates": "No updates yet.",
+	"componentStatus": "{{name}}: {{status}}"
+}

@@ -144,6 +144,10 @@ Secrets:                   the bearer token, the OAuth client registration, the 
 | `startQuillsConnectorOAuth` | `POST /assistant/connectors/{connectorId}/oauth` (returns the authorization URL) | manage_settings | `connectors` | `assistant_connector.updated` |
 | `completeQuillsConnectorOAuth` | `GET /quills-public/signed/oauth/connectors/{connectorId}/callback?state&code` (signed) | manage_settings (session) | `connectors`, `principal`, `kv_store` | `assistant_connector.connected` |
 
+The completion route keeps JSON for API clients. A browser navigation gets a 303 to the web OAuth
+result page with only a fixed outcome and the connector name (or the generic `Connector` label when
+the callback cannot safely read the record).
+
 Tests: the contract suite (a local MCP and OAuth server in `connector-edge.fixture.ts`) and
 `connectors.test.ts` (the OAuth flow, token refresh, private addresses, the URL change, bounds).
 

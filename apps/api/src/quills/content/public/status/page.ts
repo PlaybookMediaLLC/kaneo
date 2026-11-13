@@ -22,11 +22,8 @@ import {
   statusIncidents,
 } from "../../../../database/quills/schema/status";
 import { defineQuillsRoute } from "../../../framework/define-route";
-import {
-  portalUrl,
-  publicUrl,
-  rssDocument,
-} from "../../../portal/feedback/feeds";
+import { publicUrl, rssDocument } from "../../../portal/feedback/feeds";
+import { portalPaths } from "../../../portal/paths";
 import { uptimeSeriesFor } from "../../status/overview";
 import { componentStatus, worst } from "../../status/shared";
 import {
@@ -366,7 +363,7 @@ type FeedEntry = Parameters<typeof rssDocument>[0]["items"][number];
  * the latest update. Each names the status it set and carries the window and services as they are now.
  */
 function feedEntries(workspaceId: string, item: FeedItem) {
-  const link = portalUrl(workspaceId, `/status/${item.id}`);
+  const link = portalPaths.statusIncident(workspaceId, item.id);
   const title = (status: string) =>
     `${item.kind === "maintenance" ? "Maintenance: " : ""}${item.title} (${status.replace(/_/g, " ")})`;
   const context = [
@@ -473,7 +470,7 @@ const feed = defineQuillsRoute({
     return rssDocument({
       title: `${name} Status`,
       description: `Incidents and maintenance for ${name}`,
-      link: portalUrl(workspaceId, "/status"),
+      link: portalPaths.status(workspaceId),
       self: publicUrl(workspaceId, "/status/rss.xml"),
       items: [...kept].sort((x, y) => +y.publishedAt - +x.publishedAt),
     });

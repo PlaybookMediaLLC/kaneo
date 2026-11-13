@@ -24,21 +24,43 @@ import { Route as AuthVerifyOtpRouteImport } from './routes/auth/verify-otp'
 import { Route as DeviceIndexRouteImport } from './routes/device/index'
 import { Route as DeviceApproveRouteImport } from './routes/device/approve'
 import { Route as McpAuthorizeRouteImport } from './routes/mcp.authorize'
+import { Route as PortalWorkspaceIdRouteImport } from './routes/portal/$workspaceId'
 import { Route as PublicProjectProjectIdRouteImport } from './routes/public-project.$projectId'
+import { Route as QuillsKitRouteImport } from './routes/quills/kit'
 import { Route as LayoutAuthenticatedDashboardRouteImport } from './routes/_layout/_authenticated/dashboard'
 import { Route as LayoutAuthenticatedInvitationsRouteImport } from './routes/_layout/_authenticated/invitations'
 import { Route as LayoutAuthenticatedOnboardingRouteImport } from './routes/_layout/_authenticated/onboarding'
 import { Route as LayoutAuthenticatedProfileSetupRouteImport } from './routes/_layout/_authenticated/profile-setup'
 import { Route as InvitationAcceptInviteIdRouteImport } from './routes/invitation/accept.$inviteId'
+import { Route as PortalWorkspaceIdIndexRouteImport } from './routes/portal/$workspaceId/index'
+import { Route as PortalWorkspaceIdCsatRouteImport } from './routes/portal/$workspaceId/csat'
+import { Route as PortalWorkspaceIdPreferencesRouteImport } from './routes/portal/$workspaceId/preferences'
+import { Route as PortalWorkspaceIdProfileRouteImport } from './routes/portal/$workspaceId/profile'
+import { Route as PortalWorkspaceIdUnsubscribeRouteImport } from './routes/portal/$workspaceId/unsubscribe'
+import { Route as QuillsOauthResultRouteImport } from './routes/quills/oauth/result'
 import { Route as LayoutAuthenticatedDashboardIndexRouteImport } from './routes/_layout/_authenticated/dashboard/index'
 import { Route as LayoutAuthenticatedDashboardInvitationsRouteImport } from './routes/_layout/_authenticated/dashboard/invitations'
 import { Route as LayoutAuthenticatedDashboardSettingsRouteImport } from './routes/_layout/_authenticated/dashboard/settings'
+import { Route as PortalWorkspaceIdBoardsBoardIdRouteImport } from './routes/portal/$workspaceId/boards/$boardId'
+import { Route as PortalWorkspaceIdChangelogIndexRouteImport } from './routes/portal/$workspaceId/changelog/index'
+import { Route as PortalWorkspaceIdChangelogEntryIdRouteImport } from './routes/portal/$workspaceId/changelog/$entryId'
+import { Route as PortalWorkspaceIdConversationsConversationIdRouteImport } from './routes/portal/$workspaceId/conversations/$conversationId'
+import { Route as PortalWorkspaceIdHcIndexRouteImport } from './routes/portal/$workspaceId/hc/index'
+import { Route as PortalWorkspaceIdHcSplatRouteImport } from './routes/portal/$workspaceId/hc/$'
+import { Route as PortalWorkspaceIdInviteInviteIdRouteImport } from './routes/portal/$workspaceId/invite/$inviteId'
+import { Route as PortalWorkspaceIdPostsPostIdRouteImport } from './routes/portal/$workspaceId/posts/$postId'
+import { Route as PortalWorkspaceIdStatusIndexRouteImport } from './routes/portal/$workspaceId/status/index'
+import { Route as PortalWorkspaceIdStatusIncidentIdRouteImport } from './routes/portal/$workspaceId/status/$incidentId'
+import { Route as PortalWorkspaceIdSupportIndexRouteImport } from './routes/portal/$workspaceId/support/index'
+import { Route as PortalWorkspaceIdSupportTicketsRouteImport } from './routes/portal/$workspaceId/support/tickets'
 import { Route as LayoutAuthenticatedDashboardSettingsAccountRouteImport } from './routes/_layout/_authenticated/dashboard/settings/account'
 import { Route as LayoutAuthenticatedDashboardSettingsAdminRouteImport } from './routes/_layout/_authenticated/dashboard/settings/admin'
 import { Route as LayoutAuthenticatedDashboardSettingsProjectsRouteImport } from './routes/_layout/_authenticated/dashboard/settings/projects'
 import { Route as LayoutAuthenticatedDashboardSettingsWorkspaceRouteImport } from './routes/_layout/_authenticated/dashboard/settings/workspace'
 import { Route as LayoutAuthenticatedDashboardWorkspaceWorkspaceIdRouteImport } from './routes/_layout/_authenticated/dashboard/workspace/$workspaceId'
 import { Route as LayoutAuthenticatedDashboardWorkspaceCreateRouteImport } from './routes/_layout/_authenticated/dashboard/workspace/create'
+import { Route as PortalWorkspaceIdHcLocaleIndexRouteImport } from './routes/portal/$workspaceId/hc/$locale/index'
+import { Route as PortalWorkspaceIdStatusIncidentsIncidentIdRouteImport } from './routes/portal/$workspaceId/status/incidents/$incidentId'
 import { Route as LayoutAuthenticatedWorkspaceSlugTaskTicketIdChar123TitleChar125RouteImport } from './routes/_layout/_authenticated/$workspaceSlug/task.$ticketId.{-$title}'
 import { Route as LayoutAuthenticatedDashboardSettingsAccountDeveloperRouteImport } from './routes/_layout/_authenticated/dashboard/settings/account/developer'
 import { Route as LayoutAuthenticatedDashboardSettingsAccountInformationRouteImport } from './routes/_layout/_authenticated/dashboard/settings/account/information'
@@ -65,6 +87,8 @@ import { Route as LayoutAuthenticatedDashboardWorkspaceWorkspaceIdMembersRouteIm
 import { Route as LayoutAuthenticatedDashboardWorkspaceWorkspaceIdMyTasksRouteImport } from './routes/_layout/_authenticated/dashboard/workspace/$workspaceId/my-tasks'
 import { Route as LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectsRouteImport } from './routes/_layout/_authenticated/dashboard/workspace/$workspaceId/projects'
 import { Route as LayoutAuthenticatedDashboardWorkspaceWorkspaceIdSearchRouteImport } from './routes/_layout/_authenticated/dashboard/workspace/$workspaceId/search'
+import { Route as PortalWorkspaceIdHcLocaleArticlesIdSlugRouteImport } from './routes/portal/$workspaceId/hc/$locale/articles/$idSlug'
+import { Route as PortalWorkspaceIdHcLocaleCollectionsIdSlugRouteImport } from './routes/portal/$workspaceId/hc/$locale/collections/$idSlug'
 import { Route as LayoutAuthenticatedDashboardSettingsProjectsProjectIdCalendarRouteImport } from './routes/_layout/_authenticated/dashboard/settings/projects/$projectId/calendar'
 import { Route as LayoutAuthenticatedDashboardSettingsProjectsProjectIdCustomFieldsRouteImport } from './routes/_layout/_authenticated/dashboard/settings/projects/$projectId/custom-fields'
 import { Route as LayoutAuthenticatedDashboardSettingsProjectsProjectIdGeneralRouteImport } from './routes/_layout/_authenticated/dashboard/settings/projects/$projectId/general'
@@ -151,9 +175,19 @@ const McpAuthorizeRoute = McpAuthorizeRouteImport.update({
   path: '/mcp/authorize',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PortalWorkspaceIdRoute = PortalWorkspaceIdRouteImport.update({
+  id: '/portal/$workspaceId',
+  path: '/portal/$workspaceId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PublicProjectProjectIdRoute = PublicProjectProjectIdRouteImport.update({
   id: '/public-project/$projectId',
   path: '/public-project/$projectId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const QuillsKitRoute = QuillsKitRouteImport.update({
+  id: '/quills/kit',
+  path: '/quills/kit',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LayoutAuthenticatedDashboardRoute =
@@ -186,6 +220,39 @@ const InvitationAcceptInviteIdRoute =
     path: '/invitation/accept/$inviteId',
     getParentRoute: () => rootRouteImport,
   } as any)
+const PortalWorkspaceIdIndexRoute = PortalWorkspaceIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => PortalWorkspaceIdRoute,
+} as any)
+const PortalWorkspaceIdCsatRoute = PortalWorkspaceIdCsatRouteImport.update({
+  id: '/csat',
+  path: '/csat',
+  getParentRoute: () => PortalWorkspaceIdRoute,
+} as any)
+const PortalWorkspaceIdPreferencesRoute =
+  PortalWorkspaceIdPreferencesRouteImport.update({
+    id: '/preferences',
+    path: '/preferences',
+    getParentRoute: () => PortalWorkspaceIdRoute,
+  } as any)
+const PortalWorkspaceIdProfileRoute =
+  PortalWorkspaceIdProfileRouteImport.update({
+    id: '/profile',
+    path: '/profile',
+    getParentRoute: () => PortalWorkspaceIdRoute,
+  } as any)
+const PortalWorkspaceIdUnsubscribeRoute =
+  PortalWorkspaceIdUnsubscribeRouteImport.update({
+    id: '/unsubscribe',
+    path: '/unsubscribe',
+    getParentRoute: () => PortalWorkspaceIdRoute,
+  } as any)
+const QuillsOauthResultRoute = QuillsOauthResultRouteImport.update({
+  id: '/quills/oauth/result',
+  path: '/quills/oauth/result',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LayoutAuthenticatedDashboardIndexRoute =
   LayoutAuthenticatedDashboardIndexRouteImport.update({
     id: '/',
@@ -203,6 +270,78 @@ const LayoutAuthenticatedDashboardSettingsRoute =
     id: '/settings',
     path: '/settings',
     getParentRoute: () => LayoutAuthenticatedDashboardRoute,
+  } as any)
+const PortalWorkspaceIdBoardsBoardIdRoute =
+  PortalWorkspaceIdBoardsBoardIdRouteImport.update({
+    id: '/boards/$boardId',
+    path: '/boards/$boardId',
+    getParentRoute: () => PortalWorkspaceIdRoute,
+  } as any)
+const PortalWorkspaceIdChangelogIndexRoute =
+  PortalWorkspaceIdChangelogIndexRouteImport.update({
+    id: '/changelog/',
+    path: '/changelog/',
+    getParentRoute: () => PortalWorkspaceIdRoute,
+  } as any)
+const PortalWorkspaceIdChangelogEntryIdRoute =
+  PortalWorkspaceIdChangelogEntryIdRouteImport.update({
+    id: '/changelog/$entryId',
+    path: '/changelog/$entryId',
+    getParentRoute: () => PortalWorkspaceIdRoute,
+  } as any)
+const PortalWorkspaceIdConversationsConversationIdRoute =
+  PortalWorkspaceIdConversationsConversationIdRouteImport.update({
+    id: '/conversations/$conversationId',
+    path: '/conversations/$conversationId',
+    getParentRoute: () => PortalWorkspaceIdRoute,
+  } as any)
+const PortalWorkspaceIdHcIndexRoute =
+  PortalWorkspaceIdHcIndexRouteImport.update({
+    id: '/hc/',
+    path: '/hc/',
+    getParentRoute: () => PortalWorkspaceIdRoute,
+  } as any)
+const PortalWorkspaceIdHcSplatRoute =
+  PortalWorkspaceIdHcSplatRouteImport.update({
+    id: '/hc/$',
+    path: '/hc/$',
+    getParentRoute: () => PortalWorkspaceIdRoute,
+  } as any)
+const PortalWorkspaceIdInviteInviteIdRoute =
+  PortalWorkspaceIdInviteInviteIdRouteImport.update({
+    id: '/invite/$inviteId',
+    path: '/invite/$inviteId',
+    getParentRoute: () => PortalWorkspaceIdRoute,
+  } as any)
+const PortalWorkspaceIdPostsPostIdRoute =
+  PortalWorkspaceIdPostsPostIdRouteImport.update({
+    id: '/posts/$postId',
+    path: '/posts/$postId',
+    getParentRoute: () => PortalWorkspaceIdRoute,
+  } as any)
+const PortalWorkspaceIdStatusIndexRoute =
+  PortalWorkspaceIdStatusIndexRouteImport.update({
+    id: '/status/',
+    path: '/status/',
+    getParentRoute: () => PortalWorkspaceIdRoute,
+  } as any)
+const PortalWorkspaceIdStatusIncidentIdRoute =
+  PortalWorkspaceIdStatusIncidentIdRouteImport.update({
+    id: '/status/$incidentId',
+    path: '/status/$incidentId',
+    getParentRoute: () => PortalWorkspaceIdRoute,
+  } as any)
+const PortalWorkspaceIdSupportIndexRoute =
+  PortalWorkspaceIdSupportIndexRouteImport.update({
+    id: '/support/',
+    path: '/support/',
+    getParentRoute: () => PortalWorkspaceIdRoute,
+  } as any)
+const PortalWorkspaceIdSupportTicketsRoute =
+  PortalWorkspaceIdSupportTicketsRouteImport.update({
+    id: '/support/tickets',
+    path: '/support/tickets',
+    getParentRoute: () => PortalWorkspaceIdRoute,
   } as any)
 const LayoutAuthenticatedDashboardSettingsAccountRoute =
   LayoutAuthenticatedDashboardSettingsAccountRouteImport.update({
@@ -239,6 +378,18 @@ const LayoutAuthenticatedDashboardWorkspaceCreateRoute =
     id: '/workspace/create',
     path: '/workspace/create',
     getParentRoute: () => LayoutAuthenticatedDashboardRoute,
+  } as any)
+const PortalWorkspaceIdHcLocaleIndexRoute =
+  PortalWorkspaceIdHcLocaleIndexRouteImport.update({
+    id: '/hc/$locale/',
+    path: '/hc/$locale/',
+    getParentRoute: () => PortalWorkspaceIdRoute,
+  } as any)
+const PortalWorkspaceIdStatusIncidentsIncidentIdRoute =
+  PortalWorkspaceIdStatusIncidentsIncidentIdRouteImport.update({
+    id: '/status/incidents/$incidentId',
+    path: '/status/incidents/$incidentId',
+    getParentRoute: () => PortalWorkspaceIdRoute,
   } as any)
 const LayoutAuthenticatedWorkspaceSlugTaskTicketIdChar123TitleChar125Route =
   LayoutAuthenticatedWorkspaceSlugTaskTicketIdChar123TitleChar125RouteImport.update(
@@ -398,6 +549,18 @@ const LayoutAuthenticatedDashboardWorkspaceWorkspaceIdSearchRoute =
     path: '/search',
     getParentRoute: () => LayoutAuthenticatedDashboardWorkspaceWorkspaceIdRoute,
   } as any)
+const PortalWorkspaceIdHcLocaleArticlesIdSlugRoute =
+  PortalWorkspaceIdHcLocaleArticlesIdSlugRouteImport.update({
+    id: '/hc/$locale/articles/$idSlug',
+    path: '/hc/$locale/articles/$idSlug',
+    getParentRoute: () => PortalWorkspaceIdRoute,
+  } as any)
+const PortalWorkspaceIdHcLocaleCollectionsIdSlugRoute =
+  PortalWorkspaceIdHcLocaleCollectionsIdSlugRouteImport.update({
+    id: '/hc/$locale/collections/$idSlug',
+    path: '/hc/$locale/collections/$idSlug',
+    getParentRoute: () => PortalWorkspaceIdRoute,
+  } as any)
 const LayoutAuthenticatedDashboardSettingsProjectsProjectIdCalendarRoute =
   LayoutAuthenticatedDashboardSettingsProjectsProjectIdCalendarRouteImport.update(
     {
@@ -514,22 +677,44 @@ export interface FileRoutesByFullPath {
   '/auth/verify-otp': typeof AuthVerifyOtpRoute
   '/device/approve': typeof DeviceApproveRoute
   '/mcp/authorize': typeof McpAuthorizeRoute
+  '/portal/$workspaceId': typeof PortalWorkspaceIdRouteWithChildren
   '/public-project/$projectId': typeof PublicProjectProjectIdRoute
+  '/quills/kit': typeof QuillsKitRoute
   '/device/': typeof DeviceIndexRoute
   '/dashboard': typeof LayoutAuthenticatedDashboardRouteWithChildren
   '/invitations': typeof LayoutAuthenticatedInvitationsRoute
   '/onboarding': typeof LayoutAuthenticatedOnboardingRoute
   '/profile-setup': typeof LayoutAuthenticatedProfileSetupRoute
   '/invitation/accept/$inviteId': typeof InvitationAcceptInviteIdRoute
+  '/portal/$workspaceId/csat': typeof PortalWorkspaceIdCsatRoute
+  '/portal/$workspaceId/preferences': typeof PortalWorkspaceIdPreferencesRoute
+  '/portal/$workspaceId/profile': typeof PortalWorkspaceIdProfileRoute
+  '/portal/$workspaceId/unsubscribe': typeof PortalWorkspaceIdUnsubscribeRoute
+  '/quills/oauth/result': typeof QuillsOauthResultRoute
+  '/portal/$workspaceId/': typeof PortalWorkspaceIdIndexRoute
   '/dashboard/invitations': typeof LayoutAuthenticatedDashboardInvitationsRoute
   '/dashboard/settings': typeof LayoutAuthenticatedDashboardSettingsRouteWithChildren
+  '/portal/$workspaceId/boards/$boardId': typeof PortalWorkspaceIdBoardsBoardIdRoute
+  '/portal/$workspaceId/changelog/$entryId': typeof PortalWorkspaceIdChangelogEntryIdRoute
+  '/portal/$workspaceId/conversations/$conversationId': typeof PortalWorkspaceIdConversationsConversationIdRoute
+  '/portal/$workspaceId/hc/$': typeof PortalWorkspaceIdHcSplatRoute
+  '/portal/$workspaceId/invite/$inviteId': typeof PortalWorkspaceIdInviteInviteIdRoute
+  '/portal/$workspaceId/posts/$postId': typeof PortalWorkspaceIdPostsPostIdRoute
+  '/portal/$workspaceId/status/$incidentId': typeof PortalWorkspaceIdStatusIncidentIdRoute
+  '/portal/$workspaceId/support/tickets': typeof PortalWorkspaceIdSupportTicketsRoute
   '/dashboard/': typeof LayoutAuthenticatedDashboardIndexRoute
+  '/portal/$workspaceId/changelog/': typeof PortalWorkspaceIdChangelogIndexRoute
+  '/portal/$workspaceId/hc/': typeof PortalWorkspaceIdHcIndexRoute
+  '/portal/$workspaceId/status/': typeof PortalWorkspaceIdStatusIndexRoute
+  '/portal/$workspaceId/support/': typeof PortalWorkspaceIdSupportIndexRoute
   '/dashboard/settings/account': typeof LayoutAuthenticatedDashboardSettingsAccountRouteWithChildren
   '/dashboard/settings/admin': typeof LayoutAuthenticatedDashboardSettingsAdminRouteWithChildren
   '/dashboard/settings/projects': typeof LayoutAuthenticatedDashboardSettingsProjectsRouteWithChildren
   '/dashboard/settings/workspace': typeof LayoutAuthenticatedDashboardSettingsWorkspaceRouteWithChildren
   '/dashboard/workspace/$workspaceId': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdRouteWithChildren
   '/dashboard/workspace/create': typeof LayoutAuthenticatedDashboardWorkspaceCreateRoute
+  '/portal/$workspaceId/status/incidents/$incidentId': typeof PortalWorkspaceIdStatusIncidentsIncidentIdRoute
+  '/portal/$workspaceId/hc/$locale/': typeof PortalWorkspaceIdHcLocaleIndexRoute
   '/$workspaceSlug/task/$ticketId/{-$title}': typeof LayoutAuthenticatedWorkspaceSlugTaskTicketIdChar123TitleChar125Route
   '/dashboard/settings/account/developer': typeof LayoutAuthenticatedDashboardSettingsAccountDeveloperRoute
   '/dashboard/settings/account/information': typeof LayoutAuthenticatedDashboardSettingsAccountInformationRoute
@@ -554,6 +739,8 @@ export interface FileRoutesByFullPath {
   '/dashboard/workspace/$workspaceId/my-tasks': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdMyTasksRoute
   '/dashboard/workspace/$workspaceId/projects': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectsRoute
   '/dashboard/workspace/$workspaceId/search': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdSearchRoute
+  '/portal/$workspaceId/hc/$locale/articles/$idSlug': typeof PortalWorkspaceIdHcLocaleArticlesIdSlugRoute
+  '/portal/$workspaceId/hc/$locale/collections/$idSlug': typeof PortalWorkspaceIdHcLocaleCollectionsIdSlugRoute
   '/dashboard/settings/admin/': typeof LayoutAuthenticatedDashboardSettingsAdminIndexRoute
   '/dashboard/workspace/$workspaceId/': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdIndexRoute
   '/dashboard/settings/projects/$projectId/calendar': typeof LayoutAuthenticatedDashboardSettingsProjectsProjectIdCalendarRoute
@@ -582,18 +769,39 @@ export interface FileRoutesByTo {
   '/device/approve': typeof DeviceApproveRoute
   '/mcp/authorize': typeof McpAuthorizeRoute
   '/public-project/$projectId': typeof PublicProjectProjectIdRoute
+  '/quills/kit': typeof QuillsKitRoute
   '/device': typeof DeviceIndexRoute
   '/invitations': typeof LayoutAuthenticatedInvitationsRoute
   '/onboarding': typeof LayoutAuthenticatedOnboardingRoute
   '/profile-setup': typeof LayoutAuthenticatedProfileSetupRoute
   '/invitation/accept/$inviteId': typeof InvitationAcceptInviteIdRoute
+  '/portal/$workspaceId/csat': typeof PortalWorkspaceIdCsatRoute
+  '/portal/$workspaceId/preferences': typeof PortalWorkspaceIdPreferencesRoute
+  '/portal/$workspaceId/profile': typeof PortalWorkspaceIdProfileRoute
+  '/portal/$workspaceId/unsubscribe': typeof PortalWorkspaceIdUnsubscribeRoute
+  '/quills/oauth/result': typeof QuillsOauthResultRoute
+  '/portal/$workspaceId': typeof PortalWorkspaceIdIndexRoute
   '/dashboard/invitations': typeof LayoutAuthenticatedDashboardInvitationsRoute
   '/dashboard/settings': typeof LayoutAuthenticatedDashboardSettingsRouteWithChildren
+  '/portal/$workspaceId/boards/$boardId': typeof PortalWorkspaceIdBoardsBoardIdRoute
+  '/portal/$workspaceId/changelog/$entryId': typeof PortalWorkspaceIdChangelogEntryIdRoute
+  '/portal/$workspaceId/conversations/$conversationId': typeof PortalWorkspaceIdConversationsConversationIdRoute
+  '/portal/$workspaceId/hc/$': typeof PortalWorkspaceIdHcSplatRoute
+  '/portal/$workspaceId/invite/$inviteId': typeof PortalWorkspaceIdInviteInviteIdRoute
+  '/portal/$workspaceId/posts/$postId': typeof PortalWorkspaceIdPostsPostIdRoute
+  '/portal/$workspaceId/status/$incidentId': typeof PortalWorkspaceIdStatusIncidentIdRoute
+  '/portal/$workspaceId/support/tickets': typeof PortalWorkspaceIdSupportTicketsRoute
   '/dashboard': typeof LayoutAuthenticatedDashboardIndexRoute
+  '/portal/$workspaceId/changelog': typeof PortalWorkspaceIdChangelogIndexRoute
+  '/portal/$workspaceId/hc': typeof PortalWorkspaceIdHcIndexRoute
+  '/portal/$workspaceId/status': typeof PortalWorkspaceIdStatusIndexRoute
+  '/portal/$workspaceId/support': typeof PortalWorkspaceIdSupportIndexRoute
   '/dashboard/settings/account': typeof LayoutAuthenticatedDashboardSettingsAccountRouteWithChildren
   '/dashboard/settings/projects': typeof LayoutAuthenticatedDashboardSettingsProjectsRouteWithChildren
   '/dashboard/settings/workspace': typeof LayoutAuthenticatedDashboardSettingsWorkspaceRouteWithChildren
   '/dashboard/workspace/create': typeof LayoutAuthenticatedDashboardWorkspaceCreateRoute
+  '/portal/$workspaceId/status/incidents/$incidentId': typeof PortalWorkspaceIdStatusIncidentsIncidentIdRoute
+  '/portal/$workspaceId/hc/$locale': typeof PortalWorkspaceIdHcLocaleIndexRoute
   '/$workspaceSlug/task/$ticketId/{-$title}': typeof LayoutAuthenticatedWorkspaceSlugTaskTicketIdChar123TitleChar125Route
   '/dashboard/settings/account/developer': typeof LayoutAuthenticatedDashboardSettingsAccountDeveloperRoute
   '/dashboard/settings/account/information': typeof LayoutAuthenticatedDashboardSettingsAccountInformationRoute
@@ -618,6 +826,8 @@ export interface FileRoutesByTo {
   '/dashboard/workspace/$workspaceId/my-tasks': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdMyTasksRoute
   '/dashboard/workspace/$workspaceId/projects': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectsRoute
   '/dashboard/workspace/$workspaceId/search': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdSearchRoute
+  '/portal/$workspaceId/hc/$locale/articles/$idSlug': typeof PortalWorkspaceIdHcLocaleArticlesIdSlugRoute
+  '/portal/$workspaceId/hc/$locale/collections/$idSlug': typeof PortalWorkspaceIdHcLocaleCollectionsIdSlugRoute
   '/dashboard/settings/admin': typeof LayoutAuthenticatedDashboardSettingsAdminIndexRoute
   '/dashboard/workspace/$workspaceId': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdIndexRoute
   '/dashboard/settings/projects/$projectId/calendar': typeof LayoutAuthenticatedDashboardSettingsProjectsProjectIdCalendarRoute
@@ -649,22 +859,44 @@ export interface FileRoutesById {
   '/auth/verify-otp': typeof AuthVerifyOtpRoute
   '/device/approve': typeof DeviceApproveRoute
   '/mcp/authorize': typeof McpAuthorizeRoute
+  '/portal/$workspaceId': typeof PortalWorkspaceIdRouteWithChildren
   '/public-project/$projectId': typeof PublicProjectProjectIdRoute
+  '/quills/kit': typeof QuillsKitRoute
   '/device/': typeof DeviceIndexRoute
   '/_layout/_authenticated/dashboard': typeof LayoutAuthenticatedDashboardRouteWithChildren
   '/_layout/_authenticated/invitations': typeof LayoutAuthenticatedInvitationsRoute
   '/_layout/_authenticated/onboarding': typeof LayoutAuthenticatedOnboardingRoute
   '/_layout/_authenticated/profile-setup': typeof LayoutAuthenticatedProfileSetupRoute
   '/invitation/accept/$inviteId': typeof InvitationAcceptInviteIdRoute
+  '/portal/$workspaceId/csat': typeof PortalWorkspaceIdCsatRoute
+  '/portal/$workspaceId/preferences': typeof PortalWorkspaceIdPreferencesRoute
+  '/portal/$workspaceId/profile': typeof PortalWorkspaceIdProfileRoute
+  '/portal/$workspaceId/unsubscribe': typeof PortalWorkspaceIdUnsubscribeRoute
+  '/quills/oauth/result': typeof QuillsOauthResultRoute
+  '/portal/$workspaceId/': typeof PortalWorkspaceIdIndexRoute
   '/_layout/_authenticated/dashboard/invitations': typeof LayoutAuthenticatedDashboardInvitationsRoute
   '/_layout/_authenticated/dashboard/settings': typeof LayoutAuthenticatedDashboardSettingsRouteWithChildren
+  '/portal/$workspaceId/boards/$boardId': typeof PortalWorkspaceIdBoardsBoardIdRoute
+  '/portal/$workspaceId/changelog/$entryId': typeof PortalWorkspaceIdChangelogEntryIdRoute
+  '/portal/$workspaceId/conversations/$conversationId': typeof PortalWorkspaceIdConversationsConversationIdRoute
+  '/portal/$workspaceId/hc/$': typeof PortalWorkspaceIdHcSplatRoute
+  '/portal/$workspaceId/invite/$inviteId': typeof PortalWorkspaceIdInviteInviteIdRoute
+  '/portal/$workspaceId/posts/$postId': typeof PortalWorkspaceIdPostsPostIdRoute
+  '/portal/$workspaceId/status/$incidentId': typeof PortalWorkspaceIdStatusIncidentIdRoute
+  '/portal/$workspaceId/support/tickets': typeof PortalWorkspaceIdSupportTicketsRoute
   '/_layout/_authenticated/dashboard/': typeof LayoutAuthenticatedDashboardIndexRoute
+  '/portal/$workspaceId/changelog/': typeof PortalWorkspaceIdChangelogIndexRoute
+  '/portal/$workspaceId/hc/': typeof PortalWorkspaceIdHcIndexRoute
+  '/portal/$workspaceId/status/': typeof PortalWorkspaceIdStatusIndexRoute
+  '/portal/$workspaceId/support/': typeof PortalWorkspaceIdSupportIndexRoute
   '/_layout/_authenticated/dashboard/settings/account': typeof LayoutAuthenticatedDashboardSettingsAccountRouteWithChildren
   '/_layout/_authenticated/dashboard/settings/admin': typeof LayoutAuthenticatedDashboardSettingsAdminRouteWithChildren
   '/_layout/_authenticated/dashboard/settings/projects': typeof LayoutAuthenticatedDashboardSettingsProjectsRouteWithChildren
   '/_layout/_authenticated/dashboard/settings/workspace': typeof LayoutAuthenticatedDashboardSettingsWorkspaceRouteWithChildren
   '/_layout/_authenticated/dashboard/workspace/$workspaceId': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdRouteWithChildren
   '/_layout/_authenticated/dashboard/workspace/create': typeof LayoutAuthenticatedDashboardWorkspaceCreateRoute
+  '/portal/$workspaceId/status/incidents/$incidentId': typeof PortalWorkspaceIdStatusIncidentsIncidentIdRoute
+  '/portal/$workspaceId/hc/$locale/': typeof PortalWorkspaceIdHcLocaleIndexRoute
   '/_layout/_authenticated/$workspaceSlug/task/$ticketId/{-$title}': typeof LayoutAuthenticatedWorkspaceSlugTaskTicketIdChar123TitleChar125Route
   '/_layout/_authenticated/dashboard/settings/account/developer': typeof LayoutAuthenticatedDashboardSettingsAccountDeveloperRoute
   '/_layout/_authenticated/dashboard/settings/account/information': typeof LayoutAuthenticatedDashboardSettingsAccountInformationRoute
@@ -689,6 +921,8 @@ export interface FileRoutesById {
   '/_layout/_authenticated/dashboard/workspace/$workspaceId/my-tasks': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdMyTasksRoute
   '/_layout/_authenticated/dashboard/workspace/$workspaceId/projects': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectsRoute
   '/_layout/_authenticated/dashboard/workspace/$workspaceId/search': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdSearchRoute
+  '/portal/$workspaceId/hc/$locale/articles/$idSlug': typeof PortalWorkspaceIdHcLocaleArticlesIdSlugRoute
+  '/portal/$workspaceId/hc/$locale/collections/$idSlug': typeof PortalWorkspaceIdHcLocaleCollectionsIdSlugRoute
   '/_layout/_authenticated/dashboard/settings/admin/': typeof LayoutAuthenticatedDashboardSettingsAdminIndexRoute
   '/_layout/_authenticated/dashboard/workspace/$workspaceId/': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdIndexRoute
   '/_layout/_authenticated/dashboard/settings/projects/$projectId/calendar': typeof LayoutAuthenticatedDashboardSettingsProjectsProjectIdCalendarRoute
@@ -719,22 +953,44 @@ export interface FileRouteTypes {
     | '/auth/verify-otp'
     | '/device/approve'
     | '/mcp/authorize'
+    | '/portal/$workspaceId'
     | '/public-project/$projectId'
+    | '/quills/kit'
     | '/device/'
     | '/dashboard'
     | '/invitations'
     | '/onboarding'
     | '/profile-setup'
     | '/invitation/accept/$inviteId'
+    | '/portal/$workspaceId/csat'
+    | '/portal/$workspaceId/preferences'
+    | '/portal/$workspaceId/profile'
+    | '/portal/$workspaceId/unsubscribe'
+    | '/quills/oauth/result'
+    | '/portal/$workspaceId/'
     | '/dashboard/invitations'
     | '/dashboard/settings'
+    | '/portal/$workspaceId/boards/$boardId'
+    | '/portal/$workspaceId/changelog/$entryId'
+    | '/portal/$workspaceId/conversations/$conversationId'
+    | '/portal/$workspaceId/hc/$'
+    | '/portal/$workspaceId/invite/$inviteId'
+    | '/portal/$workspaceId/posts/$postId'
+    | '/portal/$workspaceId/status/$incidentId'
+    | '/portal/$workspaceId/support/tickets'
     | '/dashboard/'
+    | '/portal/$workspaceId/changelog/'
+    | '/portal/$workspaceId/hc/'
+    | '/portal/$workspaceId/status/'
+    | '/portal/$workspaceId/support/'
     | '/dashboard/settings/account'
     | '/dashboard/settings/admin'
     | '/dashboard/settings/projects'
     | '/dashboard/settings/workspace'
     | '/dashboard/workspace/$workspaceId'
     | '/dashboard/workspace/create'
+    | '/portal/$workspaceId/status/incidents/$incidentId'
+    | '/portal/$workspaceId/hc/$locale/'
     | '/$workspaceSlug/task/$ticketId/{-$title}'
     | '/dashboard/settings/account/developer'
     | '/dashboard/settings/account/information'
@@ -759,6 +1015,8 @@ export interface FileRouteTypes {
     | '/dashboard/workspace/$workspaceId/my-tasks'
     | '/dashboard/workspace/$workspaceId/projects'
     | '/dashboard/workspace/$workspaceId/search'
+    | '/portal/$workspaceId/hc/$locale/articles/$idSlug'
+    | '/portal/$workspaceId/hc/$locale/collections/$idSlug'
     | '/dashboard/settings/admin/'
     | '/dashboard/workspace/$workspaceId/'
     | '/dashboard/settings/projects/$projectId/calendar'
@@ -787,18 +1045,39 @@ export interface FileRouteTypes {
     | '/device/approve'
     | '/mcp/authorize'
     | '/public-project/$projectId'
+    | '/quills/kit'
     | '/device'
     | '/invitations'
     | '/onboarding'
     | '/profile-setup'
     | '/invitation/accept/$inviteId'
+    | '/portal/$workspaceId/csat'
+    | '/portal/$workspaceId/preferences'
+    | '/portal/$workspaceId/profile'
+    | '/portal/$workspaceId/unsubscribe'
+    | '/quills/oauth/result'
+    | '/portal/$workspaceId'
     | '/dashboard/invitations'
     | '/dashboard/settings'
+    | '/portal/$workspaceId/boards/$boardId'
+    | '/portal/$workspaceId/changelog/$entryId'
+    | '/portal/$workspaceId/conversations/$conversationId'
+    | '/portal/$workspaceId/hc/$'
+    | '/portal/$workspaceId/invite/$inviteId'
+    | '/portal/$workspaceId/posts/$postId'
+    | '/portal/$workspaceId/status/$incidentId'
+    | '/portal/$workspaceId/support/tickets'
     | '/dashboard'
+    | '/portal/$workspaceId/changelog'
+    | '/portal/$workspaceId/hc'
+    | '/portal/$workspaceId/status'
+    | '/portal/$workspaceId/support'
     | '/dashboard/settings/account'
     | '/dashboard/settings/projects'
     | '/dashboard/settings/workspace'
     | '/dashboard/workspace/create'
+    | '/portal/$workspaceId/status/incidents/$incidentId'
+    | '/portal/$workspaceId/hc/$locale'
     | '/$workspaceSlug/task/$ticketId/{-$title}'
     | '/dashboard/settings/account/developer'
     | '/dashboard/settings/account/information'
@@ -823,6 +1102,8 @@ export interface FileRouteTypes {
     | '/dashboard/workspace/$workspaceId/my-tasks'
     | '/dashboard/workspace/$workspaceId/projects'
     | '/dashboard/workspace/$workspaceId/search'
+    | '/portal/$workspaceId/hc/$locale/articles/$idSlug'
+    | '/portal/$workspaceId/hc/$locale/collections/$idSlug'
     | '/dashboard/settings/admin'
     | '/dashboard/workspace/$workspaceId'
     | '/dashboard/settings/projects/$projectId/calendar'
@@ -853,22 +1134,44 @@ export interface FileRouteTypes {
     | '/auth/verify-otp'
     | '/device/approve'
     | '/mcp/authorize'
+    | '/portal/$workspaceId'
     | '/public-project/$projectId'
+    | '/quills/kit'
     | '/device/'
     | '/_layout/_authenticated/dashboard'
     | '/_layout/_authenticated/invitations'
     | '/_layout/_authenticated/onboarding'
     | '/_layout/_authenticated/profile-setup'
     | '/invitation/accept/$inviteId'
+    | '/portal/$workspaceId/csat'
+    | '/portal/$workspaceId/preferences'
+    | '/portal/$workspaceId/profile'
+    | '/portal/$workspaceId/unsubscribe'
+    | '/quills/oauth/result'
+    | '/portal/$workspaceId/'
     | '/_layout/_authenticated/dashboard/invitations'
     | '/_layout/_authenticated/dashboard/settings'
+    | '/portal/$workspaceId/boards/$boardId'
+    | '/portal/$workspaceId/changelog/$entryId'
+    | '/portal/$workspaceId/conversations/$conversationId'
+    | '/portal/$workspaceId/hc/$'
+    | '/portal/$workspaceId/invite/$inviteId'
+    | '/portal/$workspaceId/posts/$postId'
+    | '/portal/$workspaceId/status/$incidentId'
+    | '/portal/$workspaceId/support/tickets'
     | '/_layout/_authenticated/dashboard/'
+    | '/portal/$workspaceId/changelog/'
+    | '/portal/$workspaceId/hc/'
+    | '/portal/$workspaceId/status/'
+    | '/portal/$workspaceId/support/'
     | '/_layout/_authenticated/dashboard/settings/account'
     | '/_layout/_authenticated/dashboard/settings/admin'
     | '/_layout/_authenticated/dashboard/settings/projects'
     | '/_layout/_authenticated/dashboard/settings/workspace'
     | '/_layout/_authenticated/dashboard/workspace/$workspaceId'
     | '/_layout/_authenticated/dashboard/workspace/create'
+    | '/portal/$workspaceId/status/incidents/$incidentId'
+    | '/portal/$workspaceId/hc/$locale/'
     | '/_layout/_authenticated/$workspaceSlug/task/$ticketId/{-$title}'
     | '/_layout/_authenticated/dashboard/settings/account/developer'
     | '/_layout/_authenticated/dashboard/settings/account/information'
@@ -893,6 +1196,8 @@ export interface FileRouteTypes {
     | '/_layout/_authenticated/dashboard/workspace/$workspaceId/my-tasks'
     | '/_layout/_authenticated/dashboard/workspace/$workspaceId/projects'
     | '/_layout/_authenticated/dashboard/workspace/$workspaceId/search'
+    | '/portal/$workspaceId/hc/$locale/articles/$idSlug'
+    | '/portal/$workspaceId/hc/$locale/collections/$idSlug'
     | '/_layout/_authenticated/dashboard/settings/admin/'
     | '/_layout/_authenticated/dashboard/workspace/$workspaceId/'
     | '/_layout/_authenticated/dashboard/settings/projects/$projectId/calendar'
@@ -916,8 +1221,11 @@ export interface RootRouteChildren {
   DeviceRoute: typeof DeviceRouteWithChildren
   TestErrorRoute: typeof TestErrorRoute
   McpAuthorizeRoute: typeof McpAuthorizeRoute
+  PortalWorkspaceIdRoute: typeof PortalWorkspaceIdRouteWithChildren
   PublicProjectProjectIdRoute: typeof PublicProjectProjectIdRoute
+  QuillsKitRoute: typeof QuillsKitRoute
   InvitationAcceptInviteIdRoute: typeof InvitationAcceptInviteIdRoute
+  QuillsOauthResultRoute: typeof QuillsOauthResultRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1027,11 +1335,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof McpAuthorizeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/portal/$workspaceId': {
+      id: '/portal/$workspaceId'
+      path: '/portal/$workspaceId'
+      fullPath: '/portal/$workspaceId'
+      preLoaderRoute: typeof PortalWorkspaceIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/public-project/$projectId': {
       id: '/public-project/$projectId'
       path: '/public-project/$projectId'
       fullPath: '/public-project/$projectId'
       preLoaderRoute: typeof PublicProjectProjectIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/quills/kit': {
+      id: '/quills/kit'
+      path: '/quills/kit'
+      fullPath: '/quills/kit'
+      preLoaderRoute: typeof QuillsKitRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_layout/_authenticated/dashboard': {
@@ -1069,6 +1391,48 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InvitationAcceptInviteIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/portal/$workspaceId/': {
+      id: '/portal/$workspaceId/'
+      path: '/'
+      fullPath: '/portal/$workspaceId/'
+      preLoaderRoute: typeof PortalWorkspaceIdIndexRouteImport
+      parentRoute: typeof PortalWorkspaceIdRoute
+    }
+    '/portal/$workspaceId/csat': {
+      id: '/portal/$workspaceId/csat'
+      path: '/csat'
+      fullPath: '/portal/$workspaceId/csat'
+      preLoaderRoute: typeof PortalWorkspaceIdCsatRouteImport
+      parentRoute: typeof PortalWorkspaceIdRoute
+    }
+    '/portal/$workspaceId/preferences': {
+      id: '/portal/$workspaceId/preferences'
+      path: '/preferences'
+      fullPath: '/portal/$workspaceId/preferences'
+      preLoaderRoute: typeof PortalWorkspaceIdPreferencesRouteImport
+      parentRoute: typeof PortalWorkspaceIdRoute
+    }
+    '/portal/$workspaceId/profile': {
+      id: '/portal/$workspaceId/profile'
+      path: '/profile'
+      fullPath: '/portal/$workspaceId/profile'
+      preLoaderRoute: typeof PortalWorkspaceIdProfileRouteImport
+      parentRoute: typeof PortalWorkspaceIdRoute
+    }
+    '/portal/$workspaceId/unsubscribe': {
+      id: '/portal/$workspaceId/unsubscribe'
+      path: '/unsubscribe'
+      fullPath: '/portal/$workspaceId/unsubscribe'
+      preLoaderRoute: typeof PortalWorkspaceIdUnsubscribeRouteImport
+      parentRoute: typeof PortalWorkspaceIdRoute
+    }
+    '/quills/oauth/result': {
+      id: '/quills/oauth/result'
+      path: '/quills/oauth/result'
+      fullPath: '/quills/oauth/result'
+      preLoaderRoute: typeof QuillsOauthResultRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_layout/_authenticated/dashboard/': {
       id: '/_layout/_authenticated/dashboard/'
       path: '/'
@@ -1089,6 +1453,90 @@ declare module '@tanstack/react-router' {
       fullPath: '/dashboard/settings'
       preLoaderRoute: typeof LayoutAuthenticatedDashboardSettingsRouteImport
       parentRoute: typeof LayoutAuthenticatedDashboardRoute
+    }
+    '/portal/$workspaceId/boards/$boardId': {
+      id: '/portal/$workspaceId/boards/$boardId'
+      path: '/boards/$boardId'
+      fullPath: '/portal/$workspaceId/boards/$boardId'
+      preLoaderRoute: typeof PortalWorkspaceIdBoardsBoardIdRouteImport
+      parentRoute: typeof PortalWorkspaceIdRoute
+    }
+    '/portal/$workspaceId/changelog/': {
+      id: '/portal/$workspaceId/changelog/'
+      path: '/changelog'
+      fullPath: '/portal/$workspaceId/changelog/'
+      preLoaderRoute: typeof PortalWorkspaceIdChangelogIndexRouteImport
+      parentRoute: typeof PortalWorkspaceIdRoute
+    }
+    '/portal/$workspaceId/changelog/$entryId': {
+      id: '/portal/$workspaceId/changelog/$entryId'
+      path: '/changelog/$entryId'
+      fullPath: '/portal/$workspaceId/changelog/$entryId'
+      preLoaderRoute: typeof PortalWorkspaceIdChangelogEntryIdRouteImport
+      parentRoute: typeof PortalWorkspaceIdRoute
+    }
+    '/portal/$workspaceId/conversations/$conversationId': {
+      id: '/portal/$workspaceId/conversations/$conversationId'
+      path: '/conversations/$conversationId'
+      fullPath: '/portal/$workspaceId/conversations/$conversationId'
+      preLoaderRoute: typeof PortalWorkspaceIdConversationsConversationIdRouteImport
+      parentRoute: typeof PortalWorkspaceIdRoute
+    }
+    '/portal/$workspaceId/hc/': {
+      id: '/portal/$workspaceId/hc/'
+      path: '/hc'
+      fullPath: '/portal/$workspaceId/hc/'
+      preLoaderRoute: typeof PortalWorkspaceIdHcIndexRouteImport
+      parentRoute: typeof PortalWorkspaceIdRoute
+    }
+    '/portal/$workspaceId/hc/$': {
+      id: '/portal/$workspaceId/hc/$'
+      path: '/hc/$'
+      fullPath: '/portal/$workspaceId/hc/$'
+      preLoaderRoute: typeof PortalWorkspaceIdHcSplatRouteImport
+      parentRoute: typeof PortalWorkspaceIdRoute
+    }
+    '/portal/$workspaceId/invite/$inviteId': {
+      id: '/portal/$workspaceId/invite/$inviteId'
+      path: '/invite/$inviteId'
+      fullPath: '/portal/$workspaceId/invite/$inviteId'
+      preLoaderRoute: typeof PortalWorkspaceIdInviteInviteIdRouteImport
+      parentRoute: typeof PortalWorkspaceIdRoute
+    }
+    '/portal/$workspaceId/posts/$postId': {
+      id: '/portal/$workspaceId/posts/$postId'
+      path: '/posts/$postId'
+      fullPath: '/portal/$workspaceId/posts/$postId'
+      preLoaderRoute: typeof PortalWorkspaceIdPostsPostIdRouteImport
+      parentRoute: typeof PortalWorkspaceIdRoute
+    }
+    '/portal/$workspaceId/status/': {
+      id: '/portal/$workspaceId/status/'
+      path: '/status'
+      fullPath: '/portal/$workspaceId/status/'
+      preLoaderRoute: typeof PortalWorkspaceIdStatusIndexRouteImport
+      parentRoute: typeof PortalWorkspaceIdRoute
+    }
+    '/portal/$workspaceId/status/$incidentId': {
+      id: '/portal/$workspaceId/status/$incidentId'
+      path: '/status/$incidentId'
+      fullPath: '/portal/$workspaceId/status/$incidentId'
+      preLoaderRoute: typeof PortalWorkspaceIdStatusIncidentIdRouteImport
+      parentRoute: typeof PortalWorkspaceIdRoute
+    }
+    '/portal/$workspaceId/support/': {
+      id: '/portal/$workspaceId/support/'
+      path: '/support'
+      fullPath: '/portal/$workspaceId/support/'
+      preLoaderRoute: typeof PortalWorkspaceIdSupportIndexRouteImport
+      parentRoute: typeof PortalWorkspaceIdRoute
+    }
+    '/portal/$workspaceId/support/tickets': {
+      id: '/portal/$workspaceId/support/tickets'
+      path: '/support/tickets'
+      fullPath: '/portal/$workspaceId/support/tickets'
+      preLoaderRoute: typeof PortalWorkspaceIdSupportTicketsRouteImport
+      parentRoute: typeof PortalWorkspaceIdRoute
     }
     '/_layout/_authenticated/dashboard/settings/account': {
       id: '/_layout/_authenticated/dashboard/settings/account'
@@ -1131,6 +1579,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/dashboard/workspace/create'
       preLoaderRoute: typeof LayoutAuthenticatedDashboardWorkspaceCreateRouteImport
       parentRoute: typeof LayoutAuthenticatedDashboardRoute
+    }
+    '/portal/$workspaceId/hc/$locale/': {
+      id: '/portal/$workspaceId/hc/$locale/'
+      path: '/hc/$locale'
+      fullPath: '/portal/$workspaceId/hc/$locale/'
+      preLoaderRoute: typeof PortalWorkspaceIdHcLocaleIndexRouteImport
+      parentRoute: typeof PortalWorkspaceIdRoute
+    }
+    '/portal/$workspaceId/status/incidents/$incidentId': {
+      id: '/portal/$workspaceId/status/incidents/$incidentId'
+      path: '/status/incidents/$incidentId'
+      fullPath: '/portal/$workspaceId/status/incidents/$incidentId'
+      preLoaderRoute: typeof PortalWorkspaceIdStatusIncidentsIncidentIdRouteImport
+      parentRoute: typeof PortalWorkspaceIdRoute
     }
     '/_layout/_authenticated/$workspaceSlug/task/$ticketId/{-$title}': {
       id: '/_layout/_authenticated/$workspaceSlug/task/$ticketId/{-$title}'
@@ -1313,6 +1775,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/dashboard/workspace/$workspaceId/search'
       preLoaderRoute: typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdSearchRouteImport
       parentRoute: typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdRoute
+    }
+    '/portal/$workspaceId/hc/$locale/articles/$idSlug': {
+      id: '/portal/$workspaceId/hc/$locale/articles/$idSlug'
+      path: '/hc/$locale/articles/$idSlug'
+      fullPath: '/portal/$workspaceId/hc/$locale/articles/$idSlug'
+      preLoaderRoute: typeof PortalWorkspaceIdHcLocaleArticlesIdSlugRouteImport
+      parentRoute: typeof PortalWorkspaceIdRoute
+    }
+    '/portal/$workspaceId/hc/$locale/collections/$idSlug': {
+      id: '/portal/$workspaceId/hc/$locale/collections/$idSlug'
+      path: '/hc/$locale/collections/$idSlug'
+      fullPath: '/portal/$workspaceId/hc/$locale/collections/$idSlug'
+      preLoaderRoute: typeof PortalWorkspaceIdHcLocaleCollectionsIdSlugRouteImport
+      parentRoute: typeof PortalWorkspaceIdRoute
     }
     '/_layout/_authenticated/dashboard/settings/projects/$projectId/calendar': {
       id: '/_layout/_authenticated/dashboard/settings/projects/$projectId/calendar'
@@ -1688,6 +2164,63 @@ const DeviceRouteChildren: DeviceRouteChildren = {
 const DeviceRouteWithChildren =
   DeviceRoute._addFileChildren(DeviceRouteChildren)
 
+interface PortalWorkspaceIdRouteChildren {
+  PortalWorkspaceIdCsatRoute: typeof PortalWorkspaceIdCsatRoute
+  PortalWorkspaceIdPreferencesRoute: typeof PortalWorkspaceIdPreferencesRoute
+  PortalWorkspaceIdProfileRoute: typeof PortalWorkspaceIdProfileRoute
+  PortalWorkspaceIdUnsubscribeRoute: typeof PortalWorkspaceIdUnsubscribeRoute
+  PortalWorkspaceIdIndexRoute: typeof PortalWorkspaceIdIndexRoute
+  PortalWorkspaceIdBoardsBoardIdRoute: typeof PortalWorkspaceIdBoardsBoardIdRoute
+  PortalWorkspaceIdChangelogEntryIdRoute: typeof PortalWorkspaceIdChangelogEntryIdRoute
+  PortalWorkspaceIdConversationsConversationIdRoute: typeof PortalWorkspaceIdConversationsConversationIdRoute
+  PortalWorkspaceIdHcSplatRoute: typeof PortalWorkspaceIdHcSplatRoute
+  PortalWorkspaceIdInviteInviteIdRoute: typeof PortalWorkspaceIdInviteInviteIdRoute
+  PortalWorkspaceIdPostsPostIdRoute: typeof PortalWorkspaceIdPostsPostIdRoute
+  PortalWorkspaceIdStatusIncidentIdRoute: typeof PortalWorkspaceIdStatusIncidentIdRoute
+  PortalWorkspaceIdSupportTicketsRoute: typeof PortalWorkspaceIdSupportTicketsRoute
+  PortalWorkspaceIdChangelogIndexRoute: typeof PortalWorkspaceIdChangelogIndexRoute
+  PortalWorkspaceIdHcIndexRoute: typeof PortalWorkspaceIdHcIndexRoute
+  PortalWorkspaceIdStatusIndexRoute: typeof PortalWorkspaceIdStatusIndexRoute
+  PortalWorkspaceIdSupportIndexRoute: typeof PortalWorkspaceIdSupportIndexRoute
+  PortalWorkspaceIdStatusIncidentsIncidentIdRoute: typeof PortalWorkspaceIdStatusIncidentsIncidentIdRoute
+  PortalWorkspaceIdHcLocaleIndexRoute: typeof PortalWorkspaceIdHcLocaleIndexRoute
+  PortalWorkspaceIdHcLocaleArticlesIdSlugRoute: typeof PortalWorkspaceIdHcLocaleArticlesIdSlugRoute
+  PortalWorkspaceIdHcLocaleCollectionsIdSlugRoute: typeof PortalWorkspaceIdHcLocaleCollectionsIdSlugRoute
+}
+
+const PortalWorkspaceIdRouteChildren: PortalWorkspaceIdRouteChildren = {
+  PortalWorkspaceIdCsatRoute: PortalWorkspaceIdCsatRoute,
+  PortalWorkspaceIdPreferencesRoute: PortalWorkspaceIdPreferencesRoute,
+  PortalWorkspaceIdProfileRoute: PortalWorkspaceIdProfileRoute,
+  PortalWorkspaceIdUnsubscribeRoute: PortalWorkspaceIdUnsubscribeRoute,
+  PortalWorkspaceIdIndexRoute: PortalWorkspaceIdIndexRoute,
+  PortalWorkspaceIdBoardsBoardIdRoute: PortalWorkspaceIdBoardsBoardIdRoute,
+  PortalWorkspaceIdChangelogEntryIdRoute:
+    PortalWorkspaceIdChangelogEntryIdRoute,
+  PortalWorkspaceIdConversationsConversationIdRoute:
+    PortalWorkspaceIdConversationsConversationIdRoute,
+  PortalWorkspaceIdHcSplatRoute: PortalWorkspaceIdHcSplatRoute,
+  PortalWorkspaceIdInviteInviteIdRoute: PortalWorkspaceIdInviteInviteIdRoute,
+  PortalWorkspaceIdPostsPostIdRoute: PortalWorkspaceIdPostsPostIdRoute,
+  PortalWorkspaceIdStatusIncidentIdRoute:
+    PortalWorkspaceIdStatusIncidentIdRoute,
+  PortalWorkspaceIdSupportTicketsRoute: PortalWorkspaceIdSupportTicketsRoute,
+  PortalWorkspaceIdChangelogIndexRoute: PortalWorkspaceIdChangelogIndexRoute,
+  PortalWorkspaceIdHcIndexRoute: PortalWorkspaceIdHcIndexRoute,
+  PortalWorkspaceIdStatusIndexRoute: PortalWorkspaceIdStatusIndexRoute,
+  PortalWorkspaceIdSupportIndexRoute: PortalWorkspaceIdSupportIndexRoute,
+  PortalWorkspaceIdStatusIncidentsIncidentIdRoute:
+    PortalWorkspaceIdStatusIncidentsIncidentIdRoute,
+  PortalWorkspaceIdHcLocaleIndexRoute: PortalWorkspaceIdHcLocaleIndexRoute,
+  PortalWorkspaceIdHcLocaleArticlesIdSlugRoute:
+    PortalWorkspaceIdHcLocaleArticlesIdSlugRoute,
+  PortalWorkspaceIdHcLocaleCollectionsIdSlugRoute:
+    PortalWorkspaceIdHcLocaleCollectionsIdSlugRoute,
+}
+
+const PortalWorkspaceIdRouteWithChildren =
+  PortalWorkspaceIdRoute._addFileChildren(PortalWorkspaceIdRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LayoutRoute: LayoutRouteWithChildren,
@@ -1695,8 +2228,11 @@ const rootRouteChildren: RootRouteChildren = {
   DeviceRoute: DeviceRouteWithChildren,
   TestErrorRoute: TestErrorRoute,
   McpAuthorizeRoute: McpAuthorizeRoute,
+  PortalWorkspaceIdRoute: PortalWorkspaceIdRouteWithChildren,
   PublicProjectProjectIdRoute: PublicProjectProjectIdRoute,
+  QuillsKitRoute: QuillsKitRoute,
   InvitationAcceptInviteIdRoute: InvitationAcceptInviteIdRoute,
+  QuillsOauthResultRoute: QuillsOauthResultRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

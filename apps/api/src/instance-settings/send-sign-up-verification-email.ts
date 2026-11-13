@@ -3,9 +3,28 @@ import { accountEmailSubject } from "../admin/users/account-email-subjects";
 
 type Recipient = { email: string; name?: string | null; locale?: unknown };
 
-function signInUrl() {
+function signInUrl(callback: string | null) {
   const base = process.env.KANEO_CLIENT_URL || "http://localhost:5173";
-  return `${base.replace(/\/$/, "")}/auth/sign-in`;
+  const destination = new URL(`${base.replace(/\/$/, "")}/auth/sign-in`);
+  if (!callback) return destination.href;
+  try {
+    const candidate = new URL(callback, base);
+    const redirect = candidate.searchParams.get("redirect");
+    if (
+      candidate.origin === destination.origin &&
+      candidate.pathname === destination.pathname &&
+      redirect?.startsWith("/") &&
+      !/[\\?#]/.test(redirect) &&
+      !redirect.includes("//") &&
+      new URL(redirect, base).origin === destination.origin &&
+      new URL(redirect, base).pathname === redirect &&
+      !/%(?:2f|5c|3f|23)/i.test(redirect)
+    )
+      destination.searchParams.set("redirect", redirect);
+  } catch {
+    // An invalid callback falls back to the configured web sign-in page.
+  }
+  return destination.href;
 }
 
 /**
@@ -20,7 +39,10 @@ export async function sendSignUpVerificationEmail({
   url: string;
 }) {
   const link = new URL(url);
-  link.searchParams.set("callbackURL", signInUrl());
+  link.searchParams.set(
+    "callbackURL",
+    signInUrl(link.searchParams.get("callbackURL")),
+  );
   const locale = typeof user.locale === "string" ? user.locale : null;
   try {
     await sendEmailVerificationEmail(

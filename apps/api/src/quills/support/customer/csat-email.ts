@@ -6,6 +6,7 @@ import { kvStore } from "../../../database/quills/schema/kv";
 import { hashToken } from "../../framework/audience";
 import { defineQuillsRoute, type Database } from "../../framework/define-route";
 import { recordCsat, type ConversationId, type PrincipalId } from "./model";
+import { portalPaths } from "../../portal/paths";
 
 // CSAT over email (public, the token is the credential). The token format is the one of
 // portal/unsubscribe-token.ts: 32 random bytes, only the SHA-256 hash stored, 30 days. A GET only
@@ -38,20 +39,14 @@ export async function mintCsatToken(
   return token;
 }
 
-// ponytail: apps/web has no portal CSAT page yet. The page at this path checks the token
-// (GET /support/csat-email) and POSTs the rating; point it at the real route when the portal UI lands.
-const clientUrl = () =>
-  (process.env.KANEO_CLIENT_URL || "http://localhost:5173").replace(/\/+$/, "");
-
 /**
  * The five rating links of a CSAT mail (rating 1 to 5), on the portal's rating page, as in the
  * source (`/csat?token=&rating=`). They share one token; the page checks it and POSTs the rating,
  * which spends it. Opening a link changes nothing, because mail scanners open every link.
  */
 export const csatRatingUrls = (workspaceId: string, token: string) =>
-  [1, 2, 3, 4, 5].map(
-    (rating) =>
-      `${clientUrl()}/portal/${encodeURIComponent(workspaceId)}/csat?token=${token}&rating=${rating}`,
+  [1, 2, 3, 4, 5].map((rating) =>
+    portalPaths.csat(workspaceId, token, rating),
   ) as [string, string, string, string, string];
 
 /** The live token's conversation, still owned by the token's visitor, or undefined. */

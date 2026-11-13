@@ -1,4 +1,4 @@
-name: kaneo-browserstack-e2e
+name: kaneo-stagehand-e2e
 
 services:
   postgres:
@@ -16,7 +16,7 @@ services:
       retries: 30
 
   kaneo:
-    image: kaneo-browserstack:test
+    image: kaneo-stagehand:test
     build:
       context: ../..
       dockerfile: Dockerfile.kaneo

@@ -1,0 +1,62 @@
+---
+title: "Deploy the customer portal"
+description: "Configure portal links, separate API hosting, and protection against framing."
+---
+
+Portal pages are part of the web app. Serve deep links through the same SPA fallback as other web
+routes so refreshing a mail link loads the app. Set the client URL to the public web origin using the [environment configuration](/core/installation/environment-variables).
+
+## Bundled deployment
+
+With the bundled image, the web app and `/api` share an origin. Keep the existing API proxy and
+WebSocket configuration. No separate Redis service is required for a single instance.
+See [Nginx and HTTPS](/core/reverse-proxy/nginx).
+
+At the proxy that serves the web document, add this response header to portal and OAuth result
+pages, including fallback responses:
+
+```http
+Content-Security-Policy: frame-ancestors 'none'
+```
+
+If a Content Security Policy already exists, add the `frame-ancestors 'none'` directive to it.
+Do not replace the rest of that policy. This directive must be an HTTP response header;
+putting it in an HTML meta element does not protect against framing.
+
+For Nginx, the directive in the applicable web `server` or `location` block is:
+
+```nginx
+add_header Content-Security-Policy "frame-ancestors 'none'" always;
+```
+
+Check header inheritance if a child location also declares `add_header`. Apply this policy to the
+portal web pages, not the embeddable widget document, which has a separate embedding contract.
+
+## Separate web and API deployment
+
+Set the public web and API URLs using the existing
+[environment configuration](/core/installation/environment-variables). Permit the exact web origin
+in the API's origin configuration and preserve credentialed requests and session cookies.
+Do not use a wildcard origin for credentialed access.
+
+Add the framing header at the web host or its CDN. A header added only to JSON API responses does
+not protect the portal document. Keep OAuth provider callback URLs pointed at the API. Browser
+callbacks return to the web result page; API clients continue to receive JSON.
+
+## Verify the deployment
+
+- Open a portal deep link directly and refresh it.
+- Open an invitation while signed out. Sign up, verify the email in a second tab, and return to
+  accept the invitation without entering workspace onboarding.
+- Confirm that a customer without workspace membership can use the permitted portal features.
+- Inspect the portal document response for `frame-ancestors 'none'` and check that a foreign page
+  cannot frame it. Portal forms also refuse to submit inside frames.
+- Check a mail action on a phone. Opening the link must not submit the action.
+- Test sign-out, private portal denial, and the portal-disabled state.
+
+Mail action links contain credentials. Avoid logging query strings for token-bearing portal URLs
+at your proxy or analytics service. The page removes the token from the address bar after loading;
+that cannot remove it from the initial request already received by your web host.
+
+For local development, `node scripts/quills-web/cli.mjs seed` creates synthetic portal data.
+Use a disposable local database. The seed command refuses production mode and remote database hosts.

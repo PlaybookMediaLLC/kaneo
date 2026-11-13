@@ -3,6 +3,7 @@ import type { InviteId } from "@kaneo/ids";
 import { portalInvites } from "../../database/quills/schema/portal-invites";
 import { hashToken } from "../framework/audience";
 import type { Database } from "../framework/define-route";
+import { portalPaths } from "./paths";
 
 // Route-module helper: invite tokens. A token is 32 random bytes; only its SHA-256 hash is stored.
 
@@ -16,8 +17,7 @@ export const inviteUrl = (
   workspaceId: string,
   inviteId: string,
   token: string,
-) =>
-  `${(process.env.KANEO_CLIENT_URL || "http://localhost:5173").replace(/\/+$/, "")}/portal/${encodeURIComponent(workspaceId)}/invite/${inviteId}#token=${token}`;
+) => portalPaths.invite(workspaceId, inviteId, token);
 
 /**
  * Adds a new token to a pending, unexpired invite, or returns undefined. The newest 20 tokens stay

@@ -1,0 +1,17 @@
+{
+  "name": "@kaneo/browser-test",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.mjs",
+    "./cdp": "./cdp.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@browserbasehq/stagehand": "4.4.0",
+    "@testing-library/dom": "10.4.2"
+  }
+}

@@ -1,0 +1,41 @@
+{
+	"empty": "Nothing is here yet.",
+	"frameBlocked": "Open this page in a new tab to continue.",
+	"gallery": {
+		"actions": "Actions and results",
+		"confirm": "Confirm action",
+		"content": "Feedback and conversations",
+		"demo": "Example content",
+		"empty": "Show empty content",
+		"failed": "Network error",
+		"form": "Form error to simulate",
+		"invalid": "Field error",
+		"markdown": "## Example content\n\n**Formatted text**, a list, and [a link](https://example.test).\n\n- First item\n- Second item",
+		"message": "Example message",
+		"pending": "Show pending and read-only content",
+		"rateLimited": "Rate limited",
+		"required": "Enter a message",
+		"result": "Action complete",
+		"states": "Page states",
+		"success": "Success",
+		"title": "Quills component kit"
+	},
+	"loading": "Loading\u2026",
+	"noAccess": "You do not have access to this portal.",
+	"portalOff": "This portal is not available.",
+	"poweredBy": "Powered by",
+	"problem": {
+		"authRequired": "Sign in to continue.",
+		"conflict": "This changed before your request finished. Refresh and try again.",
+		"failed": "Something went wrong. Try again.",
+		"gone": "This link is no longer valid. Open the latest email and try again.",
+		"invalid": "Check the highlighted fields.",
+		"noAccess": "You do not have access to this portal.",
+		"notFound": "This item could not be found.",
+		"rateLimited": "Too many requests. Try again after a short wait."
+	},
+	"retry": "Try again",
+	"retryAfter": "Try again in {{count}} seconds",
+	"signIn": "Sign in",
+	"signInRequired": "Sign in to continue."
+}

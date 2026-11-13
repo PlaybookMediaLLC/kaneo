@@ -113,6 +113,12 @@ describe("auth methods", () => {
   it.each([
     ["/dashboard/settings", "/dashboard/settings"],
     ["//evil.example", undefined],
+    ["/\\evil.example", undefined],
+    ["/%5cevil.example", undefined],
+    ["/%2fevil.example", undefined],
+    ["/\tevil.example", undefined],
+    ["/portal/workspace/invite/id", "/portal/workspace/invite/id"],
+    ["/dashboard/settings?tab=profile", "/dashboard/settings?tab=profile"],
     ["https://evil.example", undefined],
     [undefined, undefined],
   ])("only keeps same-origin redirect %s", (path, expected) => {

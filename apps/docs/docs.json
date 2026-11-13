@@ -90,6 +90,10 @@
 							"core/migrations/from-planka",
 							"core/migrations/from-kaneo"
 						]
+					},
+					{
+						"group": "Customer portal",
+						"pages": ["quills/admin", "quills/customer", "quills/deployment"]
 					}
 				]
 			},

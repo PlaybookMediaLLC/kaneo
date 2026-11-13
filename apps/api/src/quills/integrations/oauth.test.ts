@@ -55,6 +55,29 @@ describe("OAuth connect routes", () => {
       ),
     );
   });
+
+  it("declares sanitized browser result locations for success and failure", () => {
+    void quillsRouter;
+    const route = [...registry.keys()].find(
+      (declaration) => declaration.operationId === "completeQuillsOAuthConnect",
+    )!;
+    const input = { params: { type: "github" }, query: {} } as never;
+    for (const url of [
+      route.redirect!.success(
+        { status: "connected", integration: null },
+        input,
+      ),
+      route.redirect!.failure(502, input),
+    ]) {
+      const parsed = new URL(url);
+      expect(parsed.pathname).toBe("/quills/oauth/result");
+      expect([...parsed.searchParams.keys()].sort()).toEqual([
+        "name",
+        "outcome",
+      ]);
+      expect(parsed.searchParams.get("name")).toBe("GitHub");
+    }
+  });
 });
 
 describe("shared token helpers", () => {

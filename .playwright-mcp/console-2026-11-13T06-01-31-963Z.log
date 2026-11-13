@@ -1,0 +1,2 @@
+[   27152ms] The requested module '/@fs/Users/dyomba/go/src/github.com/PlaybookMediaLLC/kaneo/branding/index.cjs?import' does not provide an export named 'brandResources'
+[  158930ms] [LOG] [vite] server connection lost. Polling for restart... @ http://localhost:5173/@vite/client:1080

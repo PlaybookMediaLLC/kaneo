@@ -10544,6 +10544,15 @@
         "responses": {
           "200": {
             "description": "The connection without its tokens",
+            "headers": {
+              "X-Quills-Result-Location": {
+                "description": "The sanitized web result page for a browser bridge",
+                "schema": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -10563,6 +10572,36 @@
                   "required": [
                     "status",
                     "integration"
+                  ]
+                }
+              }
+            }
+          },
+          "303": {
+            "description": "Continue in the web app",
+            "headers": {
+              "Location": {
+                "description": "The web result page",
+                "schema": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              },
+              "Cache-Control": {
+                "description": "The callback response is never cached",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              },
+              "Referrer-Policy": {
+                "description": "The callback URL is not sent to the web app",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-referrer"
                   ]
                 }
               }
@@ -10664,6 +10703,15 @@
         "responses": {
           "200": {
             "description": "The connection without its tokens",
+            "headers": {
+              "X-Quills-Result-Location": {
+                "description": "The sanitized web result page for a browser bridge",
+                "schema": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -10878,6 +10926,15 @@
         "responses": {
           "200": {
             "description": "The connector without its credentials",
+            "headers": {
+              "X-Quills-Result-Location": {
+                "description": "The sanitized web result page for a browser bridge",
+                "schema": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -11121,6 +11178,36 @@
                   "required": [
                     "status",
                     "connector"
+                  ]
+                }
+              }
+            }
+          },
+          "303": {
+            "description": "Continue in the web app",
+            "headers": {
+              "Location": {
+                "description": "The web result page",
+                "schema": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              },
+              "Cache-Control": {
+                "description": "The callback response is never cached",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              },
+              "Referrer-Policy": {
+                "description": "The callback URL is not sent to the web app",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-referrer"
                   ]
                 }
               }
@@ -11429,12 +11516,276 @@
                       "required": [
                         "isPrivate"
                       ]
+                    },
+                    "branding": {
+                      "type": "object",
+                      "properties": {
+                        "logoUrl": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "theme": {
+                          "type": "object",
+                          "properties": {
+                            "themeMode": {
+                              "type": "string",
+                              "enum": [
+                                "light",
+                                "dark",
+                                "user"
+                              ]
+                            },
+                            "light": {
+                              "type": "object",
+                              "properties": {
+                                "background": {
+                                  "type": "string"
+                                },
+                                "foreground": {
+                                  "type": "string"
+                                },
+                                "card": {
+                                  "type": "string"
+                                },
+                                "cardForeground": {
+                                  "type": "string"
+                                },
+                                "popover": {
+                                  "type": "string"
+                                },
+                                "popoverForeground": {
+                                  "type": "string"
+                                },
+                                "primary": {
+                                  "type": "string"
+                                },
+                                "primaryForeground": {
+                                  "type": "string"
+                                },
+                                "secondary": {
+                                  "type": "string"
+                                },
+                                "secondaryForeground": {
+                                  "type": "string"
+                                },
+                                "muted": {
+                                  "type": "string"
+                                },
+                                "mutedForeground": {
+                                  "type": "string"
+                                },
+                                "accent": {
+                                  "type": "string"
+                                },
+                                "accentForeground": {
+                                  "type": "string"
+                                },
+                                "accentInk": {
+                                  "type": "string"
+                                },
+                                "destructive": {
+                                  "type": "string"
+                                },
+                                "destructiveForeground": {
+                                  "type": "string"
+                                },
+                                "border": {
+                                  "type": "string"
+                                },
+                                "input": {
+                                  "type": "string"
+                                },
+                                "ring": {
+                                  "type": "string"
+                                },
+                                "success": {
+                                  "type": "string"
+                                },
+                                "sidebarBackground": {
+                                  "type": "string"
+                                },
+                                "sidebarForeground": {
+                                  "type": "string"
+                                },
+                                "sidebarPrimary": {
+                                  "type": "string"
+                                },
+                                "sidebarPrimaryForeground": {
+                                  "type": "string"
+                                },
+                                "sidebarAccent": {
+                                  "type": "string"
+                                },
+                                "sidebarAccentForeground": {
+                                  "type": "string"
+                                },
+                                "sidebarBorder": {
+                                  "type": "string"
+                                },
+                                "sidebarRing": {
+                                  "type": "string"
+                                },
+                                "chart1": {
+                                  "type": "string"
+                                },
+                                "chart2": {
+                                  "type": "string"
+                                },
+                                "chart3": {
+                                  "type": "string"
+                                },
+                                "chart4": {
+                                  "type": "string"
+                                },
+                                "chart5": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "dark": {
+                              "type": "object",
+                              "properties": {
+                                "background": {
+                                  "type": "string"
+                                },
+                                "foreground": {
+                                  "type": "string"
+                                },
+                                "card": {
+                                  "type": "string"
+                                },
+                                "cardForeground": {
+                                  "type": "string"
+                                },
+                                "popover": {
+                                  "type": "string"
+                                },
+                                "popoverForeground": {
+                                  "type": "string"
+                                },
+                                "primary": {
+                                  "type": "string"
+                                },
+                                "primaryForeground": {
+                                  "type": "string"
+                                },
+                                "secondary": {
+                                  "type": "string"
+                                },
+                                "secondaryForeground": {
+                                  "type": "string"
+                                },
+                                "muted": {
+                                  "type": "string"
+                                },
+                                "mutedForeground": {
+                                  "type": "string"
+                                },
+                                "accent": {
+                                  "type": "string"
+                                },
+                                "accentForeground": {
+                                  "type": "string"
+                                },
+                                "accentInk": {
+                                  "type": "string"
+                                },
+                                "destructive": {
+                                  "type": "string"
+                                },
+                                "destructiveForeground": {
+                                  "type": "string"
+                                },
+                                "border": {
+                                  "type": "string"
+                                },
+                                "input": {
+                                  "type": "string"
+                                },
+                                "ring": {
+                                  "type": "string"
+                                },
+                                "success": {
+                                  "type": "string"
+                                },
+                                "sidebarBackground": {
+                                  "type": "string"
+                                },
+                                "sidebarForeground": {
+                                  "type": "string"
+                                },
+                                "sidebarPrimary": {
+                                  "type": "string"
+                                },
+                                "sidebarPrimaryForeground": {
+                                  "type": "string"
+                                },
+                                "sidebarAccent": {
+                                  "type": "string"
+                                },
+                                "sidebarAccentForeground": {
+                                  "type": "string"
+                                },
+                                "sidebarBorder": {
+                                  "type": "string"
+                                },
+                                "sidebarRing": {
+                                  "type": "string"
+                                },
+                                "chart1": {
+                                  "type": "string"
+                                },
+                                "chart2": {
+                                  "type": "string"
+                                },
+                                "chart3": {
+                                  "type": "string"
+                                },
+                                "chart4": {
+                                  "type": "string"
+                                },
+                                "chart5": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          },
+                          "required": [
+                            "themeMode",
+                            "light",
+                            "dark"
+                          ]
+                        },
+                        "headerDisplayMode": {
+                          "type": "string",
+                          "enum": [
+                            "logo_and_name",
+                            "logo_only",
+                            "custom_logo"
+                          ]
+                        },
+                        "headerDisplayName": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "logoUrl",
+                        "theme",
+                        "headerDisplayMode",
+                        "headerDisplayName"
+                      ]
                     }
                   },
                   "required": [
                     "name",
                     "features",
-                    "portalAccess"
+                    "portalAccess",
+                    "branding"
                   ]
                 }
               }
@@ -16758,6 +17109,12 @@
                           "isAuthor": {
                             "type": "boolean"
                           },
+                          "canEdit": {
+                            "type": "boolean"
+                          },
+                          "canDelete": {
+                            "type": "boolean"
+                          },
                           "pending": {
                             "type": "boolean"
                           },
@@ -16804,6 +17161,8 @@
                           "content",
                           "author",
                           "isAuthor",
+                          "canEdit",
+                          "canDelete",
                           "pending",
                           "deleted",
                           "createdAt",
@@ -16954,6 +17313,12 @@
                     "isAuthor": {
                       "type": "boolean"
                     },
+                    "canEdit": {
+                      "type": "boolean"
+                    },
+                    "canDelete": {
+                      "type": "boolean"
+                    },
                     "pending": {
                       "type": "boolean"
                     },
@@ -17006,6 +17371,8 @@
                     "content",
                     "author",
                     "isAuthor",
+                    "canEdit",
+                    "canDelete",
                     "pending",
                     "deleted",
                     "createdAt",
@@ -17319,6 +17686,12 @@
                     "isAuthor": {
                       "type": "boolean"
                     },
+                    "canEdit": {
+                      "type": "boolean"
+                    },
+                    "canDelete": {
+                      "type": "boolean"
+                    },
                     "pending": {
                       "type": "boolean"
                     },
@@ -17368,6 +17741,8 @@
                     "content",
                     "author",
                     "isAuthor",
+                    "canEdit",
+                    "canDelete",
                     "pending",
                     "deleted",
                     "createdAt",
@@ -20118,6 +20493,12 @@
                           "isAuthor": {
                             "type": "boolean"
                           },
+                          "canEdit": {
+                            "type": "boolean"
+                          },
+                          "canDelete": {
+                            "type": "boolean"
+                          },
                           "pending": {
                             "type": "boolean"
                           },
@@ -20164,6 +20545,8 @@
                           "content",
                           "author",
                           "isAuthor",
+                          "canEdit",
+                          "canDelete",
                           "pending",
                           "deleted",
                           "createdAt",
@@ -20324,6 +20707,12 @@
                     "isAuthor": {
                       "type": "boolean"
                     },
+                    "canEdit": {
+                      "type": "boolean"
+                    },
+                    "canDelete": {
+                      "type": "boolean"
+                    },
                     "pending": {
                       "type": "boolean"
                     },
@@ -20376,6 +20765,8 @@
                     "content",
                     "author",
                     "isAuthor",
+                    "canEdit",
+                    "canDelete",
                     "pending",
                     "deleted",
                     "createdAt",

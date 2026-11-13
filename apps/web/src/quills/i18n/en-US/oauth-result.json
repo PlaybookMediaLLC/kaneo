@@ -1,0 +1,14 @@
+{
+	"outcome": {
+		"alreadyUsed": "This connection is already complete.",
+		"connected": "The account is connected.",
+		"denied": "The account did not grant access.",
+		"failed": "The connection could not be completed.",
+		"noAccess": "You no longer have permission to manage this connection.",
+		"notFound": "This connection could not be found.",
+		"restart": "Start the connection again from the workspace settings.",
+		"unauthorized": "This connection request could not be verified."
+	},
+	"return": "Return to dashboard",
+	"title": "Connection result"
+}

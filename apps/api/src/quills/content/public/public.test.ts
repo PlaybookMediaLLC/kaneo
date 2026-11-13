@@ -23,7 +23,7 @@ import {
   startContract,
   stopContract,
 } from "../../framework/contract";
-import { portalUrl } from "../../portal/feedback/feeds";
+import { portalPaths } from "../../portal/paths";
 import { helpContentIn, openPublic, statusContentIn } from "./seed.fixture";
 import { likePattern } from "./help-center/search";
 import { mintUnsubscribeToken } from "../../portal/unsubscribe-token";
@@ -247,17 +247,16 @@ describe.skipIf(!url)(
       const ids = await helpContentIn(env, env.a);
       const sitemap = await call("GET", "/hc/sitemap.xml");
       const idSlug = `${ids.published.urlId}-${ids.published.slug}`;
-      const page = (path: string) => portalUrl(env.a, path);
+      const page = (locale: string, idSlug: string) =>
+        portalPaths.helpCenterArticle(env.a, locale, idSlug);
       const entry = (sitemap.body as string)
         .split("<url>")
-        .find((block) =>
-          block.includes(`<loc>${page(`/hc/en/articles/${idSlug}`)}</loc>`),
-        );
+        .find((block) => block.includes(`<loc>${page("en", idSlug)}</loc>`));
       expect(entry).toContain(
-        `<xhtml:link rel="alternate" hreflang="en" href="${page(`/hc/en/articles/${idSlug}`)}" />`,
+        `<xhtml:link rel="alternate" hreflang="en" href="${page("en", idSlug)}" />`,
       );
       expect(entry).toContain(
-        `<xhtml:link rel="alternate" hreflang="de" href="${page(`/hc/de/articles/${idSlug}`)}" />`,
+        `<xhtml:link rel="alternate" hreflang="de" href="${page("de", idSlug)}" />`,
       );
       // Exactly these two alternates, as the JSON entries had before.
       expect(entry!.split("<xhtml:link").length - 1).toBe(2);
@@ -496,16 +495,16 @@ describe.skipIf(!url)(
         expect(text(anonymous.body)).not.toContain(hidden);
       const feed = await call("GET", "/status/rss.xml");
       expect(feed.body).toContain(
-        `<link>${portalUrl(env.a, `/status/${ids.incidentId}`)}</link>`,
+        `<link>${portalPaths.statusIncident(env.a, ids.incidentId)}</link>`,
       );
       for (const hidden of ids.hidden)
         expect(text(feed.body)).not.toContain(hidden);
       // One item per update, open incidents first: with limit=1 only the newest open incident's
       // item stays (the second seed above opened a newer one), and no resolved item.
       const items = (body: string) =>
-        [...body.matchAll(/<link>[^<]*\/status\/([^<#]+)<\/link>/g)].map(
-          (match) => match[1],
-        );
+        [
+          ...body.matchAll(/<link>[^<]*\/status\/incidents\/([^<#]+)<\/link>/g),
+        ].map((match) => match[1]);
       expect(items(feed.body)).toEqual(
         expect.arrayContaining([ids.incidentId, ids.resolvedId]),
       );

@@ -28,8 +28,10 @@ import { realEmail } from "../../directory/customer";
 import { portalAccount } from "../../framework/platform-reads";
 import {
   mintUnsubscribeToken,
+  unsubscribePageUrl,
   unsubscribeUrl,
 } from "../../portal/unsubscribe-token";
+import { portalPaths } from "../../portal/paths";
 import type { DeliveryEvent, Subscribers } from "../fanout";
 
 // Status-page subscriber mail: an incident published or updated, and a maintenance window that
@@ -44,12 +46,8 @@ const payloadOf = (event: DeliveryEvent) =>
 const RUNNING = new Set(["in_progress", "verifying"]);
 const label = (status: string) =>
   status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, " ");
-const clientUrl = () =>
-  (process.env.KANEO_CLIENT_URL || "http://localhost:5173").replace(/\/+$/, "");
-// ponytail: apps/web has no portal status page yet; this is the portal path the other customer
-// links use. Point it at the real route when the portal UI lands.
 const incidentUrl = (workspaceId: string, incidentId: string) =>
-  `${clientUrl()}/portal/${encodeURIComponent(workspaceId)}/status/incidents/${incidentId}`;
+  portalPaths.statusIncident(workspaceId, incidentId);
 
 /**
  * Which mail the event asks for: an incident's publish or update, or a window's start (the start
@@ -204,7 +202,8 @@ const statusMail: NonNullable<Subscribers["mail"]> = async (
     workspaceName: workspace.name,
     body: shown.updates.at(-1)?.body ?? "",
     incidentUrl: incidentUrl(workspace.id, shown.id),
-    unsubscribeUrl: unsubscribeUrl(workspace.id, token),
+    unsubscribeUrl: unsubscribePageUrl(workspace.id, token),
+    oneClickUnsubscribeUrl: unsubscribeUrl(workspace.id, token),
   };
   const when = (at: Date | string | null) =>
     at ? new Date(at).toUTCString() : "";

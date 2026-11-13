@@ -2,6 +2,12 @@
 	"upstream": "upstream/main",
 	"forkOwned": [
 		"apps/api/src/quills",
+		"apps/web/src/quills",
+		"apps/web/src/routes/portal",
+		"apps/web/src/routes/quills",
+		"scripts/quills-web",
+		".github/workflows/quills-web.yml",
+		"apps/docs/quills",
 		"apps/api/src/database/quills",
 		"apps/api/drizzle/quills",
 		"apps/api/drizzle.quills.config.ts",
@@ -19,6 +25,30 @@
 		"scripts/security/check-helm-production-values.rb"
 	],
 	"seams": [
+		{
+			"file": "apps/web/src/routeTree.gen.ts",
+			"state": "generated",
+			"lines": "portal and Quills routes",
+			"plannedChange": "S1: regenerate with pnpm --filter @kaneo/web build after an upstream conflict"
+		},
+		{
+			"file": "apps/web/src/routes/auth/sign-up.tsx; apps/web/src/routes/auth/check-email.tsx; apps/web/src/routes/auth/sign-in.tsx; apps/web/src/components/auth/sign-in-footer-line.tsx; apps/web/src/components/auth/password-sign-up-form.tsx; apps/api/src/instance-settings/send-sign-up-verification-email.ts; apps/api/src/instance-settings/send-sign-up-verification-email.test.ts; apps/web/src/components/auth/auth-methods.ts; apps/web/src/components/auth/auth-methods.test.ts",
+			"state": "planned",
+			"lines": "portal redirect propagation across sign-in, sign-up, check-email and verification callback",
+			"plannedChange": "S2: retain the safe path-only redirect through both OTP and password verification flows; reject browser cross-origin and encoded-separator redirects at the shared auth boundary"
+		},
+		{
+			"file": "apps/docs/docs.json",
+			"state": "planned",
+			"lines": "one Quills portal navigation group",
+			"plannedChange": "S4: keep upstream navigation, then restore the portal group"
+		},
+		{
+			"file": "apps/web/index.html",
+			"state": "planned",
+			"lines": "early referrer policy before script and asset loading",
+			"plannedChange": "S5: no-referrer protects initial mail-token navigations before route bootstrap and token scrubbing"
+		},
 		{
 			"file": "apps/api/src/index.ts",
 			"state": "existing",

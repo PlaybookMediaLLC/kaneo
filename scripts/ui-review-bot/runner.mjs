@@ -11,7 +11,7 @@ import {
 import { createServer } from "node:net";
 import path from "node:path";
 import pixelmatch from "pixelmatch";
-import { chromium } from "playwright";
+import { launchBrowser, screenshot, selector } from "@kaneo/browser-test";
 import { PNG } from "pngjs";
 import { auditAccessibility } from "./accessibility.mjs";
 import {
@@ -233,34 +233,25 @@ export async function launchApp(snapshot, signal) {
 }
 
 async function settle(page) {
-  await page
-    .waitForLoadState("networkidle", { timeout: 15_000 })
-    .catch(() => {});
+  await page.waitForLoadState("networkidle", 15_000).catch(() => {});
   await page.evaluate(() => document.fonts.ready);
-  await page.addStyleTag({
-    content:
-      "*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}",
+  await page.evaluate(() => {
+    const style = document.createElement("style");
+    style.textContent =
+      "*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}";
+    document.head.append(style);
   });
   await page.waitForTimeout(500);
 }
 
-export async function capture(
-  browser,
-  origin,
-  scenario,
-  side,
-  file,
-  signal,
-  fixtures,
-) {
-  const context = await browser.newContext({
+export async function capture(origin, scenario, side, file, signal, fixtures) {
+  const instance = await launchBrowser({
     viewport: { width: 1440, height: 1000 },
     deviceScaleFactor: 1,
     colorScheme: "light",
     locale: "en-US",
     timezoneId: "UTC",
     reducedMotion: "reduce",
-    serviceWorkers: "block",
   });
   const diagnostics = {
     errors: [],
@@ -269,27 +260,21 @@ export async function capture(
     actions: [],
     console: [],
   };
-  const close = () => context.close().catch(() => {});
+  const close = () => instance.close().catch(() => {});
   signal.addEventListener("abort", close, { once: true });
   try {
-    await installFixtures(context, origin, diagnostics, fixtures);
-    const page = await context.newPage();
-    page.on("pageerror", (e) =>
-      diagnostics.errors.push(e.message.slice(0, 700)),
-    );
-    page.on("console", (m) => {
-      if (m.type() === "error")
-        diagnostics.console.push(m.text().slice(0, 1000));
-    });
-    page.on("response", (r) => {
+    const page = await instance.newPage();
+    await installFixtures(instance, page, origin, diagnostics, fixtures);
+    const monitor = instance.monitor(page);
+    diagnostics.errors = monitor.errors;
+    diagnostics.console = monitor.consoleErrors;
+    monitor.session.on("Network.responseReceived", ({ response, type }) => {
       if (
-        r.status() >= 400 &&
-        ["script", "document", "stylesheet"].includes(
-          r.request().resourceType(),
-        )
+        response.status >= 400 &&
+        ["Script", "Document", "Stylesheet"].includes(type)
       )
         diagnostics.errors.push(
-          `HTTP ${r.status()}: ${new URL(r.url()).pathname}`,
+          `HTTP ${response.status}: ${new URL(response.url).pathname}`,
         );
     });
     await page.goto(
@@ -308,9 +293,10 @@ export async function capture(
       retry++
     ) {
       diagnostics.startupRetries = (diagnostics.startupRetries || 0) + 1;
-      diagnostics.errors = diagnostics.errors.filter(
-        (e) => !e.startsWith("HTTP 504: /node_modules/.vite/"),
-      );
+      for (let i = diagnostics.errors.length - 1; i >= 0; i--) {
+        if (diagnostics.errors[i].startsWith("HTTP 504: /node_modules/.vite/"))
+          diagnostics.errors.splice(i, 1);
+      }
       await page.reload({ waitUntil: "domcontentloaded", timeout: 60_000 });
       await settle(page);
     }
@@ -318,12 +304,18 @@ export async function capture(
       signal.throwIfAborted();
       if (side === "before" && action.only === "after") continue;
       try {
-        const target = targetLocator(page, action);
+        const target = await targetLocator(page, action);
         if (action.type === "click") await target.click({ timeout: 5000 });
         if (action.type === "fill")
           await target.fill(action.value, { timeout: 5000 });
-        if (action.type === "press")
-          await target.press(action.value, { timeout: 5000 });
+        if (action.type === "press") {
+          const css = await selector(page, action, { first: true });
+          await page.evaluate(
+            (css) => document.querySelector(css).focus(),
+            css,
+          );
+          await page.keyPress(action.value);
+        }
         diagnostics.actions.push({ ...action, ok: true });
       } catch {
         diagnostics.actions.push({
@@ -342,9 +334,8 @@ export async function capture(
       ) || text.trim().length < 20;
     if (failedRender)
       diagnostics.errors.push("Application did not render a usable page.");
-    diagnostics.url = new URL(page.url()).pathname;
-    await page.screenshot({
-      path: file,
+    diagnostics.url = new URL(await page.url()).pathname;
+    await screenshot(page, file, {
       animations: "disabled",
       fullPage: false,
     });
@@ -355,9 +346,8 @@ export async function capture(
     ) {
       try {
         const clip = await captureFrame(page, scenario.focus, scenario.visible);
-        await page.mouse.move(0, 0);
-        await page.screenshot({
-          path: file.replace(/-after\.png$/, "-preview.png"),
+        await page.hover(0, 0);
+        await screenshot(page, file.replace(/-after\.png$/, "-preview.png"), {
           clip,
           animations: "disabled",
         });
@@ -532,7 +522,6 @@ export async function captureRun(run, signal, log, folder, update = () => {}) {
     log,
     signal,
   );
-  let browser;
   const apps = [];
   run.results = [];
   await mkdir(folder, { recursive: true });
@@ -543,7 +532,6 @@ export async function captureRun(run, signal, log, folder, update = () => {}) {
     );
     for (const side of ["before", "after"])
       apps.push(await launchApp(snapshots[side], signal));
-    browser = await chromium.launch({ headless: true });
     for (let i = 0; i < run.plan.scenarios.length; i++) {
       signal.throwIfAborted();
       const scenario = run.plan.scenarios[i];
@@ -581,7 +569,6 @@ export async function captureRun(run, signal, log, folder, update = () => {}) {
           `Capturing ${side === "before" ? "base" : "PR"}: ${scenario.name}`,
         );
         item[side] = await capture(
-          browser,
           apps[j].origin,
           scenario,
           side,
@@ -597,7 +584,7 @@ export async function captureRun(run, signal, log, folder, update = () => {}) {
       update();
     }
   } finally {
-    if (browser) await browser.close().catch(() => {});
+    // Each capture owns and closes its Stagehand browser.
     for (const app of apps) app.stop();
   }
   run.status = run.results.every((r) => r.status === "captured")

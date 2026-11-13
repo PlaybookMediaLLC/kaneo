@@ -1,0 +1,64 @@
+---
+title: "Set up a customer portal"
+description: "Enable feedback, publish customer content, and invite customers to a private portal."
+---
+
+The portal gives customers access to feedback and support without making them workspace members.
+Each workspace has its own portal. A customer signs in with a Kaneo account.
+
+## Enable the portal
+
+Portals start disabled. Use the API with a workspace member who has `quills:manage_settings`.
+API keys also need the corresponding scope. See [API authentication](/api-reference/authentication).
+The teammate settings pages are planned separately; these instructions use the current API.
+
+1. Read `GET /quills/{workspaceId}/settings/portal`.
+2. Send `PUT /quills/{workspaceId}/settings/portal` with `{"enabled": true}`.
+3. Open `/portal/{workspaceId}` on your web app's public origin.
+
+The paths above are relative to the API base URL. For a bundled installation, that base ends in
+`/api`. Set the client URL to the web app's public URL so mail links reach the portal using the [environment configuration](/core/installation/environment-variables).
+
+To turn the portal off, send the same update with `{"enabled": false}`. Disabling access does not
+delete the workspace's feedback or support history.
+
+## Choose who can enter
+
+Use `PUT /quills/{workspaceId}/settings/portal/access` to set `visibility` to `public` or `private`.
+The same operation accepts `allowedDomains` and `allowedSegmentIds` for access policies.
+A private portal asks visitors to sign in and checks their access before showing protected content.
+Published status and help-center content have their own visibility rules; do not use the portal
+setting as a substitute for reviewing what you publish.
+
+Anonymous interaction is off unless you enable `allowAnonymous` in the portal settings.
+Review this setting before sharing a public link.
+
+## Invite a customer
+
+Send `POST /quills/{workspaceId}/portal/invites` with the customer's `email` and, optionally,
+a `message` of up to 500 characters. The server queues the invitation email after the change commits.
+Your instance must have working mail delivery.
+
+The recipient must sign in with an account whose verified email matches the invitation. Accepting
+the invitation grants portal access only. It does not grant access to projects or workspace settings.
+
+Use `GET /quills/{workspaceId}/portal/invites` to view invitations. For a pending invitation:
+
+- `POST /quills/{workspaceId}/portal/invites/{inviteId}/resend` sends it again and extends its expiry.
+- `POST /quills/{workspaceId}/portal/invites/{inviteId}/link` creates a link to share privately.
+- `DELETE /quills/{workspaceId}/portal/invites/{inviteId}` cancels it and invalidates its links.
+
+An accepted invitation cannot be canceled through this endpoint. To remove that customer's access,
+block the customer. Treat invitation links as private and never paste them into public logs or tickets.
+
+## Branding and supported URLs
+
+The portal uses the public logo, supported theme colors, and header display name from workspace
+branding. Check text contrast when choosing colors. The portal does not apply `customCss`.
+
+Use URLs on the configured web app origin. Custom portal and help-center domains are not supported
+by these pages yet. Portal interface text is currently English. Help-center and changelog pages
+render in the browser; search engines that do not run JavaScript may not index their full content.
+
+Before sharing the portal, follow [deployment checks](/quills/deployment) and test a customer account
+that is not a workspace member.

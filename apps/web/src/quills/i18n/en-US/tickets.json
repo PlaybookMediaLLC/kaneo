@@ -1,0 +1,12 @@
+{
+	"created": "Ticket created",
+	"description": "Description",
+	"loadMore": "Load more tickets",
+	"newTicket": "Create a ticket",
+	"openConversation": "Open ticket conversation: {{title}}",
+	"reference": "Ticket {{reference}}",
+	"stageMissing": "Received",
+	"submit": "Create ticket",
+	"title": "Support tickets",
+	"ticketTitle": "Title"
+}
