@@ -17,10 +17,9 @@ describe("HelpCenterContent", () => {
     expect(
       view.getByRole("textbox", { name: "Search the help center" }),
     ).toBeInTheDocument();
-    expect(view.getByRole("link", { name: "Search" })).toHaveAttribute(
-      "href",
-      "/portal/workspace_test_1/hc",
-    );
+    expect(
+      view.getByRole("button", { name: "Search" }).closest("form"),
+    ).toHaveAttribute("action", "/portal/workspace_test_1/hc");
   });
   it("shows the query result state", () => {
     const view = renderComponent(

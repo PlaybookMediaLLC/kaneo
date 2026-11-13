@@ -16,7 +16,7 @@ export function ConversationDetail({
 }: ConversationDetailProps) {
   const { t } = useTranslation("quills");
   return (
-    <Card>
+    <Card className="portal-detail-card mb-7 rounded-2xl shadow-none [&_[data-slot=card-title]]:text-2xl [&_[data-slot=card-title]]:leading-snug [&_[data-slot=card-title]]:tracking-tight [&_[data-slot=card-header]>p]:text-sm [&_[data-slot=card-header]>p]:text-muted-foreground">
       <CardHeader>
         <CardTitle>
           {conversation.subject?.trim() || t("conversation.fallbackSubject")}

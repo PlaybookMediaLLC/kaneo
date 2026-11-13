@@ -20,3 +20,13 @@ export async function advanceClock(milliseconds: number) {
     await vi.advanceTimersByTimeAsync(milliseconds);
   });
 }
+
+export async function choose(label: string, option: string) {
+  fireEvent.click(screen.getByRole("combobox", { name: label }));
+  const item = await screen.findByRole("option", { name: option });
+  fireEvent.pointerDown(item);
+  fireEvent.mouseDown(item);
+  fireEvent.pointerUp(item);
+  fireEvent.mouseUp(item);
+  fireEvent.click(item, { detail: 1 });
+}

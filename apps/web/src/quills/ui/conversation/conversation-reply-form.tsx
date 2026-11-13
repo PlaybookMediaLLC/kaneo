@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import type { PortalProblem } from "../../core/types";
 import { PortalForm } from "../portal-form";
-import { Label, Textarea } from "../upstream";
+import { Field, FieldLabel, Textarea } from "../upstream";
 
 const schema = z.object({ content: z.string().trim().min(1).max(10000) });
 type Reply = z.infer<typeof schema>;
@@ -32,22 +32,24 @@ export function ConversationReplyForm({
       {(form) => {
         formRef.current = form;
         return (
-          <div>
-            <Label htmlFor="conversation-reply">
-              {t("conversation.replyLabel")}
-            </Label>
-            <Textarea
-              id="conversation-reply"
-              placeholder={t("conversation.replyPlaceholder")}
-              aria-invalid={Boolean(form.formState.errors.content)}
-              {...form.register("content")}
-            />
-            {form.formState.errors.content?.message ? (
-              <p role="alert">
-                {String(form.formState.errors.content.message)}
-              </p>
-            ) : null}
-          </div>
+          <>
+            <Field invalid={Boolean(form.formState.errors.content)}>
+              <FieldLabel htmlFor="conversation-reply">
+                {t("conversation.replyLabel")}
+              </FieldLabel>
+              <Textarea
+                id="conversation-reply"
+                placeholder={t("conversation.replyPlaceholder")}
+                aria-invalid={Boolean(form.formState.errors.content)}
+                {...form.register("content")}
+              />
+              {form.formState.errors.content?.message ? (
+                <p role="alert">
+                  {String(form.formState.errors.content.message)}
+                </p>
+              ) : null}
+            </Field>
+          </>
         );
       }}
     </PortalForm>

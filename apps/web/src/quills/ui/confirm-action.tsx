@@ -1,6 +1,6 @@
-import { useRef, useState } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Button } from "./upstream";
+import { Button, Label, Switch } from "./upstream";
 
 export function isFramed(): boolean {
   try {
@@ -12,6 +12,7 @@ export function isFramed(): boolean {
 
 export interface ConfirmActionProps {
   labelKey: string;
+  children?: ReactNode;
   onConfirm: () => Promise<void>;
   disabled?: boolean;
   role?: "button" | "switch";
@@ -22,6 +23,7 @@ export interface ConfirmActionProps {
 
 export function ConfirmAction({
   labelKey,
+  children,
   onConfirm,
   disabled,
   role = "button",
@@ -29,6 +31,7 @@ export function ConfirmAction({
   "aria-checked": ariaChecked,
   pressed,
 }: ConfirmActionProps) {
+  const id = useId();
   const { t } = useTranslation("quills");
   const [pending, setPending] = useState(false);
   const [frameBlocked, setFrameBlocked] = useState(false);
@@ -56,17 +59,35 @@ export function ConfirmAction({
     <div>
       {frameBlocked ? <p role="alert">{t("core.frameBlocked")}</p> : null}
       {failed ? <p role="alert">{t("core.problem.failed")}</p> : null}
-      <Button
-        type="button"
-        role={role}
-        aria-checked={role === "switch" ? (ariaChecked ?? checked) : undefined}
-        aria-pressed={pressed}
-        disabled={disabled || pending}
-        loading={pending}
-        onClick={() => void confirm()}
-      >
-        {t(labelKey)}
-      </Button>
+      {role === "switch" ? (
+        <div className="flex items-center justify-between gap-4">
+          <Label htmlFor={id}>{t(labelKey)}</Label>
+          <Switch
+            id={id}
+            checked={ariaChecked ?? checked ?? false}
+            disabled={disabled || pending}
+            onCheckedChange={() => void confirm()}
+          />
+        </div>
+      ) : (
+        <Button
+          type="button"
+          variant={
+            pressed === undefined
+              ? "default"
+              : pressed
+                ? "secondary"
+                : "outline"
+          }
+          aria-label={children ? t(labelKey) : undefined}
+          aria-pressed={pressed}
+          disabled={disabled || pending}
+          loading={pending}
+          onClick={() => void confirm()}
+        >
+          {children ?? t(labelKey)}
+        </Button>
+      )}
     </div>
   );
 }

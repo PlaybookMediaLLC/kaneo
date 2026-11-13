@@ -14,14 +14,17 @@ export function ProfileSummary({
 }: ProfileSummaryProps) {
   const { t } = useTranslation("quills");
   return (
-    <Card>
+    <Card className="rounded-2xl shadow-none">
       <CardHeader>
         <CardTitle>{account.name}</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-5 text-muted-foreground">
         <p>{t("profile.email", { email: account.email })}</p>
         {publicProfile ? (
-          <section aria-label={t("profile.activity")}>
+          <section
+            className="flex flex-wrap gap-3 [&_p]:rounded-full [&_p]:bg-muted [&_p]:px-3 [&_p]:py-1.5 [&_p]:text-xs"
+            aria-label={t("profile.activity")}
+          >
             {publicProfile.isTeamMember ? (
               <p>{t("profile.teamMember")}</p>
             ) : null}

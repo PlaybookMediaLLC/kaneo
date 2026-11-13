@@ -1,7 +1,15 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { PortalProblem, PortalProblemKind } from "../core/types";
-import { Button } from "./upstream";
+import {
+  Button,
+  Alert,
+  AlertDescription,
+  Empty,
+  EmptyHeader,
+  EmptyDescription,
+  Spinner,
+} from "./upstream";
 
 const problemKeys: Record<PortalProblemKind, string> = {
   authRequired: "core.problem.authRequired",
@@ -38,21 +46,36 @@ export function StateView({
     return () => window.clearInterval(timer);
   }, [retryAt]);
   const seconds = Math.max(0, Math.ceil(((retryAt ?? now) - now) / 1000));
-  if (loading) return <p role="status">{t("core.loading")}</p>;
+  if (loading)
+    return (
+      <div className="flex items-center gap-3 py-8" role="status">
+        <Spinner />
+        <p>{t("core.loading")}</p>
+      </div>
+    );
   if (problem)
     return (
-      <div>
-        <p role="alert">{t(problemKeys[problem.kind])}</p>
+      <Alert role="alert">
+        <AlertDescription className="text-foreground">
+          {t(problemKeys[problem.kind])}
+        </AlertDescription>
         {onRetry &&
         (problem.kind === "failed" || problem.kind === "rateLimited") ? (
-          <Button disabled={seconds > 0} onClick={onRetry}>
+          <Button className="mt-3" disabled={seconds > 0} onClick={onRetry}>
             {seconds > 0
               ? t("core.retryAfter", { count: seconds })
               : t("core.retry")}
           </Button>
         ) : null}
-      </div>
+      </Alert>
     );
-  if (empty) return <p role="status">{t("core.empty")}</p>;
+  if (empty)
+    return (
+      <Empty role="status">
+        <EmptyHeader>
+          <EmptyDescription>{t("core.empty")}</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    );
   return children;
 }

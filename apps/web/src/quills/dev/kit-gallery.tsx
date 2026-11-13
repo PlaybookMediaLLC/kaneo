@@ -1,7 +1,13 @@
+import { BoardNavigation } from "../ui/board-navigation";
+import { PortalSheetContent } from "../ui/portal-sheet-content";
+import { PortalSelectContent } from "../ui/portal-select-content";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
+import { portalHref } from "../core/portal-href";
 import type { PortalProblemKind } from "../core/types";
+import { PostFilters } from "../ui/post/post-filters";
+import { PostList } from "../ui/post/post-list";
 import { PostDetail } from "../ui/post/post-detail";
 import { PostComments } from "../ui/post/post-comments";
 import { PostVoteButton } from "../ui/post/post-vote-button";
@@ -13,10 +19,28 @@ import { ConfirmAction } from "../ui/confirm-action";
 import { PageFrame } from "../ui/page-frame";
 import { PortalForm } from "../ui/portal-form";
 import { PortalGate } from "../ui/portal-gate";
+import { PortalNavigation } from "../ui/portal-navigation";
 import { PortalShell } from "../ui/portal-shell";
 import { ResultCard } from "../ui/result-card";
 import { StateView } from "../ui/state-view";
-import { Input, Label } from "../ui/upstream";
+import {
+  Sheet,
+  SheetTrigger,
+  SheetHeader,
+  SheetTitle,
+  SheetPanel,
+  Button,
+  Input,
+  Label,
+  Field,
+  FieldLabel,
+  Checkbox,
+  Select,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/upstream";
 
 const problems: PortalProblemKind[] = [
   "authRequired",
@@ -48,6 +72,12 @@ export function KitGallery() {
   });
   return (
     <PortalShell
+      navigation={
+        <PortalNavigation
+          workspaceId="gallery"
+          currentPath={portalHref("gallery")}
+        />
+      }
       workspaceName={demo}
       branding={{
         logoUrl: null,
@@ -130,20 +160,34 @@ export function KitGallery() {
               <p>{demo}</p>
             </ResultCard>
             <ResultCard titleKey="core.problem.failed" status="failed" />
-            <Label htmlFor="gallery-outcome">{t("core.gallery.form")}</Label>
-            <select
-              id="gallery-outcome"
-              value={outcome}
-              onChange={(event) =>
-                setOutcome(event.target.value as typeof outcome)
-              }
-            >
-              {Object.entries(outcomes).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {t(label)}
-                </option>
-              ))}
-            </select>
+            <Field>
+              <FieldLabel htmlFor="gallery-outcome">
+                {t("core.gallery.form")}
+              </FieldLabel>
+              <Select
+                items={Object.entries(outcomes).map(([value, label]) => ({
+                  value,
+                  label: t(label),
+                }))}
+                value={outcome}
+                onValueChange={(value) => {
+                  if (value) setOutcome(value as keyof typeof outcomes);
+                }}
+              >
+                <SelectTrigger id="gallery-outcome">
+                  <SelectValue />
+                </SelectTrigger>
+                <PortalSelectContent>
+                  <SelectGroup>
+                    {Object.entries(outcomes).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {t(label)}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </PortalSelectContent>
+              </Select>
+            </Field>
             <PortalForm
               key={outcome}
               schema={schema}
@@ -189,23 +233,43 @@ export function KitGallery() {
           </section>
           <section className="grid gap-4" aria-labelledby="gallery-content">
             <h2 id="gallery-content">{t("core.gallery.content")}</h2>
-            <label>
-              <input
-                type="checkbox"
-                checked={empty}
-                onChange={(event) => setEmpty(event.target.checked)}
-              />
+            <Label>
+              <Checkbox checked={empty} onCheckedChange={setEmpty} />
               {t("core.gallery.empty")}
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={pending}
-                onChange={(event) => setPending(event.target.checked)}
-              />
+            </Label>
+            <Label>
+              <Checkbox checked={pending} onCheckedChange={setPending} />
               {t("core.gallery.pending")}
-            </label>
+            </Label>
             <MarkdownContent content={t("core.gallery.markdown")} />
+            <BoardNavigation boards={[]} workspaceId="gallery" />
+            <Sheet>
+              <SheetTrigger render={<Button />}>{demo}</SheetTrigger>
+              <PortalSheetContent>
+                <SheetHeader>
+                  <SheetTitle>{demo}</SheetTitle>
+                </SheetHeader>
+                <SheetPanel>{demo}</SheetPanel>
+              </PortalSheetContent>
+            </Sheet>
+            <PostFilters
+              search=""
+              stage=""
+              sort="newest"
+              stages={[]}
+              onSearchChange={() => {}}
+              onStageChange={() => {}}
+              onSortChange={() => {}}
+            />
+            <PostList
+              posts={[]}
+              workspaceId="gallery"
+              canVote={false}
+              canLoadMore={false}
+              loadingMore={false}
+              onLoadMore={() => {}}
+              onVote={async () => {}}
+            />
             <PostDetail
               post={{
                 title: demo,

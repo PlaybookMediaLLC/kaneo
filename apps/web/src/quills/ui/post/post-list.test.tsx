@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import { press } from "../../../test/actions";
-import { renderComponent } from "../../../test/render";
+import { press } from "../../test/actions";
+import { renderComponent } from "../../test/render";
 import { PostList } from "./post-list";
 
 const post = {

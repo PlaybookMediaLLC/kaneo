@@ -102,10 +102,10 @@ describe("PreferencesPage", () => {
       expect(await view.findByRole("alert")).toHaveTextContent(
         /too many requests/i,
       );
-      expect(changelog).toBeDisabled();
+      expect(changelog).toHaveAttribute("aria-disabled", "true");
       expect(
         view.getByRole("switch", { name: "Status page email updates" }),
-      ).toBeDisabled();
+      ).toHaveAttribute("aria-disabled", "true");
       expect(
         view.getByRole("button", { name: /try again in/i }),
       ).toBeDisabled();

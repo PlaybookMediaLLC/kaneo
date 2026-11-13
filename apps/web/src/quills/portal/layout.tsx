@@ -1,5 +1,9 @@
 import type { ReactNode } from "react";
-import { Outlet, useParams } from "@tanstack/react-router";
+import { Outlet, useLocation, useParams } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
+import { portalReturnPath } from "../core/portal-return-path";
+import { portalHref } from "../core/portal-href";
+import { PortalNavigation } from "../ui/portal-navigation";
 import type { PortalBranding } from "../core/types";
 import { usePortalViewer } from "../core/use-portal-viewer";
 import { useEvaluateMyPortalAccess } from "../hooks/portal/use-evaluate-my-portal-access";
@@ -13,6 +17,7 @@ export interface PortalLayoutProps {
   branding: PortalBranding;
   children: ReactNode;
   actions?: ReactNode;
+  navigation?: ReactNode;
 }
 
 export function PortalLayout({
@@ -20,12 +25,14 @@ export function PortalLayout({
   branding,
   children,
   actions,
+  navigation,
 }: PortalLayoutProps) {
   return (
     <PortalShell
       workspaceName={workspaceName}
       branding={branding}
       actions={actions}
+      navigation={navigation}
     >
       {children}
     </PortalShell>
@@ -33,6 +40,8 @@ export function PortalLayout({
 }
 
 export function PortalRoute() {
+  const { t } = useTranslation("quills");
+  const currentPath = useLocation({ select: (location) => location.href });
   const params = useParams({ strict: false });
   const workspaceId = String(params.workspaceId);
   const viewer = usePortalViewer();
@@ -60,6 +69,34 @@ export function PortalRoute() {
           <PortalLayout
             workspaceName={config.data.name}
             branding={config.data.branding}
+            navigation={
+              <PortalNavigation
+                workspaceId={workspaceId}
+                currentPath={currentPath.split(/[?#]/)[0]}
+              />
+            }
+            actions={
+              viewer.kind === "user" ? (
+                <>
+                  <a href={portalHref(workspaceId, "preferences")}>
+                    {t("core.navPreferences")}
+                  </a>
+                  <a
+                    className="portal-account-button bg-muted !text-foreground"
+                    href={portalHref(workspaceId, "profile")}
+                  >
+                    {t("core.navProfile")}
+                  </a>
+                </>
+              ) : (
+                <a
+                  className="portal-account-button bg-muted !text-foreground"
+                  href={`/auth/sign-in?redirect=${encodeURIComponent(portalReturnPath(currentPath))}`}
+                >
+                  {t("core.signIn")}
+                </a>
+              )
+            }
           >
             <Outlet />
           </PortalLayout>

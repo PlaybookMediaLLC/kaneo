@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import type { PortalProblem } from "../../../core/types";
 import { PortalForm } from "../../../ui/portal-form";
-import { Input, Label } from "../../../ui/upstream";
+import { Input, Field, FieldLabel } from "../../../ui/upstream";
 
 const schema = z.object({ name: z.string().trim().min(2).max(100) });
 
@@ -21,17 +21,19 @@ export function ProfileForm({ initialName, onSubmit }: ProfileFormProps) {
       onSubmit={onSubmit}
     >
       {(form) => (
-        <div>
-          <Label htmlFor="profile-name">{t("profile.name")}</Label>
-          <Input
-            id="profile-name"
-            autoComplete="name"
-            {...form.register("name")}
-          />
-          {form.formState.errors.name?.message ? (
-            <p role="alert">{form.formState.errors.name.message}</p>
-          ) : null}
-        </div>
+        <>
+          <Field invalid={Boolean(form.formState.errors.name)}>
+            <FieldLabel htmlFor="profile-name">{t("profile.name")}</FieldLabel>
+            <Input
+              id="profile-name"
+              autoComplete="name"
+              {...form.register("name")}
+            />
+            {form.formState.errors.name?.message ? (
+              <p role="alert">{form.formState.errors.name.message}</p>
+            ) : null}
+          </Field>
+        </>
       )}
     </PortalForm>
   );

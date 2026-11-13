@@ -1,3 +1,4 @@
+import { Button } from "../upstream";
 import { useTranslation } from "react-i18next";
 
 export interface PostCommentsProps {
@@ -24,7 +25,10 @@ export function PostComments({
 }: PostCommentsProps) {
   const { t } = useTranslation("quills");
   return (
-    <section aria-labelledby="post-comments-heading">
+    <section
+      className="portal-comments mt-8 [&>h2]:mb-5 [&>h2]:text-base [&>h2]:font-semibold [&_li]:grid [&_li]:gap-3 [&_li]:border-t [&_li]:border-border [&_li]:py-6 [&_li>p:first-child]:text-sm [&_li>p:first-child]:font-medium [&_li>[aria-label]]:flex [&_li>[aria-label]]:gap-4 [&_li>[aria-label]]:text-xs [&_li>[aria-label]]:text-muted-foreground"
+      aria-labelledby="post-comments-heading"
+    >
       <h2 id="post-comments-heading">{t("post.comments")}</h2>
       {comments.length ? (
         <ul>
@@ -49,20 +53,24 @@ export function PostComments({
                 (comment.canEdit || comment.canDelete) ? (
                   <div aria-label={t("post.actions")}>
                     {comment.canEdit ? (
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         type="button"
                         onClick={() => onEdit?.(comment.id)}
                       >
                         {t("post.editComment")}
-                      </button>
+                      </Button>
                     ) : null}
                     {comment.canDelete ? (
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         type="button"
                         onClick={() => onDelete?.(comment.id)}
                       >
                         {t("post.deleteComment")}
-                      </button>
+                      </Button>
                     ) : null}
                   </div>
                 ) : null}

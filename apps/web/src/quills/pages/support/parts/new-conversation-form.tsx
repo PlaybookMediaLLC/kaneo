@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import type { PortalProblem } from "../../../core/types";
 import { PortalForm } from "../../../ui/portal-form";
-import { Label, Textarea } from "../../../ui/upstream";
+import { Field, FieldLabel, Textarea } from "../../../ui/upstream";
 
 const schema = z.object({
   content: z.string().trim().min(1).max(10000),
@@ -22,14 +22,18 @@ export function NewConversationForm(props: NewConversationFormProps) {
       onSubmit={props.onSubmit}
     >
       {(form) => (
-        <div>
+        <>
           <input type="hidden" {...form.register("idempotencyKey")} />
-          <Label htmlFor="support-content">{t("support.content")}</Label>
-          <Textarea id="support-content" {...form.register("content")} />
-          {form.formState.errors.content?.message ? (
-            <p role="alert">{form.formState.errors.content.message}</p>
-          ) : null}
-        </div>
+          <Field invalid={Boolean(form.formState.errors.content)}>
+            <FieldLabel htmlFor="support-content">
+              {t("support.content")}
+            </FieldLabel>
+            <Textarea id="support-content" {...form.register("content")} />
+            {form.formState.errors.content?.message ? (
+              <p role="alert">{form.formState.errors.content.message}</p>
+            ) : null}
+          </Field>
+        </>
       )}
     </PortalForm>
   );

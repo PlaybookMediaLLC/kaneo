@@ -11,3 +11,20 @@ describe("PageFrame", () => {
     expect(view.getAllByRole("heading", { level: 1 })).toHaveLength(1);
   });
 });
+
+it("updates the title without interrupting an active draft", () => {
+  const view = renderComponent(
+    <PageFrame titleKey="post.title" displayTitle="Original">
+      <input aria-label="Comment" />
+    </PageFrame>,
+  );
+  const input = view.getByRole("textbox", { name: "Comment" });
+  input.focus();
+  view.rerender(
+    <PageFrame titleKey="post.title" displayTitle="Renamed">
+      <input aria-label="Comment" />
+    </PageFrame>,
+  );
+  expect(document.title).toBe("Renamed");
+  expect(input).toHaveFocus();
+});

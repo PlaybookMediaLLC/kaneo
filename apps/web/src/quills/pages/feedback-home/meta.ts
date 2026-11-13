@@ -9,6 +9,8 @@ export const meta = {
   operations: [
     "listQuillsPortalBoards",
     "listQuillsPortalPosts",
+    "listQuillsPortalStatuses",
+    "setQuillsPortalVote",
     "findQuillsPortalSimilarPosts",
     "createQuillsPortalPost",
   ],

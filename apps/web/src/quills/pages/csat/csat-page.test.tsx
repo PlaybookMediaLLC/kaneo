@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { recordCsatViaTokenFixture } from "../../api/support/record-csat-via-token.fixture";
 import { validateCsatEmailTokenFixture } from "../../api/support/validate-csat-email-token.fixture";
 import { stashToken } from "../../core/token-stash";
-import { fill, press } from "../../test/actions";
+import { choose, press } from "../../test/actions";
 import { describePageContract } from "../../test/contracts";
 import { mockApi } from "../../test/mock-api";
 import { renderPage } from "../../test/render";
@@ -37,7 +37,7 @@ describe("CsatPage", () => {
       assert: async (view) => {
         expect(
           await view.findByRole("combobox", { name: "Choose a rating" }),
-        ).toHaveValue("3");
+        ).toHaveTextContent("3 out of 5");
       },
     },
     done: {
@@ -68,7 +68,7 @@ describe("CsatPage", () => {
       const rating = await view.findByRole("combobox", {
         name: "Choose a rating",
       });
-      expect(rating).toHaveValue("3");
+      expect(rating).toHaveTextContent("3 out of 5");
       expect(api.calls("validateQuillsCsatEmailToken")).toHaveLength(1);
       expect(api.calls("recordQuillsCsatViaToken")).toHaveLength(0);
     });
@@ -81,7 +81,7 @@ describe("CsatPage", () => {
       stashToken(scope, "mail_link_value");
       const view = renderPage(CsatPage, meta, { search: { rating: 2 } });
       await view.findByRole("combobox", { name: "Choose a rating" });
-      fill("Choose a rating", "4");
+      await choose("Choose a rating", "Rating 4 out of 5");
       press("Send rating");
       expect(
         await view.findByText("Thanks for your feedback"),

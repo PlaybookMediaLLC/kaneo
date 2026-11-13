@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import type { PortalProblem } from "../../../core/types";
 import { PortalForm } from "../../../ui/portal-form";
-import { Input, Label, Textarea } from "../../../ui/upstream";
+import { Input, Field, FieldLabel, Textarea } from "../../../ui/upstream";
 
 const schema = z.object({
   title: z.string().trim().min(1).max(300),
@@ -21,18 +21,29 @@ export function NewTicketForm({ onSubmit }: NewTicketFormProps) {
       onSubmit={onSubmit}
     >
       {(form) => (
-        <div>
-          <Label htmlFor="ticket-title">{t("tickets.ticketTitle")}</Label>
-          <Input id="ticket-title" {...form.register("title")} />
-          {form.formState.errors.title?.message ? (
-            <p role="alert">{form.formState.errors.title.message}</p>
-          ) : null}
-          <Label htmlFor="ticket-description">{t("tickets.description")}</Label>
-          <Textarea id="ticket-description" {...form.register("description")} />
-          {form.formState.errors.description?.message ? (
-            <p role="alert">{form.formState.errors.description.message}</p>
-          ) : null}
-        </div>
+        <>
+          <Field invalid={Boolean(form.formState.errors.title)}>
+            <FieldLabel htmlFor="ticket-title">
+              {t("tickets.ticketTitle")}
+            </FieldLabel>
+            <Input id="ticket-title" {...form.register("title")} />
+            {form.formState.errors.title?.message ? (
+              <p role="alert">{form.formState.errors.title.message}</p>
+            ) : null}
+          </Field>
+          <Field invalid={Boolean(form.formState.errors.description)}>
+            <FieldLabel htmlFor="ticket-description">
+              {t("tickets.description")}
+            </FieldLabel>
+            <Textarea
+              id="ticket-description"
+              {...form.register("description")}
+            />
+            {form.formState.errors.description?.message ? (
+              <p role="alert">{form.formState.errors.description.message}</p>
+            ) : null}
+          </Field>
+        </>
       )}
     </PortalForm>
   );

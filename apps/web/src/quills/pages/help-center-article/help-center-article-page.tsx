@@ -48,7 +48,10 @@ export function HelpCenterArticlePage(props: HelpCenterArticlePageProps) {
   const gated = (meta.audience as string) !== "public";
 
   return (
-    <PageFrame titleKey="help-center.articleTitle">
+    <PageFrame
+      titleKey="help-center.articleTitle"
+      displayTitle={article.data?.article.title}
+    >
       <StateView
         loading={gated && portal.accessLoading}
         problem={gated ? portal.accessProblem : null}
@@ -75,9 +78,6 @@ export function HelpCenterArticlePage(props: HelpCenterArticlePageProps) {
             {article.data ? (
               <article className="space-y-8">
                 <header className="space-y-2">
-                  <h2 className="text-xl font-semibold">
-                    {article.data.article.title}
-                  </h2>
                   {article.data.article.description ? (
                     <p>{article.data.article.description}</p>
                   ) : null}

@@ -11,13 +11,13 @@ export interface TicketListProps {
 export function TicketList({ workspaceId, tickets }: TicketListProps) {
   const { t } = useTranslation("quills");
   return (
-    <div>
+    <div className="grid gap-3">
       {tickets.map((ticket) => (
-        <Card key={ticket.id}>
+        <Card className="rounded-2xl shadow-none" key={ticket.id}>
           <CardHeader>
             <CardTitle>{ticket.title}</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground [&_a]:ml-auto [&_a]:text-foreground [&_a]:underline [&_a]:underline-offset-4">
             <p>{t("tickets.reference", { reference: ticket.reference })}</p>
             <p>{ticket.stageLabel?.trim() || t("tickets.stageMissing")}</p>
             {ticket.conversationId ? (

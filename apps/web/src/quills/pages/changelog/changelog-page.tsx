@@ -53,20 +53,12 @@ export function ChangelogPage(props: ChangelogPageProps) {
               void changelog.refetch();
             }}
           >
-            <div className="space-y-8">
+            <div className="portal-updates space-y-12">
               {entries.map((entry) => (
-                <article key={entry.id} className="space-y-3 border-b pb-8">
-                  <h2 className="text-xl font-semibold">
-                    <a
-                      href={portalHref(
-                        props.workspaceId,
-                        `changelog/${entry.id}`,
-                      )}
-                      className="underline-offset-4 hover:underline"
-                    >
-                      {entry.title}
-                    </a>
-                  </h2>
+                <article
+                  key={entry.id}
+                  className="portal-update grid gap-5 border-b border-border pb-12 md:grid-cols-[180px_minmax(0,1fr)] md:gap-12"
+                >
                   <p className="text-sm text-muted-foreground">
                     {t("changelog.published", {
                       date: new Intl.DateTimeFormat(i18n.language, {
@@ -74,12 +66,25 @@ export function ChangelogPage(props: ChangelogPageProps) {
                       }).format(new Date(entry.publishedAt)),
                     })}
                   </p>
-                  <MarkdownContent content={entry.content} />
-                  {entry.author ? (
-                    <p className="text-sm">
-                      {t("changelog.author", { name: entry.author.name })}
-                    </p>
-                  ) : null}
+                  <div className="min-w-0 space-y-5">
+                    <h2 className="text-xl font-semibold">
+                      <a
+                        href={portalHref(
+                          props.workspaceId,
+                          `changelog/${entry.id}`,
+                        )}
+                        className="underline-offset-4 hover:underline"
+                      >
+                        {entry.title}
+                      </a>
+                    </h2>
+                    <MarkdownContent content={entry.content} />
+                    {entry.author ? (
+                      <p className="text-sm">
+                        {t("changelog.author", { name: entry.author.name })}
+                      </p>
+                    ) : null}
+                  </div>
                 </article>
               ))}
               {changelog.hasNextPage ? (

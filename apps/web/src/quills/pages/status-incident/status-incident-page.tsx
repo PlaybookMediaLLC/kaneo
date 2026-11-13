@@ -27,6 +27,7 @@ export function StatusIncidentPage(props: StatusIncidentPageProps) {
   return (
     <PageFrame
       titleKey="status-incident.title"
+      displayTitle={incident.data?.title}
       token="none"
       tokenScope={undefined}
       persistToken={false}
@@ -51,8 +52,7 @@ export function StatusIncidentPage(props: StatusIncidentPageProps) {
             }}
           >
             {incident.data ? (
-              <article>
-                <h2>{incident.data.title}</h2>
+              <article className="space-y-6 [&_section]:space-y-4 [&_ol]:space-y-6 [&_ol>li]:space-y-2 [&_ol>li]:border-l [&_ol>li]:border-border [&_ol>li]:pl-5">
                 <p>
                   {t("status-incident.status", {
                     status: incident.data.status,

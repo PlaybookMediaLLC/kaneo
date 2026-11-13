@@ -45,7 +45,10 @@ export function HelpCenterCategoryPage(props: HelpCenterCategoryPageProps) {
   const gated = (meta.audience as string) !== "public";
 
   return (
-    <PageFrame titleKey="help-center.categoryTitle">
+    <PageFrame
+      titleKey="help-center.categoryTitle"
+      displayTitle={category.data?.category.name}
+    >
       <StateView
         loading={gated && portal.accessLoading}
         problem={gated ? portal.accessProblem : null}
@@ -78,14 +81,11 @@ export function HelpCenterCategoryPage(props: HelpCenterCategoryPageProps) {
             {category.data ? (
               <div className="space-y-8">
                 <header className="space-y-2">
-                  <h2 className="text-xl font-semibold">
-                    {category.data.category.name}
-                  </h2>
                   {category.data.category.description ? (
                     <p>{category.data.category.description}</p>
                   ) : null}
                 </header>
-                <ul className="space-y-3">
+                <ul className="divide-y divide-border [&_li]:py-5 [&_a]:font-medium [&_p]:mt-2 [&_p]:text-muted-foreground">
                   {category.data.articles.map((article) => (
                     <li key={article.id}>
                       <a
@@ -112,7 +112,7 @@ export function HelpCenterCategoryPage(props: HelpCenterCategoryPageProps) {
                     >
                       {subcategory.name}
                     </h3>
-                    <ul>
+                    <ul className="divide-y divide-border [&_li]:py-4">
                       {subcategory.articles.map((article) => (
                         <li key={article.id}>
                           <a

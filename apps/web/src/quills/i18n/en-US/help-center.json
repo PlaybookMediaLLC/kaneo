@@ -12,5 +12,6 @@
 	"search": "Search",
 	"searchLabel": "Search the help center",
 	"searchResults": "Search results",
-	"title": "Help center"
+	"title": "Help center",
+	"articles": "Articles: {{count}}"
 }

@@ -1,4 +1,4 @@
-import { waitFor } from "@testing-library/react";
+import { act, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vite-plus/test";
 import { createPortalPostFixture } from "../../api/feedback/create-portal-post.fixture";
 import { listPortalBoardsFixture } from "../../api/feedback/list-portal-boards.fixture";
@@ -115,6 +115,27 @@ describe("FeedbackBoardPage", () => {
       const requests = api.calls("setQuillsPortalVote");
       expect(await requests[0]!.json()).toEqual({ voted: true });
       expect(await requests[1]!.json()).toEqual({ voted: false });
+    });
+    it("keeps the focused search mounted through loading and failure", async () => {
+      const api = prepareBoard();
+      const view = renderPage(FeedbackBoardPage, meta, options);
+      await view.findByText("No posts match these filters.");
+      let reject!: (error: Error) => void;
+      api.defer((controls) => {
+        reject = controls.reject;
+      });
+      const input = view.getByRole("textbox", { name: "Search posts" });
+      input.focus();
+      fill("Search posts", "exports");
+      await waitFor(() =>
+        expect(api.calls("listQuillsPortalPosts")).toHaveLength(2),
+      );
+      expect(view.getByRole("textbox", { name: "Search posts" })).toBe(input);
+      expect(input).toHaveFocus();
+      await act(async () => reject(new Error("Offline")));
+      await view.findByRole("alert");
+      expect(input).toHaveFocus();
+      expect(input).toHaveValue("exports");
     });
     it("does not fetch a board without portal access", async () => {
       const api = mockApi();

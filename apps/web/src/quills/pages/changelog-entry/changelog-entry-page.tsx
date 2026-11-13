@@ -31,7 +31,10 @@ export function ChangelogEntryPage(props: ChangelogEntryPageProps) {
   );
 
   return (
-    <PageFrame titleKey="changelog.entryTitle">
+    <PageFrame
+      titleKey="changelog.entryTitle"
+      displayTitle={canLoad ? entry.data?.title : undefined}
+    >
       <StateView
         loading={gated && portal.accessLoading}
         problem={gated ? portal.accessProblem : null}
@@ -58,7 +61,6 @@ export function ChangelogEntryPage(props: ChangelogEntryPageProps) {
             {entry.data ? (
               <article className="space-y-6">
                 <header className="space-y-2">
-                  <h2 className="text-xl font-semibold">{entry.data.title}</h2>
                   <p className="text-sm text-muted-foreground">
                     {t("changelog.published", {
                       date: new Intl.DateTimeFormat(i18n.language, {

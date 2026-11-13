@@ -1,3 +1,5 @@
+import { PortalSelectContent } from "../../../ui/portal-select-content";
+import { Controller } from "react-hook-form";
 import { z } from "zod";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -5,7 +7,17 @@ import type { PortalProblem, Viewer } from "../../../core/types";
 import { useFindPortalSimilarPosts } from "../../../hooks/feedback/use-find-portal-similar-posts";
 import { PortalForm } from "../../../ui/portal-form";
 import { StateView } from "../../../ui/state-view";
-import { Input, Label, Textarea } from "../../../ui/upstream";
+import {
+  Input,
+  Field,
+  FieldLabel,
+  Textarea,
+  Select,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../../ui/upstream";
 const schema = z
   .object({
     boardId: z.string().optional(),
@@ -39,34 +51,73 @@ export function SubmitPostForm(props: SubmitPostFormProps) {
     },
     props.viewer,
   );
+  const items = props.boards.map((board) => ({
+    value: board.id,
+    label: board.name,
+  }));
   return (
     <PortalForm
       schema={schema}
-      defaultValues={{ boardId: props.defaultBoardId, title: "", content: "" }}
+      defaultValues={{
+        boardId: props.defaultBoardId ?? props.boards[0]?.id,
+        title: "",
+        content: "",
+      }}
       submitKey="feedback.submit"
       onSubmit={props.onSubmit}
     >
       {(form) => (
         <>
-          <Label htmlFor="feedback-board">{t("feedback.board")}</Label>
-          <select id="feedback-board" {...form.register("boardId")}>
-            {props.boards.map((board) => (
-              <option key={board.id} value={board.id}>
-                {board.name}
-              </option>
-            ))}
-          </select>
-          <Label htmlFor="feedback-title">{t("feedback.postTitle")}</Label>
-          <Input
-            id="feedback-title"
-            {...form.register("title", {
-              onChange: (event) => setTitle(event.target.value),
-            })}
-            aria-invalid={Boolean(form.formState.errors.title)}
+          <Controller
+            control={form.control}
+            name="boardId"
+            render={({ field, fieldState }) => (
+              <Field invalid={fieldState.invalid}>
+                <FieldLabel htmlFor="feedback-board">
+                  {t("feedback.board")}
+                </FieldLabel>
+                <Select
+                  name={field.name}
+                  items={items}
+                  value={field.value ?? null}
+                  onValueChange={field.onChange}
+                >
+                  <SelectTrigger
+                    id="feedback-board"
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    aria-invalid={fieldState.invalid}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <PortalSelectContent>
+                    <SelectGroup>
+                      {items.map((item) => (
+                        <SelectItem key={item.value} value={item.value}>
+                          {item.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </PortalSelectContent>
+                </Select>
+              </Field>
+            )}
           />
-          {form.formState.errors.title?.message ? (
-            <p role="alert">{form.formState.errors.title.message}</p>
-          ) : null}
+          <Field invalid={Boolean(form.formState.errors.title)}>
+            <FieldLabel htmlFor="feedback-title">
+              {t("feedback.postTitle")}
+            </FieldLabel>
+            <Input
+              id="feedback-title"
+              {...form.register("title", {
+                onChange: (event) => setTitle(event.target.value),
+              })}
+              aria-invalid={Boolean(form.formState.errors.title)}
+            />
+            {form.formState.errors.title?.message ? (
+              <p role="alert">{form.formState.errors.title.message}</p>
+            ) : null}
+          </Field>
           <StateView
             loading={similar.isLoading}
             problem={similar.error}
@@ -83,15 +134,19 @@ export function SubmitPostForm(props: SubmitPostFormProps) {
               </section>
             ) : null}
           </StateView>
-          <Label htmlFor="feedback-content">{t("feedback.content")}</Label>
-          <Textarea
-            id="feedback-content"
-            {...form.register("content")}
-            aria-invalid={Boolean(form.formState.errors.content)}
-          />
-          {form.formState.errors.content?.message ? (
-            <p role="alert">{form.formState.errors.content.message}</p>
-          ) : null}
+          <Field invalid={Boolean(form.formState.errors.content)}>
+            <FieldLabel htmlFor="feedback-content">
+              {t("feedback.content")}
+            </FieldLabel>
+            <Textarea
+              id="feedback-content"
+              {...form.register("content")}
+              aria-invalid={Boolean(form.formState.errors.content)}
+            />
+            {form.formState.errors.content?.message ? (
+              <p role="alert">{form.formState.errors.content.message}</p>
+            ) : null}
+          </Field>
         </>
       )}
     </PortalForm>

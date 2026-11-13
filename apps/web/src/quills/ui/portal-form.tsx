@@ -11,7 +11,7 @@ import { useTranslation } from "react-i18next";
 import type { z } from "zod";
 import type { PortalProblem } from "../core/types";
 import { isFramed } from "./confirm-action";
-import { Button } from "./upstream";
+import { Button, Fieldset } from "./upstream";
 import { StateView } from "./state-view";
 
 export interface PortalFormProps<T extends FieldValues> {
@@ -54,11 +54,15 @@ export function PortalForm<T extends FieldValues>(props: PortalFormProps<T>) {
     }
   });
   return (
-    <form onSubmit={(event) => void submit(event)} noValidate>
+    <form
+      className="portal-form flex max-w-2xl flex-col gap-5 py-2"
+      onSubmit={(event) => void submit(event)}
+      noValidate
+    >
       {form.formState.errors.root?.message ? (
         <p role="alert">{form.formState.errors.root.message}</p>
       ) : null}
-      {props.children(form)}
+      <Fieldset className="max-w-none">{props.children(form)}</Fieldset>
       <StateView problem={problem} onRetry={() => setProblem(null)}>
         {null}
       </StateView>

@@ -14,7 +14,7 @@ export function ConversationList({
 }: ConversationListProps) {
   const { t } = useTranslation("quills");
   return (
-    <div>
+    <div className="portal-conversation-list my-5 grid gap-3 [&_[data-slot=card]]:shadow-none [&_[data-slot=card]:hover]:border-ring">
       {conversations.map((conversation) => {
         const subject =
           conversation.subject?.trim() || t("support.subjectMissing");

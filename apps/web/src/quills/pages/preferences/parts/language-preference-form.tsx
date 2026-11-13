@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import type { PortalProblem } from "../../../core/types";
 import { PortalForm } from "../../../ui/portal-form";
-import { Input, Label } from "../../../ui/upstream";
+import { Input, Field, FieldLabel } from "../../../ui/upstream";
 
 const schema = z.object({
   language: z
@@ -29,20 +29,24 @@ export function LanguagePreferenceForm(props: LanguagePreferenceFormProps) {
       }
     >
       {(form) => (
-        <div>
-          <Label htmlFor="preference-language">
-            {t("preferences.language")}
-          </Label>
-          <Input
-            id="preference-language"
-            autoComplete="language"
-            {...form.register("language")}
-          />
-          <p>{t("preferences.languageHint")}</p>
-          {form.formState.errors.language?.message ? (
-            <p role="alert">{String(form.formState.errors.language.message)}</p>
-          ) : null}
-        </div>
+        <>
+          <Field invalid={Boolean(form.formState.errors.language)}>
+            <FieldLabel htmlFor="preference-language">
+              {t("preferences.language")}
+            </FieldLabel>
+            <Input
+              id="preference-language"
+              autoComplete="language"
+              {...form.register("language")}
+            />
+            <p>{t("preferences.languageHint")}</p>
+            {form.formState.errors.language?.message ? (
+              <p role="alert">
+                {String(form.formState.errors.language.message)}
+              </p>
+            ) : null}
+          </Field>
+        </>
       )}
     </PortalForm>
   );

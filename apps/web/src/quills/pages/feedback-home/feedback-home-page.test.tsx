@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { createPortalPostFixture } from "../../api/feedback/create-portal-post.fixture";
 import { listPortalBoardsFixture } from "../../api/feedback/list-portal-boards.fixture";
 import { listPortalPostsFixture } from "../../api/feedback/list-portal-posts.fixture";
+import { listPortalStatusesFixture } from "../../api/feedback/list-portal-statuses.fixture";
 import { fill } from "../../test/actions";
 import { describePageContract } from "../../test/contracts";
 import { mockApi } from "../../test/mock-api";
@@ -23,6 +24,7 @@ describe("FeedbackHomePage", () => {
   const prepareHome = () => {
     const api = mockApi();
     api.reply(listPortalBoardsFixture.ok({ items: [board] }));
+    api.reply(listPortalStatusesFixture.ok());
     api.reply(listPortalPostsFixture.ok());
     return api;
   };

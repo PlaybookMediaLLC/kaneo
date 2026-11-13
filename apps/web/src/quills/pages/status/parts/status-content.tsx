@@ -32,8 +32,12 @@ export function StatusContent(props: StatusContentProps) {
     portalHref(props.workspaceId, `status/incidents/${id}`);
 
   return (
-    <div className="space-y-10">
-      <section aria-labelledby="status-overview" className="space-y-4">
+    <div className="portal-status space-y-10 max-w-4xl [&>section]:rounded-2xl [&>section]:border [&>section]:border-border [&>section]:p-6 [&_section>h2]:mb-5 [&_section>h2]:text-base [&_li]:text-sm [&_p]:text-sm">
+      <section
+        aria-labelledby="status-overview"
+        className="portal-status-overview space-y-4 bg-muted [&_h2]:before:mr-2 [&_h2]:before:inline-block [&_h2]:before:size-2 [&_h2]:before:rounded-full [&_h2]:before:bg-warning [&[data-status=operational]_h2]:before:bg-success [&>p+p]:border-t [&>p+p]:border-border [&>p+p]:pt-3"
+        data-status={props.page.topLevelStatus}
+      >
         <h2 id="status-overview" className="text-xl font-semibold">
           {statusLabels[props.page.topLevelStatus]}
         </h2>

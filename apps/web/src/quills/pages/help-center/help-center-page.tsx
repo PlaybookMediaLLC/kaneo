@@ -34,7 +34,10 @@ export function HelpCenterPage(props: HelpCenterPageProps) {
   const gated = (meta.audience as string) !== "public";
 
   return (
-    <PageFrame titleKey="help-center.title">
+    <PageFrame
+      titleKey="help-center.title"
+      displayTitle={home.data?.homepageTitle}
+    >
       <StateView
         loading={gated && portal.accessLoading}
         problem={gated ? portal.accessProblem : null}

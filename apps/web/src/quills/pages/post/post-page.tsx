@@ -41,6 +41,7 @@ export function PostPage(props: PostPageProps) {
   return (
     <PageFrame
       titleKey="post.title"
+      displayTitle={canLoad ? post.data?.title : undefined}
       token="none"
       tokenScope={undefined}
       persistToken={false}
@@ -68,7 +69,16 @@ export function PostPage(props: PostPageProps) {
           >
             {post.data && comments.data ? (
               <>
-                <PostDetail post={post.data} />
+                <a
+                  className="text-sm text-muted-foreground hover:text-foreground"
+                  href={portalHref(
+                    props.workspaceId,
+                    `boards/${post.data.board.id}`,
+                  )}
+                >
+                  {post.data.board.name}
+                </a>
+                <PostDetail post={post.data} hideTitle />
                 <PostVoteButton
                   voted={currentVote?.voted ?? post.data.voted}
                   voteCount={currentVote?.voteCount ?? post.data.voteCount}

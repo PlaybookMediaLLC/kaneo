@@ -15,10 +15,9 @@ describe("HelpCenterLocaleContent", () => {
         searchQuery=""
       />,
     );
-    expect(view.getByRole("link", { name: "Search" })).toHaveAttribute(
-      "href",
-      "/portal/workspace_test_1/hc/fr",
-    );
+    expect(
+      view.getByRole("button", { name: "Search" }).closest("form"),
+    ).toHaveAttribute("action", "/portal/workspace_test_1/hc/fr");
   });
   it("shows the localized query result state", () => {
     const view = renderComponent(

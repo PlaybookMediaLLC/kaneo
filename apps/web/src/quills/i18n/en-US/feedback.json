@@ -22,5 +22,7 @@
 	"comments": "{{count}} comments",
 	"signInToSubmit": "Sign in to submit feedback.",
 	"signIn": "Sign in",
-	"backToBoards": "Back to boards"
+	"backToBoards": "Back to boards",
+	"allFeedback": "All feedback",
+	"prompt": "Have an idea? Share it with us."
 }
