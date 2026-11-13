@@ -71,5 +71,28 @@ for (const file of mentions) {
   console.log(`FAIL unregistered seam: ${file}`);
   failed = true;
 }
+// charts/ is upstream-owned and upstream changes it often, so every fork change there
+// needs a registry entry: an edit under seams, a fork-added file under forkOwned. The
+// quills grep above cannot see these, because a chart change never mentions Quills.
+// This stays scoped to charts/ on purpose. A repo-wide version is not usable yet:
+// 321 upstream-owned files already differ across the port and only 14 are registered.
+const chartChanges = git(
+  "diff",
+  "--name-only",
+  upstream,
+  "HEAD",
+  "--",
+  "charts",
+)
+  .split("\n")
+  .filter(Boolean);
+for (const file of chartChanges) {
+  if (owned(file) || registered.has(file)) continue;
+  console.log(
+    `FAIL unregistered chart change: ${file} (add it to seams or forkOwned)`,
+  );
+  failed = true;
+}
+console.log(`charts: ${chartChanges.length} file(s) differ from ${upstream}`);
 console.log(failed ? "FAILED" : "PASSED");
 process.exit(failed ? 1 : 0);

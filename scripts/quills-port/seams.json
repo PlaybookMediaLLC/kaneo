@@ -14,7 +14,9 @@
 		"scripts/quills-port",
 		"docs/quills-port",
 		"tests/api-integration/helpers/run-alone.ts",
-		"tests/api-integration/helpers/run-alone.test.ts"
+		"tests/api-integration/helpers/run-alone.test.ts",
+		"charts/kaneo/values-production.yaml",
+		"scripts/security/check-helm-production-values.rb"
 	],
 	"seams": [
 		{
@@ -118,6 +120,18 @@
 			"state": "existing",
 			"lines": "the test context ref is refs/heads/staging; one assertion refuses a main snapshot",
 			"plannedChange": "none. This fork's default branch is staging, and GitHub updates the dependency graph only from snapshots of the default branch"
+		},
+		{
+			"file": "charts/kaneo/values.yaml",
+			"state": "existing",
+			"lines": "2 lines: the bundled postgresql image is pgvector/pgvector:0.8.7-pg16-bookworm instead of postgres:16-alpine",
+			"plannedChange": "none. Quills needs the vector and pg_trgm extensions with HNSW support (apps/api/src/database/quills/migrate.ts). On an upstream conflict take upstream and re-apply the image and tag"
+		},
+		{
+			"file": ".github/workflows/helm-validate.yml",
+			"state": "existing",
+			"lines": "the production-values matrix case and its check step, which render charts/kaneo/values-production.yaml and run scripts/security/check-helm-production-values.rb",
+			"plannedChange": "none. New assertions belong in the Ruby check, not in the workflow"
 		}
 	]
 }
