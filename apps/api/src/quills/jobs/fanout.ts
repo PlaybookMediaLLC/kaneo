@@ -42,6 +42,7 @@ import {
   mintUnsubscribeToken,
   unsubscribeUrl,
 } from "../portal/unsubscribe-token";
+import { githubCommentDue } from "./handlers/github-comment";
 import { statusSubscribers } from "./handlers/status-mail";
 import { supportSubscribers } from "./handlers/support-mail";
 import { enqueueQuillsJob, type QuillsQueue } from "./queue";
@@ -451,6 +452,15 @@ export async function fanOut(workspaceId: string, eventId: string) {
       return undefined;
     const queue = eventQueues[event.type];
     if (queue) await enqueueQuillsJob(db, queue, { eventId }, eventId, 3);
+    // A reply on a GitHub conversation, or its retry, becomes an issue comment.
+    if (await githubCommentDue(db, event))
+      await enqueueQuillsJob(
+        db,
+        "quills.webhook",
+        { eventId },
+        `${eventId}:github`,
+        5,
+      );
     await enqueueWorkflowRuns(db, event);
     // Private comments stay inside the workspace. A board filter applies only to events about a board.
     const { boardId, isPrivate } = await placeOf(db, event);

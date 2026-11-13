@@ -61,7 +61,9 @@ jobs:
       - name: Check browser-test dependency security regressions
         run: pnpm --dir tests/e2e test:security
 
-      - run: pnpm --dir tests/e2e exec playwright install --with-deps chromium
+      # Do not add --with-deps. The ubuntu-24.04 image has the browser libraries.
+      # The apt download fails when the runner loses DNS.
+      - run: pnpm --dir tests/e2e exec playwright install chromium
 
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
@@ -316,7 +318,9 @@ jobs:
       - run: pnpm install --frozen-lockfile --ignore-scripts --filter @kaneo/api...
       - run: npm ci --ignore-scripts
         working-directory: scripts/ui-review-bot
-      - run: scripts/ui-review-bot/node_modules/.bin/playwright install --with-deps chromium
+      # Do not add --with-deps. The ubuntu-24.04 image has the browser libraries.
+      # The apt download fails when the runner loses DNS.
+      - run: scripts/ui-review-bot/node_modules/.bin/playwright install chromium
       - name: Allocate runtime test ports
         run: bash scripts/ci/gateway-env.sh >> "$GITHUB_ENV"
       - name: Start bundled image without Redis

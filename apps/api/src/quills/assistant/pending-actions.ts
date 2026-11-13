@@ -16,12 +16,14 @@ import { assistantToolCalls } from "../../database/quills/schema/assistant-tool-
 import { defineQuillsRoute, type Database } from "../framework/define-route";
 import { webhookEvent } from "../framework/webhook-config";
 import { findConversation } from "../support/conversation-model";
+import { connectorCall, isConnectorTool, liveTool } from "./connector-tools";
 import { isWriteTool, writeTools } from "./tools";
 
 // Actions the assistant proposed. Approval runs the tool in the approver's request: the route
 // checks the approver's quills:update (and API-key scope), which is every write tool's action,
 // then calls the same support domain function as the teammate's own route and records the
-// same change event. A rejected, expired or decided action never runs.
+// same change event. A rejected, expired or decided action never runs. A connector action
+// reaches no network here: approval sets it `approved`, and the worker runs it once.
 
 const params = z.object({
   actionId: flexibleToTypeIdSchema("assistant_action"),
@@ -144,11 +146,12 @@ const approveAction = defineQuillsRoute({
   operationId: "approveQuillsAssistantAction",
   summary: "Approve and run a proposed action",
   description:
-    "Needs quills:update, the permission of every write tool. The tool runs now, in this request, through the same domain checks as the teammate's own route; its change event names the approver. A failed check (for example a missing required attribute) leaves the action proposed.",
+    "Needs quills:update, the permission of every write tool. A built-in tool runs now, in this request, through the same domain checks as the teammate's own route; its change event names the approver. A failed check (for example a missing required attribute) leaves the action proposed. A connector tool's action becomes `approved` here when its connector still offers the tool and the arguments fit its schema; a worker then calls the tool once and sets the action `executed` or `failed`.",
   action: "update",
   params,
   response: z.object({ action: actionSchema, change: changeSchema.nullable() }),
-  responseDescription: "The executed action and the change it made",
+  responseDescription:
+    "The executed action and the change it made, or an approved connector action that a worker runs next",
   errors,
   event: ({ params }, result) =>
     result.change
@@ -171,6 +174,21 @@ const approveAction = defineQuillsRoute({
   handler: async ({ db, actor, params }) => {
     const row = await proposal(db, params.actionId);
     const name = row.toolName;
+    if (isConnectorTool(name)) {
+      const call = connectorCall.safeParse(row.args);
+      if (!call.success || !(await liveTool(db, call.data, name)))
+        throw new HTTPException(409, { message: "This action cannot run" });
+      const [updated] = await db
+        .update(assistantPendingActions)
+        .set({
+          status: "approved",
+          decidedById: actor.principalId,
+          decidedAt: new Date(),
+        })
+        .where(eq(assistantPendingActions.id, row.id))
+        .returning(columns);
+      return { action: updated!, change: null };
+    }
     if (!isWriteTool(name) || !row.conversationId)
       throw new HTTPException(409, { message: "This action cannot run" });
     const tool = writeTools[name];

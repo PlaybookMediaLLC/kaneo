@@ -2,19 +2,21 @@ name: Dependency graph
 
 on:
   push:
-    branches: [main]
+    # This fork's default branch is staging. GitHub updates the dependency graph only from
+    # snapshots of the default branch; a snapshot of main is stored but answers ACCEPTED.
+    branches: [staging]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: dependency-graph-main
+  group: dependency-graph-staging
   cancel-in-progress: false
 
 jobs:
   submit:
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    if: github.ref == 'refs/heads/staging' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:

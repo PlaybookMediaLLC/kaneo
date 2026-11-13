@@ -80,6 +80,14 @@ const readColors = (value: unknown) =>
     }),
   );
 
+/** Receipt fields: what this area writes. Logo and favicon keys belong to the files routes. */
+export const brandingReceipt = [
+  "brandingConfig",
+  "customCss",
+  "headerDisplayMode",
+  "headerDisplayName",
+] as const;
+
 export default settingsArea({
   name: "branding",
   title: "Branding",
@@ -118,6 +126,7 @@ export default settingsArea({
     headerDisplayMode: z.enum(displayModes).optional(),
     headerDisplayName: z.string().trim().max(100).nullable().optional(),
   }),
+  receipt: brandingReceipt,
   apply: (_row, patch) => ({
     brandingConfig: patch.theme && JSON.stringify(patch.theme),
     customCss: patch.customCss,

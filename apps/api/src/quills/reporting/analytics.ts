@@ -14,6 +14,8 @@ import {
 import {
   apiRouter,
   nullableResponseTimestamp,
+  pagingNumber,
+  responseTimestamp,
   z,
   type BaseVariables,
 } from "../../openapi";
@@ -53,9 +55,12 @@ const analytics = defineQuillsRoute({
   operationId: "getQuillsAnalyticsData",
   summary: "Get feedback analytics for a period",
   description:
-    "Counts only what the caller can see: posts on boards the caller can open, no deleted posts or comments and no test customers. Deltas compare with the period before.",
+    "Counts only what the caller can see: posts on boards the caller can open, no deleted posts or comments and no test customers. Deltas compare with the period before. The changelog lists the changelogLimit most viewed published entries.",
   action: "read",
-  query: periodQuery,
+  query: periodQuery.extend({
+    /** The number of most viewed changelog entries. */
+    changelogLimit: pagingNumber(1, 20, 5),
+  }),
   response: z.object({
     summary: z.object({
       posts: total,
@@ -100,7 +105,12 @@ const analytics = defineQuillsRoute({
       publishedInPeriod: z.number(),
       totalViews: z.number(),
       topEntries: z.array(
-        z.object({ id: z.string(), title: z.string(), viewCount: z.number() }),
+        z.object({
+          id: z.string(),
+          title: z.string(),
+          viewCount: z.number(),
+          publishedAt: responseTimestamp,
+        }),
       ),
     }),
     computedAt: nullableResponseTimestamp,
@@ -268,11 +278,12 @@ const analytics = defineQuillsRoute({
         id: changelogEntries.id,
         title: changelogEntries.title,
         viewCount: changelogEntries.viewCount,
+        publishedAt: changelogEntries.publishedAt,
       })
       .from(changelogEntries)
       .where(live)
       .orderBy(desc(changelogEntries.viewCount), changelogEntries.id)
-      .limit(5);
+      .limit(query.changelogLimit);
 
     return {
       summary: {
@@ -285,7 +296,14 @@ const analytics = defineQuillsRoute({
       statusDistribution,
       boardBreakdown,
       topPosts: top.map((row, i) => ({ rank: i + 1, ...row })),
-      changelog: { ...changelog!, topEntries },
+      changelog: {
+        ...changelog!,
+        // `live` keeps only published entries.
+        topEntries: topEntries.map((entry) => ({
+          ...entry,
+          publishedAt: entry.publishedAt!,
+        })),
+      },
       computedAt: now,
     };
   },

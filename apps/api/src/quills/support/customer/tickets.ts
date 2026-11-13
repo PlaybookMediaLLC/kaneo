@@ -74,7 +74,7 @@ const watchStatus = z.object({
 });
 
 /** The caller's live customer tickets. */
-const mine = (me: PrincipalId) =>
+export const mine = (me: PrincipalId) =>
   and(
     eq(tickets.requesterPrincipalId, me),
     eq(tickets.type, "customer"),

@@ -28,6 +28,15 @@ export const resolveFlags = (stored: Record<string, unknown>) => ({
   statusPage: bool(stored.statusPage, defaults.statusPage),
 });
 
+/** Receipt fields: the switchable modules. Feedback is always on. */
+export const labsReceipt = [
+  "featureFlags.changelog",
+  "featureFlags.helpCenter",
+  "featureFlags.supportInbox",
+  "featureFlags.supportTickets",
+  "featureFlags.statusPage",
+] as const;
+
 export default settingsArea({
   name: "labs",
   title: "FeatureFlag",
@@ -35,11 +44,19 @@ export default settingsArea({
   response: flags.extend({ feedback: z.boolean() }),
   read: (row) => resolveFlags(parseJson(row.featureFlags)),
   patch: flags.partial(),
-  // Unknown and retired flags are dropped on write.
-  apply: (row, patch) => ({
-    featureFlags: JSON.stringify({
-      ...resolveFlags(parseJson(row.featureFlags)),
-      ...defined(patch),
-    }),
-  }),
+  receipt: labsReceipt,
+  // Unknown and retired flags are dropped on write. A flag that was never set keeps no stored
+  // value (its default applies), so a receipt holds only the flags that the write changed.
+  apply: (row, patch) => {
+    const stored = parseJson(row.featureFlags);
+    const kept = Object.keys(defaults).flatMap((key) =>
+      typeof stored[key] === "boolean" ? [[key, stored[key]]] : [],
+    );
+    return {
+      featureFlags: JSON.stringify({
+        ...Object.fromEntries(kept),
+        ...defined(patch),
+      }),
+    };
+  },
 });

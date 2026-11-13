@@ -12,6 +12,7 @@ contain at least one field.
 
 ```
 Tables and owning schema:      quills: principal, customer_identity, companies,
+                               conversations and tickets (company activity counts),
                                company_attribute_definitions, user_attribute_definitions,
                                user_tags, user_tag_assignments, segments, user_segments,
                                teams, audit_log, settings, kv_store; the lead merge also
@@ -76,6 +77,7 @@ Merged: 7. `listQuillsUserTags`, `listQuillsUserTagsForPrincipal`, `assignQuills
 | `updateQuillsCompany` | `PUT /companies/{companyId}` | update | same | `company.updated` |
 | `deleteQuillsCompany` | `DELETE /companies/{companyId}` | delete | `companies` (people keep a null company) | `company.deleted` |
 | `listQuillsCompanyMembers` | `GET /companies/{companyId}/members` | read | `principal`, `customer_identity` | - |
+| `getQuillsCompanyActivity` | `GET /companies/{companyId}/activity` (conversation and ticket counts) | read | `companies`, `conversations`, `principal`, `tickets`, `ticket_conversations` | - |
 | `getQuillsUserCompany` | `GET /users/{principalId}/company` | read | `principal`, `companies` | - |
 | `setQuillsUserCompany` | `PUT /users/{principalId}/company` (`companyId`, or `name` to find or create) | update | `principal`, `companies` | `user.company_set` |
 | `removeQuillsUserCompany` | `DELETE /users/{principalId}/company` | update | `principal` | `user.company_removed` |
@@ -88,7 +90,11 @@ Merged: 22. `listQuillsCompaniesIndex` (v1), `listQuillsCompanies`, `listQuillsC
 `countQuillsCompanies`; `getQuillsCompanies` (v1), `getQuillsCompany`; `createQuillsCompany`;
 `updateQuillsCompany`; `deleteQuillsCompany`; `listQuillsCompanyMembers`;
 `getQuillsCompanyForPrincipal`; `attachQuillsPrincipalToCompany`, `qualifyQuillsCompany`;
-`detachQuillsPrincipalFromCompany`; the four user and four company attribute rows.
+`detachQuillsPrincipalFromCompany`; the four user and four company attribute rows;
+`getQuillsCompanyActivity` (RFC 0001, lane M1: `companies.ts#getCompanyActivityFn`).
+Company activity counts the conversations whose visitor is a person of the company and the live
+tickets of the company. Test customers' conversations and tickets are left out, as in the source.
+Every teammate with `quills:read` sees every conversation (decision D2), so no other filter applies.
 Attribute definitions take `manage_settings` (section 3); the source used `COMPANY_MANAGE` for companies.
 
 ## Segments
@@ -143,6 +149,7 @@ Merged: 11. `listQuillsPrincipals` (v1), `listQuillsAssignableTeammates`; `getQu
 | `mintQuillsWidgetInstallCode` | `POST /settings/widget/install-code` | manage_settings | `widget_secret`, `kv_store` (hashed code) | `settings.widget_install_code_minted` |
 | `getQuillsDeveloperSettings`, `updateQuillsDeveloperSettings` | `GET`, `PUT /settings/developer` | manage_settings | `developer_config` | `settings.developer_updated` |
 | `getQuillsFeatureFlagSettings`, `updateQuillsFeatureFlagSettings` | `GET`, `PUT /settings/labs` | manage_settings | `feature_flags` | `settings.labs_updated` |
+| `createQuillsSettingsReceiptsUndo` | `POST /settings/receipts/{receiptId}/undo` | manage_settings | the receipt's keys; `audit_log`, `import_runs` (read) | `settings.undone` |
 
 Merged: 17. `listQuillsSettings` (v1); `fetchQuillsPortalConfig`, `updateQuillsPortalConfig`;
 `updateQuillsTheme`, `updateQuillsCustomCss`, `updateQuillsHeaderDisplayMode`,
@@ -152,14 +159,63 @@ Merged: 17. `listQuillsSettings` (v1); `fetchQuillsPortalConfig`, `updateQuillsP
 `getQuillsSettings` and `updateQuillsSettings` (v1 areas `portal` and `branding` only).
 The workspace name and slug are Kaneo's and are never written.
 
+### Receipts and undo (decision D11, RFC 0001 lane M1)
+
+Merged: `routes/api/v1/settings/receipts.$receiptId.undo.ts#POST`.
+
+- Each `PUT /settings/{area}` keeps a receipt in the metadata of its own audit row (`metadata.receipt`:
+  `area`, `before`, `after`). The outbox event, its jobs and webhooks never hold it.
+- A receipt holds only the area's allowlisted keys that the write changed (`receipt-fields.ts`). A
+  key is a text column, or a top-level key of a JSON column, so undo can remove a key that the write
+  added.
+
+  | Area | Keys |
+  |---|---|
+  | portal | `portalConfig.enabled`, `.features`, `.openSignup`, `.support`, `.nav` |
+  | branding | `brandingConfig`, `customCss`, `headerDisplayMode`, `headerDisplayName` |
+  | widget | `widgetConfig.enabled`, `.defaultBoard`, `.position`, `.launcherGreeting`, `.launcherLabel`, `.visitorAnalytics`, `.visitorDeviceTracking`, `.tabs`, `.home` |
+  | developer | `developerConfig.mcpEnabled`, `.mcpPortalAccessEnabled`, `.oauthDynamicClientRegistrationEnabled`, `.personalApiKeysEnabled` |
+  | labs | `featureFlags.changelog`, `.helpCenter`, `.supportInbox`, `.supportTickets`, `.statusPage` |
+
+  Never in a receipt: the widget secret, install codes, file and object keys (logo, favicon, hero
+  image), portal access data, moderation defaults, the Kaneo name and slug, or any token.
+- The update response returns `receiptId`, the audit row ID of its receipt (minted by the handler and
+  passed to `recordQuillsChange`), or null when no allowlisted key changed. It is also null when the
+  audit row cannot hold the receipt: over 128 KiB (custom CSS is limited in characters, a receipt in
+  bytes), or a value that jsonb refuses (a NUL character or a lone surrogate, which a JSON text column
+  holds). The change still saves; only its undo is not available.
+- A receipt row takes the time of its insert (`clock_timestamp()`), under the settings row lock, so
+  "later" follows the lock order and not the start of the transaction.
+- A labs write stores only the flags that are set, not the defaults, so its receipt holds only the
+  flags it changed.
+- Undo locks the settings row, as every settings write does. It answers 404 for an unknown or
+  foreign ID, or a row that is no settings receipt. It answers 409 when:
+  - a `settings.undone` row already names the receipt;
+  - a later receipt or undo of the same area touched one of its keys (even after that one was undone);
+  - a key no longer holds the receipt's `after` value (for example website branding changed the
+    theme, which writes no receipt);
+  - the receipt came with a workspace import: its row names another workspace (`target_id`), or a
+    local archive import (`import_runs`, source `api`, never in an archive) is not older than it.
+- Undo restores the `before` values and records a new `settings.undone` row with the reversed
+  receipt. It never edits the receipt row; the runtime role cannot update `audit_log`.
+- Website branding (lane B1) keeps its own undo state in `settings.metadata.brandingLookup` and
+  writes no receipt, so a branding accept is never undone twice. A settings receipt that a later
+  branding accept overwrote is stale (409).
+
+| Item | Source | Here | Reason |
+|---|---|---|---|
+| Receipt content | every changed leaf of the area, with storage effects | the allowlisted keys of the area's own write | an allowlist keeps secrets out (AGENTS.md rule 5) |
+| Receipt ID | the apply response | the update response (`receiptId`) | the same |
+| Stale check | current value equals `after` | that, and no later receipt or undo of the area on the same key | a later write and its undo cannot hide a change |
+| Imported receipt | not handled | 409 | an archive copies audit rows unchanged |
+| ETag, If-Match, dry run | yes | no | as for the settings routes |
+
 ## Not ported, or ported in part
 
 | Source capability | Status | Reason |
 |---|---|---|
 | `setQuillsTeamMembers` | not ported | Reuse Kaneo: the roster of a bound team is Kaneo's. |
-| `deleteQuillsTestConversations` | deferred to P5 | It deletes conversations, which the support phase owns. |
-| `getQuillsCompanyActivity` | deferred to P5 | It aggregates conversations and tickets. |
-| `createQuillsSettingsReceiptsUndo` | not ported | Needs the settings receipt model (before and after values per change). |
+| `deleteQuillsTestConversations` | moved | Built in RFC 0001 lane M1 as `DELETE /test-conversations` in `support/test-conversations.ts`; see `support/CONVERSATIONS.md`. |
 | `getQuillsSettings`, `updateQuillsSettings` | part | Areas `office_hours`, `messenger`, `modules`, `changelog` belong to later phases. No ETag, If-Match or dry run. |
 | `getQuillsUser` | part | No `engagedPosts` list. |
 | `listQuillsUsers` | part | No count, email-domain or custom-attribute filters; no last-seen sort (sessions are Kaneo's). |

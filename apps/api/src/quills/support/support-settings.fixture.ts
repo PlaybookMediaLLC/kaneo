@@ -22,3 +22,4 @@ export const updateQuillsSpamFilterConfig = body({
   trustedSenders: ["Acme.com", "not an address"],
   aiClassifier: false,
 });
+export const getQuillsEmailChannelStatus = empty;

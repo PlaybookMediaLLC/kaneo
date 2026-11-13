@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 import { eq, isNotNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -11,6 +12,9 @@ import {
 } from "../../database/quills/client";
 import { principal, user as customer } from "../../database/quills/schema/auth";
 import { boards } from "../../database/quills/schema/boards";
+import { postExternalLinks } from "../../database/quills/schema/external-links";
+import { boardProjects } from "../../database/quills/schema/platform-links";
+import { posts } from "../../database/quills/schema/posts";
 import * as kaneo from "../../database/schema";
 import {
   apiRouter,
@@ -36,6 +40,7 @@ import {
 import {
   buildQuillsRoute,
   defineQuillsRoute,
+  htmlHeaders,
   type AnyQuillsRoute,
 } from "./define-route";
 import { registry } from "./registry";
@@ -90,6 +95,55 @@ const noPermission: AnyQuillsRoute = {
     return { changed: true };
   },
 };
+// Broken on purpose: an app route mounted by hand, with no app gate and no permission check.
+const brokenAppNoGate: AnyQuillsRoute = {
+  ...noPermission,
+  audience: "app",
+  capability: "write:feedback",
+  path: "/broken/no-gate",
+  operationId: "brokenAppNoGate",
+  summary: "Broken app route without the app gate",
+};
+// Broken on purpose: an app route that links any post, also one on a board the caller cannot see.
+const brokenAppHiddenTarget = defineQuillsRoute({
+  audience: "app",
+  capability: "write:feedback",
+  method: "put",
+  path: "/broken/links",
+  operationId: "brokenAppHiddenTarget",
+  summary: "Broken app route without the board visibility check",
+  action: "update",
+  body: z.object({ postId: flexibleToTypeIdSchema("post") }),
+  response: changed,
+  responseDescription: "Changed",
+  errors: { 404: "Post not found" },
+  event: ({ body }) => ({
+    type: "app.post_linked",
+    entityType: "post",
+    entityId: body.postId,
+  }),
+  handler: async ({ db, body }) => {
+    await db.insert(postExternalLinks).values({
+      postId: body.postId,
+      integrationType: "broken",
+      externalId: crypto.randomUUID(),
+    });
+    return { changed: true };
+  },
+});
+// Broken on purpose: an app read that hides everything, so the leak checks pass for no reason.
+const brokenAppEmptyRead = defineQuillsRoute({
+  audience: "app",
+  capability: "read:feedback",
+  method: "get",
+  path: "/broken/empty",
+  operationId: "brokenAppEmptyRead",
+  summary: "Broken app read that returns nothing",
+  action: "read",
+  response: z.object({ items: z.array(z.string()) }),
+  responseDescription: "Nothing",
+  handler: async () => ({ items: [] }),
+});
 // Broken on purpose: complete rows behind a loose response schema.
 const rawRow = defineQuillsRoute({
   method: "get",
@@ -362,6 +416,38 @@ const teammateMeta = defineQuillsRoute({
   responseDescription: "Metadata",
   handler: async (input) => ({ present: "request" in input }),
 });
+// Event probes: the handler returns a key that the response schema leaves out; the event reads it.
+const eventRaw = { changed: true, receipt: "before:after" };
+const eventFromRaw =
+  (entityId: string) => (_input: unknown, _result: unknown, raw: unknown) => ({
+    type: "board.project_linked" as const,
+    entityType: "board" as const,
+    entityId,
+    payload: { receipt: (raw as typeof eventRaw).receipt },
+  });
+const teammateEventRaw = defineQuillsRoute({
+  method: "put",
+  path: "/probe/event-raw",
+  operationId: "probeTeammateEventRaw",
+  summary: "Records a key that the response leaves out",
+  action: "update",
+  response: changed,
+  responseDescription: "Changed",
+  event: eventFromRaw("probe-event-raw-teammate"),
+  handler: async () => eventRaw,
+});
+const publicEventRaw = defineQuillsRoute({
+  audience: "public",
+  method: "post",
+  path: "/probe/event-raw",
+  operationId: "probePublicEventRaw",
+  summary: "Records a key that the response leaves out",
+  action: "create",
+  response: changed,
+  responseDescription: "Changed",
+  event: eventFromRaw("probe-event-raw-public"),
+  handler: async () => eventRaw,
+});
 
 // Broken on purpose: a route declared raw, mounted by hand, that answers JSON with a private value.
 const rawAsJson: AnyQuillsRoute = {
@@ -484,6 +570,7 @@ const anyVisitor = defineQuillsRoute({
 const app = contractApp(
   apiRouter<BaseVariables & { workspaceId: string }>()
     .openapi(...teammateMeta)
+    .openapi(...teammateEventRaw)
     .openapi(
       createRoute({
         method: "put",
@@ -503,7 +590,25 @@ const app = contractApp(
     .openapi(...rawRow)
     .openapi(...noEvent)
     .openapi(...unboundedQuery)
-    .openapi(...deletedBoard),
+    .openapi(...deletedBoard)
+    .openapi(
+      createRoute({
+        method: "put",
+        path: "/{workspaceId}/apps/broken/no-gate",
+        middleware: [workspaceAccess.fromParam("workspaceId")],
+        request: { params: z.object({ workspaceId: z.string() }) },
+        responses: { 200: jsonResponse("Changed", changed) },
+      }),
+      async (c) => {
+        await withQuillsWorkspace(
+          { workspaceId: c.get("workspaceId"), userId: c.get("userId") },
+          insertBoard,
+        );
+        return c.json({ changed: true }, 200);
+      },
+    )
+    .openapi(...brokenAppHiddenTarget)
+    .openapi(...brokenAppEmptyRead),
   apiRouter()
     .openapi(...publicLeak)
     .openapi(...noOwnership)
@@ -513,6 +618,7 @@ const app = contractApp(
     .openapi(...publicDeletedBoard)
     .openapi(...unverified)
     .openapi(...publicMeta)
+    .openapi(...publicEventRaw)
     .openapi(...signedMeta)
     .openapi(...rawLeak)
     .openapi(...textProbe)
@@ -570,6 +676,7 @@ describe.skipIf(!url)("Quills route contract self-test", () => {
     // The others are the broken raw-response routes and the broken internal route below.
     expect(unregisteredRoutes(app)).toEqual([
       "PUT /quills/:workspaceId/broken/no-permission",
+      "PUT /quills/:workspaceId/apps/broken/no-gate",
       "GET /quills-public/:workspace/broken/feed.xml",
       "GET /quills-public/:workspace/broken/feed.json",
       "POST /quills-public/internal/broken/wake",
@@ -577,6 +684,89 @@ describe.skipIf(!url)("Quills route contract self-test", () => {
     const found = await checks(noPermission);
     for (const check of ["registered", "denied-action", "api-key-scope"])
       expect(found).toContainEqual(expect.stringMatching(`^${check}: `));
+  });
+  it("reports a teammate route that serves a key that an app holds", async () => {
+    expect(await checks(noPermission)).toContainEqual(
+      expect.stringMatching(/^app-key-confined: got 200/),
+    );
+  });
+  it("reports a session-only route that serves an API key", async () => {
+    expect(await checks({ ...noPermission, sessionOnly: true })).toContainEqual(
+      expect.stringMatching(/^session-required: got 200/),
+    );
+  });
+  it("reports an app route without the app gate", async () => {
+    const found = await checks(brokenAppNoGate);
+    for (const check of [
+      "registered",
+      "app-session",
+      "app-unscoped-key",
+      "app-unbound",
+      "app-disabled",
+      "app-other-workspace",
+      "app-capability",
+      "app-actor",
+    ])
+      expect(found).toContainEqual(expect.stringMatching(`^${check}: `));
+    // The viewer role cannot write, but the hand-made route lets it.
+    expect(found).toContainEqual(
+      expect.stringMatching(/^app-member-key: viewer role: got 200/),
+    );
+  });
+  it("reports an app read that hides the rows its fixture marks visible", async () => {
+    expect(
+      await checks(
+        declared("brokenAppEmptyRead"),
+        fixture({
+          seed: async () => ({}),
+          valid: () => ({}),
+          visible: () => ["must-be-listed"],
+        }),
+      ),
+    ).toContain("app-actor: the response does not contain must-be-listed");
+  });
+  it("reports an app route that links a post on a board the caller cannot see", async () => {
+    const found = await checks(
+      declared("brokenAppHiddenTarget"),
+      fixture({
+        seed: async (env) => {
+          const projectId = env.id("project");
+          await env.db.insert(kaneo.projectTable).values({
+            id: projectId,
+            workspaceId: env.a,
+            name: projectId,
+            slug: projectId,
+          });
+          const post = async (workspaceId: string) =>
+            env.scoped(workspaceId, async (db, actor) => {
+              const boardId = await insertBoard(db);
+              if (workspaceId === env.a)
+                await db.insert(boardProjects).values({ boardId, projectId });
+              const [row] = await db
+                .insert(posts)
+                .values({
+                  title: "Hidden",
+                  content: "Hidden",
+                  boardId,
+                  principalId: actor.principalId,
+                })
+                .returning({ id: posts.id });
+              return row!.id;
+            });
+          return { a: await post(env.a), b: await post(env.b) };
+        },
+        valid: (ids) => ({ body: { postId: ids.a } }),
+        foreign: (ids) => ({ postId: ids.b }),
+      }),
+    );
+    expect(found).toContainEqual(
+      expect.stringMatching(/^private-project: expected 403 or 404, got 200/),
+    );
+    expect(found).toContain("private-project: rows changed");
+    // With the app key, workspace B's post reaches the insert: the composite foreign key fails it.
+    expect(found).toContainEqual(
+      expect.stringMatching(/^foreign-ids: postId: got 500/),
+    );
   });
   it("reports complete rows behind a loose response schema", async () => {
     const seeded = fixture({
@@ -773,6 +963,31 @@ describe.skipIf(!url)("Quills route contract self-test", () => {
         "cross-workspace: the fixture declares no workspace B requests",
       ]),
     );
+  });
+  it("gives an event the handler's raw result, and the caller only the parsed response", async () => {
+    const env = contractEnv();
+    for (const [method, path, headers, target] of [
+      [
+        "PUT",
+        `/quills/${env.a}/probe/event-raw`,
+        { "x-test-user": env.owner },
+        "probe-event-raw-teammate",
+      ],
+      [
+        "POST",
+        `/quills-public/${env.a}/probe/event-raw`,
+        {},
+        "probe-event-raw-public",
+      ],
+    ] as const) {
+      const res = await app.request(path, { method, headers });
+      expect(await res.json()).toEqual({ changed: true });
+      const { rows } = await pool.query(
+        "SELECT metadata->>'receipt' AS receipt FROM quills.audit_log WHERE workspace_id=$1 AND target_id=$2",
+        [env.a, target],
+      );
+      expect(rows).toEqual([{ receipt: "before:after" }]);
+    }
   });
   it("gives public and signed handlers request metadata, and teammates none", async () => {
     const env = contractEnv();
@@ -997,6 +1212,70 @@ describe("raw, textBody and prepare declaration rules", () => {
       }),
     ).toThrow(/raw response/);
   });
+  it("takes an HTML response only on a signed read, and RSS or XML never there", () => {
+    const signed = {
+      ...base,
+      audience: "signed" as const,
+      verifier: {
+        name: "rules",
+        locate: () => ({ scope: { workspace: "rules" }, deliveryId: "rules" }),
+      },
+      replay: "",
+      event: { none: "Rules" },
+      response: z.string(),
+      handler: async () => "",
+    };
+    expect(() =>
+      buildQuillsRoute({ ...signed, raw: "text/html" }),
+    ).not.toThrow();
+    expect(() =>
+      buildQuillsRoute({ ...signed, raw: "application/xml" }),
+    ).toThrow(/raw response/);
+    expect(() =>
+      buildQuillsRoute({
+        ...signed,
+        raw: "text/html",
+        method: "post",
+      }),
+    ).toThrow(/raw response/);
+    for (const audience of ["public", "portal", "widget"] as const)
+      expect(() =>
+        buildQuillsRoute({
+          ...base,
+          audience,
+          raw: "text/html",
+          response: z.string(),
+          handler: async () => "",
+        }),
+      ).toThrow(/raw response/);
+  });
+  it("lets an HTML page run only the scripts that its route declares", () => {
+    const policy = (scripts?: string[]) =>
+      htmlHeaders(scripts)["content-security-policy"];
+    const hash = (script: string) =>
+      `'sha256-${createHash("sha256").update(script).digest("base64")}'`;
+    expect(policy(["go()", "stop()"])).toContain(
+      `script-src ${hash("go()")} ${hash("stop()")}; connect-src 'self';`,
+    );
+    expect(policy()).toContain("script-src 'none';");
+    expect(htmlHeaders()).toMatchObject({
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+      "referrer-policy": "no-referrer",
+      "x-content-type-options": "nosniff",
+    });
+    expect(policy()).toContain("frame-ancestors 'none'");
+    expect(() =>
+      buildQuillsRoute({
+        ...base,
+        audience: "public",
+        raw: "application/xml",
+        scripts: ["go()"],
+        response: z.string(),
+        handler: async () => "",
+      }),
+    ).toThrow(/scripts are for an HTML page/);
+  });
   it("takes textBody only on a public route with a body", () => {
     const route = {
       ...base,
@@ -1040,6 +1319,37 @@ describe("raw, textBody and prepare declaration rules", () => {
     expect(() => buildQuillsRoute({ ...route, audience: "public" })).toThrow(
       /prepare and call/,
     );
+  });
+  it("takes a capability on an app route only, revert only with call, sessionOnly only on a teammate route", () => {
+    const route = {
+      ...base,
+      response: z.object({}),
+      handler: async () => ({}),
+    };
+    expect(() =>
+      buildQuillsRoute({
+        ...route,
+        audience: "app",
+        capability: "read:feedback",
+      }),
+    ).not.toThrow();
+    expect(() => buildQuillsRoute({ ...route, audience: "app" })).toThrow(
+      /names its capability/,
+    );
+    expect(() =>
+      buildQuillsRoute({ ...route, capability: "read:feedback" }),
+    ).toThrow(/names its capability/);
+    expect(() =>
+      buildQuillsRoute({ ...route, revert: async () => {} }),
+    ).toThrow(/revert/);
+    expect(() =>
+      buildQuillsRoute({
+        ...route,
+        audience: "app",
+        capability: "read:feedback",
+        sessionOnly: true,
+      }),
+    ).toThrow(/sessionOnly/);
   });
 });
 

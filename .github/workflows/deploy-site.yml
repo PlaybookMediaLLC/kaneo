@@ -1,17 +1,10 @@
 name: Deploy Site to GitHub Pages
 
+# This fork does not publish the site. GitHub Pages is not configured here, so
+# every push to main failed on `Setup Pages`. The site also hardcodes
+# https://kaneo.app and sets no basePath, so a project page would serve broken
+# assets. Run this by hand only after Pages has a domain this fork controls.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "apps/site/**"
-      - "apps/docs/**"
-      - "i18n/**"
-      - "packages/**"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-      - ".github/workflows/deploy-site.yml"
   workflow_dispatch:
 
 permissions:

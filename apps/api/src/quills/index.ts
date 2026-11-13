@@ -1,3 +1,5 @@
+import apps from "./apps/index";
+import agentChannels from "./agent-channels";
 import automation from "./automation/index";
 import assistant from "./assistant/index";
 import content from "./content/index";
@@ -11,13 +13,21 @@ import links from "./links";
 import portalAccessSettings from "./portal/access-settings";
 import operations from "./operations/index";
 import portalInvites from "./portal/invites";
+import { profileTeamContext } from "./portal/public-profile";
 import quillsSettings from "./settings/index";
+import websiteBranding from "./settings/website-branding";
 import reporting from "./reporting/index";
 import sharedTeams from "./teams";
 import taxonomy from "./feedback/taxonomy";
 import supportTickets from "./support/tickets-router";
 import supportConversations from "./support/conversations-router";
+import supportAssistant from "./support/conversation-assistant";
+import workspaceSearch from "./assistant/search";
 import supportTyping from "./support/customer/typing";
+import supportPresence from "./support/presence";
+import supportLinkPreview from "./support/link-preview";
+import supportReadBatch from "./support/read-batch";
+import testConversations from "./support/test-conversations";
 import { brandText } from "@kaneo/branding";
 import { apiRouter, z, type BaseVariables } from "../openapi";
 import { settings } from "../database/quills/schema/auth";
@@ -68,6 +78,7 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", sharedTeams)
   .route("/", directory)
   .route("/", quillsSettings)
+  .route("/", websiteBranding)
   .route("/", feedback)
   .route("/", delivery)
   .route("/", taxonomy)
@@ -77,9 +88,18 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", operations)
   .route("/", supportTickets)
   .route("/", supportConversations)
+  .route("/", supportAssistant)
+  .route("/", workspaceSearch)
   .route("/", supportTyping)
+  .route("/", supportPresence)
+  .route("/", supportLinkPreview)
+  .route("/", supportReadBatch)
+  .route("/", testConversations)
   .route("/", portalInvites)
+  .route("/", profileTeamContext)
   .route("/", reporting)
   .route("/", automation)
   .route("/", assistant)
+  .route("/", apps)
+  .route("/", agentChannels)
   .openapi(...context);

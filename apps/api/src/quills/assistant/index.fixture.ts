@@ -16,3 +16,4 @@ export * from "./suggestions.fixture";
 export * from "./support-ai.fixture";
 export * from "./web-sources.fixture";
 export * from "../widget/kb-ask.fixture";
+export * from "./search.fixture";

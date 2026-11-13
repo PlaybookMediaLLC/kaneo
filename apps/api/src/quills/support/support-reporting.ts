@@ -1,7 +1,9 @@
-import { and, count, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, count, eq, gte, inArray, lt, sql, type SQL } from "drizzle-orm";
 import { apiRouter, z, type BaseVariables } from "../../openapi";
+import { conversations } from "../../database/quills/schema/conversation";
 import { slaEvents, slaPolicies } from "../../database/quills/schema/sla";
 import { defineQuillsRoute } from "../framework/define-route";
+import { notTestConversation } from "./conversation-model";
 
 const CLOCKS = [
   ["firstResponse", "first_response"],
@@ -25,6 +27,17 @@ const realTicket = sql`not exists (
       join quills."conversations" tc on tc.id = tl.conversation_id and tc.workspace_id = tl.workspace_id
       join quills."principal" tp on tp.id = tc.visitor_principal_id and tp.workspace_id = tc.workspace_id
       where tl.ticket_id = tt.id and tl.workspace_id = tt.workspace_id and tp.test_owner_principal_id is not null)))`;
+
+const dates = {
+  from: z.iso.datetime({ offset: true }).max(64),
+  to: z.iso.datetime({ offset: true }).max(64),
+};
+const withinRange = (q: { from: string; to: string }) => {
+  const span = Date.parse(q.to) - Date.parse(q.from);
+  return span > 0 && span <= 400 * DAY;
+};
+const rangeMessage = "`to` must be after `from` and at most 400 days later";
+const BUCKETS = 100;
 
 const attainment = z.object({
   met: z.number(),
@@ -62,15 +75,7 @@ const reporting = defineQuillsRoute({
   description:
     "Counts SLA events in [from, to), at most 400 days. Test customers' conversations and tickets are left out. The heatmap uses UTC days (ISO 1 = Monday) and hours.",
   action: "read",
-  query: z
-    .object({
-      from: z.iso.datetime({ offset: true }).max(64),
-      to: z.iso.datetime({ offset: true }).max(64),
-    })
-    .refine((q) => {
-      const span = Date.parse(q.to) - Date.parse(q.from);
-      return span > 0 && span <= 400 * DAY;
-    }, "`to` must be after `from` and at most 400 days later"),
+  query: z.object(dates).refine(withinRange, rangeMessage),
   response: z.object({
     sla: clocks(attainment),
     slaByPolicy: z.array(
@@ -216,7 +221,71 @@ const reporting = defineQuillsRoute({
   },
 });
 
+const breakdown = defineQuillsRoute({
+  method: "get",
+  path: "/support/reporting/attribute-breakdown",
+  operationId: "attributeQuillsBreakdown",
+  summary: "Count conversations per value of one attribute",
+  description:
+    "Conversations created in [from, to), at most 400 days, without test conversations. A multi-select value counts the conversation once for each option. unset counts conversations with no value. values holds the 100 most frequent values, most frequent first; truncated is true when more exist.",
+  action: "read",
+  query: z
+    .object({
+      ...dates,
+      key: z
+        .string()
+        .min(1)
+        .max(64)
+        .regex(/^[a-z0-9_.-]+$/),
+    })
+    .refine(withinRange, rangeMessage),
+  response: z.object({
+    unset: z.number(),
+    values: z.array(z.object({ value: z.string(), count: z.number() })),
+    truncated: z.boolean(),
+  }),
+  responseDescription: "Conversation counts per attribute value",
+  handler: async ({ db, query }) => {
+    // The filter runs before the counts: this workspace (RLS), the window, no test conversations.
+    const scope = and(
+      gte(conversations.createdAt, new Date(query.from)),
+      lt(conversations.createdAt, new Date(query.to)),
+      notTestConversation,
+    );
+    const raw = sql`(${conversations.customAttributes} -> ${query.key})`;
+    // A teammate or AI value is an envelope { v, src, at }; an imported value can be bare.
+    const value = sql`(case when jsonb_typeof(${raw}) = 'object' and ${raw} ? 'v' then ${raw} -> 'v' else ${raw} end)`;
+    // The values a conversation counts for: each member of an array, else the value itself.
+    // null and "" count for none; a conversation with no counted value is unset.
+    const members = (v: SQL) =>
+      sql`jsonb_array_elements(case when jsonb_typeof(${v}) = 'array' then ${v} else jsonb_build_array(${v}) end) member`;
+    const counted = sql`jsonb_typeof(member) <> 'null' and member <> '""'::jsonb`;
+    const [unset] = await db
+      .select({ n: count() })
+      .from(conversations)
+      .where(
+        and(
+          scope,
+          sql`not exists (select 1 from ${members(value)} where ${counted})`,
+        ),
+      );
+    const { rows } = await db.execute<{ value: string; count: number }>(sql`
+      select member #>> '{}' as value, count(distinct picked.id)::int as count
+      from (select ${conversations.id} as id, ${value} as v from ${conversations} where ${scope}) picked,
+        ${members(sql`picked.v`)}
+      where ${counted}
+      group by 1
+      order by 2 desc, 1
+      limit ${BUCKETS + 1}`);
+    return {
+      unset: unset?.n ?? 0,
+      values: rows.slice(0, BUCKETS),
+      truncated: rows.length > BUCKETS,
+    };
+  },
+});
+
 /** Teammate support reporting. */
-export default apiRouter<BaseVariables & { workspaceId: string }>().openapi(
-  ...reporting,
-);
+export default apiRouter<BaseVariables & { workspaceId: string }>()
+  .openapi(...reporting)
+  .openapi(...breakdown);

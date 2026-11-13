@@ -110,3 +110,6 @@ export const receiveQuillsIntegrationWebhook = fixture({
     })),
   hidden: ({ a, b }: { a: Synced; b: Synced }) => [a.secret, b.secret],
 });
+
+export { receiveQuillsAppHook } from "./slack-hook.fixture";
+export { receiveQuillsIdentify } from "./identify.fixture";

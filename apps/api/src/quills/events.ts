@@ -1,9 +1,33 @@
-import { createId } from "@kaneo/ids";
+import { createId, isValidTypeId, type AuditLogId } from "@kaneo/ids";
+import { sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Database, QuillsActor } from "../database/quills/client";
 import { auditLog } from "../database/quills/schema/audit-log";
 import { events } from "../database/quills/schema/events";
 import { enqueueQuillsEvent } from "./jobs/queue";
+
+/**
+ * The largest serialized receipt: the largest allowlisted settings area is custom CSS (up to 50 KB)
+ * before and after, with room for the theme and other small fields.
+ */
+export const RECEIPT_MAX_BYTES = 128 * 1024;
+/**
+ * A settings receipt (decision D11): the before and after values of one settings write. The caller
+ * allowlists the fields; a secret, a token or a credential never enters a receipt. It goes only into
+ * the audit row's metadata (`metadata.receipt`), never into the outbox event, its jobs or a webhook.
+ * Settings undo parses `metadata.receipt` with this schema.
+ */
+export const receiptSchema = z
+  .object({
+    area: z.string().min(1).max(64),
+    before: z.record(z.string().max(100), z.json()),
+    after: z.record(z.string().max(100), z.json()),
+  })
+  .refine(
+    (receipt) =>
+      Buffer.byteLength(JSON.stringify(receipt)) <= RECEIPT_MAX_BYTES,
+    "The settings receipt is too large.",
+  );
 
 export const changeSchema = z.object({
   type: z.enum([
@@ -305,6 +329,7 @@ export const changeSchema = z.object({
     "assistant_action.proposed",
     "assistant_action.approved",
     "assistant_action.rejected",
+    "assistant_action.completed",
     "assistant.embeddings_requested",
     "merge_suggestion.dismissed",
     "merge_suggestion.restored",
@@ -325,6 +350,27 @@ export const changeSchema = z.object({
     "integration.status_sync_disabled",
     "integration.status_mappings_updated",
     "conversation.email_received",
+    // RFC 0001 (#131), by lane: C1, G1, G2, X1, B1, M1. Lane G1 also uses "user.identified" (above).
+    "assistant_connector.created",
+    "assistant_connector.updated",
+    "assistant_connector.refreshed",
+    "assistant_connector.connected",
+    "slack_agent.settings_updated",
+    "github_inbox.settings_updated",
+    "github_inbox.message_retried",
+    "integration.hook_received",
+    "conversation.agent_started",
+    "app.post_linked",
+    "app.post_unlinked",
+    "app.post_created",
+    "app.registered",
+    "app.updated",
+    "branding.auto_started",
+    "branding.offer_accepted",
+    "branding.offer_declined",
+    "branding.auto_undone",
+    "settings.undone",
+    "conversation.test_deleted",
   ]),
   entityType: z.enum([
     "board",
@@ -380,9 +426,20 @@ export const changeSchema = z.object({
     "assistant_run",
     "assistant_action",
     "merge_suggestion",
+    // RFC 0001: the sidebar app of lane X1.
+    "app",
   ]),
   entityId: z.string().min(1).max(200),
   payload: z.record(z.string(), z.string().max(500)).default({}),
+  receipt: receiptSchema.optional(),
+  /**
+   * The audit row ID of a receipt. The caller mints it (`createId("audit_log")`), so the response of
+   * the write can name the receipt that undo takes. Only with a receipt; the outbox event never holds it.
+   */
+  receiptId: z
+    .string()
+    .refine((id) => isValidTypeId(id, "audit"), "Not an audit row ID")
+    .optional(),
 });
 /** "user" is a teammate; portal and widget callers are customers or anonymous visitors. */
 export const actorTypeSchema = z.enum(["user", "customer", "anonymous"]);
@@ -393,24 +450,30 @@ export type ChangeActor = {
 /**
  * Writes the audit row, the outbox event and its job in the caller's transaction.
  * `actor` null records a change that a worker made, with no teammate or customer actor.
+ * A `receipt` goes only into the audit row's metadata (see receiptSchema).
  */
 export async function recordQuillsChange(
   db: Database,
   actor: ChangeActor | null,
   input: z.input<typeof changeSchema>,
 ) {
-  const change = changeSchema.parse(input);
+  const { receipt, receiptId, ...change } = changeSchema.parse(input);
+  if (receiptId && !receipt) throw new Error("A receipt ID needs a receipt");
   const actorType = actor
     ? actorTypeSchema.parse(actor.actorType ?? "user")
     : "system";
   const eventId = createId("event");
   await db.insert(auditLog).values({
+    ...(receiptId && { id: receiptId as AuditLogId }),
+    // A receipt is written under the settings row lock: the insert time follows the lock order, so
+    // settings undo can tell which change came later. now() is the transaction start, which may not.
+    ...(receipt && { occurredAt: sql`clock_timestamp()` }),
     actorPrincipalId: actor?.principalId ?? null,
     actorType,
     eventType: change.type,
     targetType: change.entityType,
     targetId: change.entityId,
-    metadata: change.payload,
+    metadata: receipt ? { ...change.payload, receipt } : change.payload,
     channel: actor ? "api" : "system",
   });
   await db.insert(events).values({
