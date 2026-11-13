@@ -66,7 +66,7 @@ snapshots:
 const fixture = environment + application;
 const context = {
   sha: "a".repeat(40),
-  ref: "refs/heads/main",
+  ref: "refs/heads/staging",
   runId: "123-1",
   scanned: "2026-11-02T00:00:00.000Z",
 };
@@ -271,6 +271,10 @@ test("one stable snapshot contains two distinct manifests at the same commit", (
   assert.notEqual(snapshot.job.id, next.job.id);
   assert.throws(() => buildSnapshot({ [lockPaths[0]]: fixture }, context));
   assert.throws(() => buildSnapshot(sources, { ...context, sha: "main" }));
+  // The default branch is staging: GitHub does not update the graph from a main snapshot.
+  assert.throws(() =>
+    buildSnapshot(sources, { ...context, ref: "refs/heads/main" }),
+  );
   assert.throws(() =>
     buildSnapshot(sources, { ...context, ref: "refs/heads/untrusted" }),
   );

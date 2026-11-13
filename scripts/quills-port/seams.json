@@ -100,6 +100,24 @@
 			"state": "existing",
 			"lines": "the @kaneo/email mock alias matches the exact name only (array form with a regex)",
 			"plannedChange": "none. The Quills subpaths @kaneo/email/quills... must resolve to the real package"
+		},
+		{
+			"file": ".github/workflows/dependency-graph.yml",
+			"state": "existing",
+			"lines": "the push branch, the concurrency group and the job's ref condition name staging, not main",
+			"plannedChange": "none. This fork's default branch is staging, and GitHub updates the dependency graph only from snapshots of the default branch"
+		},
+		{
+			"file": "scripts/ci/dependency-graph-snapshot.mjs",
+			"state": "existing",
+			"lines": "the ref check and its error name refs/heads/staging, not main",
+			"plannedChange": "none. This fork's default branch is staging, and GitHub updates the dependency graph only from snapshots of the default branch"
+		},
+		{
+			"file": "scripts/ci/dependency-graph.test.mjs",
+			"state": "existing",
+			"lines": "the test context ref is refs/heads/staging; one assertion refuses a main snapshot",
+			"plannedChange": "none. This fork's default branch is staging, and GitHub updates the dependency graph only from snapshots of the default branch"
 		}
 	]
 }
