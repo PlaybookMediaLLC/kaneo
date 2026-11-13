@@ -7,6 +7,7 @@ const schema = z.object({
   boardId: z.string().optional(),
   title: z.string().min(1).max(200).optional(),
   content: z.string().max(10000),
+  attachmentIds: z.array(z.string()).max(10).optional(),
   idempotencyKey: z.string().min(1).max(128).optional(),
 });
 export interface SampleFormProps {

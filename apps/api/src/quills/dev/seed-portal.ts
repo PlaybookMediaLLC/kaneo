@@ -25,6 +25,7 @@ import {
 import { postStatuses } from "../../database/quills/schema/statuses";
 import { recordQuillsChange } from "../events";
 import { reconcileComponents } from "../content/status/shared";
+import { seedPortalShowcase } from "./showcase";
 
 config();
 
@@ -314,6 +315,7 @@ export async function seedPortal(reset = false) {
         await changed("help_center.article_published", "article", created!.id);
       }
 
+      await seedPortalShowcase(quills, actor);
       return { workspaceId: WORKSPACE_ID, userId: USER_ID };
     },
   );

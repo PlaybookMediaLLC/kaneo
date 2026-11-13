@@ -298,3 +298,65 @@ submission a fresh key. The pre-PR repository typecheck passed **30/30 tasks**;
 repository lint/format and `git diff --check` also passed. Evidence:
 `/tmp/quills-extension-final-all-web.log`, `/tmp/quills-resume-comment-tests.log`,
 `/tmp/quills-pr-typecheck.log` and `/tmp/quills-extension-final-lint.log`.
+
+
+### Populated local showcase (2026-11-13)
+
+The existing guarded `quills-web seed` command now adds a synthetic showcase:
+120 feedback posts across Features, Bugs, and UI / UX; 160 customer profiles;
+905 comments and replies; 6,717 votes and 1,585 reactions; a three-column roadmap and
+monthly release calendar; eight long updates; and 48 articles across eight help
+collections. The Linear integration example has 144 votes and 128 comments to
+exercise both discussion pages. Existing demo content remains, including edits
+made while exploring it. A transaction receipt makes repeat runs a no-op for the
+showcase dataset. No reset is needed.
+
+Boundary: the existing CLI owns the fixed `quills_portal_demo` fixture and owner,
+checks its marker/membership, and refuses production or a non-loopback database.
+The caller obtains its actor through `withQuillsWorkspace`; showcase helpers use
+only that restricted transaction. The data lives in Quills `customer_identity`,
+`principal`, `boards`, `posts`, `post_votes`, `post_comments`,
+`post_comment_reactions`, `roadmaps`, `roadmap_columns`, `kb_categories`,
+`kb_articles`, `changelog_entries`, and the `kv_store` receipt. Parent and actor
+IDs come from rows created/read in the same workspace. The existing
+`workspace.imported` audit/outbox event commits with the entire showcase.
+Synthetic participants have no platform accounts, memberships, email addresses,
+or sessions. There are no external provider calls or schema changes.
+
+Verification: 17 focused seed/contract-boundary tests passed on the separate
+`quills_rfc2_tests` database. They cover refused environments, injected failure
+following audit/outbox writes, rollback, stored counts matching child rows,
+100/28 comment pagination, concurrent first population and reseeding, preserved user edits, and refusal
+in another workspace. Repository typecheck passed 30/30 tasks, and repository
+lint and diff checks passed. Ten populated-page desktop/mobile browser audits
+passed with zero axe violations, horizontal overflow, or browser runtime errors.
+The browser also loaded the remaining discussion comments, filtered feedback,
+opened an article through its collection, and opened the mobile help navigation.
+No Gauntlet command is configured in this checkout.
+
+The six required review lenses completed without blockers. QA identified missing
+concurrent first-population coverage; the test now starts without a showcase
+receipt, runs two scoped transactions, and verifies one dataset, receipt, and
+import event. The follow-up review cleared that finding.
+
+Two CI failures on the preceding PR head were also reproduced and repaired:
+the generator golden fixtures now include the existing navigation keys and
+attachment schema, and the browser helper resolves a replaced element once more
+only after Stagehand's exact pre-dispatch missing-element error. Unknown failures
+are not replayed. The 79 generator tests and four browser-helper regression tests
+passed, including actual DOM replacement, one delivered click, and bounded retry.
+The full Kaneo smoke suite was also attempted against this local preview, but its
+password/same-origin fixture does not match the demo's email-code sign-in and
+separate API: signup could not find a password input, and the two task fixtures
+received an empty non-API response. Those three tests are not claimed as passing;
+their proper bundled-instance rerun belongs to hosted CI. The demo configuration
+was left intact. See `/tmp/quills-showcase-smoke.log`.
+
+Local evidence: `/tmp/quills-showcase-tests.log`,
+`/tmp/quills-showcase-repo-types.log`, `/tmp/quills-showcase-lint.log`,
+`/tmp/quills-showcase-browser-audit.json`. Captures use
+`/tmp/quills-showcase-{feedback,discussion,roadmap,updates,help}-{1440,375}.png`.
+Additional evidence: `/tmp/quills-showcase-framework.log`,
+`/tmp/quills-showcase-queries.log`, and `/tmp/quills-showcase-secrets.log`.
+This follow-up populates the existing Quills UI; UserJot's proprietary content,
+customer identities, illustrations, and exact styling are not copied.
