@@ -7,11 +7,19 @@ const path = "/api/quills-public/signed/oauth/trello/bridge";
 async function run(
   script: string,
   hash: string,
-  answer: () => Promise<{ ok: boolean }> = async () => ({ ok: true }),
+  answer: () => Promise<{ ok: boolean; headers: Headers }> = async () => ({
+    ok: true,
+    headers: new Headers(),
+  }),
 ) {
   const steps: unknown[][] = [];
   const status = { textContent: "" };
-  const location = { hash, pathname: path, search: "?state=s.t" };
+  const location = {
+    hash,
+    pathname: path,
+    search: "?state=s.t",
+    replace: (url: string) => steps.push(["navigate", url]),
+  };
   const history = {
     replaceState: (...args: unknown[]) => {
       steps.push(["replaceState", ...args]);
@@ -70,12 +78,23 @@ describe("OAuth bridge page scripts", () => {
 
   it("shows a fixed failure when the callback refuses or does not answer", async () => {
     for (const answer of [
-      async () => ({ ok: false }),
+      async () => ({ ok: false, headers: new Headers() }),
       () => Promise.reject(new TypeError("offline")),
     ])
       expect((await run(post, "#token=abc123", answer)).status).toMatch(
         /^The connection failed\./,
       );
+  });
+
+  it("navigates to the sanitized web result returned by the callback", async () => {
+    const result =
+      "https://web.example.test/quills/oauth/result?outcome=connected&name=Trello";
+    const { steps, status } = await run(post, "#token=abc123", async () => ({
+      ok: true,
+      headers: new Headers({ "x-quills-result-location": result }),
+    }));
+    expect(steps.at(-1)).toEqual(["navigate", result]);
+    expect(status).toBe("");
   });
 
   it("only removes the fragment on a second visit", async () => {

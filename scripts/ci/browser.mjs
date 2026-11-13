@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdir } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { Client, localOrigin, password, ready } from "./http.mjs";
 
 const require = createRequire(
   new URL("../ui-review-bot/package.json", import.meta.url),
 );
-const { chromium } = require("playwright");
+const { launchBrowser, click, fill, visible, selector, until, saveFailure } =
+  await import(require.resolve("@kaneo/browser-test"));
 const origin = localOrigin(process.argv[2]);
 await ready(origin);
 const owner = new Client(origin);
@@ -17,114 +17,104 @@ const workspace = await owner.json("/api/auth/organization/create", "POST", {
 });
 const outsider = new Client(origin);
 await outsider.signup("browser-outsider");
-const browser = await chromium.launch();
-const context = await browser.newContext({
-  locale: "en-US",
-  viewport: { width: 1440, height: 1000 },
-});
-context.setDefaultTimeout(20_000);
-await context.tracing.start({
-  screenshots: true,
-  snapshots: true,
-  sources: true,
-});
-const failures = [];
-context.on("page", (page) => {
-  page.on("pageerror", (error) => failures.push(error.message));
-});
-const page = await context.newPage();
+const browser = await launchBrowser();
+let page;
 try {
+  page = await browser.newPage();
+  const failures = browser.monitor(page).errors;
   await page.goto(`${origin}/auth/sign-in`);
-  await page.getByLabel("Email", { exact: true }).fill(owner.email);
+  await fill(page, { by: "label", name: "Email" }, owner.email);
   await page.locator('input[name="password"]').fill(password);
-  await page.getByRole("button", { name: /^Sign In$/i }).click();
-  await page.waitForURL("**/dashboard/**");
+  await click(page, { by: "role", role: "button", name: /^Sign In$/i });
+  await until(
+    async () => (await page.url()).includes("/dashboard/"),
+    "Signed in dashboard",
+  );
   await page.goto(`${origin}/dashboard/workspace/${workspace.id}`);
-  await page.getByRole("button", { name: "Add project", exact: true }).click();
-  const projectDialog = page.getByRole("dialog", {
+  await click(page, { by: "role", role: "button", name: "Add project" });
+  await visible(page, {
+    by: "role",
+    role: "dialog",
     name: "Create a new project",
   });
-  await projectDialog
-    .getByPlaceholder("Project name", { exact: true })
-    .fill("Browser regression project");
-  const [projectResponse] = await Promise.all([
-    page.waitForResponse(
-      (response) =>
-        new URL(response.url()).pathname === "/api/project" &&
-        response.request().method() === "POST",
-    ),
-    projectDialog
-      .getByRole("button", { name: "Create Project", exact: true })
-      .click(),
-  ]);
-  assert.ok(projectResponse.ok(), await projectResponse.text());
-  const project = await projectResponse.json();
+  const dialog = await selector(page, {
+    by: "role",
+    role: "dialog",
+    name: "Create a new project",
+  });
+  await fill(
+    page,
+    { by: "placeholder", name: "Project name", within: dialog },
+    "Browser regression project",
+  );
+  const project = await browser
+    .monitor(page)
+    .response("/api/project", "POST", () =>
+      click(page, {
+        by: "role",
+        role: "button",
+        name: "Create Project",
+        within: dialog,
+      }),
+    );
   await page.goto(
     `${origin}/dashboard/workspace/${workspace.id}/project/${project.id}/board`,
   );
-  await page.getByTitle("Add task", { exact: true }).first().click();
-  const taskDialog = page.getByRole("dialog");
-  await taskDialog
-    .getByPlaceholder("Task title", { exact: true })
-    .fill("Browser persistence task");
-  const [taskResponse] = await Promise.all([
-    page.waitForResponse(
-      (response) =>
-        new URL(response.url()).pathname === `/api/task/${project.id}` &&
-        response.request().method() === "POST",
-    ),
-    taskDialog
-      .getByRole("button", { name: "Create Task", exact: true })
-      .click(),
-  ]);
-  assert.ok(taskResponse.ok(), await taskResponse.text());
-  const task = await taskResponse.json();
+  await click(page, { by: "title", name: "Add task" }, { first: true });
+  await fill(
+    page,
+    { by: "placeholder", name: "Task title" },
+    "Browser persistence task",
+  );
+  const task = await browser
+    .monitor(page)
+    .response(`/api/task/${project.id}`, "POST", () =>
+      click(page, { by: "role", role: "button", name: "Create Task" }),
+    );
   await page.goto(
     `${origin}/dashboard/workspace/${workspace.id}/project/${project.id}/task/${task.id}`,
   );
-  const observer = await context.newPage();
-  // Observe connection readiness without replacing the transport or mocking messages.
-  await observer.addInitScript(() => {
-    const opened = new Set();
-    window.__ciOpenSockets = opened;
-    window.WebSocket = new Proxy(window.WebSocket, {
-      construct(Target, args) {
-        const socket = new Target(...args);
-        socket.addEventListener("open", () => opened.add(socket.url));
-        socket.addEventListener("close", () => opened.delete(socket.url));
-        return socket;
-      },
-    });
-  });
-  await observer.goto(page.url());
-  await observer.waitForFunction(
-    (projectId) =>
-      [...window.__ciOpenSockets].some(
-        (url) => new URL(url).pathname === `/api/ws/${projectId}`,
+  const observer = await browser.newPage();
+  const monitor = browser.monitor(observer);
+  await observer.goto(await page.url());
+  await until(
+    () =>
+      [...monitor.sockets.values()].some(
+        (socket) =>
+          new URL(socket.url).pathname === `/api/ws/${project.id}` &&
+          socket.open,
       ),
-    project.id,
+    "Observer websocket",
+    45_000,
   );
-  await observer.getByRole("button", { name: "To Do", exact: true }).waitFor();
-  await page.bringToFront();
-  await page.getByRole("button", { name: "To Do", exact: true }).click();
-  const [changedStatus] = await Promise.all([
-    page.waitForResponse(
-      (response) =>
-        new URL(response.url()).pathname === `/api/task/status/${task.id}` &&
-        response.request().method() === "PUT",
-    ),
-    page.getByRole("option", { name: /^In Progress/ }).click(),
-  ]);
-  assert.ok(changedStatus.ok());
-  // The other tab must update through WebSocket-driven query invalidation, without a reload.
-  await observer
-    .getByRole("button", { name: "In Progress", exact: true })
-    .waitFor();
+  await visible(observer, { by: "role", role: "button", name: "To Do" });
+  await browser.context.setActivePage(page);
+  await click(page, { by: "role", role: "button", name: "To Do" });
+  const frameStart = monitor.frames.length;
+  await browser
+    .monitor(page)
+    .response(`/api/task/status/${task.id}`, "PUT", () =>
+      click(page, { by: "role", role: "option", name: /^In Progress/ }),
+    );
+  await until(
+    () =>
+      monitor.frames.slice(frameStart).some((frame) => {
+        try {
+          const event = JSON.parse(frame.payload);
+          return (
+            event.type === "TASK_UPDATED" && event.projectId === project.id
+          );
+        } catch {
+          return false;
+        }
+      }),
+    "Observer TASK_UPDATED event",
+  );
+  await visible(observer, { by: "role", role: "button", name: "In Progress" });
+  failures.push(...monitor.errors);
   await observer.close();
   await page.reload();
-  await page
-    .getByRole("button", { name: "In Progress", exact: true })
-    .waitFor();
+  await visible(page, { by: "role", role: "button", name: "In Progress" });
   const persisted = await owner.json(`/api/task/${task.id}`);
   assert.equal(persisted.title, "Browser persistence task");
   assert.equal(persisted.status, "in-progress");
@@ -151,13 +141,8 @@ try {
     "Browser sign-in, project/task creation, status persistence and workspace isolation passed",
   );
 } catch (error) {
-  await mkdir(".cache/ci-results", { recursive: true });
-  await page
-    .screenshot({ path: ".cache/ci-results/browser.png", fullPage: true })
-    .catch(() => {});
-  await context.tracing.stop({ path: ".cache/ci-results/browser-trace.zip" });
+  if (page) await saveFailure(browser, page, ".cache/ci-results");
   throw error;
 } finally {
-  await context.close();
   await browser.close();
 }

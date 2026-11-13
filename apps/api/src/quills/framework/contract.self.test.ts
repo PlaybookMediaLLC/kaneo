@@ -377,6 +377,11 @@ const signedMeta = defineQuillsRoute({
   response: z.object({ present: z.boolean() }),
   responseDescription: "Metadata",
   replay: { present: false },
+  redirect: {
+    success: (result) =>
+      `https://web.example.test/result?present=${String(result.present)}`,
+    failure: (status) => `https://web.example.test/result?status=${status}`,
+  },
   event: { none: "A probe" },
   handler: async (input) => ({ present: Object.isFrozen(input.request) }),
 });
@@ -1029,6 +1034,19 @@ describe.skipIf(!url)("Quills route contract self-test", () => {
       { headers: { "x-delivery": crypto.randomUUID() } },
     );
     expect(await signed.json()).toEqual({ present: true });
+    const redirected = await app.request(
+      `/quills-public/signed/probe/${env.a}/request-meta`,
+      {
+        headers: {
+          "x-delivery": crypto.randomUUID(),
+          "sec-fetch-mode": "navigate",
+        },
+      },
+    );
+    expect([redirected.status, redirected.headers.get("location")]).toEqual([
+      303,
+      "https://web.example.test/result?present=true",
+    ]);
   });
   it("reports an internal route without the token check", async () => {
     const previous = process.env.QUILLS_INTERNAL_TOKEN;
@@ -1248,6 +1266,51 @@ describe("raw, textBody and prepare declaration rules", () => {
           handler: async () => "",
         }),
       ).toThrow(/raw response/);
+  });
+  it("takes a browser result only on a signed JSON route", () => {
+    const route = {
+      ...base,
+      audience: "signed" as const,
+      verifier: {
+        name: "redirect-rules",
+        locate: () => ({
+          scope: { workspace: "rules" },
+          deliveryId: "rules",
+        }),
+      },
+      response: z.object({ ok: z.boolean() }),
+      replay: { ok: false },
+      redirect: {
+        success: () => "https://web.example.test/result",
+        failure: () => "https://web.example.test/result?outcome=failed",
+      },
+      event: { none: "Rules" },
+      handler: async () => ({ ok: true }),
+    };
+    expect(() => buildQuillsRoute(route)).not.toThrow();
+    expect(() =>
+      buildQuillsRoute({
+        ...route,
+        method: "post",
+      }),
+    ).not.toThrow();
+    expect(() =>
+      buildQuillsRoute({
+        ...base,
+        response: z.object({ ok: z.boolean() }),
+        redirect: route.redirect,
+        handler: async () => ({ ok: true }),
+      }),
+    ).toThrow(/browser redirect/);
+    expect(() =>
+      buildQuillsRoute({
+        ...route,
+        raw: "text/html",
+        response: z.string(),
+        replay: "",
+        handler: async () => "",
+      }),
+    ).toThrow(/browser redirect/);
   });
   it("lets an HTML page run only the scripts that its route declares", () => {
     const policy = (scripts?: string[]) =>

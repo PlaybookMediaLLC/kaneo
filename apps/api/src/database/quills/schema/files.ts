@@ -1,5 +1,5 @@
 import { quillsSchema, workspaceColumn, workspacePolicy } from "../tenancy";
-import { foreignKey, primaryKey } from "drizzle-orm/pg-core";
+import { foreignKey, primaryKey, check } from "drizzle-orm/pg-core";
 import {
   text,
   timestamp,
@@ -11,6 +11,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { typeIdWithDefault, typeIdColumnNullable } from "@kaneo/ids/drizzle";
+import { posts, postComments } from "./posts";
 import { principal } from "./auth";
 import { conversationMessages } from "./conversation";
 import type { FilePreviewMeta } from "../types";
@@ -44,6 +45,8 @@ export const files = quillsSchema
       uploadedById: typeIdColumnNullable("principal")("uploaded_by_id"),
       /** The first message the file was attached to. */
       messageId: typeIdColumnNullable("conversation_msg")("message_id"),
+      postId: typeIdColumnNullable("post")("post_id"),
+      commentId: typeIdColumnNullable("post_comment")("comment_id"),
       attachedAt: timestamp("attached_at", { withTimezone: true }),
       /** pending | ready | failed | none (a family with nothing to derive). */
       previewStatus: text("preview_status").notNull().default("pending"),
@@ -78,6 +81,20 @@ export const files = quillsSchema
           conversationMessages.id,
         ],
       }).onDelete("set null"),
+      foreignKey({
+        columns: [table.workspaceId, table.postId],
+        foreignColumns: [posts.workspaceId, posts.id],
+      }).onDelete("cascade"),
+      foreignKey({
+        columns: [table.workspaceId, table.commentId],
+        foreignColumns: [postComments.workspaceId, postComments.id],
+      }).onDelete("cascade"),
+      check(
+        "files_one_parent",
+        sql`num_nonnulls(${table.messageId}, ${table.postId}, ${table.commentId}) <= 1`,
+      ),
+      index("files_post_id_idx").on(table.workspaceId, table.postId),
+      index("files_comment_id_idx").on(table.workspaceId, table.commentId),
       workspacePolicy(table.workspaceId),
     ],
   )

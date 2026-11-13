@@ -76,6 +76,7 @@ export const changeSchema = z.object({
     "settings.developer_updated",
     "settings.labs_updated",
     "file.created",
+    "file.deleted",
     "settings.logo_updated",
     "settings.logo_removed",
     "settings.favicon_updated",

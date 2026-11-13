@@ -17,7 +17,6 @@
     "test:security:dependencies": "node --test scripts/security/dependency-*.test.mjs",
     "test:integration": "vp run -r test:integration",
     "test:e2e": "pnpm --dir tests/e2e test",
-    "test:browserstack": "pnpm --dir tests/e2e test:browserstack",
     "typecheck": "vp run -r typecheck",
     "prepare": "husky",
     "format": "vp fmt",

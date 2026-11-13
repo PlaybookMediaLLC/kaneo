@@ -19,7 +19,7 @@ import {
   visibleArticles,
 } from "../content/public/help-center/visibility";
 import { entryVisible, shownAt } from "../portal/feedback/changelog";
-import { portalUrl } from "../portal/feedback/feeds";
+import { portalPaths } from "../portal/paths";
 import {
   postVisible,
   title,
@@ -274,7 +274,19 @@ export const embedRoutes = (audience: Customer) =>
       handler: async ({ db, caller, query, workspaceId }) => {
         // The surface gates first: the portal or widget switch and the private portal answer 404 or 403.
         const viewer = await viewerFor(db, audience, caller);
-        const link: Link = (path) => portalUrl(workspaceId, path);
+        const link: Link = (path) => {
+          const parts = path.split("/").filter(Boolean);
+          if (parts[0] === "b") return portalPaths.post(workspaceId, parts[3]!);
+          if (parts[0] === "changelog")
+            return portalPaths.changelogEntry(workspaceId, parts[1]!);
+          if (parts[0] === "support")
+            return portalPaths.conversation(workspaceId, parts[1]!);
+          return portalPaths.helpCenterArticle(
+            workspaceId,
+            parts[1]!,
+            parts.at(-1)!,
+          );
+        };
         const { kind, id } = query;
         if (kind === "post")
           return answer("post", await postCard(db, viewer, id, link));

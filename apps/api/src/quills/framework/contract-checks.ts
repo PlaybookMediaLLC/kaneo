@@ -809,6 +809,19 @@ async function checkSignedRoute(
       );
     if (before !== (await both()))
       fail("replay", "a replayed delivery changed rows");
+    if (d.redirect && d.method === "get") {
+      const redirected = await call({
+        ...fresh,
+        headers: { ...fresh.headers, "sec-fetch-mode": "navigate" },
+      });
+      if (redirected.status !== 303 || !redirected.location)
+        fail(
+          "browser-redirect",
+          `expected a 303 with Location, got ${redirected.status}`,
+        );
+      if (before !== (await both()))
+        fail("browser-redirect", "a browser replay changed rows");
+    }
     // Each header changed in turn: a signed header fails the check (401); an unsigned one must not
     // make the same signed bytes count as a new delivery.
     for (const [name, value] of Object.entries(fresh.headers ?? {})) {

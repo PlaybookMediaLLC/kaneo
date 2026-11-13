@@ -1,6 +1,7 @@
 import { apiRouter, z } from "../../../../openapi";
 import { defineQuillsRoute } from "../../../framework/define-route";
-import { portalUrl, sitemapDocument } from "../../../portal/feedback/feeds";
+import { sitemapDocument } from "../../../portal/feedback/feeds";
+import { portalPaths } from "../../../portal/paths";
 import { DEFAULT_LOCALE } from "../../help-center/shared";
 import {
   notFound,
@@ -59,7 +60,16 @@ const sitemap = defineQuillsRoute({
       }))
         add(article.id, code, article.path, article.updatedAt);
     }
-    const url = (path: string) => portalUrl(workspaceId, path);
+    const url = (path: string) => {
+      const parts = path.split("/").filter(Boolean);
+      if (parts.length === 1) return portalPaths.helpCenter(workspaceId);
+      if (parts.length === 2)
+        return portalPaths.helpCenter(workspaceId, parts[1]);
+      const idSlug = parts.at(-1)!;
+      return parts.at(-2) === "collections"
+        ? portalPaths.helpCenterCollection(workspaceId, parts[1]!, idSlug)
+        : portalPaths.helpCenterArticle(workspaceId, parts[1]!, idSlug);
+    };
     return sitemapDocument(
       [...pages.values()]
         .flatMap((versions) =>

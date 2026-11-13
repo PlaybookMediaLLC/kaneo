@@ -10,6 +10,7 @@ import { posts } from "../../database/quills/schema/posts";
 import { statusSubscriptions } from "../../database/quills/schema/status";
 import { hashToken } from "../framework/audience";
 import type { Database } from "../framework/define-route";
+import { portalPaths } from "./paths";
 
 // Route-module helper: emailed unsubscribe links. The `token` column holds the SHA-256 hash of
 // the token, never the token. A token expires after 30 days and works once.
@@ -37,6 +38,10 @@ export const apiBase = () => {
  */
 export const unsubscribeUrl = (workspaceId: string, token: string) =>
   `${apiBase()}/quills-public/${encodeURIComponent(workspaceId)}/unsubscribe?token=${token}`;
+
+/** The browser page used in the message body. The RFC 8058 header keeps `unsubscribeUrl`. */
+export const unsubscribePageUrl = (workspaceId: string, token: string) =>
+  portalPaths.unsubscribe(workspaceId, token);
 
 /**
  * Stores the hash of a new token for one recipient and action, and returns the token. The only

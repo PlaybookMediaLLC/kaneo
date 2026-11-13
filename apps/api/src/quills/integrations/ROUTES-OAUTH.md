@@ -35,6 +35,11 @@ External effects:          OAuth exchange, destinations and search, webhook regi
 | `openQuillsOAuthBridge` | `GET /quills-public/signed/oauth/{type}/bridge?state` (signed, HTML; fragment providers) | a state signed for this provider (the POST checks the session and the permission) | `kv_store` | none | contract signed table; `providers/trello-routes.test.ts`: exact headers, no secret, once per state; `oauth-bridge.test.ts`: the scripts run |
 | `completeQuillsOAuthFragmentConnect` | `POST /quills-public/signed/oauth/{type}/callback?state` with `{ token }` (signed; fragment providers) | manage_settings (session) | `integrations`, `integration_platform_credentials`, `principal`, `kv_store` | `integration.connected` | contract signed table, plus missing or foreign `Origin`; `providers/trello-routes.test.ts` |
 
+The two completion routes keep their JSON contract for API clients. A GET browser navigation gets a
+303 to `/quills/oauth/result` on the configured client origin. The fragment bridge reads the same
+sanitized result location from the successful POST response and navigates there. Result URLs contain
+only a fixed outcome code and the provider display name; codes, tokens and provider error text stay out.
+
 - The OAuth app belongs to the workspace (`integration_platform_credentials` is workspace-owned). The
   responses return the public client ID and the redirect URI to register:
   `<KANEO_API_URL origin>/api/quills-public/signed/oauth/<type>/callback`.

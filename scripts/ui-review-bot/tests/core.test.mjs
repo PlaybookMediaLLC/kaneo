@@ -91,31 +91,28 @@ test("synthetic account fixtures are stable and do not invent unknown endpoints"
 });
 
 test("browser requests cannot leak to external endpoints or mutate a real API", async () => {
-  let intercept;
-  const context = {
-    addInitScript: async () => {},
-    route: async (_, fn) => {
-      intercept = fn;
+  let paused;
+  let complete;
+  const session = {
+    on: (name, listener) => {
+      if (name === "Fetch.requestPaused") paused = listener;
     },
-    routeWebSocket: async () => {},
+    send: async (method, params) => {
+      if (method === "Fetch.failRequest") complete("blocked");
+      if (method === "Fetch.continueRequest") complete("continue");
+      if (method === "Fetch.fulfillRequest")
+        complete({ status: params.responseCode });
+    },
   };
+  const browser = { monitor: () => ({ session }) };
+  const page = { addInitScript: async () => {} };
   const diagnostics = { unhandled: [], blocked: [] };
-  await installFixtures(context, "http://127.0.0.1:1234", diagnostics);
-  async function request(url, method = "GET") {
-    let result;
-    await intercept({
-      request: () => ({ url: () => url, method: () => method }),
-      abort: () => {
-        result = "blocked";
-      },
-      continue: () => {
-        result = "continue";
-      },
-      fulfill: (x) => {
-        result = x;
-      },
+  await installFixtures(browser, page, "http://127.0.0.1:1234", diagnostics);
+  function request(url, method = "GET") {
+    return new Promise((resolve) => {
+      complete = resolve;
+      paused({ requestId: "synthetic", request: { url, method } });
     });
-    return result;
   }
   assert.equal(await request("https://example.com/tracker"), "blocked");
   assert.equal(await request("http://127.0.0.1:1234/src/main.tsx"), "continue");

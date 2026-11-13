@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import { Trans, useTranslation } from "react-i18next";
 import { authLinkClassName } from "@/components/auth/auth-link-class";
+import { getSafeRedirectPath } from "@/components/auth/auth-methods";
 import { AuthPage } from "@/components/auth/auth-page";
 import PageTitle from "@/components/page-title";
 
@@ -8,12 +9,16 @@ export const Route = createFileRoute("/auth/check-email")({
   component: CheckEmail,
   validateSearch: (search: Record<string, unknown>) => ({
     email: search.email as string | undefined,
+    redirect:
+      typeof search.redirect === "string"
+        ? getSafeRedirectPath(search.redirect)
+        : undefined,
   }),
 });
 
 function CheckEmail() {
   const { t } = useTranslation();
-  const { email } = useSearch({ from: "/auth/check-email" });
+  const { email, redirect } = useSearch({ from: "/auth/check-email" });
 
   return (
     <>
@@ -29,7 +34,11 @@ function CheckEmail() {
         }
       >
         <p className="text-muted-foreground text-sm">
-          <Link to="/auth/sign-in" className={authLinkClassName}>
+          <Link
+            to="/auth/sign-in"
+            search={{ redirect }}
+            className={authLinkClassName}
+          >
             {t("auth:checkEmail.backToLogin")}
           </Link>
         </p>

@@ -15,6 +15,7 @@ import { AuthFormSkeleton } from "@/components/auth/auth-form-skeleton";
 import { authLinkClassName } from "@/components/auth/auth-link-class";
 import {
   getProviders,
+  getSafeRedirectPath,
   getSignUpEmailMethod,
 } from "@/components/auth/auth-methods";
 import { AuthPage } from "@/components/auth/auth-page";
@@ -40,6 +41,7 @@ import { toast } from "@/lib/toast";
 const signUpSearchSchema = z.object({
   invitationId: z.string().optional(),
   email: z.string().optional(),
+  redirect: z.string().optional(),
 });
 
 export const Route = createFileRoute("/auth/sign-up")({
@@ -77,9 +79,10 @@ function SignUp() {
 
   const invitationId = search.invitationId;
   const isInstanceAdminSetup = instanceStatus?.hasUsers === false;
-  const destination = invitationId
-    ? `/invitation/accept/${invitationId}`
-    : "/dashboard";
+  const redirect = getSafeRedirectPath(search.redirect);
+  const destination =
+    redirect ??
+    (invitationId ? `/invitation/accept/${invitationId}` : "/dashboard");
   const baseUrl = import.meta.env.VITE_CLIENT_URL ?? window.location.origin;
   const selfServiceAllowed =
     !config?.disableRegistration ||
@@ -141,9 +144,12 @@ function SignUp() {
             captcha={captcha}
             disabled={busy}
             onSent={({ email, name }) =>
-              history.push(buildVerifyOtpPath({ email, invitationId }), {
-                signUpName: name,
-              } satisfies VerifyOtpState)
+              history.push(
+                buildVerifyOtpPath({ email, invitationId, redirect }),
+                {
+                  signUpName: name,
+                } satisfies VerifyOtpState,
+              )
             }
           />
         ) : null}
@@ -151,6 +157,7 @@ function SignUp() {
           <PasswordSignUpForm
             defaultEmail={search.email}
             invitationId={invitationId}
+            redirect={redirect}
             captcha={captcha}
             disabled={busy}
             onSuccess={() => navigate({ to: destination })}
@@ -184,7 +191,7 @@ function SignUp() {
               {t("auth:signUp.toggleMessage")}{" "}
               <Link
                 to="/auth/sign-in"
-                search={{ invitationId, email: search.email }}
+                search={{ invitationId, email: search.email, redirect }}
                 className={authLinkClassName}
               >
                 {t("auth:signUp.toggleLink")}

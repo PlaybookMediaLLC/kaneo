@@ -1,13 +1,7 @@
-export function targetLocator(page, target) {
-  if (target.by === "role")
-    return page
-      .getByRole(target.role, { name: target.name, exact: true })
-      .first();
-  if (target.by === "label")
-    return page.getByLabel(target.name, { exact: true }).first();
-  if (target.by === "placeholder")
-    return page.getByPlaceholder(target.name, { exact: true }).first();
-  return page.getByText(target.name, { exact: true }).first();
+import { find, selector } from "@kaneo/browser-test";
+
+export async function targetLocator(page, target) {
+  return find(page, target, { first: true });
 }
 
 export function frameBounds(boxes, viewport) {
@@ -61,10 +55,11 @@ export function frameBounds(boxes, viewport) {
 }
 
 export async function captureFrame(page, focus, visible = []) {
-  const anchor = targetLocator(page, focus);
-  await anchor.waitFor({ state: "visible", timeout: 5000 });
-  await anchor.scrollIntoViewIfNeeded({ timeout: 5000 });
-  const region = await anchor.evaluate((element) => {
+  const anchorSelector = await selector(page, focus, { first: true });
+  if (!anchorSelector) throw new Error("The preview target is missing");
+  const region = await page.evaluate((css) => {
+    const element = document.querySelector(css);
+    element.scrollIntoView({ block: "nearest", inline: "nearest" });
     const rect = (node) => {
       const r = node.getBoundingClientRect();
       return { x: r.x, y: r.y, width: r.width, height: r.height };
@@ -98,20 +93,33 @@ export async function captureFrame(page, focus, visible = []) {
         return r;
     }
     return rect(element);
-  });
+  }, anchorSelector);
   const boxes = [region];
   for (const target of visible) {
-    const control = targetLocator(page, target);
-    await control.waitFor({ state: "visible", timeout: 5000 });
-    boxes.push(await control.boundingBox());
+    const css = await selector(page, target, { first: true });
+    if (!css) throw new Error("A required preview control is missing");
+    boxes.push(
+      await page.evaluate((selector) => {
+        const r = document.querySelector(selector).getBoundingClientRect();
+        return { x: r.x, y: r.y, width: r.width, height: r.height };
+      }, css),
+    );
   }
-  // Popups are often portalled outside their field's card.
-  for (const popup of await page
-    .getByRole("listbox")
-    .or(page.getByRole("menu"))
-    .all())
-    if (await popup.isVisible()) boxes.push(await popup.boundingBox());
-  const clip = frameBounds(boxes, page.viewportSize());
+  boxes.push(
+    ...(await page.evaluate(() =>
+      [...document.querySelectorAll('[role="listbox"],[role="menu"]')]
+        .filter((node) => node.getClientRects().length)
+        .map((node) => {
+          const r = node.getBoundingClientRect();
+          return { x: r.x, y: r.y, width: r.width, height: r.height };
+        }),
+    )),
+  );
+  const viewport = await page.evaluate(() => ({
+    width: innerWidth,
+    height: innerHeight,
+  }));
+  const clip = frameBounds(boxes, viewport);
   const scroll = await page.evaluate(() => ({
     x: window.scrollX,
     y: window.scrollY,

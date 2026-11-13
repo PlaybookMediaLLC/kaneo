@@ -27,3 +27,8 @@ export const editQuillsPortalOwnComment = all.editQuillsPortalOwnComment!;
 export const deleteQuillsPortalOwnComment = all.deleteQuillsPortalOwnComment!;
 export const getQuillsPublicChangelogFeed = all.getQuillsPublicChangelogFeed!;
 export const getQuillsPublicSitemap = all.getQuillsPublicSitemap!;
+
+export {
+  getQuillsPortalFile,
+  discardQuillsPortalFile,
+} from "./attachment-routes.fixture";

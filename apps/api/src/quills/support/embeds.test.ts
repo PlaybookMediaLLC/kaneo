@@ -122,7 +122,7 @@ describe.skipIf(!url)("Quills embed previews", () => {
       changelog: null,
     });
     expect(post.body.post.url).toMatch(
-      new RegExp(`/portal/${env.a}/b/.+/posts/${s.a.postId}$`),
+      new RegExp(`/portal/${env.a}/posts/${s.a.postId}$`),
     );
     const entry = await embed("changelog", s.a.entryId, {
       user: env.customerA,

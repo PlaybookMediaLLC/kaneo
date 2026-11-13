@@ -6,6 +6,7 @@ import { posts } from "../../../database/quills/schema/posts";
 import { defineQuillsRoute, type Database } from "../../framework/define-route";
 import { record } from "../../settings/area";
 import { apiBase } from "../unsubscribe-token";
+import { portalPaths } from "../paths";
 import { entryVisible, shownAt } from "./changelog";
 import { postVisible, requirePortal, viewerFor, visibleBoards } from "./viewer";
 
@@ -13,11 +14,6 @@ import { postVisible, requirePortal, viewerFor, visibleBoards } from "./viewer";
 // portal sees, as RSS and sitemap XML. A private portal gives an empty document. The XML helpers
 // here also serve the help-center sitemap and the status feed.
 
-// ponytail: apps/web has no portal pages yet. Links use the portal path of the invite and post
-// mails; point them at the real pages when the portal UI lands.
-/** An absolute portal page URL: KANEO_CLIENT_URL/portal/{workspaceId}{path}. */
-export const portalUrl = (workspaceId: string, path = "") =>
-  `${(process.env.KANEO_CLIENT_URL || "http://localhost:5173").replace(/\/+$/, "")}/portal/${encodeURIComponent(workspaceId)}${path}`;
 /** The absolute URL of a document under /quills-public/{workspaceId}, as the unsubscribe link builds it. */
 export const publicUrl = (workspaceId: string, path: string) =>
   `${apiBase()}/quills-public/${encodeURIComponent(workspaceId)}${path}`;
@@ -157,11 +153,11 @@ const feed = defineQuillsRoute({
     return rssDocument({
       title: `${name} Changelog`,
       description: `Latest updates and releases from ${name}`,
-      link: portalUrl(workspaceId, "/changelog"),
+      link: portalPaths.changelog(workspaceId),
       self: publicUrl(workspaceId, "/changelog/rss.xml"),
       items: rows.map((entry) => ({
         title: entry.title,
-        link: portalUrl(workspaceId, `/changelog/${entry.id}`),
+        link: portalPaths.changelogEntry(workspaceId, entry.id),
         description: summary(entry.content),
         publishedAt: new Date(entry.publishedAt),
       })),
@@ -186,11 +182,9 @@ const sitemap = defineQuillsRoute({
     const viewer = await anonymous(db);
     if (!viewer) return sitemapDocument([]);
     const boardList = await visibleBoards(db, viewer);
-    const slugs = new Map(boardList.map((b) => [b.id, b.slug]));
     const postRows = await db
       .select({
         id: posts.id,
-        boardId: posts.boardId,
         updatedAt: posts.updatedAt,
       })
       .from(posts)
@@ -214,17 +208,16 @@ const sitemap = defineQuillsRoute({
       .where(entryVisible(viewer))
       .orderBy(desc(shownAt), desc(changelogEntries.id))
       .limit(1000);
-    const page = (path: string, lastModified?: Date) => ({
-      loc: portalUrl(workspaceId, path),
-      lastModified,
-    });
+    const page = (loc: string, lastModified?: Date) => ({ loc, lastModified });
     return sitemapDocument([
-      page(""),
-      ...boardList.map((b) => page(`/b/${b.slug}`)),
+      page(portalPaths.home(workspaceId)),
+      ...boardList.map((b) => page(portalPaths.board(workspaceId, b.id))),
       ...postRows.map((p) =>
-        page(`/b/${slugs.get(p.boardId)!}/posts/${p.id}`, p.updatedAt),
+        page(portalPaths.post(workspaceId, p.id), p.updatedAt),
       ),
-      ...entries.map((e) => page(`/changelog/${e.id}`, e.updatedAt)),
+      ...entries.map((e) =>
+        page(portalPaths.changelogEntry(workspaceId, e.id), e.updatedAt),
+      ),
     ]);
   },
 });

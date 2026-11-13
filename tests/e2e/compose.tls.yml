@@ -1,7 +1,7 @@
 services:
   kaneo:
     environment:
-      KANEO_CLIENT_URL: https://bs-local.com:18174
+      KANEO_CLIENT_URL: https://localhost:18174
   tls:
     image: nginx:1.30-alpine
     ports:

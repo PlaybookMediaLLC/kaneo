@@ -1,0 +1,9 @@
+{
+	"author": "By {{name}}",
+	"entryTitle": "Changelog entry",
+	"linkedPost": "Related request: {{title}}",
+	"loadMore": "Load more entries",
+	"published": "Published {{date}}",
+	"requesters": "Requested by {{count}} people",
+	"title": "Changelog"
+}

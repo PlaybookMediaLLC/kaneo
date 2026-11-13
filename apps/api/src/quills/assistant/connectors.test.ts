@@ -216,15 +216,24 @@ describe.skipIf(!url)("assistant connectors", () => {
     expect(authorize.searchParams.get("redirect_uri")).toBe(
       `http://localhost:1337/api/quills-public/signed/oauth/connectors/${id}/callback`,
     );
-    const callback = (user: string) =>
+    const callback = (user: string, headers: Record<string, string> = {}) =>
       app.request(
         `/quills-public/signed/oauth/connectors/${id}/callback?${new URLSearchParams(
           { state: authorize.searchParams.get("state")!, code: CODE },
         )}`,
-        { headers: { "x-test-user": user } },
+        { headers: { "x-test-user": user, ...headers } },
       );
     // Another teammate's browser cannot complete it.
     expect((await callback(h.mate)).status).toBe(401);
+    const refusedWeb = await callback(h.mate, {
+      "sec-fetch-mode": "navigate",
+    });
+    expect(refusedWeb.status).toBe(303);
+    expect(
+      Object.fromEntries(
+        new URL(refusedWeb.headers.get("location")!).searchParams,
+      ),
+    ).toEqual({ outcome: "unauthorized", name: "Connector" });
     const done = await callback(h.owner);
     const body = (await done.json()) as any;
     expect(done.status).toBe(200);
@@ -238,6 +247,34 @@ describe.skipIf(!url)("assistant connectors", () => {
       status: "already_used",
       connector: null,
     });
+    const web = await callback(h.owner, { "sec-fetch-mode": "navigate" });
+    expect(web.status).toBe(303);
+    expect(Object.fromEntries(web.headers)).toMatchObject({
+      "cache-control": "no-store",
+      "referrer-policy": "no-referrer",
+    });
+    const location = new URL(web.headers.get("location")!);
+    expect([
+      location.pathname,
+      Object.fromEntries(location.searchParams),
+    ]).toEqual([
+      "/quills/oauth/result",
+      { outcome: "already_used", name: "Connector" },
+    ]);
+    expect(
+      (
+        await callback(h.owner, {
+          accept: "text/html,application/json;q=0.8",
+        })
+      ).status,
+    ).toBe(303);
+    const jsonPreferred = await callback(h.owner, {
+      accept: "application/json,text/html;q=0.9",
+    });
+    expect([jsonPreferred.status, await jsonPreferred.json()]).toEqual([
+      200,
+      { status: "already_used", connector: null },
+    ]);
     const secrets = openCredentials((await stored(id)).secrets)!;
     expect(secrets.codeVerifier).toBeUndefined();
     expect(JSON.parse(secrets.tokens!).refresh_token).toBe(REFRESH);

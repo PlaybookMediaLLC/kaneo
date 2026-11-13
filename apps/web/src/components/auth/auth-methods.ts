@@ -58,7 +58,20 @@ export function getSignInFooter(
 }
 
 export function getSafeRedirectPath(path: string | undefined) {
-  return path?.startsWith("/") && !path.includes("//") ? path : undefined;
+  if (
+    !path?.startsWith("/") ||
+    path.includes("//") ||
+    // eslint-disable-next-line no-control-regex -- Reject controls before URL normalization.
+    /[\\\u0000-\u0020]/.test(path) ||
+    /%(?:2f|5c|0[0-9a-f]|1[0-9a-f])/i.test(path)
+  )
+    return undefined;
+  const base = "https://redirect.invalid";
+  const resolved = new URL(path, base);
+  return resolved.origin === base &&
+    `${resolved.pathname}${resolved.search}${resolved.hash}` === path
+    ? path
+    : undefined;
 }
 
 export function getSignInSubtitleKey(

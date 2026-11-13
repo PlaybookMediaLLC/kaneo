@@ -1,0 +1,8 @@
+{
+	"changelog": "Changelog email updates",
+	"language": "Language preference",
+	"languageHint": "Use a language tag such as en or pt-BR. Leave blank to use the portal default.",
+	"status": "Status page email updates",
+	"submit": "Save language",
+	"title": "Preferences"
+}

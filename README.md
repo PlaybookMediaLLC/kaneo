@@ -63,7 +63,7 @@ Kaneo is open source. If you find it useful, consider [sponsoring the project](h
   <img src="apps/site/public/images/blacksmith-powered.png" alt="CI powered by Blacksmith" width="368" />
 </p>
 
-This project is tested with BrowserStack.
+Browser flows are tested with Stagehand Chromium. See [browser testing](tests/e2e/README.md).
 
 ### Community sponsors
 

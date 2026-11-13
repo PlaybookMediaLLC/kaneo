@@ -1,3 +1,6 @@
+import { attachmentScene } from "./attachment-routes.fixture";
+import { files } from "../../../database/quills/schema/files";
+import { pruneQuillsWorkspace } from "../../jobs/retention";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -22,7 +25,8 @@ import { registry } from "../../framework/registry";
 import * as portalFixtures from "../index.fixture";
 import * as contentPublicFixtures from "../../content/public/index.fixture";
 import { enableWidget } from "../../widget/seed.fixture";
-import { portalUrl, publicUrl } from "./feeds";
+import { publicUrl } from "./feeds";
+import { portalPaths } from "../paths";
 import { scene, world } from "./seed.fixture";
 
 // Feature checks for customer feedback that the per-route contract cannot express: the opt-in
@@ -211,6 +215,36 @@ describe.skipIf(!url)("Quills customer feedback", () => {
     await portal({ enabled: true });
   });
 
+  it("returns safe public branding without custom CSS", async () => {
+    const env = contractEnv();
+    await env.scoped(env.a, (db) =>
+      db.update(settings).set({
+        brandingConfig: JSON.stringify({
+          themeMode: "light",
+          light: {
+            primary: "#123456",
+            background: "url(https://tracker.example.test/pixel)",
+          },
+        }),
+        customCss: "body{background:url(https://tracker.example.test/pixel)}",
+        logoKey: "portal/demo-logo.png",
+        headerDisplayMode: "logo_only",
+        headerDisplayName: "Demo",
+      }),
+    );
+    const response = await call("GET", "/portal/config");
+    expect(response.status).toBe(200);
+    expect(response.body.branding).toMatchObject({
+      theme: { themeMode: "light", light: { primary: "#123456" } },
+      headerDisplayMode: "logo_only",
+      headerDisplayName: "Demo",
+    });
+    expect(response.body.branding.theme.light.background).toBeUndefined();
+    expect(response.body.branding.logoUrl).toMatch(/^http:/);
+    expect(JSON.stringify(response.body)).not.toContain("customCss");
+    expect(JSON.stringify(response.body)).not.toContain("tracker.example.test");
+  });
+
   it("closes a private portal to callers it does not admit, in every audience", async () => {
     const env = contractEnv();
     const s = await scene(env, "widget");
@@ -259,7 +293,7 @@ describe.skipIf(!url)("Quills customer feedback", () => {
         .set({ title: `Fixes & <improvements> "${a.entryId}"` })
         .where(eq(changelogEntries.id, a.entryId)),
     );
-    const portalBase = portalUrl(env.a);
+    const portalBase = portalPaths.home(env.a);
     expect(portalBase).toMatch(
       new RegExp(`^https?://[^/]+.*/portal/${env.a}$`),
     );
@@ -280,8 +314,8 @@ describe.skipIf(!url)("Quills customer feedback", () => {
     );
     const sitemap = await call("GET", "/sitemap.xml");
     expect(sitemap.body).toContain(`<loc>${portalBase}</loc>`);
-    expect(sitemap.body).toMatch(
-      new RegExp(`<loc>${portalBase}/b/[^<]+/posts/${a.postId}</loc>`),
+    expect(sitemap.body).toContain(
+      `<loc>${portalBase}/posts/${a.postId}</loc>`,
     );
     expect(sitemap.body).toContain(
       `<loc>${portalBase}/changelog/${a.entryId}</loc>`,
@@ -375,10 +409,49 @@ describe.skipIf(!url)("Quills customer feedback", () => {
         params: { commentId: own },
         body: { content: "Edited" },
       });
+    const commentCapabilities = async (user = env.customerA) => {
+      const response = await call("GET", "/portal/posts/{postId}/comments", {
+        user,
+        params: { postId: s.a.postId },
+      });
+      expect(response.status).toBe(200);
+      return response.body.items.find(
+        (item: { id: string }) => item.id === own,
+      );
+    };
+    expect(await commentCapabilities()).toMatchObject({
+      canEdit: true,
+      canDelete: true,
+    });
+    expect(await commentCapabilities(env.customerB)).toMatchObject({
+      canEdit: false,
+      canDelete: false,
+    });
     await reply(true);
-    expect((await editComment()).status).toBe(200);
+    const editedComment = await editComment();
+    expect(editedComment.status).toBe(200);
+    expect(editedComment.body).toMatchObject({
+      canEdit: true,
+      canDelete: true,
+    });
+    expect(await commentCapabilities()).toMatchObject({
+      canEdit: true,
+      canDelete: true,
+    });
     await reply(false);
+    expect(await commentCapabilities()).toMatchObject({
+      canEdit: false,
+      canDelete: false,
+    });
     expect((await editComment()).status).toBe(403);
+    expect(
+      (
+        await call("DELETE", "/portal/comments/{commentId}", {
+          ...a,
+          params: { commentId: own },
+        })
+      ).status,
+    ).toBe(403);
     // A deleted comment keeps its place without its text.
     const mine = await call("POST", "/portal/posts/{postId}/comments", {
       ...a,
@@ -402,6 +475,8 @@ describe.skipIf(!url)("Quills customer feedback", () => {
     );
     expect(tombstone).toMatchObject({
       deleted: true,
+      canEdit: false,
+      canDelete: false,
       content: "",
       author: { name: null },
     });
@@ -641,5 +716,203 @@ describe.skipIf(!url)("Quills customer feedback", () => {
     expect((await vote()).body).toMatchObject({ voted: true, changed: true });
     // Without a session, widget reads ask for one.
     expect((await call("GET", "/widget/posts")).status).toBe(401);
+  });
+  it("attaches only owned files, rolls back a mixed batch, and protects downloads by parent visibility", async () => {
+    const env = contractEnv();
+    const s = await attachmentScene(env);
+    const create = (attachmentIds: string[], user = env.customerA) =>
+      call("POST", "/portal/posts", {
+        user,
+        body: {
+          boardId: s.a.boardId,
+          title: "Attached idea",
+          content: "Details",
+          attachmentIds,
+        },
+      });
+    expect(
+      (
+        await call("GET", "/portal/files/{fileId}", {
+          params: { fileId: s.fileId },
+          user: env.customerB,
+        })
+      ).status,
+    ).toBe(404);
+    expect((await create([s.fileId, s.foreignId])).status).toBe(404);
+    expect(
+      await env.scoped(env.a, (db) =>
+        db
+          .select({ postId: files.postId })
+          .from(files)
+          .where(eq(files.id, s.fileId)),
+      ),
+    ).toEqual([{ postId: null }]);
+    expect((await create([s.fileId], env.customerB)).status).toBe(404);
+    await portal({ moderationDefault: { requireApproval: "all" } });
+    const created = await create([s.fileId]);
+    expect(created.status).toBe(200);
+    const params = { fileId: s.fileId };
+    expect(
+      (await call("GET", "/portal/files/{fileId}", { params })).status,
+    ).toBe(404);
+    expect(
+      (
+        await call("GET", "/portal/files/{fileId}", {
+          params,
+          user: env.customerB,
+        })
+      ).status,
+    ).toBe(404);
+    const own = await call("GET", "/portal/files/{fileId}", {
+      params,
+      user: env.customerA,
+    });
+    expect(own.status).toBe(200);
+    expect(own.body.name).toBe("example.txt");
+    expect(own.body.storageKey).toBeUndefined();
+    expect(
+      (
+        await call("DELETE", "/portal/files/{fileId}", {
+          params,
+          user: env.customerA,
+        })
+      ).status,
+    ).toBe(404);
+    expect((await create([s.fileId])).status).toBe(404);
+    await env.scoped(env.a, (db) =>
+      db
+        .update(posts)
+        .set({ moderationState: "published" })
+        .where(eq(posts.id, created.body.id)),
+    );
+    expect(
+      (await call("GET", "/portal/files/{fileId}", { params })).status,
+    ).toBe(200);
+    const read = await call("GET", "/portal/posts/{postId}", {
+      params: { postId: created.body.id },
+    });
+    expect(read.body.attachments).toEqual([
+      {
+        id: s.fileId,
+        name: "example.txt",
+        contentType: "text/plain",
+        size: 12,
+      },
+    ]);
+    await call("PUT", "/portal/posts/{postId}", {
+      params: { postId: created.body.id },
+      user: env.customerA,
+      body: { title: "Updated", content: "Removed file", attachmentIds: [] },
+    });
+    expect(
+      (
+        await call("GET", "/portal/files/{fileId}", {
+          params,
+          user: env.customerA,
+        })
+      ).status,
+    ).toBe(404);
+    await portal({ moderationDefault: { requireApproval: "none" } });
+  });
+
+  it("serializes file attachment claims and hides deleted comment attachments", async () => {
+    const env = contractEnv();
+    const s = await attachmentScene(env);
+    const body = { content: "With a file", attachmentIds: [s.fileId] };
+    const send = () =>
+      call("POST", "/portal/posts/{postId}/comments", {
+        params: { postId: s.a.postId },
+        user: env.customerA,
+        body,
+      });
+    const results = await Promise.all([send(), send()]);
+    expect(results.map((result) => result.status).sort()).toEqual([200, 404]);
+    const created = results.find((result) => result.status === 200)!;
+    expect(created.body.attachments[0].id).toBe(s.fileId);
+    expect(
+      (
+        await call("GET", "/portal/files/{fileId}", {
+          params: { fileId: s.fileId },
+        })
+      ).status,
+    ).toBe(200);
+    await call("DELETE", "/portal/comments/{commentId}", {
+      params: { commentId: created.body.id },
+      user: env.customerA,
+    });
+    expect(
+      (
+        await call("GET", "/portal/files/{fileId}", {
+          params: { fileId: s.fileId },
+          user: env.customerA,
+        })
+      ).status,
+    ).toBe(404);
+  });
+
+  it("replays an attachment submission and rejects a changed attachment payload", async () => {
+    const env = contractEnv();
+    const s = await attachmentScene(env);
+    const body = {
+      boardId: s.a.boardId,
+      title: "Retry with attachment",
+      content: "Details",
+      attachmentIds: [s.fileId],
+      idempotencyKey: s.a.key,
+    };
+    const send = (value: Record<string, unknown>) =>
+      call("POST", "/portal/posts", { user: env.customerA, body: value });
+    const created = await send(body);
+    expect(created.status).toBe(200);
+    const replay = await send(body);
+    expect(replay.status).toBe(200);
+    expect(replay.body.id).toBe(created.body.id);
+    const { attachmentIds: _ids, ...withoutAttachments } = body;
+    expect((await send(withoutAttachments)).status).toBe(409);
+    expect((await send({ ...body, attachmentIds: [] })).status).toBe(409);
+  });
+
+  it("expires abandoned portal files, retains attached files and enforces tenant foreign keys", async () => {
+    const env = contractEnv();
+    const s = await attachmentScene(env);
+    await expect(
+      env.scoped(env.a, (db) =>
+        db
+          .update(files)
+          .set({ postId: s.b.postId })
+          .where(eq(files.id, s.fileId)),
+      ),
+    ).rejects.toThrow();
+    await env.scoped(env.a, async (db) => {
+      await db
+        .update(files)
+        .set({ createdAt: new Date("2020-01-01") })
+        .where(eq(files.id, s.fileId));
+      await pruneQuillsWorkspace(db);
+      expect(
+        await db
+          .select({ id: files.id })
+          .from(files)
+          .where(eq(files.id, s.fileId)),
+      ).toEqual([]);
+    });
+    const attached = await attachmentScene(env);
+    await env.scoped(env.a, async (db) => {
+      await db
+        .update(files)
+        .set({
+          createdAt: new Date("2020-01-01"),
+          postId: attached.a.postId,
+          attachedAt: new Date(),
+        })
+        .where(eq(files.id, attached.fileId));
+      await pruneQuillsWorkspace(db);
+      expect(
+        await db
+          .select({ id: files.id })
+          .from(files)
+          .where(eq(files.id, attached.fileId)),
+      ).toHaveLength(1);
+    });
   });
 });

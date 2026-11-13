@@ -10544,6 +10544,15 @@
         "responses": {
           "200": {
             "description": "The connection without its tokens",
+            "headers": {
+              "X-Quills-Result-Location": {
+                "description": "The sanitized web result page for a browser bridge",
+                "schema": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -10563,6 +10572,36 @@
                   "required": [
                     "status",
                     "integration"
+                  ]
+                }
+              }
+            }
+          },
+          "303": {
+            "description": "Continue in the web app",
+            "headers": {
+              "Location": {
+                "description": "The web result page",
+                "schema": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              },
+              "Cache-Control": {
+                "description": "The callback response is never cached",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              },
+              "Referrer-Policy": {
+                "description": "The callback URL is not sent to the web app",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-referrer"
                   ]
                 }
               }
@@ -10664,6 +10703,15 @@
         "responses": {
           "200": {
             "description": "The connection without its tokens",
+            "headers": {
+              "X-Quills-Result-Location": {
+                "description": "The sanitized web result page for a browser bridge",
+                "schema": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -10878,6 +10926,15 @@
         "responses": {
           "200": {
             "description": "The connector without its credentials",
+            "headers": {
+              "X-Quills-Result-Location": {
+                "description": "The sanitized web result page for a browser bridge",
+                "schema": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -11121,6 +11178,36 @@
                   "required": [
                     "status",
                     "connector"
+                  ]
+                }
+              }
+            }
+          },
+          "303": {
+            "description": "Continue in the web app",
+            "headers": {
+              "Location": {
+                "description": "The web result page",
+                "schema": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              },
+              "Cache-Control": {
+                "description": "The callback response is never cached",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              },
+              "Referrer-Policy": {
+                "description": "The callback URL is not sent to the web app",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-referrer"
                   ]
                 }
               }
@@ -11429,12 +11516,276 @@
                       "required": [
                         "isPrivate"
                       ]
+                    },
+                    "branding": {
+                      "type": "object",
+                      "properties": {
+                        "logoUrl": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "theme": {
+                          "type": "object",
+                          "properties": {
+                            "themeMode": {
+                              "type": "string",
+                              "enum": [
+                                "light",
+                                "dark",
+                                "user"
+                              ]
+                            },
+                            "light": {
+                              "type": "object",
+                              "properties": {
+                                "background": {
+                                  "type": "string"
+                                },
+                                "foreground": {
+                                  "type": "string"
+                                },
+                                "card": {
+                                  "type": "string"
+                                },
+                                "cardForeground": {
+                                  "type": "string"
+                                },
+                                "popover": {
+                                  "type": "string"
+                                },
+                                "popoverForeground": {
+                                  "type": "string"
+                                },
+                                "primary": {
+                                  "type": "string"
+                                },
+                                "primaryForeground": {
+                                  "type": "string"
+                                },
+                                "secondary": {
+                                  "type": "string"
+                                },
+                                "secondaryForeground": {
+                                  "type": "string"
+                                },
+                                "muted": {
+                                  "type": "string"
+                                },
+                                "mutedForeground": {
+                                  "type": "string"
+                                },
+                                "accent": {
+                                  "type": "string"
+                                },
+                                "accentForeground": {
+                                  "type": "string"
+                                },
+                                "accentInk": {
+                                  "type": "string"
+                                },
+                                "destructive": {
+                                  "type": "string"
+                                },
+                                "destructiveForeground": {
+                                  "type": "string"
+                                },
+                                "border": {
+                                  "type": "string"
+                                },
+                                "input": {
+                                  "type": "string"
+                                },
+                                "ring": {
+                                  "type": "string"
+                                },
+                                "success": {
+                                  "type": "string"
+                                },
+                                "sidebarBackground": {
+                                  "type": "string"
+                                },
+                                "sidebarForeground": {
+                                  "type": "string"
+                                },
+                                "sidebarPrimary": {
+                                  "type": "string"
+                                },
+                                "sidebarPrimaryForeground": {
+                                  "type": "string"
+                                },
+                                "sidebarAccent": {
+                                  "type": "string"
+                                },
+                                "sidebarAccentForeground": {
+                                  "type": "string"
+                                },
+                                "sidebarBorder": {
+                                  "type": "string"
+                                },
+                                "sidebarRing": {
+                                  "type": "string"
+                                },
+                                "chart1": {
+                                  "type": "string"
+                                },
+                                "chart2": {
+                                  "type": "string"
+                                },
+                                "chart3": {
+                                  "type": "string"
+                                },
+                                "chart4": {
+                                  "type": "string"
+                                },
+                                "chart5": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "dark": {
+                              "type": "object",
+                              "properties": {
+                                "background": {
+                                  "type": "string"
+                                },
+                                "foreground": {
+                                  "type": "string"
+                                },
+                                "card": {
+                                  "type": "string"
+                                },
+                                "cardForeground": {
+                                  "type": "string"
+                                },
+                                "popover": {
+                                  "type": "string"
+                                },
+                                "popoverForeground": {
+                                  "type": "string"
+                                },
+                                "primary": {
+                                  "type": "string"
+                                },
+                                "primaryForeground": {
+                                  "type": "string"
+                                },
+                                "secondary": {
+                                  "type": "string"
+                                },
+                                "secondaryForeground": {
+                                  "type": "string"
+                                },
+                                "muted": {
+                                  "type": "string"
+                                },
+                                "mutedForeground": {
+                                  "type": "string"
+                                },
+                                "accent": {
+                                  "type": "string"
+                                },
+                                "accentForeground": {
+                                  "type": "string"
+                                },
+                                "accentInk": {
+                                  "type": "string"
+                                },
+                                "destructive": {
+                                  "type": "string"
+                                },
+                                "destructiveForeground": {
+                                  "type": "string"
+                                },
+                                "border": {
+                                  "type": "string"
+                                },
+                                "input": {
+                                  "type": "string"
+                                },
+                                "ring": {
+                                  "type": "string"
+                                },
+                                "success": {
+                                  "type": "string"
+                                },
+                                "sidebarBackground": {
+                                  "type": "string"
+                                },
+                                "sidebarForeground": {
+                                  "type": "string"
+                                },
+                                "sidebarPrimary": {
+                                  "type": "string"
+                                },
+                                "sidebarPrimaryForeground": {
+                                  "type": "string"
+                                },
+                                "sidebarAccent": {
+                                  "type": "string"
+                                },
+                                "sidebarAccentForeground": {
+                                  "type": "string"
+                                },
+                                "sidebarBorder": {
+                                  "type": "string"
+                                },
+                                "sidebarRing": {
+                                  "type": "string"
+                                },
+                                "chart1": {
+                                  "type": "string"
+                                },
+                                "chart2": {
+                                  "type": "string"
+                                },
+                                "chart3": {
+                                  "type": "string"
+                                },
+                                "chart4": {
+                                  "type": "string"
+                                },
+                                "chart5": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          },
+                          "required": [
+                            "themeMode",
+                            "light",
+                            "dark"
+                          ]
+                        },
+                        "headerDisplayMode": {
+                          "type": "string",
+                          "enum": [
+                            "logo_and_name",
+                            "logo_only",
+                            "custom_logo"
+                          ]
+                        },
+                        "headerDisplayName": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "logoUrl",
+                        "theme",
+                        "headerDisplayMode",
+                        "headerDisplayName"
+                      ]
                     }
                   },
                   "required": [
                     "name",
                     "features",
-                    "portalAccess"
+                    "portalAccess",
+                    "branding"
                   ]
                 }
               }
@@ -15277,6 +15628,13 @@
                     "type": "string",
                     "maxLength": 10000
                   },
+                  "attachmentIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 10
+                  },
                   "idempotencyKey": {
                     "type": "string",
                     "minLength": 1,
@@ -15827,6 +16185,32 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "attachments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "contentType": {
+                            "type": "string"
+                          },
+                          "size": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "contentType",
+                          "size"
+                        ]
+                      }
+                    },
                     "canVote": {
                       "type": "boolean"
                     },
@@ -15880,6 +16264,7 @@
                     "following",
                     "tags",
                     "createdAt",
+                    "attachments",
                     "canVote",
                     "canComment",
                     "canEdit",
@@ -15958,6 +16343,13 @@
                   "content": {
                     "type": "string",
                     "maxLength": 10000
+                  },
+                  "attachmentIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 10
                   }
                 },
                 "required": [
@@ -16718,6 +17110,32 @@
                       "items": {
                         "type": "object",
                         "properties": {
+                          "attachments": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "contentType": {
+                                  "type": "string"
+                                },
+                                "size": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name",
+                                "contentType",
+                                "size"
+                              ]
+                            }
+                          },
                           "id": {
                             "type": "string"
                           },
@@ -16756,6 +17174,12 @@
                             ]
                           },
                           "isAuthor": {
+                            "type": "boolean"
+                          },
+                          "canEdit": {
+                            "type": "boolean"
+                          },
+                          "canDelete": {
                             "type": "boolean"
                           },
                           "pending": {
@@ -16799,11 +17223,14 @@
                           }
                         },
                         "required": [
+                          "attachments",
                           "id",
                           "parentId",
                           "content",
                           "author",
                           "isAuthor",
+                          "canEdit",
+                          "canDelete",
                           "pending",
                           "deleted",
                           "createdAt",
@@ -16890,6 +17317,13 @@
                     "minLength": 1,
                     "maxLength": 5000
                   },
+                  "attachmentIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 10
+                  },
                   "parentId": {
                     "type": "string"
                   },
@@ -16914,6 +17348,32 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "attachments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "contentType": {
+                            "type": "string"
+                          },
+                          "size": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "contentType",
+                          "size"
+                        ]
+                      }
+                    },
                     "id": {
                       "type": "string"
                     },
@@ -16952,6 +17412,12 @@
                       ]
                     },
                     "isAuthor": {
+                      "type": "boolean"
+                    },
+                    "canEdit": {
+                      "type": "boolean"
+                    },
+                    "canDelete": {
                       "type": "boolean"
                     },
                     "pending": {
@@ -17001,11 +17467,14 @@
                     }
                   },
                   "required": [
+                    "attachments",
                     "id",
                     "parentId",
                     "content",
                     "author",
                     "isAuthor",
+                    "canEdit",
+                    "canDelete",
                     "pending",
                     "deleted",
                     "createdAt",
@@ -17262,6 +17731,13 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 5000
+                  },
+                  "attachmentIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 10
                   }
                 },
                 "required": [
@@ -17279,6 +17755,32 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "attachments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "contentType": {
+                            "type": "string"
+                          },
+                          "size": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "contentType",
+                          "size"
+                        ]
+                      }
+                    },
                     "id": {
                       "type": "string"
                     },
@@ -17317,6 +17819,12 @@
                       ]
                     },
                     "isAuthor": {
+                      "type": "boolean"
+                    },
+                    "canEdit": {
+                      "type": "boolean"
+                    },
+                    "canDelete": {
                       "type": "boolean"
                     },
                     "pending": {
@@ -17363,11 +17871,14 @@
                     }
                   },
                   "required": [
+                    "attachments",
                     "id",
                     "parentId",
                     "content",
                     "author",
                     "isAuthor",
+                    "canEdit",
+                    "canDelete",
                     "pending",
                     "deleted",
                     "createdAt",
@@ -17506,6 +18017,179 @@
           },
           "429": {
             "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/portal/files/{fileId}": {
+      "get": {
+        "operationId": "getQuillsPortalFile",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get an accessible feedback attachment and a short-lived download URL",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "fileId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Attachment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "contentType": {
+                      "type": "string"
+                    },
+                    "size": {
+                      "type": "number"
+                    },
+                    "downloadUrl": {
+                      "type": "string"
+                    },
+                    "downloadExpiresAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "contentType",
+                    "size",
+                    "downloadUrl",
+                    "downloadExpiresAt"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Portal access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Attachment not found; Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "discardQuillsPortalFile",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Discard the caller's unattached feedback upload",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "fileId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Discarded upload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Portal access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unattached upload not found; Workspace not found or archived",
             "content": {
               "application/json": {
                 "schema": {
@@ -18957,6 +19641,13 @@
                     "type": "string",
                     "maxLength": 10000
                   },
+                  "attachmentIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 10
+                  },
                   "idempotencyKey": {
                     "type": "string",
                     "minLength": 1,
@@ -19517,6 +20208,32 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "attachments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "contentType": {
+                            "type": "string"
+                          },
+                          "size": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "contentType",
+                          "size"
+                        ]
+                      }
+                    },
                     "canVote": {
                       "type": "boolean"
                     },
@@ -19570,6 +20287,7 @@
                     "following",
                     "tags",
                     "createdAt",
+                    "attachments",
                     "canVote",
                     "canComment",
                     "canEdit",
@@ -20078,6 +20796,32 @@
                       "items": {
                         "type": "object",
                         "properties": {
+                          "attachments": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "contentType": {
+                                  "type": "string"
+                                },
+                                "size": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name",
+                                "contentType",
+                                "size"
+                              ]
+                            }
+                          },
                           "id": {
                             "type": "string"
                           },
@@ -20116,6 +20860,12 @@
                             ]
                           },
                           "isAuthor": {
+                            "type": "boolean"
+                          },
+                          "canEdit": {
+                            "type": "boolean"
+                          },
+                          "canDelete": {
                             "type": "boolean"
                           },
                           "pending": {
@@ -20159,11 +20909,14 @@
                           }
                         },
                         "required": [
+                          "attachments",
                           "id",
                           "parentId",
                           "content",
                           "author",
                           "isAuthor",
+                          "canEdit",
+                          "canDelete",
                           "pending",
                           "deleted",
                           "createdAt",
@@ -20260,6 +21013,13 @@
                     "minLength": 1,
                     "maxLength": 5000
                   },
+                  "attachmentIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 10
+                  },
                   "parentId": {
                     "type": "string"
                   },
@@ -20284,6 +21044,32 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "attachments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "contentType": {
+                            "type": "string"
+                          },
+                          "size": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "contentType",
+                          "size"
+                        ]
+                      }
+                    },
                     "id": {
                       "type": "string"
                     },
@@ -20322,6 +21108,12 @@
                       ]
                     },
                     "isAuthor": {
+                      "type": "boolean"
+                    },
+                    "canEdit": {
+                      "type": "boolean"
+                    },
+                    "canDelete": {
                       "type": "boolean"
                     },
                     "pending": {
@@ -20371,11 +21163,14 @@
                     }
                   },
                   "required": [
+                    "attachments",
                     "id",
                     "parentId",
                     "content",
                     "author",
                     "isAuthor",
+                    "canEdit",
+                    "canDelete",
                     "pending",
                     "deleted",
                     "createdAt",
@@ -30957,6 +31752,90 @@
           },
           "409": {
             "description": "The caller changed during the request; retry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/portal/uploads/prepare": {
+      "post": {
+        "operationId": "prepareQuillsPortalUpload",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Prepare the signed-in customer's upload profile",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Upload profile ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ready": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ready"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Portal access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
             "content": {
               "application/json": {
                 "schema": {
@@ -69462,6 +70341,7 @@
                         "settings.developer_updated",
                         "settings.labs_updated",
                         "file.created",
+                        "file.deleted",
                         "settings.logo_updated",
                         "settings.logo_removed",
                         "settings.favicon_updated",
@@ -70014,6 +70894,7 @@
                         "settings.developer_updated",
                         "settings.labs_updated",
                         "file.created",
+                        "file.deleted",
                         "settings.logo_updated",
                         "settings.logo_removed",
                         "settings.favicon_updated",
@@ -136492,6 +137373,7 @@
                             "settings.developer_updated",
                             "settings.labs_updated",
                             "file.created",
+                            "file.deleted",
                             "settings.logo_updated",
                             "settings.logo_removed",
                             "settings.favicon_updated",

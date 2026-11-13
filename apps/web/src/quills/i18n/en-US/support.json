@@ -1,0 +1,13 @@
+{
+	"content": "How can we help?",
+	"created": "Conversation started",
+	"loadMore": "Load more conversations",
+	"newConversation": "Start a conversation",
+	"openConversation": "Open conversation: {{subject}}",
+	"previewMissing": "No message preview",
+	"subjectMissing": "Support conversation",
+	"submit": "Send message",
+	"tickets": "View support tickets",
+	"title": "Support conversations",
+	"unread": "{{count}} unread messages"
+}

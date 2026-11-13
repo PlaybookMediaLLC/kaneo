@@ -224,6 +224,7 @@ function SignIn() {
             footer={getSignInFooter(config, emailMethod, providers)}
             invitationId={invitationId}
             email={search.email}
+            redirect={redirectPath}
           />
           {config?.hasGuestAccess && !invitationId ? (
             <p>

@@ -52,6 +52,7 @@ const allowedImport = (file: string, specifier: string) => {
         "framework/audience",
         "framework/signed",
         "framework/internal",
+        "framework/oauth-result",
         "framework/read-batch",
         // Static widget page and bundles: reads files, never the database (see the module).
         "widget/host",
@@ -60,6 +61,8 @@ const allowedImport = (file: string, specifier: string) => {
         "assistant/connector-client",
         // Link unfurl: the guarded fetch for route modules, no database (link-preview.test.ts pins its imports).
         "support/link-fetch",
+        // Pure builders for every web URL emitted by API routes and mail.
+        "portal/paths",
         // Website branding: a guarded site fetch, a logo upload and the personal email domain list;
         // never the database (see the module).
         "settings/website-fetch",
@@ -180,6 +183,8 @@ describe("Quills module boundaries", () => {
     expect(
       matching(quills, /from "(\.\.\/)+database(\/index|\/schema)?"/),
     ).toEqual([
+      // Local-only portal demo seed; its environment guard is tested beside it.
+      "dev/seed-portal.ts",
       // An app's API key in public.apikey: mint, scope and undo (RFC 0001, D14).
       "framework/app-keys.ts",
       // Test harness: seeds the platform rows that the contract checks need.
@@ -203,6 +208,8 @@ describe("Quills module boundaries", () => {
         /from "pg"|getDatabasePool|SET (LOCAL )?ROLE|set_config|row_security/i,
       ),
     ).toEqual([
+      // Local-only portal demo seed closes the shared pool before its process exits.
+      "dev/seed-portal.ts",
       // Operator import: a read-only client on the original Quackback database.
       "transfer/legacy-archive.ts",
     ]);

@@ -29,6 +29,7 @@ import {
   type QuillsAction,
 } from "../with-quills-request";
 import { appKey, boundApp, confineKey, type AppCapability } from "./app";
+import { prefersBrowserNavigation } from "./browser-navigation";
 import {
   callerActor,
   enforceRateLimit,
@@ -91,6 +92,18 @@ export type QuillsRouteInput<P, Q, B> = {
   workspaceId: string;
 };
 
+type SignedRedirectInput<P, Q> = {
+  params: Output<P>;
+  query: Output<Q>;
+};
+
+type SignedRedirect<P, Q, R extends z.ZodType> = {
+  /** The fixed web result page for a successful or replayed request. */
+  success: (result: z.output<R>, input: SignedRedirectInput<P, Q>) => string;
+  /** The fixed web result page for an expected HTTP failure. */
+  failure: (status: number, input: SignedRedirectInput<P, Q>) => string;
+};
+
 export type QuillsRouteDeclaration<
   M extends Method,
   Path extends string,
@@ -131,6 +144,8 @@ export type QuillsRouteDeclaration<
   ) => Promise<QuillsActor["principalId"] | null>;
   /** Signed: the response to a delivery that was already processed. Nothing else runs. */
   replay?: z.input<NoInfer<R>>;
+  /** Signed JSON: exposes the web result location; GET browser navigations receive it as a 303. */
+  redirect?: SignedRedirect<P, Q, R>;
   /**
    * Teammate, app, signed, portal and widget: a read in its own scoped transaction, before `call`. It
    * must not write. The handler then runs in a new scoped transaction with the call's result as `called`.
@@ -470,7 +485,17 @@ export function buildQuillsRoute<
         description: d.responseDescription,
         content: { [d.raw]: { schema: d.response } },
       }
-    : jsonResponse(d.responseDescription, d.response);
+    : {
+        ...jsonResponse(d.responseDescription, d.response),
+        ...(d.redirect && {
+          headers: {
+            "X-Quills-Result-Location": {
+              description: "The sanitized web result page for a browser bridge",
+              schema: { type: "string", format: "uri" },
+            },
+          },
+        }),
+      };
   if (d.textBody && (audience !== "public" || !d.body))
     throw new Error(
       `${d.operationId}: textBody is for a public route with a body`,
@@ -508,6 +533,10 @@ export function buildQuillsRoute<
   if ((audience === "signed") !== (d.replay !== undefined))
     throw new Error(
       `${d.operationId}: a signed route, and only one, declares its replay response`,
+    );
+  if (d.redirect && (audience !== "signed" || d.raw !== undefined))
+    throw new Error(
+      `${d.operationId}: a browser redirect is for a JSON signed route`,
     );
   if (audience === "signed" || audience === "internal") {
     if (
@@ -552,6 +581,26 @@ export function buildQuillsRoute<
       request: { params: d.params, query: d.query },
       responses: {
         200: ok,
+        ...(d.redirect &&
+          d.method === "get" && {
+            303: {
+              description: "Continue in the web app",
+              headers: {
+                Location: {
+                  description: "The web result page",
+                  schema: { type: "string", format: "uri" },
+                },
+                "Cache-Control": {
+                  description: "The callback response is never cached",
+                  schema: { type: "string", enum: ["no-store"] },
+                },
+                "Referrer-Policy": {
+                  description: "The callback URL is not sent to the web app",
+                  schema: { type: "string", enum: ["no-referrer"] },
+                },
+              },
+            },
+          }),
         401: errorResponse(signed ? "Invalid signature" : "Invalid token"),
         ...(signed &&
           d.body && {
@@ -606,9 +655,46 @@ export function buildQuillsRoute<
           : {},
         query: d.query ? (c.req.valid("query") as Record<string, string>) : {},
       };
-      const located = await verifier.locate(request);
-      const answer = (value: unknown) =>
-        html ? c.body(value as string, 200, html) : c.json(value, 200);
+      const navigation = Boolean(
+        d.redirect &&
+        d.method === "get" &&
+        prefersBrowserNavigation(c.req.raw.headers),
+      );
+      const redirectInput = {
+        params: request.params,
+        query: d.query && request.query,
+      } as SignedRedirectInput<P, Q>;
+      const continueInWeb = (location: string) => {
+        const response = c.redirect(location, 303);
+        response.headers.set("cache-control", "no-store");
+        response.headers.set("referrer-policy", "no-referrer");
+        return response;
+      };
+      const answer = (value: unknown) => {
+        if (d.redirect) {
+          const location = d.redirect.success(
+            value as z.output<R>,
+            redirectInput,
+          );
+          if (navigation) return continueInWeb(location);
+          const response = c.json(value, 200);
+          response.headers.set("x-quills-result-location", location);
+          return response;
+        }
+        return html ? c.body(value as string, 200, html) : c.json(value, 200);
+      };
+      const failure = async (error: unknown) => {
+        if (!d.redirect || !(error instanceof HTTPException) || !navigation)
+          throw error;
+        const location = d.redirect.failure(error.status, redirectInput);
+        return continueInWeb(location);
+      };
+      let located: Located;
+      try {
+        located = await verifier.locate(request);
+      } catch (error) {
+        return failure(error);
+      }
       let body: unknown;
       const open = <T>(
         work: (
@@ -640,45 +726,54 @@ export function buildQuillsRoute<
           throw error;
         });
       const REPLAY = Symbol("replay");
-      let called = undefined as C;
-      if (prepare) {
-        const first = await open(async (db, input, credential) =>
-          (await deliverySeen(db, verifier.name, located.deliveryId))
-            ? REPLAY
-            : {
-                input,
-                prepared: await prepare({ ...input, db, credential, located }),
-              },
-        );
-        if (first === REPLAY) return answer(d.replay);
-        called = await d.call!(first.prepared, first.input);
-      }
-      const result = await open(async (db, input, credential) => {
-        if (!(await recordDelivery(db, verifier.name, located.deliveryId)))
-          return REPLAY;
-        const raw = await handle({
-          ...input,
-          db,
-          credential,
-          located,
-          called,
-          request: requestMeta(c.req.raw.headers),
-        });
-        const result = d.response.parse(raw) as z.output<R>;
-        const change =
-          typeof d.event === "function" && d.event(input, result, raw);
-        // A machine caller is no teammate and no customer: the audit row records a system change,
-        // unless the credential names a teammate (an OAuth redirect started by one).
-        const principalId = d.actor ? await d.actor(db, located) : null;
-        for (const one of [change || []].flat())
-          await recordQuillsChange(
-            db,
-            principalId ? { principalId, actorType: "user" } : null,
-            one,
+      try {
+        let called = undefined as C;
+        if (prepare) {
+          const first = await open(async (db, input, credential) =>
+            (await deliverySeen(db, verifier.name, located.deliveryId))
+              ? REPLAY
+              : {
+                  input,
+                  prepared: await prepare({
+                    ...input,
+                    db,
+                    credential,
+                    located,
+                  }),
+                },
           );
-        return result;
-      });
-      return answer(result === REPLAY ? d.replay : result);
+          if (first === REPLAY) return answer(d.replay);
+          called = await d.call!(first.prepared, first.input);
+        }
+        const result = await open(async (db, input, credential) => {
+          if (!(await recordDelivery(db, verifier.name, located.deliveryId)))
+            return REPLAY;
+          const raw = await handle({
+            ...input,
+            db,
+            credential,
+            located,
+            called,
+            request: requestMeta(c.req.raw.headers),
+          });
+          const result = d.response.parse(raw) as z.output<R>;
+          const change =
+            typeof d.event === "function" && d.event(input, result, raw);
+          // A machine caller is no teammate and no customer: the audit row records a system change,
+          // unless the credential names a teammate (an OAuth redirect started by one).
+          const principalId = d.actor ? await d.actor(db, located) : null;
+          for (const one of [change || []].flat())
+            await recordQuillsChange(
+              db,
+              principalId ? { principalId, actorType: "user" } : null,
+              one,
+            );
+          return result;
+        });
+        return answer(result === REPLAY ? d.replay : result);
+      } catch (error) {
+        return failure(error);
+      }
     }) as unknown as RouteHandler<typeof route, RouteEnv<A>>;
     return [route, handler] as const;
   }

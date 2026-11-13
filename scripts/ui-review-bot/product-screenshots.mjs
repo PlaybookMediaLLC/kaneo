@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { copyFile, mkdir, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { chromium } from "playwright";
+import {
+  launchBrowser,
+  visible,
+  screenshot,
+  fixedTime,
+  saveFailure,
+} from "@kaneo/browser-test";
 import { WORKSPACE_CAPABILITY_NAMES } from "../../packages/permissions/src/capabilities.ts";
 import { fixture, installFixtures } from "./fixtures.mjs";
 import {
@@ -20,9 +26,10 @@ import {
   workspace,
   workspaceId,
 } from "./product-fixtures.mjs";
-import { api, fulfillJSON, origin, root, startWebApp } from "./web-app.mjs";
+import { origin, root, startWebApp } from "./web-app.mjs";
 
-const output = `${root}apps/site/public/images/product`;
+const output =
+  process.env.SCREENSHOT_OUTPUT || `${root}apps/site/public/images/product`;
 const docsOutput = `${root}apps/docs/images/product`;
 const projectPath = `/dashboard/workspace/${workspaceId}/project/${projectId}`;
 const views = [
@@ -60,6 +67,8 @@ function respond(url, method) {
       },
     };
   if (p === `/api/column/${projectId}`) return columns;
+  if (p === `/api/workspace/${workspaceId}`)
+    return { ...workspace, description: null, role: "owner" };
   if (p === `/api/workspace/${workspaceId}/capabilities`)
     return Object.fromEntries(
       WORKSPACE_CAPABILITY_NAMES.map((name) => [name, true]),
@@ -155,7 +164,6 @@ await mkdir(output, { recursive: true });
 const server = await startWebApp();
 let browser;
 try {
-  browser = await chromium.launch();
   for (const theme of ["light", "dark"]) {
     for (const [view, path, viewMode, readyText] of views) {
       if (
@@ -163,18 +171,29 @@ try {
         process.env.PRODUCT_SCREENSHOT_VIEW !== view
       )
         continue;
-      const context = await browser.newContext({
+      browser = await launchBrowser({
         viewport: { width: 1728, height: 1000 },
         deviceScaleFactor: 2,
         locale: "en-US",
         timezoneId: "UTC",
         colorScheme: theme,
         reducedMotion: "reduce",
-        serviceWorkers: "block",
       });
       const diagnostics = { unhandled: [], blocked: [] };
-      await installFixtures(context, origin, diagnostics);
-      await context.addInitScript(
+      const override = (url, method) => {
+        const data = method === "GET" ? respond(url, method) : undefined;
+        return data;
+      };
+      const page = await browser.newPage();
+      await installFixtures(
+        browser,
+        page,
+        origin,
+        diagnostics,
+        undefined,
+        override,
+      );
+      await page.addInitScript(
         ([theme, viewMode]) => {
           localStorage.setItem(
             "user-preferences",
@@ -186,60 +205,54 @@ try {
         },
         [theme, viewMode],
       );
-      await context.route(`${api}/**`, async (route) => {
-        const request = route.request();
-        const data =
-          request.method() === "GET"
-            ? respond(request.url(), request.method())
-            : undefined;
-        if (data === undefined) return route.fallback();
-        await fulfillJSON(route, data);
-      });
-      const page = await context.newPage();
-      const errors = [];
-      const consoleErrors = [];
-      page.on("pageerror", (e) => errors.push(e.message));
-      page.on("requestfailed", (r) =>
-        consoleErrors.push(`${r.url()} ${r.failure()?.errorText}`),
-      );
-      page.on("framenavigated", (f) => consoleErrors.push(`frame ${f.url()}`));
-      await page.clock.setFixedTime(new Date(date));
+      const monitor = browser.monitor(page);
+      const errors = monitor.errors;
+      const consoleErrors = monitor.consoleErrors;
+      await fixedTime(page, date);
       await page.goto(`${origin}${path}`);
-      await page
-        .getByText(readyText, { exact: true })
-        .first()
-        .waitFor()
-        .catch(async (error) => {
-          const failure = `${tmpdir()}/product-${view}-${theme}-failure.png`;
-          await page.screenshot({ path: failure });
-          console.error(
-            JSON.stringify({
-              view,
-              theme,
-              failure,
-              errors,
-              consoleErrors,
-              ...diagnostics,
-            }),
-          );
-          throw error;
-        });
+      await visible(
+        page,
+        { by: "text", name: readyText },
+        { first: true, timeout: 30_000 },
+      ).catch(async (error) => {
+        const failure = `${tmpdir()}/product-${view}-${theme}-failure.png`;
+        await screenshot(page, failure);
+        await saveFailure(
+          browser,
+          page,
+          `${tmpdir()}/product-${view}-${theme}-diagnostics`,
+        );
+        console.error(
+          JSON.stringify({
+            view,
+            theme,
+            failure,
+            errors,
+            consoleErrors,
+            ...diagnostics,
+          }),
+        );
+        throw error;
+      });
       await page.waitForLoadState("networkidle");
       await page.evaluate(() => document.fonts.ready);
       if (view === "timeline") await showTimelineFrom(page, "6");
-      await page.mouse.move(0, 0);
-      await page.screenshot({
-        path: `${output}/${view}-${theme}.png`,
+      await page.hover(0, 0);
+      await screenshot(page, `${output}/${view}-${theme}.png`, {
         animations: "disabled",
       });
       console.log(JSON.stringify({ view, theme, errors, ...diagnostics }));
       assert.deepEqual(errors, []);
       assert.deepEqual(diagnostics.unhandled, []);
-      await context.close();
+      await browser.close();
+      browser = undefined;
       const docsFile = `${docsOutput}/${view}-${theme}.png`;
-      if (await stat(docsFile).catch(() => null))
+      if (
+        !process.env.SCREENSHOT_OUTPUT &&
+        (await stat(docsFile).catch(() => null))
+      )
         await copyFile(`${output}/${view}-${theme}.png`, docsFile);
-      if (view === "board")
+      if (!process.env.SCREENSHOT_OUTPUT && view === "board")
         await copyFile(
           `${output}/${view}-${theme}.png`,
           `${root}apps/site/public/images/${theme}.png`,

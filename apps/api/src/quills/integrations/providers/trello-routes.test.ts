@@ -198,6 +198,14 @@ describe.skipIf(!url)(
       const done = await post(value);
       expect(done.status).toBe(200);
       expect(await done.json()).toMatchObject({ status: "connected" });
+      const result = new URL(done.headers.get("x-quills-result-location")!);
+      expect([
+        result.pathname,
+        Object.fromEntries(result.searchParams),
+      ]).toEqual([
+        "/quills/oauth/result",
+        { outcome: "connected", name: "Trello" },
+      ]);
     });
 
     it("opens the bridge page for any state that it signed for Trello, so the page always clears the token", async () => {

@@ -49,6 +49,7 @@ import {
   visibleBoards,
 } from "../../portal/feedback/viewer";
 import type { DeliveryEvent, Subscribers } from "../fanout";
+import { portalPaths } from "../../portal/paths";
 
 // Support delivery: the customer's copy of a teammate reply on an email conversation, mention and
 // ticket-watcher notices for teammates, and the send-time decision for customer post mail.
@@ -60,13 +61,10 @@ type TicketRow = typeof tickets.$inferSelect;
 
 const clip = (text: string, length: number) =>
   text.length > length ? `${text.slice(0, length - 1)}…` : text;
-const clientUrl = () =>
-  (process.env.KANEO_CLIENT_URL || "http://localhost:5173").replace(/\/+$/, "");
-// ponytail: apps/web has no Quills support pages yet. Point these at the real routes when they land.
 const customerConversationUrl = (workspaceId: string, conversationId: string) =>
-  `${clientUrl()}/portal/${encodeURIComponent(workspaceId)}/conversations/${conversationId}`;
+  portalPaths.conversation(workspaceId, conversationId);
 const teammateConversationUrl = (workspaceId: string, conversationId: string) =>
-  `${clientUrl()}/dashboard/workspace/${encodeURIComponent(workspaceId)}/support/conversations/${conversationId}`;
+  portalPaths.teammateConversation(workspaceId, conversationId);
 
 async function workspaceOf(db: Database) {
   const [row] = await db

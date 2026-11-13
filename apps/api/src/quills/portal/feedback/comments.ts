@@ -1,4 +1,11 @@
 import {
+  attachment,
+  attachmentIds,
+  attachmentFields,
+  readAttachments,
+  saveAttachments,
+} from "./attachments";
+import {
   and,
   asc,
   count,
@@ -67,6 +74,7 @@ const reactions = z.array(
   z.object({ emoji: z.string(), count: z.number(), reacted: z.boolean() }),
 );
 const comment = z.object({
+  attachments: z.array(attachment),
   id: z.string(),
   parentId: z.string().nullable(),
   content: z.string(),
@@ -76,6 +84,8 @@ const comment = z.object({
     isTeamMember: z.boolean(),
   }),
   isAuthor: z.boolean(),
+  canEdit: z.boolean(),
+  canDelete: z.boolean(),
   pending: z.boolean(),
   deleted: z.boolean(),
   createdAt: responseTimestamp,
@@ -118,6 +128,24 @@ const reactionList = (
     .filter((r) => r.commentId === id)
     .map(({ emoji, count, reacted }) => ({ emoji, count, reacted }));
 
+/** Shared with mutation authorization so hidden team notes never change public capabilities. */
+async function commentsWithTeamReplies(db: Database, ids: PostCommentId[]) {
+  if (!ids.length) return new Set<PostCommentId>();
+  const replies = await db
+    .select({ parentId: postComments.parentId })
+    .from(postComments)
+    .where(
+      and(
+        inArray(postComments.parentId, ids),
+        eq(postComments.isTeamMember, true),
+        eq(postComments.isPrivate, false),
+        eq(postComments.moderationState, "published"),
+        isNull(postComments.deletedAt),
+      ),
+    );
+  return new Set(replies.map((reply) => reply.parentId));
+}
+
 async function loadComments(
   db: Database,
   viewer: Viewer,
@@ -146,27 +174,41 @@ async function loadComments(
     .offset(page.offset)
     .limit(page.limit + 1);
   const items = rows.slice(0, page.limit);
+  const replied = await commentsWithTeamReplies(
+    db,
+    items.map((row) => row.id),
+  );
   const counts = await reactionsFor(
     db,
     viewer,
     items.map((row) => row.id),
   );
+  const attachments = await readAttachments(db, {
+    commentIds: items.filter((row) => !row.deletedAt).map((row) => row.id),
+  });
   return {
     items: items.map((row) => {
       const hidden = !!row.deletedAt || row.authorType === "anonymous";
+      const isAuthor =
+        !row.deletedAt &&
+        !!viewer.principalId &&
+        row.principalId === viewer.principalId;
+      const canChange = isAuthor && !replied.has(row.id);
       return {
         id: row.id,
         parentId: row.parentId,
+        attachments: attachments
+          .filter((file) => file.commentId === row.id)
+          .map(attachmentFields),
         content: row.deletedAt ? "" : row.content,
         author: {
           name: hidden ? null : (row.authorName ?? null),
           avatarUrl: hidden ? null : httpUrl(row.authorAvatar),
           isTeamMember: row.isTeamMember,
         },
-        isAuthor:
-          !row.deletedAt &&
-          !!viewer.principalId &&
-          row.principalId === viewer.principalId,
+        isAuthor,
+        canEdit: canChange,
+        canDelete: canChange,
         pending: row.moderationState === "pending",
         deleted: !!row.deletedAt,
         createdAt: row.createdAt,
@@ -256,20 +298,7 @@ async function ownComment(
   const found = await findComment(db, viewer, boardList, id);
   if (found.principalId !== viewer.principalId)
     throw forbidden(`You can only ${verb} your own comments`);
-  const [reply] = await db
-    .select({ id: postComments.id })
-    .from(postComments)
-    .where(
-      and(
-        eq(postComments.parentId, found.id),
-        eq(postComments.isTeamMember, true),
-        eq(postComments.isPrivate, false),
-        eq(postComments.moderationState, "published"),
-        isNull(postComments.deletedAt),
-      ),
-    )
-    .limit(1);
-  if (reply)
+  if ((await commentsWithTeamReplies(db, [found.id])).has(found.id))
     throw forbidden(
       `Comments with a team reply cannot be ${verb === "edit" ? "edited" : "deleted"}`,
     );
@@ -320,6 +349,7 @@ export const createComment = (audience: Customer) =>
     params: postParams,
     body: z.object({
       content,
+      attachmentIds,
       parentId: flexibleToTypeIdSchema("post_comment").optional(),
       idempotencyKey: z.string().min(1).max(128).optional(),
     }),
@@ -369,6 +399,9 @@ export const createComment = (audience: Customer) =>
             postId: post.id,
             parentId: body.parentId ?? null,
             content: body.content,
+            ...(body.attachmentIds?.length
+              ? { attachmentIds: JSON.stringify(body.attachmentIds) }
+              : {}),
           })
         : null;
       // A first comment that has left the caller's sight since is 404, not a stale copy.
@@ -391,6 +424,7 @@ export const createComment = (audience: Customer) =>
           moderationState: pending ? "pending" : "published",
         })
         .returning({ id: postComments.id });
+      await saveAttachments(db, me, { commentId: row!.id }, body.attachmentIds);
       if (!pending) await countComment(db, post.id, me, 1);
       await receipt?.finish(row!.id);
       return {
@@ -413,7 +447,7 @@ const editComment = defineQuillsRoute({
   action: "update",
   rateLimit: { limit: 30, windowSeconds: 600 },
   params: commentParams,
-  body: z.object({ content }),
+  body: z.object({ content, attachmentIds }),
   response: comment.extend({ postId: z.string() }),
   responseDescription: "The edited comment",
   errors,
@@ -452,6 +486,7 @@ const editComment = defineQuillsRoute({
         updatedAt: new Date(),
       })
       .where(eq(postComments.id, found.id));
+    await saveAttachments(db, me, { commentId: found.id }, body.attachmentIds);
     if (rehold) await countComment(db, found.postId, me, -1);
     return {
       ...(await loadComment(db, viewer, found.id)),

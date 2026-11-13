@@ -28,6 +28,7 @@ import {
   oauthState,
   type SignedVerifier,
 } from "../framework/signed";
+import { oauthFailureOutcome, oauthResultUrl } from "../framework/oauth-result";
 import { slugify } from "../content/help-center/shared";
 import { signedUrl } from "../integrations/oauth-providers";
 import { uniqueConflict } from "../support/conversation-model";
@@ -647,6 +648,12 @@ const completeOAuth = defineQuillsRoute({
     connector: detailSchema.nullable(),
   }),
   responseDescription: "The connector without its credentials",
+  redirect: {
+    success: (result) =>
+      oauthResultUrl(result.status, result.connector?.name ?? "Connector"),
+    failure: (status) =>
+      oauthResultUrl(oauthFailureOutcome(status), "Connector"),
+  },
   allowKeys: ["hasSecret"],
   errors: {
     400: "Access was not granted, or the authorization server rejected the code",

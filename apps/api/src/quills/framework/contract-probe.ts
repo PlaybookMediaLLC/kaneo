@@ -19,7 +19,12 @@ import { buildQuillsRoute, type AnyQuillsRoute } from "./define-route";
 // Requests, row fingerprints and response probes that the contract checks share.
 
 /** `body` is the parsed JSON, or the text when the response is not JSON. */
-export type Sent = { status: number; body: any; type: string | null };
+export type Sent = {
+  status: number;
+  body: any;
+  type: string | null;
+  location: string | null;
+};
 const forbiddenKey = /secret|token|password|hash|workspaceId/i;
 
 let clientCount = 0;
@@ -71,7 +76,12 @@ export async function send(
   } catch {
     // Not JSON: the checks read the text.
   }
-  return { status: res.status, body, type };
+  return {
+    status: res.status,
+    body,
+    type,
+    location: res.headers.get("location"),
+  };
 }
 
 /** The response as text, for the leak checks: JSON as serialized, a raw document as sent. */

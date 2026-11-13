@@ -56,15 +56,3 @@ export async function startWebApp() {
   }
   return server;
 }
-
-export function fulfillJSON(route, data) {
-  return route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    headers: {
-      "access-control-allow-origin": origin,
-      "access-control-allow-credentials": "true",
-    },
-    body: JSON.stringify(data),
-  });
-}

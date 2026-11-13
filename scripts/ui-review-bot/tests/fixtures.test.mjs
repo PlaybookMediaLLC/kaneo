@@ -79,3 +79,56 @@ test("custom-field values persist, preserve the API shape, and reset for each sc
     3,
   );
 });
+
+test("account and workspace fixtures retain current API response shapes", () => {
+  assert.deepEqual(fixture("http://app/api/admin/access", "GET"), {
+    permissions: [],
+  });
+  const { sessions } = fixture("http://app/api/user/sessions", "GET");
+  assert.equal(sessions[0].current, true);
+  assert.equal(typeof sessions[0].id, "string");
+  assert.equal(
+    fixture("http://app/api/workspace/ui-review-workspace", "GET").role,
+    "owner",
+  );
+  const capabilities = fixture(
+    "http://app/api/workspace/ui-review-workspace/capabilities",
+    "GET",
+  );
+  assert.ok(Object.values(capabilities).every((value) => value === true));
+  assert.deepEqual(fixture("http://app/api/task/assigned", "GET"), {
+    tasks: [],
+    total: 0,
+  });
+  assert.deepEqual(
+    fixture(
+      "http://app/api/workspace/ui-review-workspace/project-access",
+      "GET",
+    ),
+    [],
+  );
+  assert.equal(
+    fixture(
+      "http://app/api/workspace/ui-review-workspace/project-access/me",
+      "GET",
+    ).projectAccess,
+    "all",
+  );
+  for (const provider of [
+    "github",
+    "gitea",
+    "gitlab",
+    "slack",
+    "discord",
+    "mattermost",
+    "telegram",
+    "generic-webhook",
+  ])
+    assert.equal(
+      fixture(
+        `http://app/api/${provider}-integration/project/ui-review-project`,
+        "GET",
+      ),
+      null,
+    );
+});

@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
 import { toast } from "@/lib/toast";
 import { AuthCaptcha } from "./auth-captcha";
+import { getSafeRedirectPath } from "./auth-methods";
 import {
   authFieldClassName,
   authLabelClassName,
@@ -30,6 +31,7 @@ type PasswordSignUpValues = { name: string; email: string; password: string };
 type PasswordSignUpFormProps = {
   defaultEmail?: string;
   invitationId?: string;
+  redirect?: string;
   captcha: AuthCaptchaState;
   disabled?: boolean;
   onSuccess: () => void;
@@ -38,12 +40,14 @@ type PasswordSignUpFormProps = {
 export function PasswordSignUpForm({
   defaultEmail,
   invitationId,
+  redirect,
   captcha,
   disabled = false,
   onSuccess,
 }: PasswordSignUpFormProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const safeRedirect = getSafeRedirectPath(redirect);
   const [isPending, setIsPending] = useState(false);
   const schema = useMemo(
     () =>
@@ -69,7 +73,17 @@ export function PasswordSignUpForm({
       const headers: Record<string, string> = { ...captcha.headers };
       if (invitationId) headers["x-invitation-id"] = invitationId;
       const result = await authClient.signUp.email(
-        { name: name.trim(), email, password },
+        {
+          name: name.trim(),
+          email,
+          password,
+          ...(safeRedirect && {
+            callbackURL: new URL(
+              `/auth/sign-in?${new URLSearchParams({ redirect: safeRedirect })}`,
+              import.meta.env.VITE_CLIENT_URL ?? window.location.origin,
+            ).href,
+          }),
+        },
         { headers },
       );
       if (result.error) {
@@ -85,7 +99,10 @@ export function PasswordSignUpForm({
       // The instance requires a confirmed email: no session until then.
       if (!result.data?.token) {
         toast.success(t("auth:signUp.verifyEmail"));
-        await navigate({ to: "/auth/sign-in" });
+        await navigate({
+          to: "/auth/sign-in",
+          search: { redirect: safeRedirect },
+        });
         return;
       }
       onSuccess();

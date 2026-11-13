@@ -1,0 +1,19 @@
+{
+	"articleTitle": "Help article",
+	"back": "Back to the help center",
+	"categoryTitle": "Help category",
+	"empty": "No help content is available.",
+	"languages": "Languages",
+	"legacyTitle": "Help center redirect",
+	"noResults": "No articles match your search.",
+	"popular": "Popular articles",
+	"published": "Published {{date}}",
+	"related": "More in this category",
+	"search": "Search",
+	"searchLabel": "Search the help center",
+	"searchResults": "Search results",
+	"title": "Help center",
+	"articles": "Articles: {{count}}",
+	"collections": "Collections",
+	"browse": "Browse help"
+}

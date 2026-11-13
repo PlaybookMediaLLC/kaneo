@@ -43,7 +43,7 @@ export function normalizeAudit(input) {
 
 export async function auditAccessibility(page, frame) {
   try {
-    await page.addScriptTag({ content: axe.source });
+    await page.evaluate(axe.source);
     const result = await page.evaluate(async (frame) => {
       const audit = await Promise.race([
         window.axe.run(document, {

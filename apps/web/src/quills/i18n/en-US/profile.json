@@ -1,0 +1,10 @@
+{
+	"activity": "Recent portal activity",
+	"comments": "Commented on {{count}} posts",
+	"email": "Account email: {{email}}",
+	"name": "Display name",
+	"posts": "Submitted {{count}} posts",
+	"submit": "Save profile",
+	"teamMember": "Team member",
+	"title": "Profile"
+}

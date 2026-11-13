@@ -103,6 +103,7 @@ export default defineConfig({
     port: 5173,
   },
   optimizeDeps: {
+    include: ["@kaneo/branding"],
     exclude: ["better-auth"],
   },
   ssr: {

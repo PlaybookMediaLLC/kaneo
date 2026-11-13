@@ -71,7 +71,7 @@ Commits on `upstream/main` since 2026-08-01 that touch each path:
 
 | Path | Commits | Rule for this RFC |
 |---|---|---|
-| `apps/web/src/components` | 382 | Do not add or edit files. Import shared UI through one adapter (4.4). |
+| `apps/web/src/components` | 382 | Import shared UI through one adapter (4.4). Only the owner-approved S2 redirect changes to the two auth components are allowed. |
 | `apps/web/src/hooks` | 204 | Do not add files. |
 | `i18n/en-US.json` | 171 | Do not add keys. Use the `quills` namespace (4.5). |
 | `apps/web/src/routes` | 147 | Add files only under `routes/portal/` and `routes/quills/`, which upstream does not have. |
@@ -104,18 +104,22 @@ apps/docs/quills
 | # | File | Change | Conflict resolution |
 |---|---|---|---|
 | S1 | `apps/web/src/routeTree.gen.ts` | New portal and Quills routes appear in the generated tree. | Generated. Take either side, then regenerate with the router plugin (`pnpm --filter @kaneo/web build`). The same rule as `apps/docs/openapi.json`. |
-| S2 | `apps/web/src/routes/auth/sign-up.tsx`, `apps/web/src/routes/auth/check-email.tsx` | Accept `redirect` in the search schema, pass it on, and use `getSafeRedirectPath`, as `sign-in.tsx` and `verify-otp.tsx` already do. About 6 lines. | Small and local: keep upstream's lines, then apply the 6 lines again. Permanent fork seam (D20). W1's tests fail if a merge drops it. |
+| S2 | `apps/web/src/routes/auth/sign-up.tsx`, `apps/web/src/routes/auth/check-email.tsx`, `apps/web/src/routes/auth/sign-in.tsx`, `apps/web/src/components/auth/sign-in-footer-line.tsx`, `apps/web/src/components/auth/password-sign-up-form.tsx`, `apps/web/src/components/auth/auth-methods.ts` and its regression test, `apps/api/src/instance-settings/send-sign-up-verification-email.ts` and its regression test | Owner-approved expansion: accept and pass the safe `redirect` through sign-in, account creation, OTP and password email verification, including the create-account link and the verification callback URL. The mail sender preserves only a safe path through the configured web sign-in page. | Small and local: keep upstream's lines, then reapply the redirect propagation. Permanent fork seam (D20). W1's tests fail if a merge drops it. |
 | S3 | Root `package.json` and `pnpm-lock.yaml` | Only if D23 needs `oxc-parser`: one line in `devDependencies`. | Keep upstream's lines, add the one line again, then run `pnpm install` to regenerate the lockfile. |
 | S4 | `apps/docs/docs.json` | One navigation group for the portal docs in `apps/docs/quills/` (lane Z). | Keep upstream's file, then add the one group again. |
 
-No other upstream file changes. In particular: no edit to `__root.tsx`, `_layout.tsx`, the
+| S5 | `apps/web/index.html` | Install `no-referrer` before scripts and assets so initial mail-token navigation cannot leak through bootstrap requests. | Keep this meta policy before any resource load; the Stagehand browser regression checks the header behavior. |
+
+For the portal implementation, no other upstream file changes. In particular: no edit to `__root.tsx`, `_layout.tsx`, the
 navigation, `vite.config.ts`, `tsconfig`, `apps/web/package.json`, or `i18n/*.json`. The root
 `package.json` and the lockfile change only through S3.
+The later owner-requested migration of all browser tooling to Stagehand has a separate scope: browser tests, screenshot tools, workflows, locks, documentation, and the Vite CommonJS branding prebundle required by screenshot validation.
+
 Portal routes are top-level siblings of `_layout`, as `public-project.$projectId.tsx` is, so they
 need no layout change.
 
-All API and mail changes are under `apps/api/src/quills` and `packages/email/src/quills`, which
-are fork-owned already.
+Except for the owner-approved S2 verification-mail seam above, all API and mail changes are under
+`apps/api/src/quills` and `packages/email/src/quills`, which are fork-owned already.
 
 ### 4.4 One adapter for upstream code
 

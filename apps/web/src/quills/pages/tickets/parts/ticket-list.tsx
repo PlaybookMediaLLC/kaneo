@@ -1,0 +1,41 @@
+import { useTranslation } from "react-i18next";
+import type { GetMyTicketsResponse } from "../../../api/support/get-my-tickets";
+import { portalHref } from "../../../core/portal-href";
+import { Card, CardContent, CardHeader, CardTitle } from "../../../ui/upstream";
+
+type Ticket = GetMyTicketsResponse["items"][number];
+export interface TicketListProps {
+  workspaceId: string;
+  tickets: Ticket[];
+}
+export function TicketList({ workspaceId, tickets }: TicketListProps) {
+  const { t } = useTranslation("quills");
+  return (
+    <div className="grid gap-3">
+      {tickets.map((ticket) => (
+        <Card className="rounded-2xl shadow-none" key={ticket.id}>
+          <CardHeader>
+            <CardTitle>{ticket.title}</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground [&_a]:ml-auto [&_a]:text-foreground [&_a]:underline [&_a]:underline-offset-4">
+            <p>{t("tickets.reference", { reference: ticket.reference })}</p>
+            <p>{ticket.stageLabel?.trim() || t("tickets.stageMissing")}</p>
+            {ticket.conversationId ? (
+              <a
+                href={portalHref(
+                  workspaceId,
+                  `conversations/${ticket.conversationId}`,
+                )}
+                aria-label={t("tickets.openConversation", {
+                  title: ticket.title,
+                })}
+              >
+                {t("tickets.openConversation", { title: ticket.title })}
+              </a>
+            ) : null}
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}

@@ -10,7 +10,7 @@ Backlog, members, labels, workflow, integrations, notifications, and security se
 node scripts/ui-review-bot/docs-screenshots.mjs
 ```
 
-The script requires the UI review bot's Playwright dependencies and Chromium. It starts its own Vite server on port 5188, intercepts API calls with fixtures, blocks external requests, checks for browser errors and missing fixtures, and stops its server when finished.
+The script requires the UI review bot's Stagehand dependencies and an installed Chromium browser. It starts its own Vite server on port 5188, intercepts API calls with fixtures, blocks external requests, checks for browser errors and missing fixtures, and stops its server when finished.
 
 Place screenshots in a Mintlify `Frame`, with `block dark:hidden` on the light image and `hidden dark:block` on the dark image. Include alt text and a caption. Review each changed capture before publishing.
 
