@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { assessIssues, authorExemption, validatePolicy } from "./policy.mjs";
+import {
+  assessIssues,
+  authorExemption,
+  upstreamSyncExemption,
+  validatePolicy,
+} from "./policy.mjs";
 
 const account = {
   id: 123,
@@ -49,6 +54,38 @@ test("checked-in policy grants only the approved dependency-bot identities", asy
   assert.deepEqual(
     current.vouchedContributors.map((entry) => entry.id),
     [44305048, 127273550, 176929823, 115077240, 651050],
+  );
+});
+
+test("the upstream sync is exempt by head and base, not by its author", () => {
+  const sync = {
+    head: { repo: { full_name: "usekaneo/kaneo" }, ref: "main" },
+    base: { ref: "staging" },
+  };
+  assert.equal(
+    upstreamSyncExemption(sync),
+    "Upstream sync from usekaneo/kaneo:main.",
+  );
+  // A fork, a different upstream branch, or any other base earns nothing.
+  for (const spoof of [
+    { ...sync, head: { ...sync.head, repo: { full_name: "attacker/kaneo" } } },
+    { ...sync, head: { ...sync.head, ref: "feature" } },
+    { ...sync, base: { ref: "main" } },
+    { ...sync, head: { ...sync.head, repo: null } },
+    { ...sync, head: undefined },
+    {},
+  ]) {
+    assert.equal(upstreamSyncExemption(spoof), null);
+  }
+  // The exemption must not come from the bot account itself, so a sync-shaped
+  // pull request from any other head stays subject to the issue requirement.
+  assert.equal(
+    authorExemption(
+      { id: 41898282, login: "github-actions[bot]", type: "Bot" },
+      null,
+      policy,
+    ),
+    null,
   );
 });
 

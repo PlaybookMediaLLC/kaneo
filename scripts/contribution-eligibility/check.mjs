@@ -3,11 +3,18 @@ import { pathToFileURL } from "node:url";
 import { GitHub } from "./github.mjs";
 import { checkPublisher } from "./check-runs.mjs";
 import { draftComment } from "./draft-comment.mjs";
-import { assessIssues, authorExemption, validatePolicy } from "./policy.mjs";
+import {
+  assessIssues,
+  authorExemption,
+  upstreamSyncExemption,
+  validatePolicy,
+} from "./policy.mjs";
 
 async function checkPullRequest(github, pull, policy, policyError) {
   if (policyError) throw policyError;
-  let exemption = authorExemption(pull.user, null, policy);
+  // authorExemption runs first so it keeps validating the author's identity.
+  let exemption =
+    authorExemption(pull.user, null, policy) ?? upstreamSyncExemption(pull);
   if (!exemption && pull.user.type !== "Bot") {
     const permission = await github.request(
       `repos/${github.repository}/collaborators/${encodeURIComponent(pull.user.login)}/permission`,
