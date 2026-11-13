@@ -1,4 +1,11 @@
 import {
+  attachment,
+  attachmentIds,
+  attachmentFields,
+  readAttachments,
+  saveAttachments,
+} from "./attachments";
+import {
   and,
   asc,
   count,
@@ -67,6 +74,7 @@ const reactions = z.array(
   z.object({ emoji: z.string(), count: z.number(), reacted: z.boolean() }),
 );
 const comment = z.object({
+  attachments: z.array(attachment),
   id: z.string(),
   parentId: z.string().nullable(),
   content: z.string(),
@@ -175,6 +183,9 @@ async function loadComments(
     viewer,
     items.map((row) => row.id),
   );
+  const attachments = await readAttachments(db, {
+    commentIds: items.filter((row) => !row.deletedAt).map((row) => row.id),
+  });
   return {
     items: items.map((row) => {
       const hidden = !!row.deletedAt || row.authorType === "anonymous";
@@ -186,6 +197,9 @@ async function loadComments(
       return {
         id: row.id,
         parentId: row.parentId,
+        attachments: attachments
+          .filter((file) => file.commentId === row.id)
+          .map(attachmentFields),
         content: row.deletedAt ? "" : row.content,
         author: {
           name: hidden ? null : (row.authorName ?? null),
@@ -335,6 +349,7 @@ export const createComment = (audience: Customer) =>
     params: postParams,
     body: z.object({
       content,
+      attachmentIds,
       parentId: flexibleToTypeIdSchema("post_comment").optional(),
       idempotencyKey: z.string().min(1).max(128).optional(),
     }),
@@ -384,6 +399,9 @@ export const createComment = (audience: Customer) =>
             postId: post.id,
             parentId: body.parentId ?? null,
             content: body.content,
+            ...(body.attachmentIds?.length
+              ? { attachmentIds: JSON.stringify(body.attachmentIds) }
+              : {}),
           })
         : null;
       // A first comment that has left the caller's sight since is 404, not a stale copy.
@@ -406,6 +424,7 @@ export const createComment = (audience: Customer) =>
           moderationState: pending ? "pending" : "published",
         })
         .returning({ id: postComments.id });
+      await saveAttachments(db, me, { commentId: row!.id }, body.attachmentIds);
       if (!pending) await countComment(db, post.id, me, 1);
       await receipt?.finish(row!.id);
       return {
@@ -428,7 +447,7 @@ const editComment = defineQuillsRoute({
   action: "update",
   rateLimit: { limit: 30, windowSeconds: 600 },
   params: commentParams,
-  body: z.object({ content }),
+  body: z.object({ content, attachmentIds }),
   response: comment.extend({ postId: z.string() }),
   responseDescription: "The edited comment",
   errors,
@@ -467,6 +486,7 @@ const editComment = defineQuillsRoute({
         updatedAt: new Date(),
       })
       .where(eq(postComments.id, found.id));
+    await saveAttachments(db, me, { commentId: found.id }, body.attachmentIds);
     if (rehold) await countComment(db, found.postId, me, -1);
     return {
       ...(await loadComment(db, viewer, found.id)),

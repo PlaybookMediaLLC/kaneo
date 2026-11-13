@@ -100,10 +100,32 @@ export async function urlMatches(page, expected) {
   }, "Navigation");
 }
 export async function click(page, target, options) {
-  await (await find(page, target, options)).click();
+  await interact(page, target, (locator) => locator.click(), options);
 }
 export async function fill(page, target, text) {
-  await (await find(page, target)).fill(text);
+  await interact(page, target, (locator) => locator.fill(text));
+}
+
+async function interact(page, target, action, options = {}) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const css = await until(
+      () => selector(page, target, options),
+      `Find ${target.by}: ${target.name ?? target.role}`,
+      options.timeout,
+    );
+    try {
+      return await action(page.locator(css));
+    } catch (error) {
+      // Stagehand rejects a removed node before dispatch; never replay other failures.
+      if (
+        attempt ||
+        error.cause?.code !== -32603 ||
+        error.message !==
+          `Could not find an element for the given xPath(s): ${css}`
+      )
+        throw error;
+    }
+  }
 }
 export async function jsonRequest(
   page,

@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import type { Viewer } from "../../../core/types";
+import type { FeedbackAttachment } from "../../../core/use-feedback-attachments";
 import { useDeletePortalOwnComment } from "../../../hooks/feedback/use-delete-portal-own-comment";
 import { useEditPortalOwnComment } from "../../../hooks/feedback/use-edit-portal-own-comment";
 import { ConfirmAction } from "../../../ui/confirm-action";
@@ -18,11 +19,13 @@ export interface CommentSheetsProps {
   workspaceId: string;
   viewer: Viewer;
   /** The comment being edited; the edit sheet is closed without one. */
-  comment?: { id: string; content: string };
+  comment?: { id: string; content: string; attachments: FeedbackAttachment[] };
   /** The comment being deleted; the delete sheet is closed without one. */
   deleteId: string | null;
   onEditDone: () => void;
   onDeleteDone: () => void;
+  /** Runs only after a delete succeeds; closing the sheet does not call it. */
+  onDeleted?: (commentId: string) => void;
 }
 
 /** The edit and delete sheets for the viewer's own comments. */
@@ -43,7 +46,11 @@ export function CommentSheets(props: CommentSheetsProps) {
           <SheetPanel>
             {props.comment ? (
               <EditCommentForm
+                key={props.comment.id}
+                workspaceId={props.workspaceId}
+                viewer={props.viewer}
                 content={props.comment.content}
+                attachments={props.comment.attachments}
                 onSubmit={async (values) => {
                   const result = await runMutation(() =>
                     edit.mutateAsync({
@@ -75,13 +82,12 @@ export function CommentSheets(props: CommentSheetsProps) {
               <ConfirmAction
                 labelKey="post.deleteCommentConfirm"
                 onConfirm={async () => {
-                  if (!props.deleteId) return;
+                  const commentId = props.deleteId;
+                  if (!commentId) return;
                   await remove.mutateAsync({
-                    param: {
-                      workspace: props.workspaceId,
-                      commentId: props.deleteId,
-                    },
+                    param: { workspace: props.workspaceId, commentId },
                   });
+                  props.onDeleted?.(commentId);
                   props.onDeleteDone();
                 }}
               />

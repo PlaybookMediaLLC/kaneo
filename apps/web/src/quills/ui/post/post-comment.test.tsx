@@ -23,13 +23,13 @@ const comment = {
 
 describe("PostComment", () => {
   it("shows the author, likes and author actions, and opens a reply", async () => {
-    const onLike = vi.fn(async () => undefined);
+    const onReact = vi.fn(async () => undefined);
     const onEdit = vi.fn();
     const view = renderComponent(
       <ul>
         <PostComment
           comment={comment}
-          onLike={onLike}
+          onReact={onReact}
           onEdit={onEdit}
           replyForm={(parentId) => <p>{`Reply to ${parentId}`}</p>}
         />
@@ -43,7 +43,7 @@ describe("PostComment", () => {
     );
     expect(view.getByText("2")).toBeInTheDocument();
     press("Like");
-    expect(onLike).toHaveBeenCalledWith("comment_test_1", false);
+    expect(onReact).toHaveBeenCalledWith("comment_test_1", "❤️", false);
     press("Edit comment");
     expect(onEdit).toHaveBeenCalledWith("comment_test_1");
     press("Reply");

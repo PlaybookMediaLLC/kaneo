@@ -14,6 +14,8 @@ export interface SimilarPostsProps {
     voteCount: number;
     stage: string | null;
   }>;
+  /** Posts the viewer voted for get a mark. */
+  votedIds?: ReadonlySet<string>;
 }
 
 /** A compact list of posts, such as matches for a new title or an update's requests. */
@@ -21,6 +23,7 @@ export function SimilarPosts({
   workspaceId,
   titleKey = "feedback.similar",
   posts,
+  votedIds,
 }: SimilarPostsProps) {
   const { t } = useTranslation("quills");
   const headingId = useId();
@@ -50,6 +53,11 @@ export function SimilarPosts({
               <span className="min-w-0 flex-1 truncate font-medium tracking-tight">
                 {post.title}
               </span>
+              {votedIds?.has(post.id) ? (
+                <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                  {t("feedback.youVoted")}
+                </span>
+              ) : null}
               {post.stage && post.stage !== "open" ? (
                 <StatusIcon stage={post.stage} className="size-3.5" />
               ) : null}

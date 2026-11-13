@@ -15,22 +15,24 @@ export function useSetPortalVote(viewer: Viewer) {
   >({
     mutationFn: (input) => setPortalVote(input),
     onSuccess: async (_data, input) => {
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspace,
-          viewer,
-          "feedback",
+      // The refreshes are independent, so they run together.
+      await Promise.all(
+        [
           "listPortalPosts",
-        ),
-      });
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspace,
-          viewer,
-          "feedback",
           "getPortalPost",
+          "listPortalRoadmapPosts",
+          "listPortalVotedPosts",
+        ].map((operation) =>
+          queryClient.invalidateQueries({
+            queryKey: quillsOperationKey(
+              input.param.workspace,
+              viewer,
+              "feedback",
+              operation,
+            ),
+          }),
         ),
-      });
+      );
     },
   });
 }

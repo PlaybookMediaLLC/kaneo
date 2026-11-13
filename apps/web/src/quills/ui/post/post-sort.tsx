@@ -11,6 +11,8 @@ import {
 export interface PostSortProps {
   sort: string;
   onSortChange: (value: string) => void;
+  /** Hides the "Posts" label when the menu sits in a toolbar. */
+  hideLabel?: boolean;
 }
 
 export function PostSort(props: PostSortProps) {
@@ -22,9 +24,11 @@ export function PostSort(props: PostSortProps) {
   ];
   return (
     <div className="portal-post-sort flex items-center justify-between gap-4">
-      <h2 className="text-xs font-normal text-muted-foreground">
-        {t("feedback.posts")}
-      </h2>
+      {props.hideLabel ? null : (
+        <h2 className="text-xs font-normal text-muted-foreground">
+          {t("feedback.posts")}
+        </h2>
+      )}
       <Select
         items={sorts}
         value={props.sort}

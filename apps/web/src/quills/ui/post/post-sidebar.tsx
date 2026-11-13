@@ -16,6 +16,8 @@ export interface PostSidebarProps {
   status: { name: string; color: string } | null;
   stage: string | null;
   board: { name: string; href: string };
+  /** Public tags; the row is hidden without them. */
+  tags?: Array<{ id: string; name: string; color: string }>;
   /** The viewer's follow state; leave it unset when the viewer cannot follow. */
   following?: boolean;
   /** A sign-in link that replaces the follow control for a visitor. */
@@ -38,7 +40,7 @@ export function PostSidebar(props: PostSidebarProps) {
   const author = props.author.name?.trim() || t("post.anonymousAuthor");
   return (
     <aside
-      className={`portal-post-sidebar flex min-w-0 flex-col gap-7 md:sticky md:top-8 ${section}`}
+      className={`portal-post-sidebar flex min-w-0 flex-wrap gap-x-8 gap-y-4 max-md:border-b max-md:border-border max-md:pb-6 max-md:[&_h2]:sr-only md:sticky md:top-8 md:flex-col md:gap-7 ${section}`}
     >
       <section aria-labelledby="post-author">
         <h2 id="post-author">{t("post.authorHeading")}</h2>
@@ -81,11 +83,37 @@ export function PostSidebar(props: PostSidebarProps) {
               {props.board.name}
             </a>
           </dd>
+          {props.tags?.length ? (
+            <>
+              <dt>{t("post.tags")}</dt>
+              <dd className="flex flex-wrap gap-1">
+                {props.tags.map((tag) => (
+                  <span
+                    key={tag.id}
+                    className="flex items-center gap-1 rounded-full bg-muted px-2 text-xs"
+                  >
+                    <svg
+                      viewBox="0 0 6 6"
+                      aria-hidden="true"
+                      color={tag.color}
+                      className="size-1.5"
+                    >
+                      <circle cx="3" cy="3" r="3" fill="currentColor" />
+                    </svg>
+                    {tag.name}
+                  </span>
+                ))}
+              </dd>
+            </>
+          ) : null}
         </dl>
       </section>
-      <section aria-labelledby="post-actions">
+      <section
+        aria-labelledby="post-actions"
+        className="max-md:flex max-md:flex-wrap max-md:gap-x-4"
+      >
         <h2 id="post-actions">{t("post.actions")}</h2>
-        <ul className="grid gap-0.5">
+        <ul className="flex flex-wrap gap-x-4 md:grid md:gap-0.5">
           {props.signInHref ? (
             <li>
               <a className={item} href={props.signInHref}>
@@ -123,7 +151,7 @@ export function PostSidebar(props: PostSidebarProps) {
             </li>
           ) : null}
         </ul>
-        <ShareActions />
+        <ShareActions className="max-md:[&_ul]:flex max-md:[&_ul]:gap-x-4" />
       </section>
     </aside>
   );

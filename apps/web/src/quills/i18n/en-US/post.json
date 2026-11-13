@@ -31,10 +31,16 @@
 	"deletedComment": "This comment was deleted.",
 	"edited": "Edited",
 	"signInToComment": "Sign in to comment.",
-	"signIn": "Sign in",
 	"actions": "Actions",
 	"votes_one": "{{count}} vote",
 	"votes_other": "{{count}} votes",
 	"commentCount_one": "{{count}} comment",
-	"commentCount_other": "{{count}} comments"
+	"commentCount_other": "{{count}} comments",
+	"react": "React",
+	"reaction": "{{emoji}} {{count}}",
+	"reactWith": "React with {{emoji}}",
+	"addReaction": "Add reaction",
+	"related": "Related requests",
+	"tags": "Tags",
+	"voteThanks": "Thanks for your vote. Add your use case below: specific examples help the team decide what to build."
 }

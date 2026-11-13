@@ -23,6 +23,14 @@ export function useSetPortalFollow(viewer: Viewer) {
           "getPortalPost",
         ),
       });
+      await queryClient.invalidateQueries({
+        queryKey: quillsOperationKey(
+          input.param.workspace,
+          viewer,
+          "feedback",
+          "listPortalPosts",
+        ),
+      });
     },
   });
 }

@@ -3,6 +3,7 @@ type PortalComment = ListPortalPostCommentsResponse["items"][number];
 export const listPortalPostCommentsFixture = {
   comment: (overrides: Partial<PortalComment> = {}) =>
     ({
+      attachments: [],
       id: "comment_test_1",
       parentId: null,
       content: "A useful reply",

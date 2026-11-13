@@ -27,6 +27,16 @@ describe("MarkdownContent", () => {
       "javascript:alert(1)",
     );
   });
+  it("shows no remote images in customer text, but keeps them in team text", () => {
+    const image = "![Chart](https://tracker.example.test/pixel.png)";
+    const customer = renderComponent(
+      <MarkdownContent customer content={image} />,
+    );
+    expect(customer.queryByRole("img")).not.toBeInTheDocument();
+    customer.unmount();
+    const team = renderComponent(<MarkdownContent content={image} />);
+    expect(team.getByRole("img", { name: "Chart" })).toBeInTheDocument();
+  });
   it("keeps ordinary links accessible", () => {
     const view = renderComponent(
       <MarkdownContent content="[Documentation](https://example.test/docs)" />,

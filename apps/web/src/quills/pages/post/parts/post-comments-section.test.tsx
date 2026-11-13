@@ -1,7 +1,9 @@
-import { waitFor } from "@testing-library/react";
+import { fireEvent, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vite-plus/test";
+import { createPortalCommentFixture } from "../../../api/feedback/create-portal-comment.fixture";
 import { listPortalPostCommentsFixture } from "../../../api/feedback/list-portal-post-comments.fixture";
 import { setPortalCommentReactionFixture } from "../../../api/feedback/set-portal-comment-reaction.fixture";
+import { press } from "../../../test/actions";
 import { mockApi } from "../../../test/mock-api";
 import { renderComponent } from "../../../test/render";
 import { PostCommentsSection } from "./post-comments-section";
@@ -27,6 +29,8 @@ describe("PostCommentsSection", () => {
         postId="post_test_1"
         viewer={{ kind: "user", id: "account_test_1" }}
         canComment
+        open
+        count={2}
         comments={[parent, reply]}
       />,
     );
@@ -43,6 +47,42 @@ describe("PostCommentsSection", () => {
     expect(await request!.json()).toEqual({ emoji: "❤️", reacted: true });
   });
 
+  it("shows a new reply under its parent before the pages reload it", async () => {
+    const api = mockApi();
+    api.reply(
+      createPortalCommentFixture.ok({
+        id: "comment_test_3",
+        parentId: "comment_test_1",
+        content: "A fresh reply",
+      }),
+    );
+    const view = renderComponent(
+      <PostCommentsSection
+        workspaceId="workspace_test_1"
+        postId="post_test_1"
+        viewer={{ kind: "user", id: "account_test_1" }}
+        canComment
+        open
+        count={1}
+        comments={[parent]}
+      />,
+    );
+    press("Reply");
+    fireEvent.change(view.getAllByLabelText("Comment")[1]!, {
+      target: { value: "A fresh reply" },
+    });
+    fireEvent.click(view.getAllByRole("button", { name: "Post comment" })[1]!);
+    const parentItem = view.getByText("Top-level idea").closest("li")!;
+    await waitFor(() =>
+      expect(parentItem).toContainElement(view.getByText("A fresh reply")),
+    );
+    const [request] = api.calls("createQuillsPortalComment");
+    expect(await request!.json()).toMatchObject({
+      content: "A fresh reply",
+      parentId: "comment_test_1",
+    });
+  });
+
   it("asks a visitor to sign in and offers no reply or like", () => {
     const view = renderComponent(
       <PostCommentsSection
@@ -50,13 +90,14 @@ describe("PostCommentsSection", () => {
         postId="post_test_1"
         viewer={{ kind: "anonymous" }}
         canComment
+        open
+        count={1}
         comments={[parent]}
       />,
     );
-    expect(view.getByRole("link", { name: "Sign in" })).toHaveAttribute(
-      "href",
-      expect.stringContaining("redirect="),
-    );
+    expect(
+      view.getByRole("link", { name: /sign in to comment/i }),
+    ).toHaveAttribute("href", expect.stringContaining("redirect="));
     expect(
       view.queryByRole("button", { name: "Reply" }),
     ).not.toBeInTheDocument();

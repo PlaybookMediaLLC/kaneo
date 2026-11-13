@@ -12,6 +12,8 @@ export function isFramed(): boolean {
 
 export interface ConfirmActionProps {
   labelKey: string;
+  /** An accessible name with values, such as the emoji of a reaction. */
+  label?: string;
   children?: ReactNode;
   onConfirm: () => Promise<void>;
   disabled?: boolean;
@@ -24,6 +26,7 @@ export interface ConfirmActionProps {
 
 export function ConfirmAction({
   labelKey,
+  label,
   children,
   onConfirm,
   disabled,
@@ -81,7 +84,7 @@ export function ConfirmAction({
                 ? "secondary"
                 : "outline"
           }
-          aria-label={children ? t(labelKey) : undefined}
+          aria-label={children ? (label ?? t(labelKey)) : undefined}
           aria-pressed={pressed}
           className={className}
           disabled={disabled || pending}

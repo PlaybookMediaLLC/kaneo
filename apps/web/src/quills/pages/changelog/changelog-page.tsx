@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { changelogFeedUrl } from "../../core/changelog-feed-url";
 import { portalHref } from "../../core/portal-href";
 import { useListPortalChangelog } from "../../hooks/changelog/use-list-portal-changelog";
+import { useListPortalVotedPosts } from "../../hooks/feedback/use-list-portal-voted-posts";
 import { usePortalRuntime } from "../../portal/runtime";
 import { ChangelogEntry } from "../../ui/changelog-entry";
 import { PageFrame } from "../../ui/page-frame";
@@ -31,6 +32,19 @@ export function ChangelogPage(props: ChangelogPageProps) {
     viewer,
   );
   const entries = changelog.data?.pages.flatMap((page) => page.entries) ?? [];
+  // Only a signed-in viewer has votes, and only linked requests need the marks.
+  const voted = useListPortalVotedPosts(
+    {
+      param: {
+        workspace:
+          viewer.kind === "user" &&
+          entries.some((entry) => entry.linkedPosts.length)
+            ? props.workspaceId
+            : "",
+      },
+    },
+    viewer,
+  );
 
   return (
     <PageFrame
@@ -76,6 +90,7 @@ export function ChangelogPage(props: ChangelogPageProps) {
                   key={entry.id}
                   workspaceId={props.workspaceId}
                   entry={entry}
+                  votedIds={new Set(voted.data?.postIds)}
                 />
               ))}
               {changelog.hasNextPage ? (

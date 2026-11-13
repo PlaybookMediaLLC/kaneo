@@ -6,14 +6,17 @@ import { listPortalPostsInfiniteQuery } from "@/quills/api/feedback/list-portal-
 import { listPortalStatusesQuery } from "@/quills/api/feedback/list-portal-statuses";
 
 const searchSchema = z.object({
-  stage: z.enum(["open", "planned", "in_progress", "shipped"]).optional(),
-  sort: z.enum(["newest", "oldest", "votes"]).optional(),
+  stage: z
+    .enum(["open", "planned", "in_progress", "shipped"])
+    .optional()
+    .catch(undefined),
+  sort: z.enum(["newest", "oldest", "votes"]).optional().catch(undefined),
   openFeedback: z.unknown().optional(),
 });
 export const Route = createFileRoute("/portal/$workspaceId/")({
   validateSearch: searchSchema,
-  beforeLoad: async ({ context, params, search }) => {
-    if (!context.quillsPortal.accessGranted) return;
+  beforeLoad: async ({ context, params, search, cause }) => {
+    if (!context.quillsPortal.accessGranted || cause === "stay") return;
     const viewer = context.quillsPortal.viewer;
     const workspace = { workspace: params.workspaceId };
     await Promise.all([

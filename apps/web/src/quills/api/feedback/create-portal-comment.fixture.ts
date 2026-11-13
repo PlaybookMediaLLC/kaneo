@@ -3,6 +3,7 @@ export const createPortalCommentFixture = {
   ok: (overrides: Partial<CreatePortalCommentResponse> = {}) =>
     ({
       ...{
+        attachments: [],
         id: "id_test_1",
         parentId: null,
         content: "value",

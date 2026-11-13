@@ -47,5 +47,5 @@ it("puts the rail after the title and shows the description and actions", () => 
   ).toBeTruthy();
   expect(view.getByText("Short summary")).toBeInTheDocument();
   expect(view.getByRole("button", { name: "Subscribe" })).toBeInTheDocument();
-  expect(view.getByRole("main")).toHaveClass("max-w-4xl");
+  expect(view.getByRole("main")).toHaveClass("max-w-5xl");
 });

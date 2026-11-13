@@ -14,9 +14,10 @@ import {
 } from "../../../ui/upstream";
 import { runMutation } from "../run-mutation";
 import { EditPostForm } from "./edit-post-form";
+import type { FeedbackAttachment } from "../../../core/use-feedback-attachments";
 
 export interface PostActionsProps {
-  post: { title: string; content: string };
+  post: { title: string; content: string; attachments: FeedbackAttachment[] };
   postId: string;
   viewer: Viewer;
   workspaceId: string;
@@ -43,6 +44,9 @@ export function PostActions(props: PostActionsProps) {
             <EditPostForm
               title={props.post.title}
               content={props.post.content}
+              workspaceId={props.workspaceId}
+              viewer={props.viewer}
+              attachments={props.post.attachments}
               onSubmit={async (values) => {
                 const result = await runMutation(() =>
                   editPost.mutateAsync({ param, json: values }),

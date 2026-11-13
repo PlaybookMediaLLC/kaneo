@@ -5,6 +5,8 @@ import { PersonAvatar } from "./person-avatar";
 import { SimilarPosts } from "./post/similar-posts";
 
 export interface ChangelogEntryProps {
+  /** Requests the viewer voted for get a mark. */
+  votedIds?: ReadonlySet<string>;
   workspaceId: string;
   entry: {
     id: string;
@@ -30,6 +32,7 @@ export function ChangelogEntry({
   workspaceId,
   entry,
   linkTitle = true,
+  votedIds,
 }: ChangelogEntryProps) {
   const { t, i18n } = useTranslation("quills");
   return (
@@ -83,6 +86,7 @@ export function ChangelogEntry({
               workspaceId={workspaceId}
               titleKey="changelog.linkedPosts"
               posts={entry.linkedPosts}
+              votedIds={votedIds}
             />
             {entry.requesterCount ? (
               <p className="mt-1 text-xs text-muted-foreground">

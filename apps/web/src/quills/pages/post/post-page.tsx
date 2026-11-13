@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { portalHref } from "../../core/portal-href";
+import { useFindPortalSimilarPosts } from "../../hooks/feedback/use-find-portal-similar-posts";
 import { useGetPortalPost } from "../../hooks/feedback/use-get-portal-post";
 import { useListPortalPostComments } from "../../hooks/feedback/use-list-portal-post-comments";
 import { useSetPortalFollow } from "../../hooks/feedback/use-set-portal-follow";
@@ -11,10 +12,11 @@ import { PageFrame } from "../../ui/page-frame";
 import { PortalGate } from "../../ui/portal-gate";
 import { PostSidebar } from "../../ui/post/post-sidebar";
 import { PostVoteButton } from "../../ui/post/post-vote-button";
+import { SimilarPosts } from "../../ui/post/similar-posts";
 import { StateView } from "../../ui/state-view";
-import { Button } from "../../ui/upstream";
 import { meta } from "./meta";
 import { PostActions } from "./parts/post-actions";
+import { PostAttachments } from "./parts/post-attachments";
 import { PostCommentsSection } from "./parts/post-comments-section";
 
 export interface PostPageProps {
@@ -47,6 +49,15 @@ export function PostPage(props: PostPageProps) {
   const currentVote = vote.data?.postId === post.data?.id ? vote.data : null;
   const here = portalHref(props.workspaceId, `posts/${postId}`);
   const data = post.data;
+  // Related requests help voters gather on one post instead of splitting into duplicates.
+  const title = data?.title.trim() ?? "";
+  const related = useFindPortalSimilarPosts(
+    {
+      param: { workspace: title.length >= 3 ? input.param.workspace : "" },
+      query: { title, limit: "5" },
+    },
+    viewer,
+  );
 
   return (
     <PageFrame
@@ -75,6 +86,7 @@ export function PostPage(props: PostPageProps) {
                 json: { following },
               });
             }}
+            tags={data.tags}
             onEdit={data.canEdit ? () => setEditOpen(true) : undefined}
             onDelete={data.canDelete ? () => setDeleteOpen(true) : undefined}
           />
@@ -114,7 +126,12 @@ export function PostPage(props: PostPageProps) {
                     {t("post.mergedInto", { title: data.mergedInto.title })}
                   </p>
                 ) : null}
-                <MarkdownContent content={data.content} />
+                <MarkdownContent customer content={data.content} />
+                <PostAttachments
+                  workspaceId={props.workspaceId}
+                  viewer={viewer}
+                  attachments={data.attachments}
+                />
                 <PostVoteButton
                   voted={currentVote?.voted ?? data.voted}
                   voteCount={currentVote?.voteCount ?? data.voteCount}
@@ -129,24 +146,35 @@ export function PostPage(props: PostPageProps) {
                     });
                   }}
                 />
+                {currentVote?.voted ? (
+                  <p role="status" className="text-sm text-muted-foreground">
+                    {t("post.voteThanks")}
+                  </p>
+                ) : null}
+                <SimilarPosts
+                  workspaceId={props.workspaceId}
+                  titleKey="post.related"
+                  posts={
+                    related.data?.items
+                      .filter((item) => item.id !== postId)
+                      .slice(0, 3) ?? []
+                  }
+                />
                 <PostCommentsSection
                   workspaceId={props.workspaceId}
                   postId={postId}
                   viewer={viewer}
                   canComment={data.canComment && !data.isCommentsLocked}
+                  open={!data.isCommentsLocked && !data.mergedInto}
+                  count={comments.hasNextPage ? data.commentCount : undefined}
                   comments={comments.data.pages.flatMap((page) => page.items)}
+                  loadingMore={comments.isFetchingNextPage}
+                  onLoadMore={
+                    comments.hasNextPage
+                      ? () => void comments.fetchNextPage()
+                      : undefined
+                  }
                 />
-                {comments.hasNextPage ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className="w-full text-muted-foreground"
-                    loading={comments.isFetchingNextPage}
-                    onClick={() => void comments.fetchNextPage()}
-                  >
-                    {t("post.loadMore")}
-                  </Button>
-                ) : null}
                 <PostActions
                   post={data}
                   postId={postId}

@@ -14,7 +14,11 @@ describe("CommentSheets", () => {
     const view = renderComponent(
       <CommentSheets
         {...props}
-        comment={{ id: "comment_test_1", content: "Earlier text" }}
+        comment={{
+          id: "comment_test_1",
+          content: "Earlier text",
+          attachments: [],
+        }}
         deleteId={null}
       />,
     );

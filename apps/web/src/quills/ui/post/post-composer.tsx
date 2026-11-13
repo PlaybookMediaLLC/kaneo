@@ -1,28 +1,20 @@
-import { IconCircleHashtagOutline18 } from "nucleo-ui-essential-outline-18";
 import {
   useEffect,
   useRef,
   useState,
   type ComponentProps,
   type FocusEvent,
+  type ReactNode,
 } from "react";
 import { Controller } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
+import { readDraft, saveDraft } from "../../core/composer-draft";
 import type { PortalProblem } from "../../core/types";
 import { ArrowUpIcon } from "../arrow-up-icon";
 import { PortalForm } from "../portal-form";
-import { PortalSelectContent } from "../portal-select-content";
-import {
-  Input,
-  Select,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  Textarea,
-  cn,
-} from "../upstream";
+import { Input, Textarea, cn } from "../upstream";
+import { BoardSelect } from "./board-select";
 
 interface PostComposerValues {
   boardId?: string;
@@ -37,6 +29,10 @@ export interface PostComposerProps {
   /** Set for a visitor who must sign in first; the composer then only searches. */
   signInHref?: string;
   autoFocus?: boolean;
+  /** Saves an unsent title and details on this device under this key. */
+  draftKey?: string;
+  /** A file control in the footer; it gets whether the form is sending. */
+  attachments?: (submitting: boolean) => ReactNode;
   onTitleChange: (title: string) => void;
   onSubmit: (values: PostComposerValues) => Promise<PortalProblem | void>;
 }
@@ -46,8 +42,11 @@ const card =
 
 export function PostComposer(props: PostComposerProps) {
   const { t } = useTranslation("quills");
-  const [expanded, setExpanded] = useState(Boolean(props.autoFocus));
-  const [title, setTitle] = useState("");
+  const [draft] = useState(() => readDraft(props.draftKey));
+  const [expanded, setExpanded] = useState(
+    Boolean(props.autoFocus || draft.title || draft.content),
+  );
+  const [title, setTitle] = useState(draft.title);
   const [round, setRound] = useState(0);
   const schema = z.object({
     boardId: z.string().optional(),
@@ -62,6 +61,11 @@ export function PostComposer(props: PostComposerProps) {
     clearTimeout(timer.current);
     timer.current = setTimeout(() => props.onTitleChange(value), 300);
   };
+  const remember = (values: { title?: string; content?: string }) =>
+    saveDraft(props.draftKey, {
+      title: values.title ?? "",
+      content: values.content ?? "",
+    });
   const collapse = (event: FocusEvent<HTMLDivElement>) => {
     if (!event.currentTarget.contains(event.relatedTarget) && !title.trim())
       setExpanded(false);
@@ -78,10 +82,6 @@ export function PostComposer(props: PostComposerProps) {
       {...field}
     />
   );
-  const items = props.boards.map((board) => ({
-    value: board.id,
-    label: board.name,
-  }));
 
   if (props.signInHref)
     return (
@@ -111,8 +111,8 @@ export function PostComposer(props: PostComposerProps) {
         schema={schema}
         defaultValues={{
           boardId: props.defaultBoardId ?? props.boards[0]?.id,
-          title: "",
-          content: "",
+          title: round ? "" : draft.title,
+          content: round ? "" : draft.content,
         }}
         submitKey="feedback.submit"
         submitIcon={<ArrowUpIcon />}
@@ -124,6 +124,7 @@ export function PostComposer(props: PostComposerProps) {
         onSubmit={async (values) => {
           const problem = await props.onSubmit(values);
           if (!problem) {
+            saveDraft(props.draftKey, { title: "", content: "" });
             changeTitle("");
             setExpanded(false);
             setRound(round + 1);
@@ -131,43 +132,32 @@ export function PostComposer(props: PostComposerProps) {
           return problem;
         }}
         footer={(form) => (
-          <Controller
-            control={form.control}
-            name="boardId"
-            render={({ field }) => (
-              <Select
-                name={field.name}
-                items={items}
-                value={field.value ?? null}
-                onValueChange={field.onChange}
-              >
-                <SelectTrigger
-                  ref={field.ref}
-                  aria-label={t("feedback.board")}
-                  className="min-h-7 w-auto min-w-0 gap-1 rounded-md border-0 bg-muted/60 px-2 text-xs shadow-none before:hidden sm:min-h-7 sm:text-xs dark:bg-muted/60 [&_svg]:size-3"
-                >
-                  <IconCircleHashtagOutline18 aria-hidden="true" />
-                  <SelectValue />
-                </SelectTrigger>
-                <PortalSelectContent alignItemWithTrigger={false}>
-                  <SelectGroup>
-                    {items.map((item) => (
-                      <SelectItem key={item.value} value={item.value}>
-                        {item.label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </PortalSelectContent>
-              </Select>
-            )}
-          />
+          <>
+            {props.attachments?.(form.formState.isSubmitting)}
+            <Controller
+              control={form.control}
+              name="boardId"
+              render={({ field }) => (
+                <BoardSelect
+                  name={field.name}
+                  boards={props.boards}
+                  value={field.value}
+                  triggerRef={field.ref}
+                  onChange={field.onChange}
+                />
+              )}
+            />
+          </>
         )}
       >
         {(form) => (
           <>
             {titleInput(
               form.register("title", {
-                onChange: (event) => changeTitle(event.target.value),
+                onChange: (event) => {
+                  changeTitle(event.target.value);
+                  remember(form.getValues());
+                },
               }),
             )}
             {form.formState.errors.title?.message ? (
@@ -176,13 +166,24 @@ export function PostComposer(props: PostComposerProps) {
               </p>
             ) : null}
             {expanded ? (
-              <Textarea
-                unstyled
-                className="text-sm text-muted-foreground"
-                aria-label={t("feedback.content")}
-                placeholder={t("feedback.details")}
-                {...form.register("content")}
-              />
+              <>
+                <Textarea
+                  unstyled
+                  className="text-sm text-muted-foreground [&_textarea]:resize-none"
+                  aria-label={t("feedback.content")}
+                  aria-describedby="feedback-details-hint"
+                  placeholder={t("feedback.details")}
+                  {...form.register("content", {
+                    onChange: () => remember(form.getValues()),
+                  })}
+                />
+                <p
+                  id="feedback-details-hint"
+                  className="text-xs text-muted-foreground"
+                >
+                  {t("feedback.detailsHint")}
+                </p>
+              </>
             ) : null}
           </>
         )}

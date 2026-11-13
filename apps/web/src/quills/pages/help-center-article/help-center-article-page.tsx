@@ -11,6 +11,7 @@ import { PortalGate } from "../../ui/portal-gate";
 import { StateView } from "../../ui/state-view";
 import { meta } from "./meta";
 import { ArticleFeedback } from "./parts/article-feedback";
+import { ArticleNextSteps } from "./parts/article-next-steps";
 
 export interface HelpCenterArticlePageProps {
   workspaceId: string;
@@ -142,6 +143,11 @@ export function HelpCenterArticlePage(props: HelpCenterArticlePageProps) {
                   workspaceId={props.workspaceId}
                   articleId={data.article.id}
                   viewer={viewer}
+                />
+                <ArticleNextSteps
+                  workspaceId={props.workspaceId}
+                  articleId={data.article.id}
+                  articles={data.articles}
                 />
               </article>
             ) : null}

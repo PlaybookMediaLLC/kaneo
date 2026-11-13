@@ -17,5 +17,12 @@
 	"title": "Help center",
 	"updated": "Updated {{date}}",
 	"articles_one": "{{count}} article",
-	"articles_other": "{{count}} articles"
+	"articles_other": "{{count}} articles",
+	"moreArticles": "More articles",
+	"previous": "Previous",
+	"next": "Next",
+	"stillNeedHelp": "Still need help?",
+	"stillNeedHelpBody": "Tell us what you tried to do. Your feedback helps us improve this guide and the product.",
+	"submitFeedback": "Submit feedback",
+	"contactSupport": "Contact support"
 }

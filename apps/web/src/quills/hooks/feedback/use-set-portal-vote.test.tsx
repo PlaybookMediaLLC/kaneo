@@ -28,6 +28,18 @@ describe("useSetPortalVote", () => {
         "feedback",
         "getPortalPost",
       ),
+      quillsOperationKey(
+        "workspace_test_1",
+        { kind: "anonymous" },
+        "feedback",
+        "listPortalRoadmapPosts",
+      ),
+      quillsOperationKey(
+        "workspace_test_1",
+        { kind: "anonymous" },
+        "feedback",
+        "listPortalVotedPosts",
+      ),
     ],
   });
 });

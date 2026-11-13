@@ -2,17 +2,16 @@ import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { feedbackStages, type FeedbackStage } from "../../core/feedback-stages";
 import { portalHref } from "../../core/portal-href";
-import { useCreatePortalPost } from "../../hooks/feedback/use-create-portal-post";
 import { useFindPortalSimilarPosts } from "../../hooks/feedback/use-find-portal-similar-posts";
 import { useListPortalBoards } from "../../hooks/feedback/use-list-portal-boards";
 import { useListPortalPosts } from "../../hooks/feedback/use-list-portal-posts";
 import { useListPortalStatuses } from "../../hooks/feedback/use-list-portal-statuses";
 import { useSetPortalVote } from "../../hooks/feedback/use-set-portal-vote";
+import { FeedbackComposer } from "../../portal/feedback-composer";
 import { usePortalRuntime } from "../../portal/runtime";
 import { BoardNavigation } from "../../ui/board-navigation";
 import { PageFrame } from "../../ui/page-frame";
 import { PortalGate } from "../../ui/portal-gate";
-import { PostComposer } from "../../ui/post/post-composer";
 import { PostList } from "../../ui/post/post-list";
 import { PostSort } from "../../ui/post/post-sort";
 import { SimilarPosts } from "../../ui/post/similar-posts";
@@ -63,7 +62,6 @@ export function FeedbackHomePage(props: FeedbackHomePageProps) {
     viewer,
   );
   const vote = useSetPortalVote(viewer);
-  const create = useCreatePortalPost(viewer);
   const remember = (search: Record<string, string>) =>
     void navigate({
       to: ".",
@@ -122,8 +120,8 @@ export function FeedbackHomePage(props: FeedbackHomePageProps) {
             }}
           >
             {boards.data && (viewer.kind !== "user" || submittable.length) ? (
-              <PostComposer
-                workspaceName={portal.config.name}
+              <FeedbackComposer
+                workspaceId={props.workspaceId}
                 boards={submittable}
                 autoFocus={"openFeedback" in props.search}
                 signInHref={
@@ -132,16 +130,6 @@ export function FeedbackHomePage(props: FeedbackHomePageProps) {
                     : `/auth/sign-in?redirect=${encodeURIComponent(portalHref(props.workspaceId))}`
                 }
                 onTitleChange={setTitle}
-                onSubmit={async (values) => {
-                  try {
-                    await create.mutateAsync({
-                      param: { workspace: props.workspaceId },
-                      json: values,
-                    });
-                  } catch (problem) {
-                    return problem as never;
-                  }
-                }}
               />
             ) : null}
             <SimilarPosts

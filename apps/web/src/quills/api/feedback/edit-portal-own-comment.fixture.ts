@@ -3,6 +3,7 @@ export const editPortalOwnCommentFixture = {
   ok: (overrides: Partial<EditPortalOwnCommentResponse> = {}) =>
     ({
       ...{
+        attachments: [],
         id: "id_test_1",
         parentId: null,
         content: "value",

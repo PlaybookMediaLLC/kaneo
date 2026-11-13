@@ -72,6 +72,28 @@ async function widgetUploader(db: Database, caller: QuillsCaller) {
   return customerId;
 }
 
+const preparePortalUpload = defineQuillsRoute({
+  audience: "portal",
+  ensureCustomer: true,
+  method: "post",
+  path: "/portal/uploads/prepare",
+  operationId: "prepareQuillsPortalUpload",
+  summary: "Prepare the signed-in customer's upload profile",
+  action: "create",
+  rateLimit: perMinute,
+  response: z.object({ ready: z.boolean() }),
+  responseDescription: "Upload profile ready",
+  errors: { 403: "Portal access denied" },
+  event: {
+    none: "The audience framework creates the canonical customer profile if missing",
+  },
+  handler: async ({ db, caller }) => {
+    await requirePortalAccess(db, caller);
+    owner(caller);
+    return { ready: true };
+  },
+});
+
 const portalUpload = defineQuillsRoute({
   audience: "portal",
   method: "post",
@@ -292,6 +314,7 @@ const deleteAvatar = defineQuillsRoute({
 });
 
 export default apiRouter()
+  .openapi(...preparePortalUpload)
   .openapi(...portalUpload)
   .openapi(...portalFile)
   .openapi(...widgetUpload)

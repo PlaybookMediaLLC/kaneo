@@ -83,13 +83,13 @@ export function PageFrame({
     <main
       className={cn(
         "portal-page mx-auto w-full flex-1 px-5 pb-16 pt-8 md:pt-12 [&_h2]:tracking-tight [&_h3]:font-semibold [&_time]:text-xs [&_time]:text-muted-foreground",
-        wide || aside ? "max-w-4xl" : "max-w-3xl",
+        wide || aside ? "max-w-5xl" : "max-w-3xl",
       )}
       data-page={titleKey}
     >
       {token !== "none" ? <meta name="referrer" content="no-referrer" /> : null}
       {aside ? (
-        <div className="grid items-start gap-x-14 md:grid-cols-[180px_minmax(0,1fr)]">
+        <div className="grid items-start gap-x-16 md:grid-cols-[13rem_minmax(0,1fr)] md:grid-rows-[auto_1fr]">
           {header}
           <div className="mb-8 min-w-0 md:col-start-1 md:row-span-2 md:row-start-1 md:mb-0 md:self-stretch">
             {aside}

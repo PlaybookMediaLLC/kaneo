@@ -18,6 +18,7 @@ export interface PortalFormProps<T extends FieldValues> {
   schema: z.ZodType<T, T>;
   defaultValues: DefaultValues<T>;
   submitKey: string;
+  resetOnSuccess?: boolean;
   onSubmit: (values: T) => Promise<PortalProblem | void>;
   children: (form: UseFormReturn<T>) => ReactNode;
   className?: string;
@@ -51,9 +52,26 @@ export function PortalForm<T extends FieldValues>(props: PortalFormProps<T>) {
         }
       } else {
         setProblem(result ?? null);
+        if (!result && props.resetOnSuccess) form.reset();
       }
-    } catch {
-      setProblem({ kind: "failed" });
+    } catch (error) {
+      setProblem(
+        error &&
+          typeof error === "object" &&
+          "kind" in error &&
+          [
+            "authRequired",
+            "noAccess",
+            "notFound",
+            "gone",
+            "conflict",
+            "invalid",
+            "rateLimited",
+            "failed",
+          ].includes(String(error.kind))
+          ? (error as PortalProblem)
+          : { kind: "failed" },
+      );
     } finally {
       running.current = false;
     }

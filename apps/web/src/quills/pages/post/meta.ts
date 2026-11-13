@@ -1,3 +1,4 @@
+// quills-web-allow C11: Upload operations are composed in core/use-feedback-attachments.ts and retain their generated hook contracts.
 import type { PageMeta } from "../../core/types";
 export const meta = {
   id: "post",
@@ -7,7 +8,14 @@ export const meta = {
   mailLinked: true,
   token: "none",
   operations: [
+    "getQuillsPortalFile",
+    "setQuillsPortalFollow",
+    "prepareQuillsPortalUpload",
+    "createQuillsPortalUpload",
+    "createQuillsPortalFiles",
+    "discardQuillsPortalFile",
     "getQuillsPortalPost",
+    "findQuillsPortalSimilarPosts",
     "listQuillsPortalPostComments",
     "setQuillsPortalVote",
     "createQuillsPortalComment",

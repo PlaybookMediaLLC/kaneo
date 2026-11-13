@@ -22,6 +22,12 @@ describe("useSetPortalFollow", () => {
         "feedback",
         "getPortalPost",
       ),
+      quillsOperationKey(
+        "workspace_test_1",
+        { kind: "anonymous" },
+        "feedback",
+        "listPortalPosts",
+      ),
     ],
   });
 });

@@ -3,7 +3,11 @@ import { renderComponent } from "../../../test/render";
 import { PostActions } from "./post-actions";
 
 const props = {
-  post: { title: "Export history", content: "Please add exports" },
+  post: {
+    title: "Export history",
+    content: "Please add exports",
+    attachments: [],
+  },
   postId: "post_test_1",
   workspaceId: "workspace_test_1",
   viewer: { kind: "user" as const, id: "account_test_1" },

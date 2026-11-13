@@ -1,9 +1,9 @@
-import { IconHeartOutline18 } from "nucleo-ui-essential-outline-18";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { relativeTime } from "../../core/relative-time";
-import { ConfirmAction } from "../confirm-action";
+import { MarkdownContent } from "../markdown-content";
 import { PersonAvatar } from "../person-avatar";
+import { CommentReactions } from "./comment-reactions";
 
 interface CommentItem {
   id: string;
@@ -28,30 +28,28 @@ export interface PostCommentProps {
   comment: CommentItem;
   onEdit?: (commentId: string) => void;
   onDelete?: (commentId: string) => void;
-  /** Toggles the like; the like is read-only without it. */
-  onLike?: (commentId: string, liked: boolean) => Promise<void>;
+  /** Toggles a reaction; the reactions are read-only without it. */
+  onReact?: (
+    commentId: string,
+    emoji: string,
+    reacted: boolean,
+  ) => Promise<void>;
   /** The reply form; the Reply control is hidden without it. */
   replyForm?: (parentId: string, close: () => void) => ReactNode;
+  /** The comment's files, shown under its text. */
+  attachments?: ReactNode;
   /** Replies, shown under the comment. */
   children?: ReactNode;
 }
 
-const LIKE = "❤️";
-
 const action =
   "text-xs text-muted-foreground transition-colors hover:text-foreground";
-// Resets the upstream button so the like matches the other text actions.
-const like = `${action} h-auto gap-1 border-0 bg-transparent px-0 font-normal shadow-none before:hidden hover:bg-transparent aria-pressed:bg-transparent aria-pressed:text-foreground sm:h-auto sm:text-xs dark:bg-transparent [&_svg]:size-3.5`;
 
 /** One comment with its likes, reply control, author actions and replies. */
 export function PostComment({ comment, ...props }: PostCommentProps) {
   const { t, i18n } = useTranslation("quills");
   const [replying, setReplying] = useState(false);
   const author = comment.author.name?.trim() || t("post.anonymousAuthor");
-  const liked = comment.reactions.find((item) => item.emoji === LIKE);
-  const others = comment.reactions.filter(
-    (item) => item.emoji !== LIKE && item.count > 0,
-  );
   return (
     <li className="grid grid-cols-[1.75rem_minmax(0,1fr)] gap-x-3">
       <PersonAvatar
@@ -79,11 +77,20 @@ export function PostComment({ comment, ...props }: PostCommentProps) {
             </span>
           ) : null}
         </p>
-        <p
-          className={`mt-1 whitespace-pre-wrap break-words text-sm ${comment.deleted ? "italic text-muted-foreground" : ""}`}
-        >
-          {comment.deleted ? t("post.deletedComment") : comment.content}
-        </p>
+        {comment.deleted ? (
+          <p className="mt-1 text-sm italic text-muted-foreground">
+            {t("post.deletedComment")}
+          </p>
+        ) : (
+          <>
+            <MarkdownContent
+              customer
+              content={comment.content}
+              className="mt-1 text-sm leading-relaxed [&>*+*]:mt-2 [&_p]:whitespace-pre-line"
+            />
+            {props.attachments}
+          </>
+        )}
         {comment.pending ? (
           <p role="status" className="mt-1 text-xs text-muted-foreground">
             {t("post.pending")}
@@ -95,23 +102,15 @@ export function PostComment({ comment, ...props }: PostCommentProps) {
             role="group"
             className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1"
           >
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <ConfirmAction
-                labelKey="post.like"
-                pressed={Boolean(liked?.reacted)}
-                disabled={!props.onLike}
-                className={like}
-                onConfirm={() => props.onLike!(comment.id, !liked?.reacted)}
-              >
-                <IconHeartOutline18 aria-hidden="true" />
-              </ConfirmAction>
-              {liked?.count ? <span>{liked.count}</span> : null}
-            </span>
-            {others.map((item) => (
-              <span key={item.emoji} className="text-xs text-muted-foreground">
-                {item.emoji} {item.count}
-              </span>
-            ))}
+            <CommentReactions
+              reactions={comment.reactions}
+              onReact={
+                props.onReact
+                  ? (emoji, reacted) =>
+                      props.onReact!(comment.id, emoji, reacted)
+                  : undefined
+              }
+            />
             {props.replyForm ? (
               <button
                 type="button"

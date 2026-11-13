@@ -1,90 +1,86 @@
-import { describe, expect } from "vite-plus/test";
-import { getPortalPostFixture } from "../../api/feedback/get-portal-post.fixture";
-import { listPortalBoardsFixture } from "../../api/feedback/list-portal-boards.fixture";
-import { listPortalPostsFixture } from "../../api/feedback/list-portal-posts.fixture";
-import { listPortalStatusesFixture } from "../../api/feedback/list-portal-statuses.fixture";
-import { setPortalVoteFixture } from "../../api/feedback/set-portal-vote.fixture";
-import { press } from "../../test/actions";
+import { describe, expect, it } from "vite-plus/test";
 import { describePageContract } from "../../test/contracts";
 import { mockApi } from "../../test/mock-api";
+import { renderPage } from "../../test/render";
+import { listPortalRoadmapsFixture } from "../../api/feedback/list-portal-roadmaps.fixture";
+import { listPortalRoadmapPostsFixture } from "../../api/feedback/list-portal-roadmap-posts.fixture";
+import { listPortalStatusesFixture } from "../../api/feedback/list-portal-statuses.fixture";
+import { listPortalBoardsFixture } from "../../api/feedback/list-portal-boards.fixture";
 import { meta } from "./meta";
 import { RoadmapPage } from "./roadmap-page";
-
-const status = {
-  id: "post_status_test_1",
-  name: "Planned",
-  slug: "planned",
-  color: "blue",
-  category: "active",
-  showOnRoadmap: true,
-  stage: "planned" as const,
+const roadmap = {
+  id: "roadmap_1",
+  name: "Product roadmap",
+  slug: "product",
+  description: "Our plans",
+  type: "column" as const,
+  frequency: null,
+  position: 0,
+  columns: [
+    {
+      id: "column_1",
+      statusId: "status_1",
+      name: "Planned",
+      icon: null,
+      color: "",
+      position: 0,
+    },
+  ],
 };
-const statuses = [
-  status,
-  {
-    ...status,
-    id: "post_status_test_2",
-    name: "Building",
-    slug: "in_progress",
-    showOnRoadmap: false,
-    stage: "in_progress" as const,
-  },
-];
-const board = {
-  id: "board_test_1",
-  name: "Ideas",
-  slug: "ideas",
-  description: null,
-  postCount: null,
-  canSubmit: true,
-  canVote: true,
-  canComment: true,
-};
-const post = getPortalPostFixture.ok({
-  id: "post_test_1",
-  title: "Linear sync",
-  board: { id: "board_test_1", name: "Ideas", slug: "ideas" },
-  stage: "planned",
-});
-
-function prepare() {
-  const api = mockApi();
-  api.reply(listPortalStatusesFixture.ok({ items: statuses }));
-  api.reply(listPortalBoardsFixture.ok({ items: [board] }));
-  api.reply(listPortalPostsFixture.ok({ items: [post] }));
-  return api;
-}
-
 describe("RoadmapPage", () => {
   describePageContract(meta, RoadmapPage, {
-    loading: { prepare: () => void mockApi().defer(() => undefined) },
-    failed: { prepare: () => void mockApi().fail() },
-    ready: {
-      prepare: () => void prepare(),
-      assert: async (view) => {
-        await view.findByRole("link", { name: "Linear sync" });
-        expect(
-          view.getByRole("heading", { level: 2, name: /Planned/ }),
-        ).toBeInTheDocument();
-        expect(
-          view.queryByRole("heading", { level: 2, name: /Building/ }),
-        ).not.toBeInTheDocument();
-      },
-    },
-    done: {
+    loading: {
       prepare: () => {
-        const api = prepare();
-        api.reply(setPortalVoteFixture.ok({ postId: post.id, voted: true }));
-        api.reply(
-          listPortalPostsFixture.ok({ items: [{ ...post, voted: true }] }),
-        );
-        return { viewer: { kind: "user" as const, id: "account_test_1" } };
-      },
-      act: async (view) => {
-        await view.findByRole("link", { name: "Linear sync" });
-        press("Vote");
-        await view.findByRole("button", { name: "Remove vote" });
+        mockApi().defer(() => undefined);
+        return { accessLoading: true };
       },
     },
+    failed: {
+      prepare: () => {
+        mockApi().fail();
+        return { accessProblem: { kind: "failed" } };
+      },
+    },
+    ready: {
+      prepare: () => {
+        mockApi().reply(listPortalRoadmapsFixture.ok());
+        return {};
+      },
+    },
+  });
+  it("selects the shared roadmap and renders linked cards with search and sort", async () => {
+    const api = mockApi();
+    api.reply(listPortalRoadmapsFixture.ok({ roadmaps: [roadmap] }));
+    api.reply(listPortalStatusesFixture.ok());
+    api.reply(listPortalBoardsFixture.ok());
+    api.reply(
+      listPortalRoadmapPostsFixture.ok({
+        items: [
+          {
+            id: "post_1",
+            title: "Exports",
+            voteCount: 3,
+            commentCount: 1,
+            statusId: "status_1",
+            eta: null,
+            board: { id: "board_1", name: "Ideas", slug: "ideas" },
+          },
+        ],
+        total: 1,
+      }),
+    );
+    const view = renderPage(RoadmapPage, meta, {
+      search: { roadmap: "product", search: "exports", sort: "newest" },
+    });
+    expect(await view.findByRole("link", { name: "Exports" })).toHaveAttribute(
+      "href",
+      "/portal/workspace_test_1/posts/post_1",
+    );
+    const url = new URL(api.calls("listQuillsPortalRoadmapPosts")[0].url);
+    expect(url.searchParams.get("statusId")).toBe("status_1");
+    expect(url.searchParams.get("search")).toBe("exports");
+    expect(
+      view.getByRole("link", { name: "Suggest a feature" }),
+    ).toHaveAttribute("href", "/portal/workspace_test_1?openFeedback=1");
   });
 });

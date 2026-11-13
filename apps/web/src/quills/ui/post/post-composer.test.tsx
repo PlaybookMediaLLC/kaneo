@@ -1,6 +1,6 @@
 import { fireEvent, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { fill, press } from "../../test/actions";
+import { choose, fill, press } from "../../test/actions";
 import { renderComponent } from "../../test/render";
 import { PostComposer } from "./post-composer";
 
@@ -35,6 +35,54 @@ describe("PostComposer", () => {
       content: "Monthly",
     });
     expect(view.getByLabelText("Title")).toHaveValue("");
+  });
+
+  it("submits the board the writer chooses", async () => {
+    const onSubmit = vi.fn(async () => undefined);
+    renderComponent(
+      <PostComposer
+        workspaceName="Acme"
+        boards={[...boards, { id: "board_test_2", name: "Bugs" }]}
+        autoFocus
+        onTitleChange={vi.fn()}
+        onSubmit={onSubmit}
+      />,
+    );
+    fill("Title", "Crash on save");
+    await choose("Board", "Bugs");
+    press("Submit feedback");
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ boardId: "board_test_2" }),
+      ),
+    );
+  });
+
+  it("restores an unsent draft and clears it after posting", async () => {
+    localStorage.setItem(
+      "draft_test",
+      JSON.stringify({ title: "Saved idea", content: "Saved details" }),
+    );
+    const onSubmit = vi.fn(async () => undefined);
+    const view = renderComponent(
+      <PostComposer
+        workspaceName="Acme"
+        boards={boards}
+        draftKey="draft_test"
+        onTitleChange={vi.fn()}
+        onSubmit={onSubmit}
+      />,
+    );
+    expect(view.getByLabelText("Title")).toHaveValue("Saved idea");
+    expect(view.getByLabelText("Details")).toHaveValue("Saved details");
+    fill("Details", "Saved details, edited");
+    expect(JSON.parse(localStorage.getItem("draft_test")!)).toEqual({
+      title: "Saved idea",
+      content: "Saved details, edited",
+    });
+    press("Submit feedback");
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    await waitFor(() => expect(localStorage.getItem("draft_test")).toBeNull());
   });
 
   it("requires a title", async () => {

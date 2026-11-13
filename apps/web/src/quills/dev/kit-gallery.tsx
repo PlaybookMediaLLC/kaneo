@@ -1,3 +1,7 @@
+import { AttachmentPicker } from "../ui/attachment-picker";
+import { BoardSelect } from "../ui/post/board-select";
+import { CommentReactions } from "../ui/post/comment-reactions";
+import { FeedbackEditor } from "../ui/feedback-editor";
 import { BoardNavigation } from "../ui/board-navigation";
 import { PortalSheetContent } from "../ui/portal-sheet-content";
 import { PortalSelectContent } from "../ui/portal-select-content";
@@ -264,6 +268,30 @@ export function KitGallery() {
               stage={pending ? "planned" : ""}
               onStageChange={() => setPending(!pending)}
             />
+            <BoardSelect
+              name="gallery-board"
+              boards={[{ id: "board_test_1", name: demo }]}
+              value={empty ? undefined : "board_test_1"}
+              onChange={() => {}}
+            />
+            <AttachmentPicker
+              attachments={empty ? [] : [{ id: "file_1", name: demo }]}
+              files={[]}
+              onFilesChange={() => {}}
+              onRemove={() => {}}
+              onRemoveFile={() => {}}
+            />
+            <FeedbackEditor
+              id="gallery-editor"
+              value={demo}
+              onChange={() => {}}
+              maxLength={10000}
+              attachments={[]}
+              files={[]}
+              onFilesChange={() => {}}
+              onRemove={() => {}}
+              onRemoveFile={() => {}}
+            />
             <Sheet>
               <SheetTrigger render={<Button />}>{demo}</SheetTrigger>
               <PortalSheetContent>
@@ -385,6 +413,14 @@ export function KitGallery() {
               onEdit={() => setConfirmed(true)}
               onDelete={() => setEmpty(true)}
             />
+            <div className="flex items-center gap-3">
+              <CommentReactions
+                reactions={
+                  empty ? [] : [{ emoji: "🚀", count: 1, reacted: voted }]
+                }
+                onReact={async (_emoji, reacted) => setVoted(reacted)}
+              />
+            </div>
             <ul>
               <PostComment
                 comment={{
@@ -403,7 +439,7 @@ export function KitGallery() {
                 }}
                 onEdit={() => setConfirmed(true)}
                 onDelete={() => setEmpty(true)}
-                onLike={async (_id, liked) => setVoted(liked)}
+                onReact={async (_id, _emoji, liked) => setVoted(liked)}
                 replyForm={() => <p>{demo}</p>}
               />
             </ul>
