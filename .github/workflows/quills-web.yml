@@ -30,6 +30,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: node --test "scripts/quills-web/**/*.test.mjs"
       - run: node scripts/quills-web/cli.mjs check
+      - run: pnpm --filter "@kaneo/api^..." build
       - run: pnpm --filter @kaneo/web typecheck
       - run: pnpm --filter @kaneo/web test
       - name: Compile and test generated output in a clean worktree
@@ -44,6 +45,7 @@ jobs:
           git worktree add --detach "$generated_root" HEAD
           cd "$generated_root"
           pnpm install --frozen-lockfile --offline
+          pnpm --filter "@kaneo/api^..." build
           node scripts/quills-web/cli.mjs feature ci-generated
           node -e 'const fs = require("node:fs"); fs.writeFileSync("apps/web/src/quills/i18n/en-US/ci-generated.json", "{\n  \"title\": \"Generated page\"\n}\n")'
           node scripts/quills-web/cli.mjs query getQuillsPublicPortalConfig --area ci-generated
