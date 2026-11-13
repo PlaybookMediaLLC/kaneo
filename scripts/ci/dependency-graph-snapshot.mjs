@@ -7,8 +7,10 @@ export function buildSnapshot(sources, { sha, ref, runId, scanned }) {
   if (!/^(?:[a-f\d]{40}|[a-f\d]{64})$/i.test(sha ?? "")) {
     throw new Error("Invalid commit SHA");
   }
-  if (ref !== "refs/heads/main")
-    throw new Error("Dependency snapshots require main");
+  if (ref !== "refs/heads/staging")
+    throw new Error(
+      "Dependency snapshots require the default branch (staging)",
+    );
   if (typeof runId !== "string" || !runId) throw new Error("Missing run ID");
   if (typeof scanned !== "string" || !Number.isFinite(Date.parse(scanned))) {
     throw new Error("Invalid scan time");
