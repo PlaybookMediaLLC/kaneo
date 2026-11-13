@@ -42,6 +42,7 @@ import {
   type DeliveredEvent,
 } from "../../integrations/catalog";
 import { tokenFields } from "../../integrations/oauth-providers";
+import { oauthProvider } from "../../integrations/providers";
 import { systemMessage } from "../../support/ticket-view";
 import { loadEvent, type DeliveryEvent } from "../fanout";
 import { enqueueQuillsJob, finishQuillsJob } from "../queue";
@@ -107,6 +108,34 @@ async function sourceOf(db: Database, event: DeliveryEvent) {
       : undefined;
   }
   return undefined;
+}
+
+/**
+ * True when any installation of the connection sent the post's create to this channel, or may have: a
+ * create that is running, uncertain or succeeded. Operations are kept, and a delivery links an item only
+ * for a create that succeeded.
+ */
+async function sentBefore(
+  db: Database,
+  integrationId: string,
+  postId: string,
+  channel: string,
+) {
+  const [sent] = await db
+    .select({ id: operations.id })
+    .from(operations)
+    .where(
+      and(
+        eq(operations.sourceType, "post"),
+        eq(operations.sourceId, postId),
+        eq(operations.integrationId, integrationId),
+        eq(operations.destinationKey, channel),
+        eq(operations.kind, "create"),
+        inArray(operations.state, ["running", "uncertain", "succeeded"]),
+      ),
+    )
+    .limit(1);
+  return Boolean(sent);
 }
 
 const boardAllowed = (
@@ -185,6 +214,14 @@ export async function fanOutIntegrations(workspaceId: string, eventId: string) {
         continue;
       const installation = installationOf(target);
       const kind = trigger === "post.created" ? "create" : "notify";
+      // A resync after a reconnect (a new installation) never sends a create that an earlier
+      // installation sent or may have sent. Another event's post is newer than the connection.
+      // ponytail: checked at fan-out only; an old installation's claim that read the connection before the reconnect and commits after this check can still race it.
+      if (
+        event.type === "post.integration_sync_requested" &&
+        (await sentBefore(db, target.id, source.sourceId, target.target))
+      )
+        continue;
       const key = createHash("sha256")
         .update(
           JSON.stringify([
@@ -512,6 +549,7 @@ async function claimOperation(db: Database, id: string): Promise<Claim> {
           status: integrations.status,
           connectedAt: integrations.connectedAt,
           secrets: integrations.secrets,
+          config: integrations.config,
         })
         .from(integrations)
         .where(eq(integrations.id, op.integrationId))
@@ -600,8 +638,9 @@ async function claimOperation(db: Database, id: string): Promise<Claim> {
     delivery: {
       provider: integration.type,
       credentials,
-      // OAuth providers: the workspace's OAuth app (a GitLab refresh, the Discord bot token).
-      app: ["gitlab", "discord"].includes(integration.type)
+      config: integration.config,
+      // A provider with an OAuth app (platform credentials): for a token refresh or a bot token.
+      app: oauthProvider(integration.type)?.credentials.length
         ? unseal(
             (
               await db
@@ -626,7 +665,7 @@ async function claimOperation(db: Database, id: string): Promise<Claim> {
 async function settle(db: Database, claim: Claimed, outcome: Outcome) {
   const now = new Date();
   const result = outcome.result ?? null;
-  // A GitLab token refreshed before the call: kept unless the connection changed meanwhile.
+  // A token refreshed for the call: kept unless the connection changed meanwhile.
   if (outcome.refreshed && isTypeId(claim.op.integrationId, "integration")) {
     const [live] = await db
       .select({
@@ -706,6 +745,7 @@ async function settle(db: Database, claim: Claimed, outcome: Outcome) {
         integrationId: live.id,
         integrationType: claim.op.provider,
         externalId: result.externalId,
+        externalDisplayId: result.externalDisplayId ?? null,
         externalUrl: result.externalUrl,
         syncScope,
         origin: "event",
@@ -720,7 +760,7 @@ async function settle(db: Database, claim: Claimed, outcome: Outcome) {
         integrationId: live.id,
         integrationType: claim.op.provider,
         externalId: result.externalId,
-        externalDisplayId: result.externalId,
+        externalDisplayId: result.externalDisplayId ?? result.externalId,
         externalUrl: result.externalUrl,
         syncScope,
         origin: "push",

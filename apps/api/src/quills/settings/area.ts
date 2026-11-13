@@ -1,10 +1,12 @@
 import { eq } from "drizzle-orm";
+import { createId } from "@kaneo/ids";
 import { apiRouter, z, type BaseVariables } from "../../openapi";
 import { settings } from "../../database/quills/schema/auth";
 import {
   defineQuillsRoute,
   type AnyQuillsRoute,
 } from "../framework/define-route";
+import { receiptOf, type Receipt } from "./receipt-fields";
 
 // One settings area: a read and a partial update of the workspace settings row.
 // The workspace name and slug belong to Kaneo and are never written here.
@@ -55,6 +57,11 @@ export function settingsArea<
   read: (row: SettingsRow) => z.input<R>;
   patch: P;
   apply: (row: SettingsRow, patch: z.output<P>) => Change;
+  /**
+   * The fields a receipt may hold (see receipt-fields.ts): only what `apply` writes. Never a secret,
+   * a token, a credential, a file key, portal access data, or the Kaneo name or slug.
+   */
+  receipt: readonly string[];
 }) {
   const read = async (db: Db, lock: boolean) => {
     const query = db.select().from(settings).limit(1);
@@ -83,13 +90,24 @@ export function settingsArea<
       (patch) => Object.keys(patch).length > 0,
       "Send at least one field",
     ),
-    response: area.response,
-    responseDescription: `The ${area.label} settings`,
-    event: ({ workspaceId }) => ({
-      type: `settings.${area.name}_updated` as const,
-      entityType: "settings",
-      entityId: workspaceId,
+    response: area.response.extend({
+      receiptId: z.string().nullable().openapi({
+        description:
+          "The receipt of this change, for POST /settings/receipts/{receiptId}/undo. Null when no field that undo restores changed.",
+      }),
     }),
+    responseDescription: `The ${area.label} settings`,
+    // The receipt goes only into the audit row (events.ts); the response holds its ID only.
+    event: ({ workspaceId }, result, raw) => {
+      const { receipt } = raw as { receipt?: Receipt | null };
+      const { receiptId } = result as { receiptId: string | null };
+      return {
+        type: `settings.${area.name}_updated` as const,
+        entityType: "settings",
+        entityId: workspaceId,
+        ...(receipt && receiptId ? { receipt, receiptId } : {}),
+      };
+    },
     handler: async ({ db, body }) => {
       const row = await read(db, true);
       const [updated] = await db
@@ -97,7 +115,12 @@ export function settingsArea<
         .set(area.apply(row, body as z.output<P>))
         .where(eq(settings.id, row.id))
         .returning();
-      return area.read(updated!);
+      const receipt = receiptOf(area.name, area.receipt, row, updated!);
+      // The response schema drops `receipt`; the event reads it from the raw result.
+      return Object.assign(area.read(updated!), {
+        receiptId: receipt && createId("audit_log"),
+        receipt,
+      });
     },
   });
   return apiRouter<BaseVariables & { workspaceId: string }>()

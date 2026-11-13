@@ -20,6 +20,8 @@ import { runQuillsMigrations } from "../../database/quills/migrate";
 import * as kaneo from "../../database/schema";
 import { httpExceptionResponse } from "../../errors/http-exception-response";
 import type { BaseVariables } from "../../openapi";
+import { createId } from "@kaneo/ids";
+import { appCapabilities } from "./app";
 import { mintWidgetSession, resolveCaller, widgetEnabled } from "./audience";
 import { registry } from "./registry";
 
@@ -106,6 +108,8 @@ export type Fixture<T = any> = {
   actor?: (env: ContractEnv, ids: T, body: any) => Promise<string | null>;
   /** The target is soft-deletable: soft-delete the target of `valid(ids)` in A. The request must then return 404. */
   softDelete?: (env: ContractEnv, ids: T) => Promise<unknown>;
+  /** App reads: values that the authorized response must contain, so a read that hides everything fails. */
+  visible?: (ids: T) => string[];
 };
 export const fixture = <T>(f: Fixture<T>) => f;
 export const empty = fixture({ seed: async () => ({}), valid: () => ({}) });
@@ -124,6 +128,18 @@ export const users = {
   customerB: `${prefix}_customer_b`,
 };
 export const role = `${prefix}_role`;
+/**
+ * The API key of `user` that an app of A holds. Teammate checks use `${user}_key`, so the app
+ * bindings never change a teammate result.
+ */
+export const appKeyId = (user: string) => `${user}_app_key`;
+const appUsers = [
+  users.owner,
+  users.limited,
+  users.removed,
+  users.outsider,
+  users.admin,
+];
 export let pool: Pool;
 export let env: ContractEnv;
 export let fingerprintSql: { all: string; domain: string };
@@ -174,11 +190,14 @@ export async function startContract(testPool: Pool, url: string) {
     })),
   );
   await db.insert(kaneo.apikeyTable).values(
-    [users.owner, users.limited].map((id) => ({
-      id: `${id}_key`,
-      key: `${id}_key`,
+    [
+      ...[users.owner, users.limited].map((user) => [`${user}_key`, user]),
+      ...appUsers.map((user) => [appKeyId(user), user]),
+    ].map(([id, user]) => ({
+      id: id!,
+      key: id!,
       name: "Contract",
-      referenceId: id,
+      referenceId: user!,
       enabled: true,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -196,6 +215,7 @@ export async function startContract(testPool: Pool, url: string) {
     "DELETE FROM public.workspace_member WHERE workspace_id=$1 AND user_id=$2",
     [a, users.removed],
   );
+  await bindAppKeys(a);
   const tables: string[] = (
     await pool.query(
       `SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
@@ -305,6 +325,32 @@ export async function startContract(testPool: Pool, url: string) {
   return env;
 }
 
+/**
+ * Gives each app key one active app in A with every capability, and removes its other bindings.
+ * The app checks call it first, so a route that changed the bindings cannot change a later result.
+ */
+export async function bindAppKeys(workspaceId = env.a) {
+  const keys = appUsers.map(appKeyId);
+  await pool.query(
+    "DELETE FROM quills.apps WHERE api_key_id = ANY($1::text[])",
+    [keys],
+  );
+  await pool.query(
+    `INSERT INTO quills.apps (workspace_id, id, name, api_key_id, granted_scopes)
+     SELECT $1, k.id, 'Contract', k.key, $2::text[] FROM unnest($3::text[], $4::text[]) AS k(key, id)`,
+    [workspaceId, appCapabilities, keys, keys.map(() => createId("app"))],
+  );
+}
+
+/** The ID of the app of A that holds `user`'s app key. */
+export const appOf = async (user: string): Promise<string | undefined> =>
+  (
+    await pool.query(
+      "SELECT id FROM quills.apps WHERE workspace_id=$1 AND api_key_id=$2",
+      [env.a, appKeyId(user)],
+    )
+  ).rows[0]?.id;
+
 /** The Kaneo session for the x-test-user header. Tests mock getUserSession with it. */
 export async function contractSession(headers: Headers) {
   const id = headers.get("x-test-user");
@@ -344,9 +390,13 @@ export function contractApp(router: App, publicRouter?: App) {
     c.set("userId", c.req.header("x-test-user") ?? "");
     c.set("user", null);
     const scope = c.req.header("x-test-scope");
+    // `x-test-key: app` sends the caller's app key instead of its teammate key.
     if (scope)
       c.set("apiKey", {
-        id: `${c.get("userId")}_key`,
+        id:
+          c.req.header("x-test-key") === "app"
+            ? appKeyId(c.get("userId"))
+            : `${c.get("userId")}_key`,
         userId: c.get("userId"),
         enabled: true,
         permissions: JSON.parse(scope),

@@ -1,11 +1,14 @@
 import { eq } from "drizzle-orm";
 import { fromUuid } from "@kaneo/ids";
-import { statement } from "@kaneo/permissions";
+import { defaultRolePayloads, statement } from "@kaneo/permissions";
 import * as kaneo from "../../database/schema";
 import type { PermissionMap } from "../../utils/role-permissions";
 import { hashToken } from "./audience";
 import { boundedInputIssues } from "./bounded-inputs";
 import {
+  appKeyId,
+  appOf,
+  bindAppKeys,
   env,
   pool,
   prefix,
@@ -43,19 +46,26 @@ export async function checkRoute(
   if (!f) return [{ check: "no-fixture", detail: d.operationId }];
   if (d.audience === "signed") return checkSignedRoute(app, d, f);
   if (d.audience === "internal") return checkInternalRoute(app, d, f);
-  if ((d.audience ?? "teammate") !== "teammate")
+  const audience = d.audience ?? "teammate";
+  if (audience !== "teammate" && audience !== "app")
     return checkAudienceRoute(app, d, f);
   const findings: Finding[] = [];
   const fail = (check: string, detail: string) =>
     findings.push({ check, detail });
+  // App routes run every teammate check with the caller's bound app key. A session would stop at
+  // the app gate, so a check that sends none would pass for the wrong reason.
+  const appGrant = audience === "app" ? grant(d, true) : undefined;
+  // The app checks and the teammate confinement check need the seeded bindings.
+  await bindAppKeys();
   const expectStatus = async (
     check: string,
     statuses: number[],
     user: string,
     input: ContractInput,
-    scope?: PermissionMap,
+    // `null` sends no key, also on an app route.
+    scope: PermissionMap | null | undefined = appGrant,
   ) => {
-    const res = await send(app, d, input, user, scope);
+    const res = await send(app, d, input, user, scope ?? undefined);
     if (!statuses.includes(res.status))
       fail(
         check,
@@ -76,7 +86,7 @@ export async function checkRoute(
 
   const ids = await f.seed(env, users.owner);
   const input = f.valid(ids);
-  await expectStatus("no-session", [401], "", input);
+  await expectStatus("no-session", [401], "", input, null);
   await expectStatus("other-workspace", [403, 404], users.outsider, input);
   await expectStatus("removed-member", [403, 404], users.removed, input);
   await pool.query(
@@ -92,13 +102,57 @@ export async function checkRoute(
     );
   }
   await setRole(grant(d, false));
-  await expectStatus("denied-action", [403], users.limited, input);
+  const denied = await expectStatus(
+    "denied-action",
+    [403],
+    users.limited,
+    input,
+  );
+  // An app route's key holds the action, so only the role can deny it.
+  if (appGrant && denied.body?.code !== "MISSING_PERMISSION")
+    fail(
+      "denied-action",
+      `expected MISSING_PERMISSION, got ${denied.body?.code}`,
+    );
   const scoped = await send(app, d, input, users.owner, grant(d, false));
   if (scoped.status !== 403 || scoped.body?.code !== "API_KEY_SCOPE")
     fail(
       "api-key-scope",
       `got ${scoped.status} ${JSON.stringify(scoped.body)}`,
     );
+  // A key that an app holds works only on the app routes (RFC 0001, D15). Fresh rows: `load` runs
+  // before the transaction's check and may take a lease on its input (an upload verification).
+  if (!appGrant) {
+    const target = f.valid(await f.seed(env, users.owner));
+    const before = await fingerprint(env.a);
+    const confined = await send(
+      app,
+      d,
+      { ...target, headers: { ...target.headers, "x-test-key": "app" } },
+      users.owner,
+      grant(d, true),
+    );
+    if (confined.status !== 403 || confined.body?.code !== "APP_KEY_CONFINED")
+      fail(
+        "app-key-confined",
+        `got ${confined.status} ${JSON.stringify(confined.body)}`,
+      );
+    if (before !== (await fingerprint(env.a)))
+      fail("app-key-confined", "rows changed");
+  }
+  // A session-only route refuses a key that holds every permission it needs.
+  if (d.sessionOnly) {
+    const target = f.valid(await f.seed(env, users.owner));
+    const before = await fingerprint(env.a);
+    const keyed = await send(app, d, target, users.owner, grant(d, true));
+    if (keyed.status !== 403 || keyed.body?.code !== "SESSION_REQUIRED")
+      fail(
+        "session-required",
+        `got ${keyed.status} ${JSON.stringify(keyed.body)}`,
+      );
+    if (before !== (await fingerprint(env.a)))
+      fail("session-required", "rows changed");
+  }
   // Each extra required action alone: a role or key that lacks it is denied.
   for (const extra of d.alsoRequires ?? []) {
     const without: PermissionMap = {
@@ -134,7 +188,13 @@ export async function checkRoute(
       fail("foreign-ids", `${key}: the fixture has no workspace B value`);
   for (const [key, value] of Object.entries(foreign)) {
     const before = `${await fingerprint(env.a)}${await fingerprint(env.b)}`;
-    const res = await send(app, d, replace(input, key, value), users.owner);
+    const res = await send(
+      app,
+      d,
+      replace(input, key, value),
+      users.owner,
+      appGrant,
+    );
     if (!rejected.includes(res.status))
       fail("foreign-ids", `${key}: got ${res.status}`);
     if (before !== `${await fingerprint(env.a)}${await fingerprint(env.b)}`)
@@ -143,7 +203,8 @@ export async function checkRoute(
 
   await setRole(grant(d, true));
   // A caller who can open no project in A: a project route denies, a read hides the seeded rows.
-  if (d.project || d.native?.project) {
+  // App routes always run it: their fixture board is linked to a project, the app's link target.
+  if (d.project || d.native?.project || appGrant) {
     await env.db.insert(kaneo.workspaceMemberAccessTable).values({
       workspaceId: env.a,
       userId: users.limited,
@@ -152,7 +213,12 @@ export async function checkRoute(
     try {
       if (d.project)
         await expectStatus("private-project", [403, 404], users.limited, input);
-      else {
+      else if (appGrant && d.method !== "get") {
+        const before = `${await fingerprint(env.a)}${await fingerprint(env.b)}`;
+        await expectStatus("private-project", [403, 404], users.limited, input);
+        if (before !== `${await fingerprint(env.a)}${await fingerprint(env.b)}`)
+          fail("private-project", "rows changed");
+      } else {
         const res = await expectStatus(
           "private-project",
           [200],
@@ -171,21 +237,32 @@ export async function checkRoute(
     }
   }
 
-  const fresh = f.valid(await f.seed(env, users.limited));
+  const freshIds = await f.seed(env, users.limited);
+  const fresh = f.valid(freshIds);
   const since: string = (
     await pool.query("SELECT clock_timestamp()::text AS t")
   ).rows[0].t;
   const domain = await fingerprint(env.a, "domain");
-  const ok = await send(app, d, fresh, users.limited, grant(d, true));
+  // The role grants exactly the action; a session-only route takes the session, not the key.
+  const ok = await send(
+    app,
+    d,
+    fresh,
+    users.limited,
+    d.sessionOnly ? undefined : grant(d, true),
+  );
   if (ok.status !== 200)
     fail("authorized", `got ${ok.status} ${JSON.stringify(ok.body)}`);
   else {
     findings.push(...responseIssues(d, ok));
     for (const issue of await outboxIssues(d, fresh, ok.body, since, domain))
       fail("outbox", issue);
+    if (appGrant)
+      for (const issue of await appActorIssues(d, f, freshIds, ok, since))
+        fail("app-actor", issue);
   }
   for (const issue of await deletedObjectIssues(f, (target) =>
-    send(app, d, target, users.owner),
+    send(app, d, target, users.owner, appGrant),
   ))
     fail("deleted-object", issue);
 
@@ -204,13 +281,157 @@ export async function checkRoute(
       d,
       { ...target, body: { ...(target.body as object), workspaceId: env.b } },
       users.owner,
+      appGrant,
     );
     if (before !== (await fingerprint(env.b)))
       fail("foreign-body-workspace", "a row in workspace B changed");
   }
 
-  for (const issue of await rollbackIssues(d, f, users.owner))
+  for (const issue of await rollbackIssues(d, f, users.owner, appGrant))
     fail("rollback", issue);
+  if (appGrant) findings.push(...(await appIssues(app, d, f)));
+  return findings;
+}
+
+/**
+ * App routes, after an authorized request by limited: a write's audit rows name limited's teammate
+ * principal and limited's app; a read's response holds every value that the fixture marks visible.
+ */
+async function appActorIssues(
+  d: AnyQuillsRoute,
+  f: Fixture,
+  ids: unknown,
+  ok: Sent,
+  since: string,
+) {
+  if (d.method === "get") {
+    if (!f.visible) return ["an app read fixture declares no visible values"];
+    const text = responseText(ok);
+    return f
+      .visible(ids)
+      .filter((value) => !text.includes(value))
+      .map((value) => `the response does not contain ${value}`);
+  }
+  const {
+    rows: [n],
+  } = await pool.query(
+    `SELECT count(*)::int AS audit,
+       count(*) FILTER (WHERE p.kaneo_user_id=$3 AND l.metadata->>'appId'=$4)::int AS "byApp"
+     FROM quills.audit_log l LEFT JOIN quills.principal p ON p.id=l.actor_principal_id AND p.workspace_id=l.workspace_id
+     WHERE l.workspace_id=$1 AND l.occurred_at>=$2::timestamptz`,
+    [env.a, since, users.limited, await appOf(users.limited)],
+  );
+  return n.audit && n.audit === n.byApp
+    ? []
+    : [
+        `expected every audit row to name limited and its app, ${n.byApp} of ${n.audit} do`,
+      ];
+}
+
+/**
+ * The app gate (framework/app.ts): a session, an unscoped key, an unbound key, a disabled app, an app
+ * of workspace B and a missing capability are each refused and change nothing. A member's key works.
+ */
+async function appIssues(
+  app: App,
+  d: AnyQuillsRoute,
+  f: Fixture,
+): Promise<Finding[]> {
+  const findings: Finding[] = [];
+  const fail = (check: string, detail: string) =>
+    findings.push({ check, detail });
+  const both = async () =>
+    `${await fingerprint(env.a)}${await fingerprint(env.b)}`;
+  /** Changes the owner's binding in A: `statement` with an optional value as $3. */
+  const binding = (statement: string, value?: string) => () =>
+    pool.query(`${statement} WHERE api_key_id=$1 AND workspace_id=$2`, [
+      appKeyId(users.owner),
+      env.a,
+      ...(value === undefined ? [] : [value]),
+    ]);
+  /** Changes the binding, sends one request, then restores every binding. */
+  const refused = async (
+    check: string,
+    code: string,
+    change?: () => Promise<unknown>,
+    headers: Record<string, string> = {},
+    // `null` sends no key: a session.
+    scope: PermissionMap | null = grant(d, true),
+  ) => {
+    const input = f.valid(await f.seed(env, users.owner));
+    try {
+      await change?.();
+      const before = await both();
+      const res = await send(
+        app,
+        d,
+        { ...input, headers: { ...input.headers, ...headers } },
+        users.owner,
+        scope ?? undefined,
+      );
+      if (res.status !== 403 || res.body?.code !== code)
+        fail(
+          check,
+          `expected 403 ${code}, got ${res.status} ${JSON.stringify(res.body)}`,
+        );
+      if (before !== (await both())) fail(check, "rows changed");
+    } finally {
+      await bindAppKeys();
+    }
+  };
+  await refused("app-session", "APP_NOT_BOUND", undefined, {}, null);
+  await refused("app-unscoped-key", "API_KEY_SCOPE", undefined, {
+    "x-test-scope": "null",
+  });
+  await refused(
+    "app-unbound",
+    "APP_NOT_BOUND",
+    binding("DELETE FROM quills.apps"),
+  );
+  await refused(
+    "app-disabled",
+    "APP_NOT_BOUND",
+    binding("UPDATE quills.apps SET status='disabled'"),
+  );
+  // The same key, bound only in workspace B.
+  await refused(
+    "app-other-workspace",
+    "APP_NOT_BOUND",
+    binding("UPDATE quills.apps SET workspace_id=$3", env.b),
+  );
+  await refused(
+    "app-capability",
+    "APP_SCOPE",
+    binding(
+      "UPDATE quills.apps SET granted_scopes=array_remove(granted_scopes, $3)",
+      d.capability,
+    ),
+  );
+
+  // A key that a member made: the built-in member role holds every app action. Writes need more than a viewer.
+  for (const [name, payload, statuses] of [
+    ["member", defaultRolePayloads.member, [200]],
+    ...(d.method === "get"
+      ? []
+      : ([["viewer", defaultRolePayloads.viewer, [403]]] as const)),
+  ] as const) {
+    await setRole(payload);
+    const res = await send(
+      app,
+      d,
+      f.valid(await f.seed(env, users.limited)),
+      users.limited,
+      grant(d, true),
+    );
+    if (
+      !(statuses as readonly number[]).includes(res.status) ||
+      (res.status === 403 && res.body?.code !== "MISSING_PERMISSION")
+    )
+      fail(
+        "app-member-key",
+        `${name} role: got ${res.status} ${JSON.stringify(res.body)}`,
+      );
+  }
   return findings;
 }
 

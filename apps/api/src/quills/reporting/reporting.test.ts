@@ -7,6 +7,7 @@ import { withQuillsSystemWorkspace } from "../../database/quills/client";
 import { maintainPageViewPartitions } from "../../database/quills/page-view-partitions";
 import { principal, user } from "../../database/quills/schema/auth";
 import { boards } from "../../database/quills/schema/boards";
+import { changelogEntries } from "../../database/quills/schema/changelog";
 import { boardProjects } from "../../database/quills/schema/platform-links";
 import {
   postComments,
@@ -237,5 +238,77 @@ describe.skipIf(!url)("Reporting aggregates", () => {
       "/reporting/visitor-analytics?period=7d&surface=portal",
     );
     expect([403, 404]).toContain(outsider.status);
+  });
+
+  it("lists the most viewed published changelog entries up to changelogLimit", async () => {
+    const day = 86_400_000;
+    const published = new Date(Date.now() - day);
+    const read = (title: string, viewCount: number) => ({
+      title,
+      content: "-",
+      viewCount,
+      publishedAt: published,
+    });
+    await world.scoped(world.a, world.users.owner, (db) =>
+      db.insert(changelogEntries).values([
+        read("Read 60", 60),
+        read("Read 50", 50),
+        read("Read 40", 40),
+        read("Read 30", 30),
+        read("Read 20", 20),
+        read("Read 10", 10),
+        { title: "Draft entry", content: "-", viewCount: 99 },
+        {
+          ...read("Scheduled entry", 98),
+          publishedAt: new Date(Date.now() + day),
+        },
+        { ...read("Deleted entry", 97), deletedAt: new Date() },
+      ]),
+    );
+    const titles = async (query: string) =>
+      (
+        await world.request(
+          world.users.member,
+          "GET",
+          `/reporting/analytics?period=7d${query}`,
+        )
+      ).body.changelog.topEntries.map((e: { title: string }) => e.title);
+    const res = await world.request(
+      world.users.member,
+      "GET",
+      "/reporting/analytics?period=7d&changelogLimit=2",
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.changelog.topEntries).toEqual([
+      expect.objectContaining({
+        title: "Read 60",
+        viewCount: 60,
+        publishedAt: published.toISOString(),
+      }),
+      expect.objectContaining({ title: "Read 50", viewCount: 50 }),
+    ]);
+    // The default stays five, as before the limit existed.
+    expect(await titles("")).toEqual([
+      "Read 60",
+      "Read 50",
+      "Read 40",
+      "Read 30",
+      "Read 20",
+    ]);
+    expect(await titles("&changelogLimit=20")).toHaveLength(6);
+    for (const limit of ["0", "21"])
+      expect(
+        (
+          await world.request(
+            world.users.member,
+            "GET",
+            `/reporting/analytics?changelogLimit=${limit}`,
+          )
+        ).status,
+      ).toBe(400);
+    expect([403, 404]).toContain(
+      (await world.request(world.users.outsider, "GET", "/reporting/analytics"))
+        .status,
+    );
   });
 });

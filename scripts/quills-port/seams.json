@@ -12,7 +12,9 @@
 		"packages/email/src/quills",
 		"packages/permissions/src/quills.test.ts",
 		"scripts/quills-port",
-		"docs/quills-port"
+		"docs/quills-port",
+		"tests/api-integration/helpers/run-alone.ts",
+		"tests/api-integration/helpers/run-alone.test.ts"
 	],
 	"seams": [
 		{
@@ -54,7 +56,7 @@
 		{
 			"file": "tests/api-integration/helpers/database.ts",
 			"state": "existing",
-			"lines": "runs the Quills migrations for integration tests",
+			"lines": "runs the Quills migrations for integration tests; runs the TRUNCATE through runAlone (helpers/run-alone.ts)",
 			"plannedChange": "none"
 		},
 		{

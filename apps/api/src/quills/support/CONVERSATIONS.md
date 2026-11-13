@@ -135,6 +135,38 @@ Merged: 1 (`bulkQuillsUpdateConversations`, split by action: `delete_forever` ne
 action). All or nothing: one missing ID, one blocked close or one invalid assignee returns 404 or 409
 and changes nothing. The `macro` action belongs to the macros slice.
 
+## Test conversations (RFC 0001, lane M1)
+
+`test-conversations.ts`.
+
+```
+Tables and owning schema:  quills: conversations and their cascades (messages, tags, participants,
+                           summaries), principal (read), ticket_conversations (read), tickets
+                           (the pair tickets of the deleted threads). public: none.
+Actor and workspace:       authenticated context (helper).
+Permissions:               workspace:read + quills:delete. No native permissions.
+Persisted relationships:   principal.test_owner_principal_id marks a test customer;
+                           ticket_conversations finds the pair ticket of a thread.
+Transaction:               one scoped transaction: the pair tickets, the conversations and the
+                           outbox event commit together or not at all.
+External effects:          none. Attachment cleanup is queued by the storage triggers.
+Completion checks:         authenticated endpoint, tenant/object access, mutation or batch.
+```
+
+| operationId | Route | Action | Tables | Event | Tests |
+|---|---|---|---|---|---|
+| `deleteQuillsTestConversations` | `DELETE /test-conversations` | delete | `conversations`, `principal`, `ticket_conversations`, `tickets` | `conversation.test_deleted` (entity `workspace`, `count`) when one or more were deleted | contract, rollback, `test-conversations.test.ts` |
+
+Merged: `test-customer.ts#deleteTestConversationsFn`.
+
+- Only a conversation whose visitor is a test customer is deleted. Workspace row security keeps
+  the delete in the caller's workspace.
+- The pair ticket of a deleted thread goes with it when a test customer requested it, as in the
+  source. Another ticket of a test customer stays.
+- Differences from the source: the route is `DELETE` (the source is a server function), and it
+  records an outbox event so caches refresh. Every teammate sees every conversation (D2), so
+  every test customer's threads go, not only the caller's.
+
 ## Tags
 
 | operationId | Route | Action | Tables | Event |
@@ -200,6 +232,63 @@ because the contract's strict-response check reads no unions. The `waiting` sort
 have no wait clock. Post routes use `feedback/visibility.ts`: a board linked to projects the caller
 cannot open hides its posts.
 
+## Assistant surface and outbound start (RFC 0001, lane G2)
+
+Module: `support/conversation-assistant.ts`. Feature tests: `support/conversation-assistant.test.ts`.
+
+```
+Tables and owning schema:  quills: conversations, conversation_messages, principal, user,
+                           assistant_involvements (read), posts and boards (read, for cited posts),
+                           events, audit_log, job_queue. public (read only, through
+                           framework/platform-reads.ts): project access (`loadProjects`).
+Actor and workspace:       authenticated context (helper). The target customer comes from the body
+                           and is checked against this workspace (`loadCustomer`: `isCustomer` and
+                           row security).
+Permissions:               workspace:read + quills:read (counts, activity); quills:update (start, the
+                           source's CONVERSATION_REPLY). No native permissions.
+Persisted relationships:   assistant_involvements.conversation_id; board_projects for a cited post.
+Transaction:               one scoped transaction per request. The start writes the conversation, the
+                           first message and two outbox events together; any failure rolls all back.
+External effects:          none in a request. The conversation is an email conversation, so its
+                           `message.created` makes the existing reply delivery mail the first message
+                           (jobs/handlers/support-mail.ts, one send per event through the ledger).
+Completion checks:         authenticated endpoint, tenant/object access, mutation, read/search/export.
+```
+
+Visibility: the counts use the inbox list's rule before they count: real conversations (no test
+customer) that are not spam, in the caller's workspace. The activity of one conversation follows
+`getQuillsConversation`: any conversation of the workspace, 404 otherwise. A cited post shows only
+when it is on a board that the caller can see (`feedback/visibility.ts`).
+
+| operationId | Route | Action | Tables | Event |
+|---|---|---|---|---|
+| `startQuillsAgentConversation` | `POST /conversations` (`targetPrincipalId`: an identified customer with a mail address; plain text ≤ 10000) | update | `conversations`, `conversation_messages`, `principal`, `user` | `conversation.agent_started` and `message.created` |
+| `fetchQuillsAssistantInboxCounts` | `GET /inbox/assistant-counts` (resolved, escalated, pending) | read | `assistant_involvements`, `conversations`, `principal` | - |
+| `getQuillsConversationAssistantActivity` | `GET /conversations/{conversationId}/assistant-activity` | read | `assistant_involvements`, `conversations`, `posts`, `boards` | - |
+
+Differences from the source, on purpose:
+
+- The start takes plain text only, like the reply. It accepts no rich document and no attachments.
+- The start refuses a lead (409), a customer with no real mail address (409) and a blocked customer
+  (409). The source refuses the first two; a blocked customer would get no mail here, so the start
+  fails instead of reporting a delivery that cannot happen.
+- A teammate, a test customer or a customer of another workspace is "Person not found" (404). The
+  source answers a teammate with a validation error and accepts a test customer.
+- The start opens an email conversation, not a messenger one. Kaneo's inbound mail threads only into
+  email conversations, and only those mail later replies. The source opens a messenger thread and
+  promotes it to email when the customer replies by mail. The first mail therefore uses the reply
+  template of an email conversation, not the source's "sent you a message" card.
+- The start does not check the `supportInbox` flag. No Kaneo teammate route checks a product flag.
+- The start records `conversation.agent_started` (no handler; audit and webhooks) and `message.created`
+  (the mail and the customer's live channel), not `conversation.created`. It sends no SLA or workflow
+  trigger of its own.
+- The counts count distinct conversations, as the list would show them. The source counts involvement
+  rows and also counts spam conversations.
+- The activity leaves out a cited post on a board that the caller cannot see and a malformed stored
+  source, and then returns at most 50 sources. The source returns every stored source.
+- Nothing in Kaneo writes `assistant_involvements` yet (the customer agent is not ported). The counts
+  and the activity read imported rows and rows that a later agent writes.
+
 ## Event catalogue additions
 
 Types: `conversation.status_changed`, `conversation.assigned`, `conversation.priority_changed`,
@@ -215,20 +304,206 @@ Types: `conversation.status_changed`, `conversation.assigned`, `conversation.pri
 Entities: `conversation`, `conversation_message`, `conversation_tag`, `conversation_attribute`,
 `conversation_view`. Payloads carry IDs and enum values only, never message text.
 
+## RFC 0001 lane S1: support extras
+
+Source rows: `embeds.ts#getEmbedPreviewFn`, `link-preview.ts#unfurlLinkFn`, `read-batch.ts#readTogetherFn`,
+`settings.ts#getEmailChannelStatusFn`, `support-reporting.ts#attributeBreakdownFn` and
+`conversation.ts#getConversationPresenceFn` (RFC 0001, lane S1, decision D8).
+
+### Boundary map
+
+```
+Tables and owning schema:  quills: kv_store (presence heartbeats; written by the heartbeat only),
+                           principal (chat availability, read), settings (office hours, portal,
+                           widget and changelog switches, read), conversations (attribute
+                           breakdown, read), boards, board_projects, posts, post_statuses,
+                           changelog_entries, changelog_entry_categories, changelog_categories,
+                           kb_articles, kb_article_translations, kb_categories, segments,
+                           user_segments, tickets, ticket_statuses, ticket_conversations
+                           (embed preview, read).
+                           public: none. No route reads a platform table.
+Actor and workspace:       teammate routes: authenticated context (helper). Portal: the Kaneo session,
+                           optional. Widget: the widget session Bearer. Never a body or query copy.
+Permissions:               heartbeat quills:update; attribute breakdown quills:read; email channel
+                           status quills:manage_settings. Portal and widget routes: none of Kaneo's;
+                           the portal switch and private-portal gate, the widget switch, and the
+                           customer visibility rule of each record kind.
+Persisted relationships:   embed preview: posts.board_id with the board's view tier, and no
+                           board_projects row (a board linked to a project never shows to a
+                           customer); changelog and article segment gates; tickets.requester_principal_id
+                           (a customer sees only an own customer ticket). Presence: the heartbeat
+                           key names the caller's own principal.
+Transaction:               one scoped transaction per request. The heartbeat upsert is the only write.
+External effects:          none. The email channel status reads process configuration, never a
+                           credential. The link preview below is the only outbound request.
+Completion checks:         authenticated endpoint, tenant/object access, read (aggregate and
+                           customer visibility), mutation (heartbeat, no event: expiring marker).
+```
+
+Boundary map of the two entry points that the coordinator unblocked (link unfurl and read batch):
+
+```
+Tables and owning schema:  unfurl: settings (portal and widget switches, read); no write, no cache.
+                           read batch: the tables of each read it runs, through that read's own handler.
+                           public: none.
+Actor and workspace:       teammate: authenticated context. Portal: the Kaneo session. Widget: the widget
+                           session Bearer. Never a body or query copy. A batch element never names a
+                           workspace: it runs in the batch request's workspace and transaction.
+Permissions:               unfurl: quills:read (teammate); portal and widget: the portal gate and support
+                           switch, or the widget and messenger switches. Read batch: quills:read for the
+                           batch, then each element's own action, against the caller's role within the
+                           API-key scope (callerActions).
+Persisted relationships:   none for unfurl. A batch element runs its route's handler, so its object
+                           checks are the route's own. Routes with path IDs, native permissions, a
+                           project resolver, load, after, prepare, alsoRequires or callerActions are
+                           not batchable.
+Transaction:               unfurl: prepare runs the permission checks (and the customer gates) in one
+                           scoped transaction, call fetches with no transaction open, the handler
+                           answers in a second one. Read batch: one scoped transaction; each element
+                           in its own savepoint.
+External effects:          unfurl: one GET to the URL through support/link-fetch.ts, the module that
+                           route modules may import for import/guarded-fetch: every hop and the
+                           socket's DNS answer are checked, at most 3 redirects, a 5-second deadline
+                           that also covers DNS, 512 KB, at most 2 previews at once. Read batch: none.
+Completion checks:         authenticated endpoint, tenant/object access, read, outbound request (SSRF).
+```
+
+### Routes
+
+| operationId | Route | Audience | Action | Tables | Event | Tests |
+|---|---|---|---|---|---|---|
+| `sendQuillsAgentHeartbeat` | `PUT /quills/{workspaceId}/support/presence` | teammate | update | `kv_store` | none: expiring marker (90 s) | contract, `presence.test.ts` |
+| `getQuillsConversationPresence` | `GET /quills-public/{workspace}/support/presence` (sign-in optional) | portal | read | `kv_store`, `principal`, `settings` | - | contract, portal off, `presence.test.ts` |
+| `getQuillsWidgetPresence` (changed) | `GET /quills-public/{workspace}/widget/presence` | public | read | as above | - | contract, `presence.test.ts` |
+| `getQuillsEmbedPreview` | `GET /quills-public/{workspace}/portal/embed-preview?kind&id` (sign-in optional) | portal | read | see the boundary map | - | contract, portal off, `embeds.test.ts` |
+| `getQuillsWidgetEmbedPreview` | `GET /quills-public/{workspace}/widget/embed-preview?kind&id` | widget | read | see the boundary map | - | contract, `embeds.test.ts` |
+| `getQuillsEmailChannelStatus` | `GET /quills/{workspaceId}/support/email-channel/status` | teammate | manage_settings | none (process configuration) | - | contract, `support-settings.test.ts` |
+| `attributeQuillsBreakdown` | `GET /quills/{workspaceId}/support/reporting/attribute-breakdown?key&from&to` (at most 400 days) | teammate | read | `conversations`, `principal` | - | contract, `support-reporting.test.ts` |
+| `unfurlQuillsLink` | `GET /quills/{workspaceId}/support/link-preview?url` | teammate | read | none | - | contract, `link-preview.test.ts` |
+| `unfurlQuillsPortalLink` | `GET /quills-public/{workspace}/support/link-preview?url` (30 a minute for each client address) | portal | read | `settings` | - | contract, portal off, `link-preview.test.ts` |
+| `unfurlQuillsWidgetLink` | `GET /quills-public/{workspace}/widget/link-preview?url` (30 a minute for each client address) | widget | read | `settings` | - | contract, `link-preview.test.ts` |
+| `readQuillsTogether` | `POST /quills/{workspaceId}/read-batch` (at most 20 reads) | teammate | read, then each read's own action | each read's own tables | none: read only | contract, `read-batch.test.ts` |
+
+Merged: `getConversationPresenceFn` (the widget twin `widgetGetConversationPresenceFn` was already
+`getQuillsWidgetPresence`, which now reports `agentsOnline`), `getEmbedPreviewFn` (one route for each
+customer audience), `getEmailChannelStatusFn`, `attributeBreakdownFn`, `unfurlLinkFn` (one route
+for each audience), `readTogetherFn`.
+
+- Link preview: route modules reach `import/guarded-fetch.ts` only through `support/link-fetch.ts`.
+  `framework/boundaries.test.ts` allows route modules to import it, and `link-preview.test.ts` pins
+  its imports to the guard and `utils/assert-public-destination.ts`. The page is fetched in `call`,
+  with no transaction open. The guard refuses a private, loopback, link-local or metadata address and
+  a redirect to one, at every hop and at the socket's DNS answer. The instance switch
+  `KANEO_ALLOW_PRIVATE_WEBHOOK_DESTINATIONS` lifts that refusal for the teammate route only, as for
+  imports and webhooks; the portal and widget routes answer null while it is on, so a customer never
+  reaches the private network. The 5-second deadline also covers the guard's DNS lookups, which take
+  no abort signal, and at most 2 previews run at once in the process: a slot frees only when its work
+  ends, so stuck lookups cannot fill the libuv thread pool. The body is decoded in the charset that
+  the content type names. The parser reads at most 200 KB of the head in linear time: each search
+  starts where the last one stopped, a tag with no closing bracket ends the scan, and attributes are
+  read in one pass.
+- Read batch: `framework/read-batch.ts#runRead` runs each element as its route runs it. The batch
+  route declares `callerActions`, so the element's action is checked against the caller's role
+  within the API-key scope, as `requireWorkspacePermission` checks one action. Each result has the
+  status that the route itself gives this caller. A read whose checks do not all run inside its
+  handler and withQuillsRequest is not batchable (404), and neither is a read with `alsoRequires` or
+  `callerActions`: its route checks the actions together in one role. An API key spends one request
+  of its rate limit and quota on the whole batch (the platform counts requests); charging each read
+  needs a hook in `utils/api-key-usage.ts`.
+
+- Presence: the heartbeat writes `support:presence:{principalId}` with a 90-second expiry, one row for
+  each teammate. `agentsOnline` is true while one live row names a teammate whose chat availability is
+  `online`. A heartbeat in workspace B never counts in A (RLS on `kv_store`). The widget polls the
+  read, so it uses two index reads: the teammates by `(workspace_id, kaneo_user_id)`, then their
+  exact keys by the `kv_store` primary key. A `LIKE` on the key prefix cannot use that index under
+  the database's default collation, and it would read every widget session.
+- Embed preview: `kind` is `post`, `changelog`, `article` or `ticket`; `id` is the record ID, or the
+  article slug as in the source. The portal and widget switches and the private-portal gate answer
+  404 or 403 first, as on every customer route. Then each kind applies its own customer rule:
+  `portal/feedback/viewer.ts#postVisible` (board view tier, no project link, published or own
+  pending, no test customer), `portal/feedback/changelog.ts#entryVisible`,
+  `content/public/help-center/visibility.ts#visibleArticles` and the requester rule of
+  `customer/tickets.ts`. A miss of any kind, a closed help center and a closed tickets surface answer
+  `{ unavailable: true }`. The answer is one closed object with one card set, because the contract's
+  strict-response check reads no unions. Card URLs use `portal/feedback/feeds.ts#portalUrl`.
+- Email channel status: `provider`, `fromAddress` (`EMAIL_FROM`), `inboundConfigured` (the inbound
+  route's own switch, `framework/signed.ts#resendInbound`) and `inboundDomain`. No credential, key or
+  secret is read into the answer. A route module may not import `@kaneo/email`, so `outboundProvider`
+  repeats the provider rules; `support-settings.test.ts` compares it with
+  `@kaneo/email/quills/provider#resolveEmailProvider` for every combination of the variables.
+- Attribute breakdown: the window, the workspace (RLS) and the test-customer rule
+  (`conversation-model.ts#notTestConversation`) filter the rows before the counts. A value inside a
+  `{ v, src }` envelope and a bare imported value count the same.
+
+### Differences from the source
+
+- Presence: `agentsOnline` stays a boolean, as in the source and in the existing widget answer. The
+  heartbeat comes from an HTTP route, not from a live SSE stream, so an agent who closes the inbox
+  shows online for up to 90 seconds. The source drops a stream at once on disconnect. There is no
+  sign-off route; add one if the inbox needs an immediate offline.
+- Presence: the portal route is closed while the portal or its support switch is off (404). The
+  source answers every caller.
+- Embed preview: a closed portal or widget is 404 and a denied private portal is 403, as on the
+  customer feedback routes. The source answers `{ unavailable: true }` for both. On a private portal
+  this also refuses an anonymous widget visitor's own ticket card (403), which the widget ticket
+  routes still show: stricter, not a leak.
+- Embed preview: no teammate route. A teammate reads posts, entries, articles and tickets through
+  the teammate routes; on a customer route a teammate is a customer (the contract checks it).
+- Embed preview: the post card has no tags, author or avatar, and the ticket card has the public
+  stage label but no status color or priority. The excerpt is 140 characters, not 160.
+- Email channel status: `customDomains` is left out. Kaneo records a custom sending domain but never
+  verifies it with a provider (`TICKETS.md`), so the source's answer would always be "unavailable".
+  `provider` is null when more than one provider is configured; the source throws.
+- Link preview: no image and no favicon. The source copies them into its object storage; Kaneo would
+  need the storage lifecycle for that, and a remote image URL would send the viewer to the site.
+- Link preview: no cache. The contract forbids a read to write rows. The portal and widget routes
+  have a rate limit for each client address, and the process runs at most 2 previews at once; the
+  source also limits each principal. A customer route never previews a private address, whatever
+  the instance switch says.
+- Link preview: a URL of this instance is unfurled like any other page; the source leaves it to the
+  embed preview. No `supportInbox` flag: the portal support switch and the widget messenger tab
+  gate the customer routes.
+- Read batch: elements are named by operationId with string query values, not by the source's
+  client query keys, and a repeated query key is not supported. Each element answers its status
+  and its JSON as text (the source answers only ok or not ok). Elements run one at a time in one
+  transaction, at most 20 (the source runs 32 in parallel). An unexpected server error fails the
+  batch; the source hides it as "not read".
+- Attribute breakdown: SQL counts instead of reading every row into memory, at most 100 values with
+  `truncated`, and a key that matches the attribute key pattern (`^[a-z0-9_.-]+$`, at most 64).
+  A conversation counts once for a value that its multi-select repeats. A conversation with no
+  counted value (`null`, `""`, `[]`, or an array of only those) is unset, so `unset` and the values
+  cover every conversation of the window. The source counts `[null]` as the value "null".
+
+### Edits outside the lane's own files
+
+- `quills/index.ts`: mounts `support/presence.ts`, `support/link-preview.ts` and
+  `support/read-batch.ts` (one line and an import each).
+- `framework/read-batch.ts` (new, coordinator ruling): `runRead` and `batchable`. No other framework
+  file changes.
+- `framework/boundaries.test.ts` (coordinator ruling): two allowlist entries, `support/link-fetch`
+  and `framework/read-batch`, each in its own commit.
+- `support/index.fixture.ts`: exports the read batch fixture.
+- `widget/support/presence.ts`: reads `agentsOnline` and the office hours from `support/presence.ts`.
+  `withinOfficeHours` moved there unchanged.
+- `widget/support/index.ts`, `support/customer/portal.ts`: mount the embed, presence and link
+  preview routes.
+- `support/customer/index.fixture.ts`: the embed fixtures and the presence and link preview
+  fixture exports, so the contract suite and the portal-off test find them.
+- `support/customer/customer.test.ts`: imports `withinOfficeHours` from its new module.
+- `support/customer/tickets.ts`: exports `mine`, the requester rule, so the ticket card reuses it.
+- `support/customer/ROUTES.md`, `support/TICKETS.md`: rows that pointed at these entry points.
+
 ## Not ported in this slice
 
 | Source capability | State | Reason |
 |---|---|---|
-| `startQuillsAgentConversation` | deferred | The first message must reach the customer by mail; no conversation mail handler exists yet (P4 follow-up). |
 | `translateQuillsConversationMessages` | deferred (P8) | Needs the AI provider. The toggles are ported. |
-| `fetchQuillsAssistantInboxCounts`, `getQuillsConversationAssistantActivity` | deferred (P8) | Assistant involvement. |
 | `draftQuillsAttributeDescriptions`, `previewQuillsAttributeDetection` | deferred (P8) | AI authoring. |
 | `fetchQuillsCustomerContext` | deferred (P7) | Calls connected integrations. |
-| `unfurlQuillsLink`, `getQuillsEmbedPreview` | deferred (audience wave) | Portal audience. Needs a safe outbound fetch, a rate limit and a cache, and help center and ticket embeds. |
-| `readQuillsTogether` | not ported | Client read batching; the typed client sends reads in parallel. |
+| `unfurlQuillsLink`, `readQuillsTogether`, `getQuillsEmbedPreview` | built | See "RFC 0001 lane S1" above. |
 | `getQuillsConversationTicketLink` | out of scope | Ticket links (tickets slice). |
-| `attributeQuillsBreakdown`, `supportQuillsReporting` | deferred | Support reporting, not conversations. |
-| `sendQuillsConversationTyping`, `getQuillsConversationPresence` | deferred | Realtime only, no plain write; portal or public audience. |
+| `supportQuillsReporting` | in `TICKETS.md` | Support reporting, not conversations. `attributeQuillsBreakdown` is built in lane S1 above. |
+| `sendQuillsConversationTyping` | in `customer/ROUTES.md` | Typing markers. `getQuillsConversationPresence` is built in lane S1 above. |
 | `captureQuillsVisitorContactEmail` changelog auto-subscribe | part | The address is stored; the changelog subscription side effect waits for a handler. |
 
 Partly ported behavior: replies and notes are plain text without attachments; mentions come from

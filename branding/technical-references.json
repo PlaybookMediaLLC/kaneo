@@ -6535,7 +6535,7 @@
 	},
 	{
 		"file": "apps/api/src/quills/directory/companies.ts",
-		"value": " and m.kaneo_user_id is null and m.test_owner_principal_id is null)",
+		"value": ".id and m.kaneo_user_id is null and m.test_owner_principal_id is null)",
 		"term": "kaneo",
 		"reason": "Existing quills kaneo_user_id column and its mapped property; a storage identifier, not product copy."
 	},
@@ -6616,5 +6616,11 @@
 		"value": " m where m.kaneo_user_id = ",
 		"term": "kaneo",
 		"reason": "Existing quills kaneo_user_id column and its mapped property; a storage identifier, not product copy."
+	},
+	{
+		"file": "apps/api/src/quills/framework/contract-checks.ts",
+		"value": "SELECT count(*)::int AS audit,\n       count(*) FILTER (WHERE p.kaneo_user_id=$3 AND l.metadata->>'appId'=$4)::int AS \"byApp\"\n     FROM quills.audit_log l LEFT JOIN quills.principal p ON p.id=l.actor_principal_id AND p.workspace_id=l.workspace_id\n     WHERE l.workspace_id=$1 AND l.occurred_at>=$2::timestamptz",
+		"term": "kaneo",
+		"reason": "Existing quills kaneo_user_id column in a contract-check query; a storage identifier, not product copy."
 	}
 ]

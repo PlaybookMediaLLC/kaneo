@@ -251,6 +251,8 @@ function addCapability(id, type, source, facts, domain, proposal, override) {
     calls: [...facts.capabilities].sort(),
     usedBy: 0,
     mergedInto: override?.mergedInto ?? "",
+    // Who built it, for example "RFC 0001 lane M1". Empty while it is open.
+    closed: override?.closed ?? "",
     ...proposal,
   };
   row.action =
@@ -268,6 +270,12 @@ function addCapability(id, type, source, facts, domain, proposal, override) {
         .replace(/[^a-zA-Z0-9]+(.)?/g, (_, c) => (c ?? "").toUpperCase())
         .replace(/^./, (c) => c.toUpperCase());
     operationIds.set(row.operationId, id);
+    // The operation that closed it, when it differs from the proposal. The proposed endpoint does
+    // not name that operation's path, so it is cleared; the OpenAPI document has the real one.
+    if (override?.operationId) {
+      row.operationId = override.operationId;
+      row.endpoint = "";
+    }
   }
   row.tests = testProfile(row);
   capabilities.set(id, row);
@@ -378,6 +386,8 @@ for (const file of walk(routesDir).sort()) {
           ),
           overrides.capabilities?.[id],
         );
+        // A closed route file closes its handlers.
+        if (override?.closed) capabilities.get(id).closed ||= override.closed;
         row.capabilities.push(id);
       }
     }
@@ -419,6 +429,14 @@ for (const file of walk(routesDir).sort()) {
     if (capabilities.has(id)) capabilities.get(id).usedBy += 1;
   routes.push(row);
 }
+
+// An override must name a row that exists, or a typo would leave a built row open.
+for (const id of Object.keys(overrides.capabilities ?? {}))
+  if (!capabilities.has(id))
+    problems.push(`override for an unknown capability: ${id}`);
+for (const path of Object.keys(overrides.routes ?? {}))
+  if (!routes.some((row) => row.path === path))
+    problems.push(`override for an unknown route file: ${path}`);
 
 // ---- 3. write ----
 mkdirSync(out, { recursive: true });
@@ -491,6 +509,7 @@ writeFileSync(
       "event",
       "tests",
       "mergedInto",
+      "closed",
     ],
     capabilityRows,
   ),
@@ -624,6 +643,18 @@ writeFileSync(
         [
           "Capabilities without a domain",
           String(capabilityRows.filter((row) => !row.domain).length),
+        ],
+        [
+          "Capabilities closed (`overrides.json`)",
+          String(capabilityRows.filter((row) => row.closed).length),
+        ],
+        [
+          "Ported capabilities not marked closed",
+          String(ported.filter((row) => !row.closed).length),
+        ],
+        [
+          "Route files closed (`overrides.json`)",
+          String(routes.filter((row) => row.closed).length),
         ],
         [
           "Server functions that no route file reaches",

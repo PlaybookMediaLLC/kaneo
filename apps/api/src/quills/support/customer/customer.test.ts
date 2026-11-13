@@ -61,7 +61,7 @@ import {
   contactEmailOf,
 } from "../../widget/contact-email.fixture";
 import { signIdentity } from "../../widget/seed.fixture";
-import { withinOfficeHours } from "../../widget/support/presence";
+import { withinOfficeHours } from "../presence";
 import { mintCsatToken } from "./csat-email";
 import {
   conversationOf,

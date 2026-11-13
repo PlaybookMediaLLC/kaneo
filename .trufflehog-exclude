@@ -23,3 +23,5 @@
 # Quills SSRF tests: placeholder credentials in a reserved documentation address (203.0.113.10).
 ^apps/api/src/quills/jobs/handlers/webhook\.test\.ts$
 ^apps/api/src/quills/jobs/handlers/integration\.test\.ts$
+# Quills Salesforce host test: a placeholder user:pass in an instance URL that the code must refuse.
+^apps/api/src/quills/integrations/customer-context\.test\.ts$

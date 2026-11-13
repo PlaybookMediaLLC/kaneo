@@ -26,3 +26,15 @@ export const getQuillsSupportReporting = fixture({
     },
   }),
 });
+
+/** A read of A's conversations; support-reporting.test.ts checks the counts and the filter. */
+export const attributeQuillsBreakdown = fixture({
+  seed: async () => ({}),
+  valid: () => ({
+    query: {
+      key: "plan",
+      from: new Date(Date.now() - 86400000).toISOString(),
+      to: new Date(Date.now() + 86400000).toISOString(),
+    },
+  }),
+});

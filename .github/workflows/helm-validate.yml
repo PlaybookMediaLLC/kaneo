@@ -59,6 +59,12 @@ jobs:
               --set kaneo.securityContext.readOnlyRootFilesystem=true
               --set kaneo.securityContext.allowPrivilegeEscalation=false
               --set kaneo.securityContext.capabilities.drop[0]=ALL
+          # Fork addition: renders charts/kaneo/values-production.yaml, the hardened
+          # example overlay, and asserts those values reach the rendered pods.
+          - name: production-values
+            args: >-
+              -f charts/kaneo/values-production.yaml
+              --set kaneo.env.authSecret=secure-auth-secret-at-least-32-characters
 
     steps:
       - name: Checkout repository
@@ -78,3 +84,8 @@ jobs:
       - name: Check secret preservation and security settings
         if: matrix.name == 'default'
         run: ruby scripts/security/check-helm-secrets.rb
+
+      # Fork addition: see the production-values matrix case above.
+      - name: Check the hardened example values
+        if: matrix.name == 'production-values'
+        run: ruby scripts/security/check-helm-production-values.rb

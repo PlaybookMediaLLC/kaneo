@@ -128,6 +128,15 @@ describe("Workspace archive validation", () => {
     expect(result.tables.integrations![0]).toMatchObject({ status: "paused" });
   });
 
+  it("turns off an imported connector so the copilot calls it only after a manager enables it", () => {
+    const archive = base();
+    archive.tables.connectors = [
+      { id: "connector", enabled: true, assignments: { copilot: true } },
+    ];
+    const result = prepareArchive(archive, {}, "target", []);
+    expect(result.tables.connectors![0]).toMatchObject({ enabled: false });
+  });
+
   it("imports portal invites without a usable token and keeps the hero image key", () => {
     const archive = base();
     archive.tables.portal_invites = [
@@ -163,6 +172,14 @@ describe("Workspace archive validation", () => {
     expect(() => prepareArchive(archive, {}, "target", [])).toThrow(
       "Unsupported public number",
     );
+  });
+  it("leaves out the rows of a table that a later release omits", () => {
+    // Archives exported before RFC 0001 hold `apps`; an import must not bind an app again.
+    const archive = base();
+    archive.tables.apps = [
+      { id: "app_old", name: "Old", oauth_client_id: "client" },
+    ];
+    expect(prepareArchive(archive, {}, "target", []).tables).toEqual({});
   });
   it("rejects unknown tables, columns, versions and malformed mappings", () => {
     const archive = base();

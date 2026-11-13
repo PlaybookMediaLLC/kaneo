@@ -16,8 +16,11 @@ import {
   ticketOf,
 } from "./seed.fixture";
 
+export * from "../link-preview.fixture";
+export * from "../presence.fixture";
+
 // Fixtures for the customer support routes of both audiences, the CSAT email link and the
-// teammate typing routes.
+// teammate typing routes. The presence fixtures join them, so the portal-off test finds them.
 
 /** The caller with the surface on, its own conversation and ticket, and the shared foreign rows. */
 async function world(env: ContractEnv, audience: Customer) {
@@ -175,6 +178,13 @@ export const [
   getQuillsWidgetConversationLinkedTicket,
   getQuillsConversationLinkedTicket,
 ] = both((audience) => onConversation(audience));
+/** The caller's own ticket: customer B, another visitor and a teammate get unavailable. */
+export const [getQuillsWidgetEmbedPreview, getQuillsEmbedPreview] = both(
+  (audience) =>
+    customerFixture(audience, (w) => ({
+      query: { kind: "ticket", id: w.ticket.ticketId },
+    })),
+);
 
 /** A fresh rating token for a new conversation of a widget visitor in A. */
 const csatWorld = async (env: ContractEnv) => {

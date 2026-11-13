@@ -1,5 +1,6 @@
+import { sql } from "drizzle-orm";
 import { quillsSchema, workspaceColumn, workspacePolicy } from "../tenancy";
-import { foreignKey, primaryKey } from "drizzle-orm/pg-core";
+import { check, foreignKey, primaryKey } from "drizzle-orm/pg-core";
 /**
  * Third-party app platform (EVENTING-V2 §3.6 / WO-12).
  *
@@ -20,8 +21,13 @@ export const apps = quillsSchema
       workspaceId: workspaceColumn(),
       /** TypeID 'app_...'. */
       id: text("id").notNull(),
-      /** FK to the better-auth oauth client this app authenticates as. */
-      oauthClientId: text("oauth_client_id").notNull(),
+      /** FK to the better-auth oauth client of an imported Quackback app. Kaneo never authorizes with it. */
+      oauthClientId: text("oauth_client_id"),
+      /**
+       * The Kaneo API key (public.apikey.id) that the app authenticates with (RFC 0001, D12).
+       * No foreign key: the key lives in the public schema, and a deleted key leaves an inert ID.
+       */
+      apiKeyId: text("api_key_id"),
       name: text("name").notNull(),
       /** Capability scopes the app was granted (shared api-key-scopes vocabulary). */
       grantedScopes: text("granted_scopes").array().notNull().default([]),
@@ -47,6 +53,14 @@ export const apps = quillsSchema
       uniqueIndex("apps_oauth_client_id_idx").on(
         table.workspaceId,
         table.oauthClientId,
+      ),
+      // One app per key in each workspace. The app gate and the teammate confinement read it.
+      uniqueIndex("apps_api_key_id_idx")
+        .on(table.workspaceId, table.apiKeyId)
+        .where(sql`${table.apiKeyId} IS NOT NULL`),
+      check(
+        "apps_credential_check",
+        sql`num_nonnulls(${table.oauthClientId}, ${table.apiKeyId}) <= 1`,
       ),
       index("apps_status_idx").on(table.status),
       index("apps_subscribed_events_idx").using(

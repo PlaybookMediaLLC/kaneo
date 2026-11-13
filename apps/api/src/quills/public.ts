@@ -1,4 +1,5 @@
 import { apiRouter } from "../openapi";
+import { connectorOAuthCallback } from "./assistant/connectors";
 import customerFiles from "./files/customer";
 import inboundEmail from "./inbound/email";
 import emailEvents from "./inbound/events";
@@ -28,6 +29,7 @@ export default apiRouter()
   .route("/", widgetHost)
   .route("/", integrationWebhooks)
   .route("/", oauthCallback)
+  .route("/", connectorOAuthCallback)
   .route("/", inboundEmail)
   .route("/", emailEvents)
   .route("/", jobWake)

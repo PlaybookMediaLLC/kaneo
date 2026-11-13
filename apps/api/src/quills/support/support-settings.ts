@@ -7,9 +7,11 @@ import {
   writeSettingsKey,
 } from "../feedback/settings-json";
 import { defineQuillsRoute } from "../framework/define-route";
+import { resendInbound } from "../framework/signed";
 
 // Support settings stored in the workspace settings row: office hours, routing, email auto-ack and
 // the spam filter. Each is one JSON key (or the spam-filter column), read with defaults for unset values.
+// The email channel status reads the instance's mail configuration instead.
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
@@ -282,6 +284,58 @@ const setSpam = defineQuillsRoute({
   },
 });
 
+const set = (name: string) => Boolean(process.env[name]?.trim());
+
+/**
+ * The outbound mail provider, by the rules of `@kaneo/email/quills/provider#resolveEmailProvider`
+ * (a route module may not import the mail package). Null when more than one is configured: the
+ * mail worker then refuses to send. support-settings.test.ts checks both against each other.
+ */
+export function outboundProvider():
+  | "ses"
+  | "smtp"
+  | "resend"
+  | "console"
+  | null {
+  const found: ("ses" | "smtp" | "resend")[] = [];
+  if (set("EMAIL_SES_ACCESS_KEY_ID") && set("EMAIL_SES_SECRET_ACCESS_KEY"))
+    found.push("ses");
+  if (set("EMAIL_SMTP_HOST")) found.push("smtp");
+  const inboundOnly =
+    process.env.EMAIL_INBOUND_PROVIDER?.trim().toLowerCase() === "resend";
+  if (
+    (set("EMAIL_RESEND_API_KEY") || set("RESEND_API_KEY")) &&
+    !(inboundOnly && found.length)
+  )
+    found.push("resend");
+  if (found.length > 1) return null;
+  return found[0] ?? "console";
+}
+
+const emailStatus = defineQuillsRoute({
+  method: "get",
+  path: "/support/email-channel/status",
+  operationId: "getQuillsEmailChannelStatus",
+  summary: "Get the status of the instance's email transport",
+  description:
+    "Names only, never a credential. provider is the outbound provider (console: none, mail is only logged), or null when more than one is configured. inboundConfigured is true when the inbound mail route accepts deliveries.",
+  action: "manage_settings",
+  response: z.object({
+    provider: z.enum(["ses", "smtp", "resend", "console"]).nullable(),
+    fromAddress: z.string().nullable(),
+    inboundConfigured: z.boolean(),
+    inboundDomain: z.string().nullable(),
+  }),
+  responseDescription: "The email transport status",
+  handler: async () => ({
+    provider: outboundProvider(),
+    fromAddress: process.env.EMAIL_FROM?.trim() || null,
+    inboundConfigured: !resendInbound.disabled?.(),
+    inboundDomain:
+      process.env.EMAIL_INBOUND_DOMAIN?.trim().toLowerCase() || null,
+  }),
+});
+
 /** Teammate routes for support settings. */
 export default apiRouter<BaseVariables & { workspaceId: string }>()
   .openapi(...getOfficeHours)
@@ -291,4 +345,5 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .openapi(...getAutoAck)
   .openapi(...setAutoAck)
   .openapi(...getSpam)
-  .openapi(...setSpam);
+  .openapi(...setSpam)
+  .openapi(...emailStatus);
