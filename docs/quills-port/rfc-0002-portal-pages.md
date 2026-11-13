@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Draft. It needs the owner decisions in section 3. |
+| Status | Accepted. The owner decided D16, D17, D20 and D21 on 2026-11-13. D18 and D19 apply as defaults until the owner changes them. |
 | Issue | [#130](https://github.com/PlaybookMediaLLC/kaneo/issues/130) |
 | Related | #129 (widget handoff decision), #132 (teammate pages, a later RFC) |
 | Target | `apps/web`, plus small changes in `apps/api/src/quills` and `packages/email/src/quills` |
@@ -43,16 +43,16 @@ This RFC builds the portal pages in `apps/web`. It has three equal goals:
 - Server rendering for search engines (decision D19).
 - Any change to `packages/widget`.
 
-## 3. Decisions for the owner
+## 3. Decisions
 
-| # | Question | Recommendation |
+| # | Question | Decision |
 |---|---|---|
-| D16 | The OAuth callbacks answer JSON. Browsers need a page. | **Content negotiation.** A browser navigation (`Sec-Fetch-Mode: navigate`, or `Accept` that prefers `text/html`) gets a 303 redirect to the web result page. Any other client keeps the JSON answer, so API and MCP clients do not break. |
+| D16 | The OAuth callbacks answer JSON. Browsers need a page. | **Redirect browsers only.** A browser navigation (`Sec-Fetch-Mode: navigate`, or `Accept` that prefers `text/html`) gets a 303 redirect to the web result page. Any other client keeps the JSON answer, so API and MCP clients do not break. |
 | D17 | Status mail links to `/status/incidents/{id}`; the RSS feed links to `/status/{id}`. | **Canonical `/status/incidents/{id}`.** The feed changes to it. The web route `/status/{id}` stays as a redirect, because readers already hold old feed items. |
-| D18 | Portal text in 22 more locales? | **`en-US` only now.** The `quills` namespace falls back to `en-US`. Translation is a later task. |
-| D19 | The help center and changelog are client-rendered. A crawler that runs no JavaScript sees little. | **Accept for now.** The sitemap still lists the URLs. Prerender is a later RFC. |
-| D20 | Sign-up and check-email drop the `redirect` search value. | **Add it (seam S2), and offer the same change upstream.** Upstream sign-in and OTP verification already carry it, so the change is small and generic. If upstream accepts it, the seam disappears. |
-| D21 | Browser tests in hosted CI, or local proof only? | **Local proof in lane Z for this RFC.** A CI browser test needs seeded portal data in the disposable instance. Add it later as its own change. |
+| D18 | Portal text in 22 more locales? | **Default: `en-US` only now.** The `quills` namespace falls back to `en-US`. Translation is a later task. |
+| D19 | The help center and changelog are client-rendered. A crawler that runs no JavaScript sees little. | **Default: accept for now.** The sitemap still lists the URLs. Prerender is a later RFC. |
+| D20 | Sign-up and check-email drop the `redirect` search value. | **Patch it in the fork only (seam S2).** The seam is permanent and registered. No upstream pull request. |
+| D21 | Browser tests in hosted CI, or local proof only? | **Local proof in lane Z.** A CI browser test needs seeded portal data in the disposable instance. Add it later as its own change. |
 
 ## 4. Upstream safety
 
@@ -92,7 +92,7 @@ scripts/quills-web
 | # | File | Change | Conflict resolution |
 |---|---|---|---|
 | S1 | `apps/web/src/routeTree.gen.ts` | New portal and Quills routes appear in the generated tree. | Generated. Take either side, then regenerate with the router plugin (`pnpm --filter @kaneo/web build`). The same rule as `apps/docs/openapi.json`. |
-| S2 | `apps/web/src/routes/auth/sign-up.tsx`, `apps/web/src/routes/auth/check-email.tsx` | Accept `redirect` in the search schema, pass it on, and use `getSafeRedirectPath`, as `sign-in.tsx` and `verify-otp.tsx` already do. About 6 lines. | Small and local. Removed if upstream accepts the change (D20). |
+| S2 | `apps/web/src/routes/auth/sign-up.tsx`, `apps/web/src/routes/auth/check-email.tsx` | Accept `redirect` in the search schema, pass it on, and use `getSafeRedirectPath`, as `sign-in.tsx` and `verify-otp.tsx` already do. About 6 lines. | Small and local: keep upstream's lines, then apply the 6 lines again. Permanent fork seam (D20). W1's tests fail if a merge drops it. |
 
 No other upstream file changes. In particular: no edit to `__root.tsx`, `_layout.tsx`, the
 navigation, `vite.config.ts`, `tsconfig`, any `package.json`, the lockfile, or `i18n/*.json`.
@@ -443,7 +443,7 @@ The typed client from `@kaneo/libs` makes a wrong path, method or body a type er
 | Risk | Control |
 |---|---|
 | Upstream reshapes `components/ui`, auth routes or the router. | One adapter file (4.4), 2 seams (4.3), and `check-upstream.mjs`. |
-| Upstream changes the sign-in redirect contract. | Seam S2 is tested. W1's tests cover sign-in and sign-up return. |
+| Upstream changes the sign-in or sign-up redirect contract. | Seam S2 is permanent and tested. W1's tests cover sign-in and sign-up return, so a merge that drops S2 fails CI. |
 | The generator becomes a framework that nobody can change. | Plain templates, standard library only, one test that runs every template. A generated file is ordinary code after generation. |
 | A token leaks through the address bar, the referrer or logs. | Rule 3 of 5.4, rule C9, and a security lens in the review. |
 | A mail scanner triggers an action. | Rule 2 of 5.4 and rule C9. |
