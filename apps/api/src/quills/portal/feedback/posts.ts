@@ -1,4 +1,11 @@
 import {
+  attachment,
+  attachmentIds,
+  attachmentFields,
+  readAttachments,
+  saveAttachments,
+} from "./attachments";
+import {
   and,
   asc,
   desc,
@@ -93,6 +100,7 @@ export const postItem = z.object({
   createdAt: responseTimestamp,
 });
 const postDetail = postItem.extend({
+  attachments: z.array(attachment),
   canVote: z.boolean(),
   canComment: z.boolean(),
   canEdit: z.boolean(),
@@ -468,6 +476,9 @@ export const getPost = (audience: Customer) =>
       const isAuthor = owner.reason === "engagement";
       return {
         ...(await presentOne(db, viewer, boardList, post.id)),
+        attachments: (await readAttachments(db, { postIds: [post.id] })).map(
+          attachmentFields,
+        ),
         canVote: can.canVote,
         canComment:
           can.canComment &&
@@ -500,6 +511,7 @@ export const createPost = (audience: Customer) =>
         boardId: flexibleToTypeIdSchema("board").optional(),
         title: z.string().trim().min(1).max(200).optional(),
         content: z.string().trim().max(10000),
+        attachmentIds,
         idempotencyKey: z.string().min(1).max(128).optional(),
       })
       .refine((body) => body.title || body.content, {
@@ -532,6 +544,9 @@ export const createPost = (audience: Customer) =>
             boardId: board.id,
             title: postTitle,
             content: body.content,
+            ...(body.attachmentIds?.length
+              ? { attachmentIds: JSON.stringify(body.attachmentIds) }
+              : {}),
           })
         : null;
       if (receipt?.replayOf) {
@@ -567,6 +582,7 @@ export const createPost = (audience: Customer) =>
         })
         .returning({ id: posts.id });
       const postId = post!.id;
+      await saveAttachments(db, me, { postId }, body.attachmentIds);
       await db.insert(postVotes).values({ postId, principalId: me });
       await db
         .insert(postSubscriptions)
@@ -595,6 +611,7 @@ const editPost = defineQuillsRoute({
   body: z.object({
     title: z.string().trim().min(1).max(200),
     content: z.string().trim().max(10000),
+    attachmentIds,
   }),
   response: postItem,
   responseDescription: "The edited post",
@@ -644,6 +661,7 @@ const editPost = defineQuillsRoute({
         updatedAt: new Date(),
       })
       .where(eq(posts.id, post.id));
+    await saveAttachments(db, me, { postId: post.id }, body.attachmentIds);
     return presentOne(db, viewer, boardList, post.id);
   },
 });

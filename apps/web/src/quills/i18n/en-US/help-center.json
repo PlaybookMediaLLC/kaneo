@@ -13,5 +13,7 @@
 	"searchLabel": "Search the help center",
 	"searchResults": "Search results",
 	"title": "Help center",
-	"articles": "Articles: {{count}}"
+	"articles": "Articles: {{count}}",
+	"collections": "Collections",
+	"browse": "Browse help"
 }

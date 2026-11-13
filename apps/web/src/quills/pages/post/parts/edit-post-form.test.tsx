@@ -8,6 +8,8 @@ describe("EditPostForm", () => {
     render: (onSubmit) =>
       renderComponent(
         <EditPostForm
+          workspaceId="workspace_test_1"
+          viewer={{ kind: "user", id: "user_test_1" }}
           title="Export history"
           content="Please add exports"
           onSubmit={onSubmit}
@@ -18,6 +20,7 @@ describe("EditPostForm", () => {
     submitName: /Save post|post\.savePost/,
     validValue: "Export activity history",
     expectedValues: {
+      attachmentIds: [],
       title: "Export activity history",
       content: "Please add exports",
     },
@@ -26,6 +29,8 @@ describe("EditPostForm", () => {
   it("starts with the current post values", () => {
     const view = renderComponent(
       <EditPostForm
+        workspaceId="workspace_test_1"
+        viewer={{ kind: "user", id: "user_test_1" }}
         title="Export history"
         content="Please add exports"
         onSubmit={vi.fn()}

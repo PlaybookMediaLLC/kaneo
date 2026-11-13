@@ -19,6 +19,7 @@ import { runQuillsMigrations } from "./migrate";
 import { withQuillsWorkspace } from "./client";
 import { boards } from "./schema/boards";
 import { posts } from "./schema/posts";
+import { files } from "./schema/files";
 import { postStatuses } from "./schema/statuses";
 import { teams, teamMembers } from "./schema/teams";
 import { boardProjects, postTasks } from "./schema/platform-links";
@@ -552,6 +553,16 @@ describe.skipIf(!url)("Quills completion", () => {
       },
     ];
     const storageKey = prefix + "/imported-file";
+    const attachmentPostId = archive.tables.posts![0]!.id!;
+    const attachmentCommentId = randomUUID();
+    archive.tables.post_comments = [
+      {
+        id: attachmentCommentId,
+        post_id: attachmentPostId,
+        principal_id: archive.tables.posts![0]!.principal_id!,
+        content: "Imported comment",
+      },
+    ];
     archive.tables.files = [
       {
         id: randomUUID(),
@@ -561,7 +572,19 @@ describe.skipIf(!url)("Quills completion", () => {
         family: "text",
         size: 1,
         sha256: "fixture",
-        source: "api",
+        source: "portal",
+        post_id: attachmentPostId,
+      },
+      {
+        id: randomUUID(),
+        storage_key: storageKey + "-comment",
+        name: "Comment file",
+        content_type: "text/plain",
+        family: "text",
+        size: 1,
+        sha256: "fixture",
+        source: "portal",
+        comment_id: attachmentCommentId,
       },
     ];
     vi.mocked(verifyPrivateObjectExists).mockImplementation(async (key) => {
@@ -705,6 +728,20 @@ describe.skipIf(!url)("Quills completion", () => {
       { exclusiveWorkspace: true },
     );
     expect(imported.rows).toBeGreaterThan(0);
+    expect(
+      await scoped(
+        (tx) =>
+          tx
+            .select({ postId: files.postId, commentId: files.commentId })
+            .from(files),
+        c,
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        { postId: post.id, commentId: null },
+        { postId: null, commentId: expect.any(String) },
+      ]),
+    );
     expect(await scoped((tx) => tx.select().from(boards), c)).toHaveLength(1);
     expect(
       (

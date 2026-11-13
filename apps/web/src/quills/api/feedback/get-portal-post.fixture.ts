@@ -3,6 +3,7 @@ export const getPortalPostFixture = {
   ok: (overrides: Partial<GetPortalPostResponse> = {}) =>
     ({
       ...{
+        attachments: [],
         id: "id_test_1",
         title: "value",
         content: "value",

@@ -7,18 +7,28 @@ describe("EditCommentForm", () => {
   describeFormContract({
     render: (onSubmit) =>
       renderComponent(
-        <EditCommentForm content="Current comment" onSubmit={onSubmit} />,
+        <EditCommentForm
+          workspaceId="workspace_test_1"
+          viewer={{ kind: "user", id: "user_test_1" }}
+          content="Current comment"
+          onSubmit={onSubmit}
+        />,
       ),
     fieldName: /Comment|post\.comment/,
     issuePath: "content",
     submitName: /Save comment|post\.saveComment/,
     validValue: "Updated comment",
-    expectedValues: { content: "Updated comment" },
+    expectedValues: { attachmentIds: [], content: "Updated comment" },
     invalidValue: "",
   });
   it("starts with the current comment", () => {
     const view = renderComponent(
-      <EditCommentForm content="Current comment" onSubmit={vi.fn()} />,
+      <EditCommentForm
+        workspaceId="workspace_test_1"
+        viewer={{ kind: "user", id: "user_test_1" }}
+        content="Current comment"
+        onSubmit={vi.fn()}
+      />,
     );
     expect(view.getByLabelText("Comment")).toHaveValue("Current comment");
     expect(

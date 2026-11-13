@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+import { MarkdownContent } from "../markdown-content";
 import { Button } from "../upstream";
 import { useTranslation } from "react-i18next";
 
@@ -14,12 +16,14 @@ export interface PostCommentsProps {
     pending: boolean;
     updatedAt: string | null;
   }>;
+  renderAttachments?: (commentId: string) => ReactNode;
   onDelete?: (commentId: string) => void;
   onEdit?: (commentId: string) => void;
 }
 
 export function PostComments({
   comments,
+  renderAttachments,
   onDelete,
   onEdit,
 }: PostCommentsProps) {
@@ -38,9 +42,14 @@ export function PostComments({
             return (
               <li key={comment.id}>
                 <p>{t("post.author", { name: author })}</p>
-                <p>
-                  {comment.deleted ? t("post.deletedComment") : comment.content}
-                </p>
+                {comment.deleted ? (
+                  <p>{t("post.deletedComment")}</p>
+                ) : (
+                  <>
+                    <MarkdownContent content={comment.content} />
+                    {renderAttachments?.(comment.id)}
+                  </>
+                )}
                 {comment.pending ? (
                   <p role="status">{t("post.pending")}</p>
                 ) : null}

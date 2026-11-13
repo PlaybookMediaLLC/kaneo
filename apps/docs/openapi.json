@@ -15628,6 +15628,13 @@
                     "type": "string",
                     "maxLength": 10000
                   },
+                  "attachmentIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 10
+                  },
                   "idempotencyKey": {
                     "type": "string",
                     "minLength": 1,
@@ -16178,6 +16185,32 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "attachments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "contentType": {
+                            "type": "string"
+                          },
+                          "size": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "contentType",
+                          "size"
+                        ]
+                      }
+                    },
                     "canVote": {
                       "type": "boolean"
                     },
@@ -16231,6 +16264,7 @@
                     "following",
                     "tags",
                     "createdAt",
+                    "attachments",
                     "canVote",
                     "canComment",
                     "canEdit",
@@ -16309,6 +16343,13 @@
                   "content": {
                     "type": "string",
                     "maxLength": 10000
+                  },
+                  "attachmentIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 10
                   }
                 },
                 "required": [
@@ -17069,6 +17110,32 @@
                       "items": {
                         "type": "object",
                         "properties": {
+                          "attachments": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "contentType": {
+                                  "type": "string"
+                                },
+                                "size": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name",
+                                "contentType",
+                                "size"
+                              ]
+                            }
+                          },
                           "id": {
                             "type": "string"
                           },
@@ -17156,6 +17223,7 @@
                           }
                         },
                         "required": [
+                          "attachments",
                           "id",
                           "parentId",
                           "content",
@@ -17249,6 +17317,13 @@
                     "minLength": 1,
                     "maxLength": 5000
                   },
+                  "attachmentIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 10
+                  },
                   "parentId": {
                     "type": "string"
                   },
@@ -17273,6 +17348,32 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "attachments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "contentType": {
+                            "type": "string"
+                          },
+                          "size": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "contentType",
+                          "size"
+                        ]
+                      }
+                    },
                     "id": {
                       "type": "string"
                     },
@@ -17366,6 +17467,7 @@
                     }
                   },
                   "required": [
+                    "attachments",
                     "id",
                     "parentId",
                     "content",
@@ -17629,6 +17731,13 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 5000
+                  },
+                  "attachmentIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 10
                   }
                 },
                 "required": [
@@ -17646,6 +17755,32 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "attachments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "contentType": {
+                            "type": "string"
+                          },
+                          "size": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "contentType",
+                          "size"
+                        ]
+                      }
+                    },
                     "id": {
                       "type": "string"
                     },
@@ -17736,6 +17871,7 @@
                     }
                   },
                   "required": [
+                    "attachments",
                     "id",
                     "parentId",
                     "content",
@@ -17881,6 +18017,179 @@
           },
           "429": {
             "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/portal/files/{fileId}": {
+      "get": {
+        "operationId": "getQuillsPortalFile",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get an accessible feedback attachment and a short-lived download URL",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "fileId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Attachment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "contentType": {
+                      "type": "string"
+                    },
+                    "size": {
+                      "type": "number"
+                    },
+                    "downloadUrl": {
+                      "type": "string"
+                    },
+                    "downloadExpiresAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "contentType",
+                    "size",
+                    "downloadUrl",
+                    "downloadExpiresAt"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Portal access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Attachment not found; Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "discardQuillsPortalFile",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Discard the caller's unattached feedback upload",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "fileId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Discarded upload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Portal access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unattached upload not found; Workspace not found or archived",
             "content": {
               "application/json": {
                 "schema": {
@@ -19332,6 +19641,13 @@
                     "type": "string",
                     "maxLength": 10000
                   },
+                  "attachmentIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 10
+                  },
                   "idempotencyKey": {
                     "type": "string",
                     "minLength": 1,
@@ -19892,6 +20208,32 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "attachments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "contentType": {
+                            "type": "string"
+                          },
+                          "size": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "contentType",
+                          "size"
+                        ]
+                      }
+                    },
                     "canVote": {
                       "type": "boolean"
                     },
@@ -19945,6 +20287,7 @@
                     "following",
                     "tags",
                     "createdAt",
+                    "attachments",
                     "canVote",
                     "canComment",
                     "canEdit",
@@ -20453,6 +20796,32 @@
                       "items": {
                         "type": "object",
                         "properties": {
+                          "attachments": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "contentType": {
+                                  "type": "string"
+                                },
+                                "size": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name",
+                                "contentType",
+                                "size"
+                              ]
+                            }
+                          },
                           "id": {
                             "type": "string"
                           },
@@ -20540,6 +20909,7 @@
                           }
                         },
                         "required": [
+                          "attachments",
                           "id",
                           "parentId",
                           "content",
@@ -20643,6 +21013,13 @@
                     "minLength": 1,
                     "maxLength": 5000
                   },
+                  "attachmentIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 10
+                  },
                   "parentId": {
                     "type": "string"
                   },
@@ -20667,6 +21044,32 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "attachments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "contentType": {
+                            "type": "string"
+                          },
+                          "size": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "contentType",
+                          "size"
+                        ]
+                      }
+                    },
                     "id": {
                       "type": "string"
                     },
@@ -20760,6 +21163,7 @@
                     }
                   },
                   "required": [
+                    "attachments",
                     "id",
                     "parentId",
                     "content",
@@ -31348,6 +31752,90 @@
           },
           "409": {
             "description": "The caller changed during the request; retry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/portal/uploads/prepare": {
+      "post": {
+        "operationId": "prepareQuillsPortalUpload",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Prepare the signed-in customer's upload profile",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Upload profile ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ready": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ready"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Portal access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
             "content": {
               "application/json": {
                 "schema": {
@@ -69853,6 +70341,7 @@
                         "settings.developer_updated",
                         "settings.labs_updated",
                         "file.created",
+                        "file.deleted",
                         "settings.logo_updated",
                         "settings.logo_removed",
                         "settings.favicon_updated",
@@ -70405,6 +70894,7 @@
                         "settings.developer_updated",
                         "settings.labs_updated",
                         "file.created",
+                        "file.deleted",
                         "settings.logo_updated",
                         "settings.logo_removed",
                         "settings.favicon_updated",
@@ -136883,6 +137373,7 @@
                             "settings.developer_updated",
                             "settings.labs_updated",
                             "file.created",
+                            "file.deleted",
                             "settings.logo_updated",
                             "settings.logo_removed",
                             "settings.favicon_updated",

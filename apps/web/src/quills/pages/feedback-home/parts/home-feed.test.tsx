@@ -1,12 +1,13 @@
 import { act, fireEvent, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { getPortalPostFixture } from "../../../api/feedback/get-portal-post.fixture";
 import { listPortalPostsFixture } from "../../../api/feedback/list-portal-posts.fixture";
 import { listPortalStatusesFixture } from "../../../api/feedback/list-portal-statuses.fixture";
-import { choose, fill } from "../../../test/actions";
 import { mockApi } from "../../../test/mock-api";
 import { renderComponent } from "../../../test/render";
 import { HomeFeed } from "./home-feed";
+
+vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
 
 describe("HomeFeed", () => {
   it("sends the selected sort and search to the workspace-scoped API", async () => {
@@ -18,6 +19,7 @@ describe("HomeFeed", () => {
         workspaceId="workspace_test_1"
         viewer={{ kind: "anonymous" }}
         boards={[]}
+        filters={{ sort: "votes", search: "exports" }}
       />,
     );
     await view.findByText("No posts match these filters.");
@@ -26,17 +28,7 @@ describe("HomeFeed", () => {
         "limit",
       ),
     ).toBe("10");
-    api.reply(listPortalPostsFixture.ok());
-    await choose("Sort", "Most votes");
-    await waitFor(() =>
-      expect(api.calls("listQuillsPortalPosts")).toHaveLength(2),
-    );
-    api.reply(listPortalPostsFixture.ok());
-    fill("Search posts", "exports");
-    await waitFor(() =>
-      expect(api.calls("listQuillsPortalPosts")).toHaveLength(3),
-    );
-    const url = new URL(api.calls("listQuillsPortalPosts")[2].url);
+    const url = new URL(api.calls("listQuillsPortalPosts")[0].url);
     expect(url.searchParams.get("sort")).toBe("votes");
     expect(url.searchParams.get("search")).toBe("exports");
     expect(url.pathname).toContain("workspace_test_1");

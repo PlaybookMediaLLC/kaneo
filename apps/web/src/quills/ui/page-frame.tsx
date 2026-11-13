@@ -42,9 +42,14 @@ export function PageFrame({
     <main
       className={cn(
         "portal-page mx-auto w-full flex-1 px-5 pb-16 pt-8 md:px-8 md:pt-12 [&_h2]:tracking-tight [&_h3]:font-semibold [&_time]:text-xs [&_time]:text-muted-foreground",
-        ["feedback.title", "help-center.title", "changelog.title"].includes(
-          titleKey,
-        )
+        [
+          "feedback.title",
+          "feedback.roadmapTitle",
+          "help-center.title",
+          "help-center.categoryTitle",
+          "help-center.articleTitle",
+          "changelog.title",
+        ].includes(titleKey)
           ? "max-w-6xl"
           : "max-w-3xl",
       )}
@@ -57,6 +62,13 @@ export function PageFrame({
         className={cn(
           "portal-page-title mb-8 text-3xl font-semibold leading-tight tracking-tight outline-none md:text-4xl",
           titleKey === "feedback.title" ? "md:ml-[228px]" : "",
+          [
+            "help-center.title",
+            "help-center.categoryTitle",
+            "help-center.articleTitle",
+          ].includes(titleKey)
+            ? "md:ml-[252px]"
+            : "",
         )}
       >
         {title}

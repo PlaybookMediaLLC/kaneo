@@ -23,6 +23,8 @@ describe("SubmitPostForm", () => {
     validValue: "Export activity history",
     invalidValue: "",
     expectedValues: {
+      idempotencyKey: expect.any(String),
+      attachmentIds: [],
       boardId: "board_test_1",
       title: undefined,
       content: "Export activity history",

@@ -46,6 +46,7 @@ export async function claimReceipt(
   const before = record(stored.payload);
   if (
     typeof stored.id !== "string" ||
+    Object.keys(before).length !== Object.keys(payload).length ||
     Object.keys(payload).some((field) => before[field] !== payload[field])
   )
     throw new HTTPException(409, {

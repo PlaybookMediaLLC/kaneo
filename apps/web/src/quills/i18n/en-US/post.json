@@ -26,5 +26,7 @@
 	"edited": "Edited",
 	"signInToComment": "Sign in to comment.",
 	"signIn": "Sign in",
-	"actions": "Post actions"
+	"actions": "Post actions",
+	"follow": "Follow updates",
+	"unfollow": "Unfollow updates"
 }

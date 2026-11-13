@@ -136,6 +136,18 @@ in the same transaction. Workspace deletion also collects these keys through the
 existing deletion flow. The cleanup worker retains any object still referenced by
 either Kaneo or Quills, including another workspace.
 
+Portal feedback attachments reuse `files.storage_key`. A file can belong to at
+most one conversation message, feedback post or feedback comment; composite
+workspace foreign keys enforce each parent relationship. Portal claims require
+the uploader's principal, lock selected rows, and run in the authorized parent
+mutation transaction. Download authorization follows the persisted parent,
+including board visibility, moderation and deleted comments. Draft downloads are
+uploader-only. Removing a file reference and hard-deleting its parent use the
+existing cleanup trigger; soft-deleted feedback is inaccessible but retains its
+references until deletion. Hourly retention removes registered unattached portal
+files older than one day. Uploads abandoned before registration are outside this
+reference retention path.
+
 A restricted security-definer function exposes storage references to the platform
 credential only. Its owner has a SELECT policy on the seven storage-bearing tables;
 `quills_runtime` keeps workspace RLS and cannot call that platform function.

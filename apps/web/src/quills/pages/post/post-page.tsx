@@ -1,3 +1,6 @@
+import { useSetPortalFollow } from "../../hooks/feedback/use-set-portal-follow";
+import { ConfirmAction } from "../../ui/confirm-action";
+import { PostAttachments } from "./parts/post-attachments";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../ui/upstream";
 import { portalHref } from "../../core/portal-href";
@@ -36,6 +39,7 @@ export function PostPage(props: PostPageProps) {
     portal.viewer,
   );
   const vote = useSetPortalVote(portal.viewer);
+  const follow = useSetPortalFollow(portal.viewer);
   const currentVote = vote.data?.postId === post.data?.id ? vote.data : null;
 
   return (
@@ -79,6 +83,11 @@ export function PostPage(props: PostPageProps) {
                   {post.data.board.name}
                 </a>
                 <PostDetail post={post.data} hideTitle />
+                <PostAttachments
+                  workspaceId={props.workspaceId}
+                  viewer={portal.viewer}
+                  attachments={post.data.attachments ?? []}
+                />
                 <PostVoteButton
                   voted={currentVote?.voted ?? post.data.voted}
                   voteCount={currentVote?.voteCount ?? post.data.voteCount}
@@ -93,6 +102,24 @@ export function PostPage(props: PostPageProps) {
                     });
                   }}
                 />
+                {portal.viewer.kind === "user" ? (
+                  <StateView
+                    problem={follow.error}
+                    onRetry={() => follow.reset()}
+                  >
+                    <ConfirmAction
+                      labelKey={
+                        post.data.following ? "post.unfollow" : "post.follow"
+                      }
+                      onConfirm={async () => {
+                        await follow.mutateAsync({
+                          param: { workspace: props.workspaceId, postId },
+                          json: { following: !post.data.following },
+                        });
+                      }}
+                    />
+                  </StateView>
+                ) : null}
                 <PostActions
                   post={post.data}
                   comments={comments.data.pages.flatMap((page) => page.items)}

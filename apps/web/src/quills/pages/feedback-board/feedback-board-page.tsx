@@ -1,3 +1,4 @@
+import { useFeedbackFilters } from "../../core/use-feedback-filters";
 import { PortalSheetContent } from "../../ui/portal-sheet-content";
 import { feedbackStages } from "../../core/feedback-stages";
 import { useState } from "react";
@@ -28,15 +29,8 @@ export function FeedbackBoardPage(props: FeedbackBoardPageProps) {
   const { t } = useTranslation("quills");
   const portal = usePortalRuntime();
   const boardId = props.params.boardId ?? "";
-  const [search, setSearch] = useState(
-    typeof props.search.search === "string" ? props.search.search : "",
-  );
-  const [stage, setStage] = useState(
-    typeof props.search.stage === "string" ? props.search.stage : "",
-  );
-  const [sort, setSort] = useState(
-    typeof props.search.sort === "string" ? props.search.sort : "newest",
-  );
+  const { search, sort, stage, setSearch, setSort, setStage } =
+    useFeedbackFilters(props.search);
   const [submitting, setSubmitting] = useState(false);
   const [votePostId, setVotePostId] = useState<string | null>(null);
   const canLoad = !portal.accessLoading && portal.access?.granted === true;

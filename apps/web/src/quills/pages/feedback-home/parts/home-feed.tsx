@@ -1,3 +1,4 @@
+import { useFeedbackFilters } from "../../../core/use-feedback-filters";
 import { feedbackStages } from "../../../core/feedback-stages";
 import { useState } from "react";
 import type { PortalBoard } from "../../../api/feedback/portal-board.type";
@@ -11,14 +12,19 @@ import { StateView } from "../../../ui/state-view";
 
 export interface HomeFeedProps {
   workspaceId: string;
+  filters?: Record<string, unknown>;
   viewer: Viewer;
   boards: PortalBoard[];
 }
 
-export function HomeFeed({ workspaceId, boards, viewer }: HomeFeedProps) {
-  const [search, setSearch] = useState("");
-  const [sort, setSort] = useState("newest");
-  const [stage, setStage] = useState("");
+export function HomeFeed({
+  workspaceId,
+  boards,
+  viewer,
+  filters = {},
+}: HomeFeedProps) {
+  const { search, sort, stage, setSearch, setSort, setStage } =
+    useFeedbackFilters(filters);
   const [votePostId, setVotePostId] = useState<string | null>(null);
   const statuses = useListPortalStatuses(
     { param: { workspace: workspaceId } },

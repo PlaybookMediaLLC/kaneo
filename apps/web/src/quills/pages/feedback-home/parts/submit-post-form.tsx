@@ -1,3 +1,6 @@
+import { FeedbackEditor } from "../../../ui/feedback-editor";
+import { useFeedbackAttachments } from "../../../core/use-feedback-attachments";
+import { portalHref } from "../../../core/portal-href";
 import { PortalSelectContent } from "../../../ui/portal-select-content";
 import { Controller } from "react-hook-form";
 import { z } from "zod";
@@ -11,7 +14,6 @@ import {
   Input,
   Field,
   FieldLabel,
-  Textarea,
   Select,
   SelectGroup,
   SelectItem,
@@ -28,6 +30,7 @@ const schema = z
       .transform((value) => value || undefined)
       .optional(),
     content: z.string().trim().max(10000),
+    attachmentIds: z.array(z.string()).optional(),
     idempotencyKey: z.string().min(1).max(128).optional(),
   })
   .refine((values) => Boolean(values.title || values.content), {
@@ -41,6 +44,7 @@ export interface SubmitPostFormProps {
   onSubmit: (values: z.infer<typeof schema>) => Promise<PortalProblem | void>;
 }
 export function SubmitPostForm(props: SubmitPostFormProps) {
+  const attachments = useFeedbackAttachments(props.workspaceId, props.viewer);
   const { t } = useTranslation("quills");
   const [title, setTitle] = useState("");
   const similar = useFindPortalSimilarPosts(
@@ -55,7 +59,7 @@ export function SubmitPostForm(props: SubmitPostFormProps) {
     label: board.name,
   }));
   return (
-    <PortalForm
+    <PortalForm<z.infer<typeof schema>>
       schema={schema}
       defaultValues={{
         boardId: props.defaultBoardId ?? props.boards[0]?.id,
@@ -63,7 +67,13 @@ export function SubmitPostForm(props: SubmitPostFormProps) {
         content: "",
       }}
       submitKey="feedback.submit"
-      onSubmit={props.onSubmit}
+      onSubmit={async (values) =>
+        props.onSubmit({
+          ...values,
+          idempotencyKey: attachments.idempotencyKey,
+          attachmentIds: await attachments.upload(),
+        })
+      }
     >
       {(form) => (
         <>
@@ -127,7 +137,16 @@ export function SubmitPostForm(props: SubmitPostFormProps) {
                 <h3 id="similar-posts">{t("feedback.similar")}</h3>
                 <ul>
                   {similar.data.items.map((post) => (
-                    <li key={post.id}>{post.title}</li>
+                    <li key={post.id}>
+                      <a
+                        className="block py-2 underline-offset-4 hover:underline"
+                        href={portalHref(props.workspaceId, `posts/${post.id}`)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {post.title}
+                      </a>
+                    </li>
                   ))}
                 </ul>
               </section>
@@ -137,10 +156,20 @@ export function SubmitPostForm(props: SubmitPostFormProps) {
             <FieldLabel htmlFor="feedback-content">
               {t("feedback.content")}
             </FieldLabel>
-            <Textarea
+            <FeedbackEditor
               id="feedback-content"
-              {...form.register("content")}
-              aria-invalid={Boolean(form.formState.errors.content)}
+              value={form.watch("content")}
+              onChange={(value) =>
+                form.setValue("content", value, { shouldDirty: true })
+              }
+              maxLength={10000}
+              invalid={Boolean(form.formState.errors.content)}
+              disabled={form.formState.isSubmitting}
+              attachments={attachments.attachments}
+              files={attachments.files}
+              onFilesChange={attachments.setFiles}
+              onRemove={attachments.remove}
+              onRemoveFile={attachments.removeFile}
             />
             {form.formState.errors.content?.message ? (
               <p role="alert">{form.formState.errors.content.message}</p>

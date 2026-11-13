@@ -97,6 +97,7 @@ export function FeedbackHomePage(props: FeedbackHomePageProps) {
                     )}
                   </div>
                   <HomeFeed
+                    filters={props.search}
                     viewer={portal.viewer}
                     boards={boards.data.items}
                     workspaceId={props.workspaceId}

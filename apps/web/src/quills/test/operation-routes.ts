@@ -816,6 +816,11 @@ export const quillsOperationRoutes = [
     path: "/api/quills/{workspaceId}/integrations/{integrationId}/status-sync",
   },
   {
+    operationId: "discardQuillsPortalFile",
+    method: "DELETE",
+    path: "/api/quills-public/{workspace}/portal/files/{fileId}",
+  },
+  {
     operationId: "dismissQuillsInboxTranslationSuggestion",
     method: "POST",
     path: "/api/quills/{workspaceId}/conversations/{conversationId}/translation/dismiss",
@@ -1224,6 +1229,11 @@ export const quillsOperationRoutes = [
     operationId: "getQuillsPortalChangelogEntry",
     method: "GET",
     path: "/api/quills-public/{workspace}/portal/changelog/{entryId}",
+  },
+  {
+    operationId: "getQuillsPortalFile",
+    method: "GET",
+    path: "/api/quills-public/{workspace}/portal/files/{fileId}",
   },
   {
     operationId: "getQuillsPortalPost",
@@ -2354,6 +2364,11 @@ export const quillsOperationRoutes = [
     operationId: "postQuillsStatusIncidentUpdate",
     method: "POST",
     path: "/api/quills/{workspaceId}/status/incidents/{incidentId}/updates",
+  },
+  {
+    operationId: "prepareQuillsPortalUpload",
+    method: "POST",
+    path: "/api/quills-public/{workspace}/portal/uploads/prepare",
   },
   {
     operationId: "previewQuillsAttributeDetection",

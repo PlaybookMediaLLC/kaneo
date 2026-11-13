@@ -1,3 +1,4 @@
+import { HelpNavigation } from "../../ui/help-navigation";
 import { useTranslation } from "react-i18next";
 import { portalHref } from "../../core/portal-href";
 import { useGetPublicHelpCenterCategory } from "../../hooks/help-center/use-get-public-help-center-category";
@@ -79,41 +80,23 @@ export function HelpCenterCategoryPage(props: HelpCenterCategoryPageProps) {
             }}
           >
             {category.data ? (
-              <div className="space-y-8">
-                <header className="space-y-2">
-                  {category.data.category.description ? (
-                    <p>{category.data.category.description}</p>
-                  ) : null}
-                </header>
-                <ul className="divide-y divide-border [&_li]:py-5 [&_a]:font-medium [&_p]:mt-2 [&_p]:text-muted-foreground">
-                  {category.data.articles.map((article) => (
-                    <li key={article.id}>
-                      <a
-                        className="underline-offset-4 hover:underline"
-                        href={portalHref(props.workspaceId, article.path)}
-                      >
-                        {article.title}
-                      </a>
-                      {article.description ? (
-                        <p>{article.description}</p>
+              <div className="grid items-start gap-8 md:grid-cols-[220px_minmax(0,1fr)]">
+                <HelpNavigation
+                  workspaceId={props.workspaceId}
+                  categories={category.data.categories}
+                  locale={props.params.locale ?? "en"}
+                  categoryId={category.data.category.id}
+                  articles={category.data.articles}
+                />
+                <div className="min-w-0">
+                  <div className="space-y-8">
+                    <header className="space-y-2">
+                      {category.data.category.description ? (
+                        <p>{category.data.category.description}</p>
                       ) : null}
-                    </li>
-                  ))}
-                </ul>
-                {category.data.subcategories.map((subcategory) => (
-                  <section
-                    key={subcategory.id}
-                    aria-labelledby={`subcategory-${subcategory.id}`}
-                    className="space-y-3"
-                  >
-                    <h3
-                      id={`subcategory-${subcategory.id}`}
-                      className="text-lg font-semibold"
-                    >
-                      {subcategory.name}
-                    </h3>
-                    <ul className="divide-y divide-border [&_li]:py-4">
-                      {subcategory.articles.map((article) => (
+                    </header>
+                    <ul className="divide-y divide-border [&_li]:py-5 [&_a]:font-medium [&_p]:mt-2 [&_p]:text-muted-foreground">
+                      {category.data.articles.map((article) => (
                         <li key={article.id}>
                           <a
                             className="underline-offset-4 hover:underline"
@@ -121,22 +104,54 @@ export function HelpCenterCategoryPage(props: HelpCenterCategoryPageProps) {
                           >
                             {article.title}
                           </a>
+                          {article.description ? (
+                            <p>{article.description}</p>
+                          ) : null}
                         </li>
                       ))}
                     </ul>
-                  </section>
-                ))}
-                <a
-                  className="underline-offset-4 hover:underline"
-                  href={portalHref(
-                    props.workspaceId,
-                    props.params.locale === "en"
-                      ? "hc"
-                      : `hc/${props.params.locale}`,
-                  )}
-                >
-                  {t("help-center.back")}
-                </a>
+                    {category.data.subcategories.map((subcategory) => (
+                      <section
+                        key={subcategory.id}
+                        aria-labelledby={`subcategory-${subcategory.id}`}
+                        className="space-y-3"
+                      >
+                        <h3
+                          id={`subcategory-${subcategory.id}`}
+                          className="text-lg font-semibold"
+                        >
+                          {subcategory.name}
+                        </h3>
+                        <ul className="divide-y divide-border [&_li]:py-4">
+                          {subcategory.articles.map((article) => (
+                            <li key={article.id}>
+                              <a
+                                className="underline-offset-4 hover:underline"
+                                href={portalHref(
+                                  props.workspaceId,
+                                  article.path,
+                                )}
+                              >
+                                {article.title}
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    ))}
+                    <a
+                      className="underline-offset-4 hover:underline"
+                      href={portalHref(
+                        props.workspaceId,
+                        props.params.locale === "en"
+                          ? "hc"
+                          : `hc/${props.params.locale}`,
+                      )}
+                    >
+                      {t("help-center.back")}
+                    </a>
+                  </div>
+                </div>
               </div>
             ) : null}
           </StateView>

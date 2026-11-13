@@ -117,3 +117,18 @@ export const deleteQuillsCustomerAvatar = fixture({
   own: (ids) => [ids.principalId],
   probe: avatarOf,
 });
+
+export const prepareQuillsPortalUpload = fixture({
+  seed: async (env) => {
+    await enablePortal(env, env.a);
+    return {};
+  },
+  valid: () => ({}),
+  probe: (env) =>
+    env.scoped(env.a, (db) =>
+      db
+        .select({ id: customer.id })
+        .from(customer)
+        .where(eq(customer.kaneoUserId, env.customerA)),
+    ),
+});

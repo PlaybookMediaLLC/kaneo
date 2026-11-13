@@ -49,3 +49,5 @@ export { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 export { Spinner } from "@/components/ui/spinner";
 
 export { ArrowUp } from "lucide-react";
+
+export { useDebouncedValue } from "@/hooks/use-debounced-value";

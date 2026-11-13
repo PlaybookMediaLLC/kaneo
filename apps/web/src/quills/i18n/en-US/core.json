@@ -20,7 +20,7 @@
 		"success": "Success",
 		"title": "Quills component kit"
 	},
-	"loading": "Loading…",
+	"loading": "Loading\u2026",
 	"noAccess": "You do not have access to this portal.",
 	"portalOff": "This portal is not available.",
 	"poweredBy": "Powered by",
@@ -45,5 +45,6 @@
 	"navStatus": "Status",
 	"navSupport": "Support",
 	"navProfile": "Profile",
-	"navPreferences": "Preferences"
+	"navPreferences": "Preferences",
+	"navRoadmap": "Roadmap"
 }

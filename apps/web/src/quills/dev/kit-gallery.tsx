@@ -1,3 +1,5 @@
+import { FeedbackEditor } from "../ui/feedback-editor";
+import { HelpNavigation } from "../ui/help-navigation";
 import { BoardNavigation } from "../ui/board-navigation";
 import { PortalSheetContent } from "../ui/portal-sheet-content";
 import { PortalSelectContent } from "../ui/portal-select-content";
@@ -242,6 +244,18 @@ export function KitGallery() {
               {t("core.gallery.pending")}
             </Label>
             <MarkdownContent content={t("core.gallery.markdown")} />
+            <FeedbackEditor
+              id="gallery-editor"
+              value={demo}
+              onChange={() => {}}
+              maxLength={10000}
+              attachments={[]}
+              files={[]}
+              onFilesChange={() => {}}
+              onRemove={() => {}}
+              onRemoveFile={() => {}}
+            />
+            <HelpNavigation workspaceId="gallery" categories={[]} />
             <BoardNavigation boards={[]} workspaceId="gallery" />
             <Sheet>
               <SheetTrigger render={<Button />}>{demo}</SheetTrigger>

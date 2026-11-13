@@ -1,3 +1,4 @@
+import { HelpNavigation } from "../../ui/help-navigation";
 import { portalHref } from "../../core/portal-href";
 import { useGetPublicHelpCenter } from "../../hooks/help-center/use-get-public-help-center";
 import { useSearchPublicHelpCenter } from "../../hooks/help-center/use-search-public-help-center";
@@ -62,12 +63,21 @@ export function HelpCenterPage(props: HelpCenterPageProps) {
             }}
           >
             {home.data ? (
-              <HelpCenterContent
-                workspaceId={props.workspaceId}
-                home={home.data}
-                results={results.data}
-                searchQuery={searchQuery}
-              />
+              <div className="grid items-start gap-8 md:grid-cols-[220px_minmax(0,1fr)]">
+                <HelpNavigation
+                  workspaceId={props.workspaceId}
+                  categories={home.data.categories}
+                  locale={props.params.locale ?? "en"}
+                />
+                <div className="min-w-0">
+                  <HelpCenterContent
+                    workspaceId={props.workspaceId}
+                    home={home.data}
+                    results={results.data}
+                    searchQuery={searchQuery}
+                  />
+                </div>
+              </div>
             ) : null}
           </StateView>
         </PortalGate>

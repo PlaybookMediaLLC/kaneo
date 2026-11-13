@@ -25,6 +25,11 @@ export function PortalNavigation({
           active: ["", "boards", "posts"].includes(section),
         },
         {
+          path: "roadmap",
+          label: "core.navRoadmap",
+          active: section === "roadmap",
+        },
+        {
           path: "changelog",
           label: "core.navUpdates",
           active: section === "changelog",
