@@ -19,6 +19,7 @@ export interface ConfirmActionProps {
   checked?: boolean;
   "aria-checked"?: boolean;
   pressed?: boolean;
+  className?: string;
 }
 
 export function ConfirmAction({
@@ -30,6 +31,7 @@ export function ConfirmAction({
   checked,
   "aria-checked": ariaChecked,
   pressed,
+  className,
 }: ConfirmActionProps) {
   const id = useId();
   const { t } = useTranslation("quills");
@@ -81,6 +83,7 @@ export function ConfirmAction({
           }
           aria-label={children ? t(labelKey) : undefined}
           aria-pressed={pressed}
+          className={className}
           disabled={disabled || pending}
           loading={pending}
           onClick={() => void confirm()}

@@ -2,11 +2,12 @@ import { portalHref } from "../../core/portal-href";
 import { useGetPublicHelpCenter } from "../../hooks/help-center/use-get-public-help-center";
 import { useSearchPublicHelpCenter } from "../../hooks/help-center/use-search-public-help-center";
 import { usePortalRuntime } from "../../portal/runtime";
+import { HelpSidebar } from "../../portal/help-sidebar";
+import { HelpCenterHome } from "../../ui/help-center-home";
 import { PageFrame } from "../../ui/page-frame";
 import { PortalGate } from "../../ui/portal-gate";
 import { StateView } from "../../ui/state-view";
 import { meta } from "./meta";
-import { HelpCenterLocaleContent } from "./parts/help-center-locale-content";
 
 export interface HelpCenterLocalePageProps {
   workspaceId: string;
@@ -54,6 +55,16 @@ export function HelpCenterLocalePage(props: HelpCenterLocalePageProps) {
     <PageFrame
       titleKey="help-center.title"
       displayTitle={home.data?.homepageTitle}
+      description={home.data?.homepageDescription}
+      aside={
+        home.data ? (
+          <HelpSidebar
+            workspaceId={props.workspaceId}
+            locale={locale}
+            categories={home.data.categories}
+          />
+        ) : null
+      }
     >
       <StateView
         loading={gated && portal.accessLoading}
@@ -79,11 +90,13 @@ export function HelpCenterLocalePage(props: HelpCenterLocalePageProps) {
             }}
           >
             {home.data ? (
-              <HelpCenterLocaleContent
+              <HelpCenterHome
                 workspaceId={props.workspaceId}
-                locale={locale ?? "en"}
-                home={home.data}
-                results={results.data}
+                locale={locale}
+                locales={home.data.locales}
+                categories={home.data.categories}
+                popular={home.data.popular}
+                results={results.data?.articles}
                 searchQuery={searchQuery}
               />
             ) : null}

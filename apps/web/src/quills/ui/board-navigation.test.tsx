@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
+import { press } from "../test/actions";
 import { renderComponent } from "../test/render";
 import { BoardNavigation } from "./board-navigation";
 
@@ -50,4 +51,28 @@ it("marks only the selected board and preserves workspace links", () => {
   expect(view.getByRole("link", { name: "All feedback" })).not.toHaveAttribute(
     "aria-current",
   );
+});
+
+it("toggles one status filter at a time", () => {
+  const onStageChange = vi.fn();
+  const view = renderComponent(
+    <BoardNavigation
+      workspaceId="workspace_1"
+      boards={[]}
+      stages={[
+        { value: "planned", label: "Planned", color: "blue" },
+        { value: "shipped", label: "Complete", color: null },
+      ]}
+      stage="planned"
+      onStageChange={onStageChange}
+    />,
+  );
+  expect(view.getByRole("button", { name: "Planned" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  press("Planned");
+  press("Complete");
+  expect(onStageChange.mock.calls).toEqual([[""], ["shipped"]]);
+  expect(view.getByRole("button", { name: "Copy link" })).toBeInTheDocument();
 });

@@ -30,6 +30,13 @@ describe("ChangelogPage", () => {
       },
       assert: async (view) => {
         await view.findByRole("link", { name: "November release" });
+        expect(view.getByRole("link", { name: "RSS feed" })).toHaveAttribute(
+          "href",
+          expect.stringMatching(
+            /\/quills-public\/workspace_test_1\/changelog\/rss\.xml$/,
+          ),
+        );
+        expect(view.getByText("You’re all caught up")).toBeInTheDocument();
       },
     },
   });

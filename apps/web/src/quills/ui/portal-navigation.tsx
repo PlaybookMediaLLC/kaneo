@@ -15,7 +15,7 @@ export function PortalNavigation({
   const section = currentPath.slice(root.length).split("/")[1] || "";
   return (
     <nav
-      className="portal-navigation order-3 flex w-full flex-wrap items-center gap-1 pb-1 lg:order-none lg:w-auto lg:flex-1 lg:pb-0 [&_a]:whitespace-nowrap [&_a]:rounded-full [&_a]:px-3 [&_a]:py-1.5 [&_a]:text-muted-foreground [&_a:hover]:bg-muted [&_a:hover]:text-foreground [&_a[aria-current]]:bg-muted [&_a[aria-current]]:text-foreground"
+      className="portal-navigation order-3 -mx-1 flex w-full items-center gap-0.5 overflow-x-auto pb-1 lg:order-none lg:mx-0 lg:w-auto lg:flex-1 lg:pb-0 [&_a]:whitespace-nowrap [&_a]:rounded-full [&_a]:px-2.5 [&_a]:py-1 [&_a]:text-sm [&_a]:text-muted-foreground [&_a[aria-current]]:font-medium [&_a:hover]:bg-muted [&_a:hover]:text-foreground [&_a[aria-current]]:bg-muted [&_a[aria-current]]:text-foreground"
       aria-label={t("core.navigation")}
     >
       {[
@@ -23,6 +23,11 @@ export function PortalNavigation({
           path: "",
           label: "core.navFeedback",
           active: ["", "boards", "posts"].includes(section),
+        },
+        {
+          path: "roadmap",
+          label: "core.navRoadmap",
+          active: section === "roadmap",
         },
         {
           path: "changelog",

@@ -41,7 +41,7 @@ export function PortalShell({
       style={themeVariables}
     >
       <header className="portal-header shrink-0 bg-background">
-        <div className="portal-header-inner mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-5 py-5 md:gap-8 md:px-8 lg:flex-nowrap">
+        <div className="portal-header-inner mx-auto flex max-w-4xl flex-wrap items-center gap-3 px-5 py-4 lg:flex-nowrap lg:gap-6">
           <div className="portal-brand flex min-w-0 flex-1 items-center gap-2 text-base tracking-tight lg:flex-none">
             {branding.logoUrl ? (
               <img
@@ -56,13 +56,13 @@ export function PortalShell({
             ) : null}
           </div>
           {navigation}
-          <div className="portal-account-actions ml-auto flex items-center gap-2 text-xs [&_a]:rounded-full [&_a]:px-3 [&_a]:py-2 [&_a]:text-muted-foreground [&_a:hover]:text-foreground">
+          <div className="portal-account-actions ml-auto flex items-center gap-1.5 text-sm [&_a]:whitespace-nowrap [&_a]:rounded-full [&_a]:px-3 [&_a]:py-1.5 [&_a]:font-medium">
             {actions}
           </div>
         </div>
       </header>
       {children}
-      <footer className="portal-footer mx-auto w-full max-w-6xl px-5 py-6 text-xs text-muted-foreground md:px-8">
+      <footer className="portal-footer mx-auto w-full max-w-4xl px-5 py-6 text-xs text-muted-foreground">
         {t("core.poweredBy")} {brand.name}
       </footer>
     </div>

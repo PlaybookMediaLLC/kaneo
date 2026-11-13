@@ -1,10 +1,9 @@
-import { waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vite-plus/test";
 import { createPortalPostFixture } from "../../api/feedback/create-portal-post.fixture";
 import { listPortalBoardsFixture } from "../../api/feedback/list-portal-boards.fixture";
 import { listPortalPostsFixture } from "../../api/feedback/list-portal-posts.fixture";
 import { listPortalStatusesFixture } from "../../api/feedback/list-portal-statuses.fixture";
-import { fill } from "../../test/actions";
+import { fill, press } from "../../test/actions";
 import { describePageContract } from "../../test/contracts";
 import { mockApi } from "../../test/mock-api";
 import { renderPage } from "../../test/render";
@@ -46,16 +45,10 @@ describe("FeedbackHomePage", () => {
         return { viewer: { kind: "user", id: "account_test_1" } };
       },
       act: async (view) => {
-        (await view.findByRole("button", { name: "Submit feedback" })).click();
-        await view.findByLabelText("Details");
-        fill("Details", "Please add exports");
-        view
-          .getAllByRole("button", { name: "Submit feedback" })
-          .at(-1)
-          ?.click();
-        await waitFor(() =>
-          expect(view.queryByLabelText("Details")).not.toBeInTheDocument(),
-        );
+        await view.findByLabelText("Title");
+        fill("Title", "UX");
+        press("Submit feedback");
+        await view.findByText("Thanks! Your feedback was posted.");
       },
     },
   });

@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vite-plus/test";
 import { feedbackStages } from "./feedback-stages";
 describe("feedbackStages", () => {
-  it("keeps configured labels, excludes unmapped statuses and deduplicates stages", () => {
+  it("names each stage after its first status and excludes unmapped statuses", () => {
     expect(
       feedbackStages([
         { stage: null, name: "New" },
-        { stage: "planned", name: "Later" },
-        { stage: "planned", name: "Planned" },
+        { stage: "planned", name: "Later", color: "blue" },
+        { stage: "planned", name: "Planned", color: "teal" },
+        { stage: "shipped", name: "Complete" },
       ]),
-    ).toEqual([{ value: "planned", label: "Planned" }]);
+    ).toEqual([
+      { value: "planned", label: "Later", color: "blue" },
+      { value: "shipped", label: "Complete", color: null },
+    ]);
   });
 });

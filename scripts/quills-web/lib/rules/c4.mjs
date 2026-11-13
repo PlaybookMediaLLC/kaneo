@@ -6,6 +6,8 @@ function flatten(value, prefix = "") {
       : [`${prefix}${k}`],
   );
 }
+// i18next resolves t("feature.key", { count }) to key_one, key_other and the other CLDR forms.
+const plural = /_(?:zero|one|two|few|many|other)$/;
 export function check({ documents, report }) {
   const keys = new Map(),
     used = new Set();
@@ -38,10 +40,10 @@ export function check({ documents, report }) {
       if (typeof key !== "string") continue;
       key = key.replace(/^quills:/, "");
       used.add(key);
-      if (!keys.has(key))
+      if (!keys.has(key) && !keys.has(`${key}_other`))
         report("C4", d, node, `Add the translation key ${key}.`);
     }
   for (const [key, d] of keys)
-    if (!used.has(key))
+    if (!used.has(key) && !used.has(key.replace(plural, "")))
       report("C4", d, 1, `Use or remove the translation key ${key}.`);
 }

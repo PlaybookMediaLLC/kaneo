@@ -1,10 +1,12 @@
 import { useTranslation } from "react-i18next";
+import { changelogFeedUrl } from "../../core/changelog-feed-url";
 import { portalHref } from "../../core/portal-href";
 import { useListPortalChangelog } from "../../hooks/changelog/use-list-portal-changelog";
 import { usePortalRuntime } from "../../portal/runtime";
-import { MarkdownContent } from "../../ui/markdown-content";
+import { ChangelogEntry } from "../../ui/changelog-entry";
 import { PageFrame } from "../../ui/page-frame";
 import { PortalGate } from "../../ui/portal-gate";
+import { ShareActions } from "../../ui/share-actions";
 import { StateView } from "../../ui/state-view";
 import { Button } from "../../ui/upstream";
 import { meta } from "./meta";
@@ -16,7 +18,7 @@ export interface ChangelogPageProps {
 }
 
 export function ChangelogPage(props: ChangelogPageProps) {
-  const { t, i18n } = useTranslation("quills");
+  const { t } = useTranslation("quills");
   const portal = usePortalRuntime();
   const { viewer } = portal;
   const gated = (meta.audience as string) !== "public";
@@ -31,7 +33,22 @@ export function ChangelogPage(props: ChangelogPageProps) {
   const entries = changelog.data?.pages.flatMap((page) => page.entries) ?? [];
 
   return (
-    <PageFrame titleKey="changelog.title">
+    <PageFrame
+      titleKey="changelog.title"
+      description={t("changelog.description")}
+      wide
+      actions={
+        <>
+          <ShareActions compact />
+          <a
+            className="rounded-full bg-muted px-3 py-1 text-xs font-medium transition-colors hover:bg-muted/70"
+            href={changelogFeedUrl(props.workspaceId)}
+          >
+            {t("changelog.rss")}
+          </a>
+        </>
+      }
+    >
       <StateView
         loading={gated && portal.accessLoading}
         problem={gated ? portal.accessProblem : null}
@@ -53,48 +70,28 @@ export function ChangelogPage(props: ChangelogPageProps) {
               void changelog.refetch();
             }}
           >
-            <div className="portal-updates space-y-12">
+            <div className="portal-updates pt-2">
               {entries.map((entry) => (
-                <article
+                <ChangelogEntry
                   key={entry.id}
-                  className="portal-update grid gap-5 border-b border-border pb-12 md:grid-cols-[180px_minmax(0,1fr)] md:gap-12"
-                >
-                  <p className="text-sm text-muted-foreground">
-                    {t("changelog.published", {
-                      date: new Intl.DateTimeFormat(i18n.language, {
-                        dateStyle: "long",
-                      }).format(new Date(entry.publishedAt)),
-                    })}
-                  </p>
-                  <div className="min-w-0 space-y-5">
-                    <h2 className="text-xl font-semibold">
-                      <a
-                        href={portalHref(
-                          props.workspaceId,
-                          `changelog/${entry.id}`,
-                        )}
-                        className="underline-offset-4 hover:underline"
-                      >
-                        {entry.title}
-                      </a>
-                    </h2>
-                    <MarkdownContent content={entry.content} />
-                    {entry.author ? (
-                      <p className="text-sm">
-                        {t("changelog.author", { name: entry.author.name })}
-                      </p>
-                    ) : null}
-                  </div>
-                </article>
+                  workspaceId={props.workspaceId}
+                  entry={entry}
+                />
               ))}
               {changelog.hasNextPage ? (
                 <Button
+                  variant="ghost"
+                  className="w-full text-muted-foreground"
                   onClick={() => changelog.fetchNextPage()}
-                  disabled={changelog.isFetchingNextPage}
+                  loading={changelog.isFetchingNextPage}
                 >
                   {t("changelog.loadMore")}
                 </Button>
-              ) : null}
+              ) : (
+                <p className="text-center text-xs text-muted-foreground">
+                  {t("changelog.caughtUp")}
+                </p>
+              )}
             </div>
           </StateView>
         </PortalGate>

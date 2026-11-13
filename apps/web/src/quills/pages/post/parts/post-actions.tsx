@@ -1,89 +1,40 @@
-import { runMutation } from "../run-mutation";
-import { PortalSheetContent } from "../../../ui/portal-sheet-content";
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { GetPortalPostResponse } from "../../../api/feedback/get-portal-post";
-import type { ListPortalPostCommentsResponse } from "../../../api/feedback/list-portal-post-comments";
 import { portalHref } from "../../../core/portal-href";
 import type { Viewer } from "../../../core/types";
-import { useCreatePortalComment } from "../../../hooks/feedback/use-create-portal-comment";
-import { useDeletePortalOwnComment } from "../../../hooks/feedback/use-delete-portal-own-comment";
 import { useDeletePortalOwnPost } from "../../../hooks/feedback/use-delete-portal-own-post";
-import { useEditPortalOwnComment } from "../../../hooks/feedback/use-edit-portal-own-comment";
 import { useEditPortalOwnPost } from "../../../hooks/feedback/use-edit-portal-own-post";
 import { ConfirmAction } from "../../../ui/confirm-action";
-import { PostComments } from "../../../ui/post/post-comments";
+import { PortalSheetContent } from "../../../ui/portal-sheet-content";
 import { StateView } from "../../../ui/state-view";
 import {
-  Button,
   Sheet,
-  SheetPanel,
   SheetHeader,
+  SheetPanel,
   SheetTitle,
 } from "../../../ui/upstream";
-import { CreateCommentForm } from "./create-comment-form";
-import { EditCommentForm } from "./edit-comment-form";
+import { runMutation } from "../run-mutation";
 import { EditPostForm } from "./edit-post-form";
+
 export interface PostActionsProps {
-  comments: ListPortalPostCommentsResponse["items"];
-  post: GetPortalPostResponse;
+  post: { title: string; content: string };
   postId: string;
   viewer: Viewer;
   workspaceId: string;
+  editOpen: boolean;
+  deleteOpen: boolean;
+  onEditOpenChange: (open: boolean) => void;
+  onDeleteOpenChange: (open: boolean) => void;
 }
+
+/** The sheets behind the rail's edit and delete actions for the viewer's own post. */
 export function PostActions(props: PostActionsProps) {
   const { t } = useTranslation("quills");
-  const [editPostOpen, setEditPostOpen] = useState(false);
-  const [deletePostOpen, setDeletePostOpen] = useState(false);
-  const [editCommentId, setEditCommentId] = useState<string | null>(null);
-  const [deleteCommentId, setDeleteCommentId] = useState<string | null>(null);
-  const createComment = useCreatePortalComment(props.viewer);
   const editPost = useEditPortalOwnPost(props.viewer);
   const deletePost = useDeletePortalOwnPost(props.viewer);
-  const editComment = useEditPortalOwnComment(props.viewer);
-  const deleteComment = useDeletePortalOwnComment(props.viewer);
-  const selectedComment = props.comments.find(
-    (comment) => comment.id === editCommentId,
-  );
+  const param = { workspace: props.workspaceId, postId: props.postId };
   return (
     <>
-      {props.post.canEdit ? (
-        <Button type="button" onClick={() => setEditPostOpen(true)}>
-          {t("post.editPost")}
-        </Button>
-      ) : null}
-      {props.post.canDelete ? (
-        <Button type="button" onClick={() => setDeletePostOpen(true)}>
-          {t("post.deletePost")}
-        </Button>
-      ) : null}
-      {props.viewer.kind === "user" && props.post.canComment ? (
-        <CreateCommentForm
-          onSubmit={(values) =>
-            runMutation(() =>
-              createComment.mutateAsync({
-                param: { workspace: props.workspaceId, postId: props.postId },
-                json: values,
-              }),
-            )
-          }
-        />
-      ) : props.post.canComment ? (
-        <p>
-          {t("post.signInToComment")}{" "}
-          <a
-            href={`/auth/sign-in?redirect=${encodeURIComponent(portalHref(props.workspaceId, `posts/${props.postId}`))}`}
-          >
-            {t("post.signIn")}
-          </a>
-        </p>
-      ) : null}
-      <PostComments
-        comments={props.comments}
-        onEdit={setEditCommentId}
-        onDelete={setDeleteCommentId}
-      />
-      <Sheet open={editPostOpen} onOpenChange={setEditPostOpen}>
+      <Sheet open={props.editOpen} onOpenChange={props.onEditOpenChange}>
         <PortalSheetContent>
           <SheetHeader>
             <SheetTitle>{t("post.editPost")}</SheetTitle>
@@ -94,22 +45,16 @@ export function PostActions(props: PostActionsProps) {
               content={props.post.content}
               onSubmit={async (values) => {
                 const result = await runMutation(() =>
-                  editPost.mutateAsync({
-                    param: {
-                      workspace: props.workspaceId,
-                      postId: props.postId,
-                    },
-                    json: values,
-                  }),
+                  editPost.mutateAsync({ param, json: values }),
                 );
-                if (!result) setEditPostOpen(false);
+                if (!result) props.onEditOpenChange(false);
                 return result;
               }}
             />
           </SheetPanel>
         </PortalSheetContent>
       </Sheet>
-      <Sheet open={deletePostOpen} onOpenChange={setDeletePostOpen}>
+      <Sheet open={props.deleteOpen} onOpenChange={props.onDeleteOpenChange}>
         <PortalSheetContent>
           <SheetHeader>
             <SheetTitle>{t("post.deletePost")}</SheetTitle>
@@ -122,73 +67,8 @@ export function PostActions(props: PostActionsProps) {
               <ConfirmAction
                 labelKey="post.deletePostConfirm"
                 onConfirm={async () => {
-                  await deletePost.mutateAsync({
-                    param: {
-                      workspace: props.workspaceId,
-                      postId: props.postId,
-                    },
-                  });
+                  await deletePost.mutateAsync({ param });
                   window.location.assign(portalHref(props.workspaceId));
-                }}
-              />
-            </StateView>
-          </SheetPanel>
-        </PortalSheetContent>
-      </Sheet>
-      <Sheet
-        open={Boolean(selectedComment)}
-        onOpenChange={(open) => !open && setEditCommentId(null)}
-      >
-        <PortalSheetContent>
-          <SheetHeader>
-            <SheetTitle>{t("post.editComment")}</SheetTitle>
-          </SheetHeader>
-          <SheetPanel>
-            {selectedComment ? (
-              <EditCommentForm
-                content={selectedComment.content}
-                onSubmit={async (values) => {
-                  const result = await runMutation(() =>
-                    editComment.mutateAsync({
-                      param: {
-                        workspace: props.workspaceId,
-                        commentId: selectedComment.id,
-                      },
-                      json: values,
-                    }),
-                  );
-                  if (!result) setEditCommentId(null);
-                  return result;
-                }}
-              />
-            ) : null}
-          </SheetPanel>
-        </PortalSheetContent>
-      </Sheet>
-      <Sheet
-        open={Boolean(deleteCommentId)}
-        onOpenChange={(open) => !open && setDeleteCommentId(null)}
-      >
-        <PortalSheetContent>
-          <SheetHeader>
-            <SheetTitle>{t("post.deleteComment")}</SheetTitle>
-          </SheetHeader>
-          <SheetPanel>
-            <StateView
-              problem={deleteComment.error}
-              onRetry={() => deleteComment.reset()}
-            >
-              <ConfirmAction
-                labelKey="post.deleteCommentConfirm"
-                onConfirm={async () => {
-                  if (!deleteCommentId) return;
-                  await deleteComment.mutateAsync({
-                    param: {
-                      workspace: props.workspaceId,
-                      commentId: deleteCommentId,
-                    },
-                  });
-                  setDeleteCommentId(null);
                 }}
               />
             </StateView>

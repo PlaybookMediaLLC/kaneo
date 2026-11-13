@@ -48,4 +48,11 @@ export { cn } from "@/lib/cn";
 export { Empty, EmptyHeader, EmptyDescription } from "@/components/ui/empty";
 export { Spinner } from "@/components/ui/spinner";
 
-export { ArrowUp } from "lucide-react";
+export { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+export {
+  Dialog,
+  DialogPopup,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+export { Kbd } from "@/components/ui/kbd";

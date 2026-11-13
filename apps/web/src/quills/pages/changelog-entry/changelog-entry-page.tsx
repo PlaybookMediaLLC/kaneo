@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import { portalHref } from "../../core/portal-href";
 import { useGetPortalChangelogEntry } from "../../hooks/changelog/use-get-portal-changelog-entry";
 import { usePortalRuntime } from "../../portal/runtime";
-import { MarkdownContent } from "../../ui/markdown-content";
+import { ChangelogEntry } from "../../ui/changelog-entry";
 import { PageFrame } from "../../ui/page-frame";
 import { PortalGate } from "../../ui/portal-gate";
 import { StateView } from "../../ui/state-view";
@@ -15,7 +15,7 @@ export interface ChangelogEntryPageProps {
 }
 
 export function ChangelogEntryPage(props: ChangelogEntryPageProps) {
-  const { t, i18n } = useTranslation("quills");
+  const { t } = useTranslation("quills");
   const portal = usePortalRuntime();
   const { viewer } = portal;
   const gated = (meta.audience as string) !== "public";
@@ -34,6 +34,7 @@ export function ChangelogEntryPage(props: ChangelogEntryPageProps) {
     <PageFrame
       titleKey="changelog.entryTitle"
       displayTitle={canLoad ? entry.data?.title : undefined}
+      wide
     >
       <StateView
         loading={gated && portal.accessLoading}
@@ -59,47 +60,19 @@ export function ChangelogEntryPage(props: ChangelogEntryPageProps) {
             }}
           >
             {entry.data ? (
-              <article className="space-y-6">
-                <header className="space-y-2">
-                  <p className="text-sm text-muted-foreground">
-                    {t("changelog.published", {
-                      date: new Intl.DateTimeFormat(i18n.language, {
-                        dateStyle: "long",
-                      }).format(new Date(entry.data.publishedAt)),
-                    })}
-                  </p>
-                </header>
-                <MarkdownContent content={entry.data.content} />
-                {entry.data.author ? (
-                  <p>
-                    {t("changelog.author", { name: entry.data.author.name })}
-                  </p>
-                ) : null}
-                {entry.data.requesterCount > 0 ? (
-                  <p>
-                    {t("changelog.requesters", {
-                      count: entry.data.requesterCount,
-                    })}
-                  </p>
-                ) : null}
-                {entry.data.linkedPosts.length ? (
-                  <ul className="space-y-2">
-                    {entry.data.linkedPosts.map((post) => (
-                      <li key={post.id}>
-                        <a
-                          href={portalHref(
-                            props.workspaceId,
-                            `posts/${post.id}`,
-                          )}
-                          className="underline-offset-4 hover:underline"
-                        >
-                          {t("changelog.linkedPost", { title: post.title })}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </article>
+              <>
+                <a
+                  className="text-sm text-muted-foreground hover:text-foreground"
+                  href={portalHref(props.workspaceId, "changelog")}
+                >
+                  {t("changelog.back")}
+                </a>
+                <ChangelogEntry
+                  workspaceId={props.workspaceId}
+                  entry={entry.data}
+                  linkTitle={false}
+                />
+              </>
             ) : null}
           </StateView>
         </PortalGate>

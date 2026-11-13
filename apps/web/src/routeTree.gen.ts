@@ -36,6 +36,7 @@ import { Route as PortalWorkspaceIdIndexRouteImport } from './routes/portal/$wor
 import { Route as PortalWorkspaceIdCsatRouteImport } from './routes/portal/$workspaceId/csat'
 import { Route as PortalWorkspaceIdPreferencesRouteImport } from './routes/portal/$workspaceId/preferences'
 import { Route as PortalWorkspaceIdProfileRouteImport } from './routes/portal/$workspaceId/profile'
+import { Route as PortalWorkspaceIdRoadmapRouteImport } from './routes/portal/$workspaceId/roadmap'
 import { Route as PortalWorkspaceIdUnsubscribeRouteImport } from './routes/portal/$workspaceId/unsubscribe'
 import { Route as QuillsOauthResultRouteImport } from './routes/quills/oauth/result'
 import { Route as LayoutAuthenticatedDashboardIndexRouteImport } from './routes/_layout/_authenticated/dashboard/index'
@@ -240,6 +241,12 @@ const PortalWorkspaceIdProfileRoute =
   PortalWorkspaceIdProfileRouteImport.update({
     id: '/profile',
     path: '/profile',
+    getParentRoute: () => PortalWorkspaceIdRoute,
+  } as any)
+const PortalWorkspaceIdRoadmapRoute =
+  PortalWorkspaceIdRoadmapRouteImport.update({
+    id: '/roadmap',
+    path: '/roadmap',
     getParentRoute: () => PortalWorkspaceIdRoute,
   } as any)
 const PortalWorkspaceIdUnsubscribeRoute =
@@ -689,6 +696,7 @@ export interface FileRoutesByFullPath {
   '/portal/$workspaceId/csat': typeof PortalWorkspaceIdCsatRoute
   '/portal/$workspaceId/preferences': typeof PortalWorkspaceIdPreferencesRoute
   '/portal/$workspaceId/profile': typeof PortalWorkspaceIdProfileRoute
+  '/portal/$workspaceId/roadmap': typeof PortalWorkspaceIdRoadmapRoute
   '/portal/$workspaceId/unsubscribe': typeof PortalWorkspaceIdUnsubscribeRoute
   '/quills/oauth/result': typeof QuillsOauthResultRoute
   '/portal/$workspaceId/': typeof PortalWorkspaceIdIndexRoute
@@ -778,6 +786,7 @@ export interface FileRoutesByTo {
   '/portal/$workspaceId/csat': typeof PortalWorkspaceIdCsatRoute
   '/portal/$workspaceId/preferences': typeof PortalWorkspaceIdPreferencesRoute
   '/portal/$workspaceId/profile': typeof PortalWorkspaceIdProfileRoute
+  '/portal/$workspaceId/roadmap': typeof PortalWorkspaceIdRoadmapRoute
   '/portal/$workspaceId/unsubscribe': typeof PortalWorkspaceIdUnsubscribeRoute
   '/quills/oauth/result': typeof QuillsOauthResultRoute
   '/portal/$workspaceId': typeof PortalWorkspaceIdIndexRoute
@@ -871,6 +880,7 @@ export interface FileRoutesById {
   '/portal/$workspaceId/csat': typeof PortalWorkspaceIdCsatRoute
   '/portal/$workspaceId/preferences': typeof PortalWorkspaceIdPreferencesRoute
   '/portal/$workspaceId/profile': typeof PortalWorkspaceIdProfileRoute
+  '/portal/$workspaceId/roadmap': typeof PortalWorkspaceIdRoadmapRoute
   '/portal/$workspaceId/unsubscribe': typeof PortalWorkspaceIdUnsubscribeRoute
   '/quills/oauth/result': typeof QuillsOauthResultRoute
   '/portal/$workspaceId/': typeof PortalWorkspaceIdIndexRoute
@@ -965,6 +975,7 @@ export interface FileRouteTypes {
     | '/portal/$workspaceId/csat'
     | '/portal/$workspaceId/preferences'
     | '/portal/$workspaceId/profile'
+    | '/portal/$workspaceId/roadmap'
     | '/portal/$workspaceId/unsubscribe'
     | '/quills/oauth/result'
     | '/portal/$workspaceId/'
@@ -1054,6 +1065,7 @@ export interface FileRouteTypes {
     | '/portal/$workspaceId/csat'
     | '/portal/$workspaceId/preferences'
     | '/portal/$workspaceId/profile'
+    | '/portal/$workspaceId/roadmap'
     | '/portal/$workspaceId/unsubscribe'
     | '/quills/oauth/result'
     | '/portal/$workspaceId'
@@ -1146,6 +1158,7 @@ export interface FileRouteTypes {
     | '/portal/$workspaceId/csat'
     | '/portal/$workspaceId/preferences'
     | '/portal/$workspaceId/profile'
+    | '/portal/$workspaceId/roadmap'
     | '/portal/$workspaceId/unsubscribe'
     | '/quills/oauth/result'
     | '/portal/$workspaceId/'
@@ -1417,6 +1430,13 @@ declare module '@tanstack/react-router' {
       path: '/profile'
       fullPath: '/portal/$workspaceId/profile'
       preLoaderRoute: typeof PortalWorkspaceIdProfileRouteImport
+      parentRoute: typeof PortalWorkspaceIdRoute
+    }
+    '/portal/$workspaceId/roadmap': {
+      id: '/portal/$workspaceId/roadmap'
+      path: '/roadmap'
+      fullPath: '/portal/$workspaceId/roadmap'
+      preLoaderRoute: typeof PortalWorkspaceIdRoadmapRouteImport
       parentRoute: typeof PortalWorkspaceIdRoute
     }
     '/portal/$workspaceId/unsubscribe': {
@@ -2168,6 +2188,7 @@ interface PortalWorkspaceIdRouteChildren {
   PortalWorkspaceIdCsatRoute: typeof PortalWorkspaceIdCsatRoute
   PortalWorkspaceIdPreferencesRoute: typeof PortalWorkspaceIdPreferencesRoute
   PortalWorkspaceIdProfileRoute: typeof PortalWorkspaceIdProfileRoute
+  PortalWorkspaceIdRoadmapRoute: typeof PortalWorkspaceIdRoadmapRoute
   PortalWorkspaceIdUnsubscribeRoute: typeof PortalWorkspaceIdUnsubscribeRoute
   PortalWorkspaceIdIndexRoute: typeof PortalWorkspaceIdIndexRoute
   PortalWorkspaceIdBoardsBoardIdRoute: typeof PortalWorkspaceIdBoardsBoardIdRoute
@@ -2192,6 +2213,7 @@ const PortalWorkspaceIdRouteChildren: PortalWorkspaceIdRouteChildren = {
   PortalWorkspaceIdCsatRoute: PortalWorkspaceIdCsatRoute,
   PortalWorkspaceIdPreferencesRoute: PortalWorkspaceIdPreferencesRoute,
   PortalWorkspaceIdProfileRoute: PortalWorkspaceIdProfileRoute,
+  PortalWorkspaceIdRoadmapRoute: PortalWorkspaceIdRoadmapRoute,
   PortalWorkspaceIdUnsubscribeRoute: PortalWorkspaceIdUnsubscribeRoute,
   PortalWorkspaceIdIndexRoute: PortalWorkspaceIdIndexRoute,
   PortalWorkspaceIdBoardsBoardIdRoute: PortalWorkspaceIdBoardsBoardIdRoute,

@@ -6,6 +6,9 @@ export const meta = {
   audience: "public",
   mailLinked: true,
   token: "none",
-  operations: ["getQuillsPublicHelpCenterArticle"],
-  states: ["loading", "failed", "ready"],
+  operations: [
+    "getQuillsPublicHelpCenterArticle",
+    "recordQuillsPublicArticleFeedback",
+  ],
+  states: ["loading", "failed", "ready", "done"],
 } satisfies PageMeta;

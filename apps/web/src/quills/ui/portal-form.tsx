@@ -11,7 +11,7 @@ import { useTranslation } from "react-i18next";
 import type { z } from "zod";
 import type { PortalProblem } from "../core/types";
 import { isFramed } from "./confirm-action";
-import { Button, Fieldset } from "./upstream";
+import { Button, Fieldset, cn } from "./upstream";
 import { StateView } from "./state-view";
 
 export interface PortalFormProps<T extends FieldValues> {
@@ -20,6 +20,11 @@ export interface PortalFormProps<T extends FieldValues> {
   submitKey: string;
   onSubmit: (values: T) => Promise<PortalProblem | void>;
   children: (form: UseFormReturn<T>) => ReactNode;
+  className?: string;
+  /** Controls in one row with the submit button, such as a compact select. */
+  footer?: (form: UseFormReturn<T>) => ReactNode;
+  /** An icon-only submit button; the submit label becomes its accessible name. */
+  submitIcon?: ReactNode;
 }
 
 export function PortalForm<T extends FieldValues>(props: PortalFormProps<T>) {
@@ -53,9 +58,27 @@ export function PortalForm<T extends FieldValues>(props: PortalFormProps<T>) {
       running.current = false;
     }
   });
+  const submitButton = (
+    <Button
+      type="submit"
+      size={props.submitIcon ? "icon-sm" : undefined}
+      className={props.submitIcon ? "ml-auto rounded-full" : undefined}
+      aria-label={props.submitIcon ? t(props.submitKey) : undefined}
+      disabled={
+        form.formState.isSubmitting ||
+        Boolean(problem && problem.kind !== "invalid")
+      }
+      loading={form.formState.isSubmitting}
+    >
+      {props.submitIcon ?? t(props.submitKey)}
+    </Button>
+  );
   return (
     <form
-      className="portal-form flex max-w-2xl flex-col gap-5 py-2"
+      className={cn(
+        "portal-form flex max-w-2xl flex-col gap-5 py-2",
+        props.className,
+      )}
       onSubmit={(event) => void submit(event)}
       noValidate
     >
@@ -66,16 +89,14 @@ export function PortalForm<T extends FieldValues>(props: PortalFormProps<T>) {
       <StateView problem={problem} onRetry={() => setProblem(null)}>
         {null}
       </StateView>
-      <Button
-        type="submit"
-        disabled={
-          form.formState.isSubmitting ||
-          Boolean(problem && problem.kind !== "invalid")
-        }
-        loading={form.formState.isSubmitting}
-      >
-        {t(props.submitKey)}
-      </Button>
+      {props.footer ? (
+        <div className="flex items-center gap-2">
+          {props.footer(form)}
+          {submitButton}
+        </div>
+      ) : (
+        submitButton
+      )}
     </form>
   );
 }

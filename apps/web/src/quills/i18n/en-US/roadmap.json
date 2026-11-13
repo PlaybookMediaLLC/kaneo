@@ -1,0 +1,10 @@
+{
+	"countMore": "{{count}}+",
+	"description": "What we’re planning, building and have shipped.",
+	"empty": "Nothing here yet.",
+	"in_progress": "Actively being built",
+	"loadMore": "Show more",
+	"planned": "Committed and queued",
+	"shipped": "Recently shipped",
+	"title": "Roadmap"
+}
