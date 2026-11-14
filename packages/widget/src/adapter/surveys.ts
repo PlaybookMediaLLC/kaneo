@@ -27,6 +27,8 @@ export function useWidgetSurvey(
     survey: WidgetSurvey | null;
   } | null>(null);
   const [dismissed, setDismissed] = useState(dismissedIds);
+  // Answered in this session: the home tab thanks the visitor instead of asking again.
+  const [answered, setAnswered] = useState<readonly string[]>([]);
   useEffect(() => {
     if (session === null || !active) return;
     const controller = new AbortController();
@@ -43,10 +45,13 @@ export function useWidgetSurvey(
   }, [api, session, active]);
   const survey = found?.session === session ? found.survey : null;
   return {
-    survey: survey && !dismissed.includes(survey.id) ? survey : null,
+    survey:
+      survey && !dismissed.includes(survey.id)
+        ? { ...survey, answered: answered.includes(survey.id) }
+        : null,
     /** An earlier answer (409) counts as answered. */
-    onAnswerSurvey: (surveyId: string, answer: SurveyAnswer) =>
-      api
+    onAnswerSurvey: async (surveyId: string, answer: SurveyAnswer) => {
+      await api
         .request(
           "POST",
           `/widget/surveys/${encodeURIComponent(surveyId)}/responses`,
@@ -54,7 +59,9 @@ export function useWidgetSurvey(
         )
         .catch((error) => {
           if (!(error instanceof ApiError && error.status === 409)) throw error;
-        }),
+        });
+      setAnswered((list) => [...list, surveyId]);
+    },
     onDismissSurvey: (surveyId: string) => {
       const next = [...dismissed, surveyId];
       setDismissed(next);

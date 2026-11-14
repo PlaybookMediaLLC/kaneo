@@ -97,6 +97,20 @@ describe("widget survey prompt", () => {
     );
   });
 
+  it("hides the survey through Not now", () => {
+    const dismiss = vi.fn();
+    render(
+      <WidgetView
+        onClose={vi.fn()}
+        survey={nps}
+        onAnswerSurvey={vi.fn()}
+        onDismissSurvey={dismiss}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Not now" }));
+    expect(dismiss).toHaveBeenCalledWith("survey_1");
+  });
+
   it("keeps the draft and shows an error when the answer fails", async () => {
     const answer = vi.fn(async () => {
       throw new Error("offline");
@@ -150,9 +164,8 @@ describe("widget survey adapter", () => {
     );
     const { result } = renderHook(() => useWidgetSurvey(api, 1, true));
     await waitFor(() => expect(result.current.survey).not.toBeNull());
-    await expect(
-      result.current.onAnswerSurvey("survey_1", { score: 5 }),
-    ).resolves.toBeUndefined();
+    await act(() => result.current.onAnswerSurvey("survey_1", { score: 5 }));
+    expect(result.current.survey?.answered).toBe(true);
     act(() => result.current.onDismissSurvey("survey_1"));
     expect(result.current.survey).toBeNull();
     const again = renderHook(() => useWidgetSurvey(api, 1, true));
@@ -247,6 +260,13 @@ describe("widget host survey", () => {
       expect(calls).toContain(
         'POST /widget/surveys/survey_1/responses {"score":10}',
       );
+      // Back on Home after another tab, the survey thanks instead of asking again.
+      fireEvent.click(screen.getByRole("button", { name: "Help" }));
+      fireEvent.click(screen.getByRole("button", { name: "Home" }));
+      expect(await screen.findByText("Thanks for your answer.")).toBeDefined();
+      expect(screen.queryByRole("button", { name: "Send answer" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      expect(screen.queryByText(nps.question)).toBeNull();
     } finally {
       cleanup();
       vi.unstubAllGlobals();

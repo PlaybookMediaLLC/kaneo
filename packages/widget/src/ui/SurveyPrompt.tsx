@@ -17,7 +17,8 @@ export function SurveyPrompt({
   const id = useId();
   const [answer, setAnswer] = useState<string | null>(null);
   const [comment, setComment] = useState("");
-  const [done, setDone] = useState(false);
+  const [sent, setSent] = useState(false);
+  const done = sent || !!survey.answered;
   const action = useAction();
   const { scale } = survey;
   const open = survey.type === "open";
@@ -35,7 +36,7 @@ export function SurveyPrompt({
         ...(!scale && !open ? { choice: answer ?? "" } : {}),
         ...(text ? { comment: text } : {}),
       });
-      setDone(true);
+      setSent(true);
     });
   return (
     <section className="qb-contact-card qb-survey" aria-labelledby={id}>

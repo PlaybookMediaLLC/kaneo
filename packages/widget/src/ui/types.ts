@@ -121,6 +121,8 @@ export interface WidgetSurvey {
   question: string;
   options: readonly string[];
   scale: { min: number; max: number } | null;
+  /** The visitor answered it in this session: the prompt shows its thanks state. */
+  answered?: boolean;
 }
 /** A score, a choice or only a comment, as the survey type asks. */
 export interface SurveyAnswer {
