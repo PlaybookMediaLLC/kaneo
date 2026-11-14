@@ -26,6 +26,7 @@
 	"statusExpired": "Expired",
 	"statusMerged": "Merged",
 	"title": "Duplicates",
+	"titleDismissed": "Dismissed pairs",
 	"voteInstead": "Vote for this instead",
 	"voteInsteadFor": "Vote for this instead: {{title}}",
 	"votes_one": "{{count}} vote",

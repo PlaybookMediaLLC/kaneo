@@ -4,17 +4,10 @@ import { suggestionsFixture } from "../suggestions.fixture";
 import { SuggestionDetail } from "./suggestion-detail";
 
 describe("SuggestionDetail", () => {
-  it("shows both posts, the match and the reason", () => {
+  it("shows both posts and the reason", () => {
     const view = renderComponent(
       <SuggestionDetail suggestion={suggestionsFixture.suggestion()} />,
     );
-    expect(
-      view.getByRole("heading", {
-        level: 1,
-        name: "“Dark theme” and “Dark mode”",
-      }),
-    ).toBeInTheDocument();
-    expect(view.getByText("93% match")).toBeInTheDocument();
     expect(view.getByRole("region", { name: "Duplicate" })).toHaveTextContent(
       "Dark themeIdeas2 votes",
     );
@@ -30,7 +23,6 @@ describe("SuggestionDetail", () => {
     const view = renderComponent(
       <SuggestionDetail
         suggestion={suggestionsFixture.suggestion({
-          hybridScore: 0.876,
           llmReasoning: null,
           source: {
             id: "post_test_1",
@@ -42,7 +34,6 @@ describe("SuggestionDetail", () => {
         })}
       />,
     );
-    expect(view.getByText("88% match")).toBeInTheDocument();
     expect(view.getByText("1 vote")).toBeInTheDocument();
     expect(view.queryByText(/color scheme/)).toBeNull();
   });

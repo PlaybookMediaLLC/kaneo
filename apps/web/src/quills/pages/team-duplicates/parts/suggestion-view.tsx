@@ -68,7 +68,24 @@ export function SuggestionView({
         onBack={props.onBack}
         onPrevious={nav.previous}
         onNext={nav.next}
-      />
+      >
+        <div className="min-w-0">
+          <h1
+            tabIndex={-1}
+            className="line-clamp-2 text-lg font-semibold leading-tight outline-none"
+          >
+            {t("duplicates.pair", {
+              source: suggestion.source.title,
+              target: suggestion.target.title,
+            })}
+          </h1>
+          <p className="truncate text-xs text-muted-foreground">
+            {t("duplicates.match", {
+              percent: Math.round(suggestion.hybridScore * 100),
+            })}
+          </p>
+        </div>
+      </DetailHeader>
       <SuggestionDetail suggestion={suggestion} />
       <p
         role="status"

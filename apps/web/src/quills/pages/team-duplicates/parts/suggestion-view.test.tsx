@@ -41,6 +41,8 @@ describe("SuggestionView", () => {
         name: "“Dark theme” and “Dark mode”",
       }),
     ).toBeInTheDocument();
+    // The header and the two cards of the list show the match.
+    expect(view.getAllByText("93% match")).toHaveLength(3);
     expect(
       view.getByRole("complementary", { name: "Details" }),
     ).toHaveTextContent("Pending");

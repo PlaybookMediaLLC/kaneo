@@ -7,7 +7,8 @@ export interface SuggestionPropertiesProps {
   suggestion: Suggestion;
 }
 
-const statusKeys = {
+/** The label of each pair status. */
+export const suggestionStatusKeys = {
   pending: "duplicates.pending",
   accepted: "duplicates.statusMerged",
   dismissed: "duplicates.dismissed",
@@ -22,7 +23,7 @@ export function SuggestionProperties({
   return (
     <div>
       <PropertyRow label={t("duplicates.status")}>
-        {t(statusKeys[suggestion.status])}
+        {t(suggestionStatusKeys[suggestion.status])}
       </PropertyRow>
       <PropertyRow label={t("duplicates.confidence")}>
         {t("duplicates.percent", {

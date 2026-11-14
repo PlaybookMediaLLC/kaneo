@@ -29,9 +29,11 @@ const render = (overrides: Partial<SuggestionActionsProps> = {}) => {
 describe("SuggestionActions", () => {
   it("offers merge and dismiss for a pending pair, by button and by key", () => {
     const { view, calls } = render();
-    expect(
-      view.getByRole("group", { name: "Pair actions" }),
-    ).toBeInTheDocument();
+    expect(view.getByRole("group", { name: "Pair actions" })).toHaveTextContent(
+      /^Pending/,
+    );
+    // Merge is the main button at the end of the bar.
+    expect(view.getAllByRole("button").at(-1)).toHaveAccessibleName(/^Merge/);
     press("Merge");
     fireEvent.keyDown(document.body, { key: "d", code: "KeyD" });
     expect(calls.onMerge).toHaveBeenCalledOnce();

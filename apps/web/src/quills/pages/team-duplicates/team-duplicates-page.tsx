@@ -9,12 +9,11 @@ import { useTeamRuntime } from "../../team/runtime";
 import { teamHref } from "../../team/team-href";
 import { TeamStateView } from "../../team/team-state-view";
 import { GroupedList } from "../../ui/inbox/grouped-list";
-import { ListHeader } from "../../ui/inbox/list-header";
-import { StatusTabs } from "../../ui/inbox/status-tabs";
 import { useListNavigation } from "../../ui/inbox/use-list-navigation";
 import { PageFrame } from "../../ui/page-frame";
 import { Button } from "../../ui/upstream";
 import type { Suggestion } from "./parts/suggestion-detail";
+import { SuggestionList, type SuggestionFilter } from "./parts/suggestion-list";
 import { SuggestionListRow } from "./parts/suggestion-list-row";
 import { SuggestionView } from "./parts/suggestion-view";
 
@@ -24,20 +23,11 @@ export interface TeamDuplicatesPageProps {
   search: Record<string, unknown>;
 }
 
-const filters = {
-  pending: "duplicates.pending",
-  dismissed: "duplicates.dismissed",
-} as const;
-type Filter = keyof typeof filters;
-// The scroll area under the header. The loading, empty and error states get a margin.
-const body =
-  "min-h-0 flex-1 overflow-y-auto [&>[role=alert]]:m-4 [&>[role=status]]:px-4";
-
 /** The duplicate review queue: the pairs of posts by board, and the open pair with its decisions. */
 export function TeamDuplicatesPage({ workspaceId }: TeamDuplicatesPageProps) {
   const { t } = useTranslation("quills");
   const team = useTeamRuntime();
-  const [status, setStatus] = useState<Filter>("pending");
+  const [status, setStatus] = useState<SuggestionFilter>("pending");
   const [openId, setOpenId] = useState<string | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [message, setMessage] = useState("");
@@ -137,60 +127,46 @@ export function TeamDuplicatesPage({ workspaceId }: TeamDuplicatesPageProps) {
           }}
         />
       ) : (
-        <>
-          <ListHeader title={t("duplicates.title")} />
-          <StatusTabs
-            label={t("duplicates.filter")}
-            tabs={(Object.keys(filters) as Filter[]).map((value) => ({
-              value,
-              label: t(filters[value]),
-            }))}
-            value={status}
-            onChange={(value) => {
-              setStatus(value as Filter);
-              setCursor(null);
-            }}
-          />
-          <div className={body}>
-            <p
-              role="status"
-              className="text-sm text-muted-foreground [&:not(:empty)]:py-2"
-            >
-              {message}
-            </p>
-            <TeamStateView
-              loading={list.isLoading}
-              problem={list.error ?? null}
-              empty={!items.length}
-              onRetry={() => void list.refetch()}
-            >
-              <GroupedList
-                label={t("duplicates.title")}
-                groups={groups}
-                getKey={(item) => item.id}
-                renderItem={(item) => (
-                  <SuggestionListRow
-                    suggestion={item}
-                    href={href}
-                    selected={item.id === cursor}
-                    onOpen={() => setOpenId(item.id)}
-                  />
-                )}
-              />
-              {list.hasNextPage ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="w-full text-muted-foreground"
-                  loading={list.isFetchingNextPage}
-                  onClick={() => void list.fetchNextPage()}
-                >
-                  {t("duplicates.loadMore")}
-                </Button>
-              ) : null}
-            </TeamStateView>
-          </div>
-        </>
+        <SuggestionList
+          status={status}
+          onStatusChange={(value) => {
+            setStatus(value);
+            setCursor(null);
+          }}
+          message={message}
+        >
+          <TeamStateView
+            loading={list.isLoading}
+            problem={list.error ?? null}
+            empty={!items.length}
+            onRetry={() => void list.refetch()}
+          >
+            <GroupedList
+              label={t("duplicates.title")}
+              groups={groups}
+              getKey={(item) => item.id}
+              renderItem={(item) => (
+                <SuggestionListRow
+                  suggestion={item}
+                  href={href}
+                  selected={item.id === cursor}
+                  onOpen={() => setOpenId(item.id)}
+                />
+              )}
+            />
+            {list.hasNextPage ? (
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full text-muted-foreground"
+                loading={list.isFetchingNextPage}
+                onClick={() => void list.fetchNextPage()}
+              >
+                {t("duplicates.loadMore")}
+              </Button>
+            ) : null}
+          </TeamStateView>
+        </SuggestionList>
       )}
     </PageFrame>
   );
