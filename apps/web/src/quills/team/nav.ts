@@ -8,8 +8,12 @@ import {
 } from "lucide-react";
 import type { GetTeamCountsResponse } from "../api/team/get-team-counts";
 
-/** A value of the team counts route (`getQuillsTeamCounts`). */
-export type TeamCountKey = keyof GetTeamCountsResponse;
+/** A number of the team counts route (`getQuillsTeamCounts`). */
+export type TeamCountKey = {
+  [
+    Key in keyof GetTeamCountsResponse
+  ]: GetTeamCountsResponse[Key] extends number ? Key : never;
+}[keyof GetTeamCountsResponse];
 
 export interface TeamNavItem {
   /** The path after /feedback/{id}. The overview is "". */
