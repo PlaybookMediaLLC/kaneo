@@ -20,8 +20,8 @@ import {
 import { renderTemplate } from "./template.mjs";
 
 const marker = "TODO(quills-web)";
-// Teammate pages live in the upstream workspace layout (RFC 0002 D24).
-const teamRoute = "/dashboard/workspace/$workspaceId/quills";
+// Teammate pages live in the teammate app (RFC 0004 D1).
+const teamRoute = "/feedback/$workspaceId";
 // Teammate API routes are mounted at /quills/{workspaceId}; portal routes at /quills-public.
 const isTeammatePath = (path) => path.startsWith("/quills/{workspaceId}/");
 

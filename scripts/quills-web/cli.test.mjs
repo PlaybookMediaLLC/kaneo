@@ -243,10 +243,10 @@ test("generates each framework kind without overwriting", async () => {
   );
 });
 
-test("generates a teammate page in the D24 folder with teammate problem mapping", async () => {
+test("generates a teammate page in the teammate app folder with teammate problem mapping", async () => {
   const root = await fixtureRoot();
   const team =
-    "apps/web/src/routes/_layout/_authenticated/dashboard/workspace/$workspaceId/quills";
+    "apps/web/src/routes/_layout/_authenticated/feedback/$workspaceId";
   await generateFeature(root, "team-sample");
   await generateOperation(root, "query", "fetchQuillsAdminOverview", {
     area: "team",
@@ -266,10 +266,20 @@ test("generates a teammate page in the D24 folder with teammate problem mapping"
       }),
     /teammate page route must stay under/,
   );
+  // The old folder (RFC 0002 D24) keeps only the redirect to the teammate app.
+  await assert.rejects(
+    () =>
+      generatePage(root, "team-old", {
+        route: "/dashboard/workspace/$workspaceId/quills/old",
+        audience: "teammate",
+        feature: "team-sample",
+      }),
+    /teammate page route must stay under \/feedback\/\$workspaceId/,
+  );
   await assert.rejects(
     () =>
       generatePage(root, "team-token", {
-        route: "/dashboard/workspace/$workspaceId/quills/token",
+        route: "/feedback/$workspaceId/token",
         audience: "teammate",
         feature: "team-sample",
         token: "query",
@@ -277,7 +287,7 @@ test("generates a teammate page in the D24 folder with teammate problem mapping"
     /cannot take a mail token/,
   );
   await generatePage(root, "team-sample", {
-    route: "/dashboard/workspace/$workspaceId/quills/sample",
+    route: "/feedback/$workspaceId/sample",
     audience: "teammate",
     feature: "team-sample",
     operations: "fetchQuillsAdminOverview",
@@ -285,7 +295,7 @@ test("generates a teammate page in the D24 folder with teammate problem mapping"
   const route = await readFile(`${root}/${team}/sample/index.tsx`, "utf8");
   assert.match(
     route,
-    /createFileRoute\(\s*"\/_layout\/_authenticated\/dashboard\/workspace\/\$workspaceId\/quills\/sample\/",?\s*\)/,
+    /createFileRoute\(\s*"\/_layout\/_authenticated\/feedback\/\$workspaceId\/sample\/",?\s*\)/,
   );
   assert.doesNotMatch(route, /beforeLoad|quillsPortal/);
   assert.match(

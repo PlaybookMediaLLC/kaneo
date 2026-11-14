@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { nodes, kindOf, declaration, valueOf, lineOf } from "./ast.mjs";
-import { teamRoutes } from "../files.mjs";
+import { legacyTeamRoutes, teamRoutes } from "../files.mjs";
 
 const rulesDirectory = dirname(fileURLToPath(import.meta.url));
 const protectedRules = new Set(["C5", "C7", "C9", "C16"]);
@@ -38,6 +38,7 @@ export async function readDocuments(root) {
     "apps/web/src/routes/portal",
     "apps/web/src/routes/quills",
     teamRoutes,
+    legacyTeamRoutes,
   ];
   const files = (
     await Promise.all(directories.map((p) => walk(join(root, p))))
