@@ -103,11 +103,9 @@ an open form to the next item, and a reopened view showed stale cached data. Ope
 2. The list pane beside an open request has no "Load more".
 3. A deleted request cannot be restored from the app (`restoreQuillsPost` has no client).
 4. A snoozed conversation has no "Unsnooze"; only Resolve, then Reopen.
-5. The changelog `requesterCount` still reveals the voters of a board with hidden counts.
-6. A ticket read refetches the sidebar counts; the generator needs an invalidation target.
-7. The New request and "Track as post" forms show no error for an empty board list or details
+5. A ticket read refetches the sidebar counts; the generator needs an invalidation target.
+6. The New request and "Track as post" forms show no error for an empty board list or details
    over 10,000 characters.
-8. Smaller items: the merge palette shows "No results" on a failed search; each hidden tab shows
+7. Smaller items: the merge palette shows "No results" on a failed search; each hidden tab shows
    its own desktop notification; some controls show without their permission (the API refuses
-   the action); no digest test covers merged-duplicate voters; the AI chip of the request detail
-   is not built.
+   the action); the AI chip of the request detail is not built.
