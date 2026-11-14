@@ -12,8 +12,8 @@ export interface ListRowProps {
   onOpen: () => void;
   /** The keyboard highlight of a list, or the open item of the compact list. */
   selected?: boolean;
-  /** The customer or author. */
-  person: InboxPerson;
+  /** The customer or author. Leave it out for an item without a person, such as a survey. */
+  person?: InboxPerson;
   /** A short reference such as "T-39". */
   shortId?: string;
   title: string;
@@ -64,12 +64,16 @@ export function ListRow(props: ListRowProps) {
         props.compact ? "flex-col" : "items-center",
       )}
     >
-      <span className="flex min-w-0 shrink-0 items-center gap-2 md:w-44">
-        <PersonAvatar
-          name={props.person.name}
-          avatarUrl={props.person.avatarUrl}
-        />
-        <span className="truncate">{props.person.name}</span>
+      <span className="flex min-w-0 shrink-0 items-center gap-2 empty:hidden md:w-44">
+        {props.person ? (
+          <>
+            <PersonAvatar
+              name={props.person.name}
+              avatarUrl={props.person.avatarUrl}
+            />
+            <span className="truncate">{props.person.name}</span>
+          </>
+        ) : null}
         {props.shortId ? (
           <span className="shrink-0 text-xs text-muted-foreground">
             {props.shortId}

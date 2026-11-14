@@ -34,6 +34,14 @@ describe("ListRow", () => {
     expect(view.getByText(/2h ago/)).toHaveAttribute("datetime", row.time);
   });
 
+  it("shows an item without a person", () => {
+    const view = renderComponent(
+      <ListRow {...row} person={undefined} shortId={undefined} />,
+    );
+    expect(view.getByRole("link")).toHaveTextContent(/^Export fails/);
+    expect(view.getByRole("link")).not.toHaveTextContent("Ada Customer");
+  });
+
   it("names an unassigned item and shows no assignee when none is given", () => {
     const view = renderComponent(<ListRow {...row} assignee={null} />);
     expect(view.getByRole("link")).toHaveTextContent("Unassigned");
