@@ -7,4 +7,5 @@ export interface TeamNavEntry {
 // The team shell navigation. A Wave 1 lane appends one entry for each teammate page.
 export const teamNavigation: readonly TeamNavEntry[] = [
   { path: "", labelKey: "team.nav.home" },
+  { path: "/surveys", labelKey: "surveys.title" },
 ];

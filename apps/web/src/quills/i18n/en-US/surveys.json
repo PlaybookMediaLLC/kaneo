@@ -1,0 +1,59 @@
+{
+	"actions": {
+		"activate": "Activate survey",
+		"close": "Close survey",
+		"delete": "Delete draft",
+		"deleted": "The draft is deleted",
+		"list": "All surveys"
+	},
+	"card": {
+		"comment": "Comment (optional)",
+		"dismiss": "Not now",
+		"openAnswer": "Your answer",
+		"required": "Choose an answer",
+		"submit": "Send answer",
+		"thanks": "Thanks for your answer"
+	},
+	"create": {
+		"options": "Answers, one on each line",
+		"optionsRequired": "Give 2 to 20 different answers",
+		"question": "Question",
+		"questionRequired": "Write a question",
+		"submit": "Create draft",
+		"title": "New survey",
+		"type": "Type"
+	},
+	"description": "Ask customers one short question in the portal and the widget.",
+	"none": "No surveys yet.",
+	"responses_one": "{{count}} response",
+	"responses_other": "{{count}} responses",
+	"results": {
+		"answers": "Answers",
+		"bar": "{{label}}: {{count}} of {{total}}",
+		"comments": "Latest comments",
+		"noComments": "No comments yet.",
+		"noScore": "No score yet",
+		"person": "Unknown person",
+		"score": {
+			"ces": "Average effort: {{score}} of 7",
+			"csat": "Satisfied: {{score}}%",
+			"nps": "Net Promoter Score: {{score}}",
+			"pmf": "Very disappointed: {{score}}%"
+		}
+	},
+	"status": {
+		"active": "Active",
+		"closed": "Closed",
+		"draft": "Draft"
+	},
+	"summary": "{{type}} · {{status}} · {{responses}}",
+	"title": "Surveys",
+	"types": {
+		"ces": "Customer effort (1 to 7)",
+		"csat": "Satisfaction (1 to 5)",
+		"nps": "Net Promoter Score (0 to 10)",
+		"open": "Open question",
+		"pmf": "Product-market fit",
+		"poll": "Poll"
+	}
+}
