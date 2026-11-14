@@ -23,6 +23,7 @@ import {
 } from "../../content/status/maintenance";
 import { recordQuillsChange } from "../../events";
 import { setStatus } from "../../support/conversation-ops";
+import { queueWeeklyDigests } from "./digest";
 
 // Timed work that the earlier slices store but nothing ran. quills.runnable_workspaces (migration
 // 0013) lists a workspace when one of these is due; its predicates match the queries below.
@@ -180,6 +181,10 @@ const SWEEPS = [
   wakeSnoozedConversations,
   announceScheduledChangelog,
   runMaintenanceWindows,
+  // RFC 0003: the weekly digest. ponytail: quills.runnable_workspaces has no digest predicate, so
+  // a workspace gets its digests on its first runnable pass of the week (any due job or event).
+  // A forward migration that lists every Quills workspace once a week removes that wait.
+  (db: Database) => queueWeeklyDigests(db),
 ];
 
 /**
