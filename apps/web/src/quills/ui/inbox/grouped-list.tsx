@@ -33,7 +33,7 @@ export function GroupedList<Item>({
               {group.label}{" "}
               <span className="tabular-nums">{group.items.length}</span>
             </h2>
-            <ul className="grid gap-0.5">
+            <ul className="grid grid-cols-1 gap-0.5">
               {group.items.map((item) => (
                 <li key={getKey(item)}>{renderItem(item)}</li>
               ))}

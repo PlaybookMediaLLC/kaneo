@@ -74,7 +74,7 @@ export function TeamSidebar({
             </p>
             <ul
               aria-labelledby={`${id}-${section.id}`}
-              className="grid gap-0.5"
+              className="grid grid-cols-1 gap-0.5"
             >
               {section.items.map((item) => (
                 <li key={item.id}>

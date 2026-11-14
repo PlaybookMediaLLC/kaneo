@@ -38,7 +38,7 @@ export function SignalView({ signal, signals, ...props }: SignalViewProps) {
     <DetailLayout
       list={
         <ListPane title={t("autopilot.title")} headingLevel={2}>
-          <ul className="grid gap-0.5">
+          <ul className="grid grid-cols-1 gap-0.5">
             {signals.map((item) => (
               <li key={item.id}>
                 <SignalListRow

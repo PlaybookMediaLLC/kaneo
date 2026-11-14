@@ -28,7 +28,7 @@ export function ViewLinks({ workspaceId, counts }: ViewLinksProps) {
             <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               {t(section.labelKey)}
             </p>
-            <ul className="grid gap-0.5">
+            <ul className="grid grid-cols-1 gap-0.5">
               {views.map((item) => (
                 <li key={item.id}>
                   <SidebarItem item={item} />

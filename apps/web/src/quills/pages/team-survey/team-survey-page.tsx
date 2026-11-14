@@ -74,7 +74,7 @@ export function TeamSurveyPage({ workspaceId, params }: TeamSurveyPageProps) {
             headingLevel={2}
             loading={surveys.isLoading}
           >
-            <ul className="grid gap-0.5">
+            <ul className="grid grid-cols-1 gap-0.5">
               {items.map((item) => (
                 <li key={item.id}>
                   <RequestRow

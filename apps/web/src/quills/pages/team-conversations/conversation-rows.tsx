@@ -34,7 +34,7 @@ export function ConversationRows(props: ConversationRowsProps) {
   };
   return (
     <>
-      <ul className="grid gap-0.5">
+      <ul className="grid grid-cols-1 gap-0.5">
         {props.items.map((item) => (
           <li key={item.id}>
             <ConversationRow

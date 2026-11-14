@@ -69,7 +69,10 @@ export function TeamChangelogPage({ workspaceId }: TeamChangelogPageProps) {
             void shipped.refetch();
           }}
         >
-          <ul aria-label={t("team-changelog.title")} className="grid gap-0.5">
+          <ul
+            aria-label={t("team-changelog.title")}
+            className="grid grid-cols-1 gap-0.5"
+          >
             {items.map((item) => (
               <li key={item.id}>
                 <EngagementRow

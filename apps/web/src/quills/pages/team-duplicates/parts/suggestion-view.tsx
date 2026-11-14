@@ -45,7 +45,7 @@ export function SuggestionView({
     <DetailLayout
       list={
         <ListPane title={t("duplicates.title")} headingLevel={2}>
-          <ul className="grid gap-0.5">
+          <ul className="grid grid-cols-1 gap-0.5">
             {suggestions.map((item) => (
               <li key={item.id}>
                 <SuggestionListRow

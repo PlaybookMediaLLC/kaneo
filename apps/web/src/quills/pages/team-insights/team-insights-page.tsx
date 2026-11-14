@@ -106,7 +106,7 @@ export function TeamInsightsPage({ workspaceId }: TeamInsightsPageProps) {
                   {t("insights.topPosts")}
                 </h2>
                 {data.topPosts.length ? (
-                  <ol className="-mx-3 mt-2 grid gap-0.5">
+                  <ol className="-mx-3 mt-2 grid grid-cols-1 gap-0.5">
                     {data.topPosts.map((item) => (
                       <li key={item.id}>
                         <RequestRow
