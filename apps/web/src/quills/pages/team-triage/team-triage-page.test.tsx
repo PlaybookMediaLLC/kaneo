@@ -5,6 +5,7 @@ import { getRevenueAtRiskFixture } from "../../api/team/get-revenue-at-risk.fixt
 import type { ListBoardsResponse } from "../../api/team/list-boards";
 import { listBoardsFixture } from "../../api/team/list-boards.fixture";
 import { listPostsFixture } from "../../api/team/list-posts.fixture";
+import { listStatusesFixture } from "../../api/team/list-statuses.fixture";
 import { setPostScoreFixture } from "../../api/team/set-post-score.fixture";
 import { updateBoardSettingsFixture } from "../../api/team/update-board-settings.fixture";
 import { fill, press } from "../../test/actions";
@@ -53,7 +54,20 @@ const prepare = () => {
   api.reply(getRevenueAtRiskFixture.ok({ companies: 2, mrrCents: 150000 }));
   api.reply(listBoardsFixture.ok({ items: [board] }));
   api.reply(getBoardSettingsFixture.ok({ boardId: board.id }));
+  api.reply(listStatusesFixture.ok({ statuses: [complete] }));
   return api;
+};
+
+const complete = {
+  id: "post_status_test_1",
+  name: "Complete",
+  slug: "complete",
+  color: "#22c55e",
+  category: "complete" as const,
+  position: 0,
+  showOnRoadmap: true,
+  isDefault: false,
+  createdAt: "2026-01-01T00:00:00.000Z",
 };
 
 let api: ReturnType<typeof mockApi>;
@@ -158,6 +172,22 @@ describe("TeamTriagePage", () => {
       });
     });
 
+    it("sets the status that a done task gives its linked posts", async () => {
+      api = prepare();
+      api.reply(updateBoardSettingsFixture.ok({ boardId: board.id }));
+      api.reply(getBoardSettingsFixture.ok({ boardId: board.id }));
+      const view = renderPage(TeamTriagePage, meta);
+      await view.findByRole("option", { name: "Complete" });
+      fill("When a linked task is done, set the status to", complete.id);
+      press("Save task sync");
+      await waitFor(() =>
+        expect(api.calls("updateQuillsBoardSettings")).toHaveLength(1),
+      );
+      expect(await api.calls("updateQuillsBoardSettings")[0]!.json()).toEqual({
+        taskSync: { statusOnTaskDone: complete.id },
+      });
+    });
+
     it("hides the score editor and voting settings without the actions", async () => {
       prepare();
       const view = renderPage(TeamTriagePage, meta, {
@@ -168,6 +198,9 @@ describe("TeamTriagePage", () => {
         view.queryByRole("button", { name: /score/i }),
       ).not.toBeInTheDocument();
       expect(view.queryByLabelText("Vote counts")).not.toBeInTheDocument();
+      expect(
+        view.queryByLabelText("When a linked task is done, set the status to"),
+      ).not.toBeInTheDocument();
     });
   });
 });

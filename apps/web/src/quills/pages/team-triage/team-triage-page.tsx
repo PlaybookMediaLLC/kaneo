@@ -4,6 +4,7 @@ import { useGetBoardSettings } from "../../hooks/team/use-get-board-settings";
 import { useGetRevenueAtRisk } from "../../hooks/team/use-get-revenue-at-risk";
 import { useListBoards } from "../../hooks/team/use-list-boards";
 import { useListPosts } from "../../hooks/team/use-list-posts";
+import { useListStatuses } from "../../hooks/team/use-list-statuses";
 import { useSetPostScore } from "../../hooks/team/use-set-post-score";
 import { useUpdateBoardSettings } from "../../hooks/team/use-update-board-settings";
 import { useTeamRuntime } from "../../team/runtime";
@@ -11,6 +12,7 @@ import { TeamStateView } from "../../team/team-state-view";
 import { PageFrame } from "../../ui/page-frame";
 import { Button } from "../../ui/upstream";
 import { BoardVotingForm } from "./parts/board-voting-form";
+import { TaskSyncForm } from "./parts/task-sync-form";
 import { TriageTable } from "./parts/triage-table";
 
 export interface TeamTriagePageProps {
@@ -47,8 +49,14 @@ export function TeamTriagePage({ workspaceId }: TeamTriagePageProps) {
   );
   const boardId = chosenBoard || boards.data?.items[0]?.id || "";
   const manages = team.permissions.manageSettings && Boolean(boardId);
+  const scope = manages ? workspaceId : "";
   const settings = useGetBoardSettings(
-    { param: { workspaceId: manages ? workspaceId : "", boardId } },
+    { param: { workspaceId: scope, boardId } },
+    team.viewer,
+  );
+  // ponytail: the first 100 statuses (the API maximum) for the task sync choice.
+  const statuses = useListStatuses(
+    { param: { workspaceId: scope }, query: { limit: "100" } },
     team.viewer,
   );
   const score = useSetPostScore(team.viewer);
@@ -151,21 +159,36 @@ export function TeamTriagePage({ workspaceId }: TeamTriagePageProps) {
               </select>
             </label>
             <TeamStateView
-              loading={settings.isLoading}
-              problem={settings.error ?? null}
-              onRetry={() => void settings.refetch()}
+              loading={settings.isLoading || statuses.isLoading}
+              problem={settings.error ?? statuses.error ?? null}
+              onRetry={() =>
+                void Promise.all([settings.refetch(), statuses.refetch()])
+              }
             >
               {settings.data ? (
-                <BoardVotingForm
-                  key={boardId}
-                  settings={settings.data}
-                  onSubmit={async (json) => {
-                    await voting.mutateAsync({
-                      param: { workspaceId, boardId },
-                      json,
-                    });
-                  }}
-                />
+                <>
+                  <BoardVotingForm
+                    key={boardId}
+                    settings={settings.data}
+                    onSubmit={async (json) => {
+                      await voting.mutateAsync({
+                        param: { workspaceId, boardId },
+                        json,
+                      });
+                    }}
+                  />
+                  <TaskSyncForm
+                    key={`${boardId}:task-sync`}
+                    statusOnTaskDone={settings.data.taskSync.statusOnTaskDone}
+                    statuses={statuses.data?.statuses ?? []}
+                    onSubmit={async (taskSync) => {
+                      await voting.mutateAsync({
+                        param: { workspaceId, boardId },
+                        json: { taskSync },
+                      });
+                    }}
+                  />
+                </>
               ) : null}
             </TeamStateView>
           </section>

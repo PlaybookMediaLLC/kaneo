@@ -11,6 +11,7 @@ export const meta = {
     "getQuillsRevenueAtRisk",
     "listQuillsBoards",
     "getQuillsBoardSettings",
+    "listQuillsStatuses",
     "setQuillsPostScore",
     "updateQuillsBoardSettings",
   ],
