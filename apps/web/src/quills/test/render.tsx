@@ -48,11 +48,12 @@ export function createQuillsTestQueryClient() {
 
 export function renderComponent(element: ReactElement) {
   const client = createQuillsTestQueryClient();
-  return render(element, {
+  const result = render(element, {
     wrapper: ({ children }) => (
       <Providers client={client}>{children}</Providers>
     ),
   });
+  return Object.assign(result, { queryClient: client });
 }
 
 export interface RenderPageOptions {

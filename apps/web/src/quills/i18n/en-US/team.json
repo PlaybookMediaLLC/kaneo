@@ -1,4 +1,8 @@
 {
 	"denied": "You do not have permission to see this page. Ask a workspace admin for access.",
+	"nav": {
+		"home": "Overview"
+	},
+	"navigation": "Feedback sections",
 	"title": "Feedback"
 }

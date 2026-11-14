@@ -87,6 +87,7 @@ import { Route as LayoutAuthenticatedDashboardWorkspaceWorkspaceIdInboxRouteImpo
 import { Route as LayoutAuthenticatedDashboardWorkspaceWorkspaceIdMembersRouteImport } from './routes/_layout/_authenticated/dashboard/workspace/$workspaceId/members'
 import { Route as LayoutAuthenticatedDashboardWorkspaceWorkspaceIdMyTasksRouteImport } from './routes/_layout/_authenticated/dashboard/workspace/$workspaceId/my-tasks'
 import { Route as LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectsRouteImport } from './routes/_layout/_authenticated/dashboard/workspace/$workspaceId/projects'
+import { Route as LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsRouteRouteImport } from './routes/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/route'
 import { Route as LayoutAuthenticatedDashboardWorkspaceWorkspaceIdSearchRouteImport } from './routes/_layout/_authenticated/dashboard/workspace/$workspaceId/search'
 import { Route as PortalWorkspaceIdHcLocaleArticlesIdSlugRouteImport } from './routes/portal/$workspaceId/hc/$locale/articles/$idSlug'
 import { Route as PortalWorkspaceIdHcLocaleCollectionsIdSlugRouteImport } from './routes/portal/$workspaceId/hc/$locale/collections/$idSlug'
@@ -550,6 +551,15 @@ const LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectsRoute =
     path: '/projects',
     getParentRoute: () => LayoutAuthenticatedDashboardWorkspaceWorkspaceIdRoute,
   } as any)
+const LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsRouteRoute =
+  LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsRouteRouteImport.update(
+    {
+      id: '/quills',
+      path: '/quills',
+      getParentRoute: () =>
+        LayoutAuthenticatedDashboardWorkspaceWorkspaceIdRoute,
+    } as any,
+  )
 const LayoutAuthenticatedDashboardWorkspaceWorkspaceIdSearchRoute =
   LayoutAuthenticatedDashboardWorkspaceWorkspaceIdSearchRouteImport.update({
     id: '/search',
@@ -723,6 +733,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/workspace/create': typeof LayoutAuthenticatedDashboardWorkspaceCreateRoute
   '/portal/$workspaceId/status/incidents/$incidentId': typeof PortalWorkspaceIdStatusIncidentsIncidentIdRoute
   '/portal/$workspaceId/hc/$locale/': typeof PortalWorkspaceIdHcLocaleIndexRoute
+  '/dashboard/workspace/$workspaceId/quills': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsRouteRoute
   '/$workspaceSlug/task/$ticketId/{-$title}': typeof LayoutAuthenticatedWorkspaceSlugTaskTicketIdChar123TitleChar125Route
   '/dashboard/settings/account/developer': typeof LayoutAuthenticatedDashboardSettingsAccountDeveloperRoute
   '/dashboard/settings/account/information': typeof LayoutAuthenticatedDashboardSettingsAccountInformationRoute
@@ -811,6 +822,7 @@ export interface FileRoutesByTo {
   '/dashboard/workspace/create': typeof LayoutAuthenticatedDashboardWorkspaceCreateRoute
   '/portal/$workspaceId/status/incidents/$incidentId': typeof PortalWorkspaceIdStatusIncidentsIncidentIdRoute
   '/portal/$workspaceId/hc/$locale': typeof PortalWorkspaceIdHcLocaleIndexRoute
+  '/dashboard/workspace/$workspaceId/quills': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsRouteRoute
   '/$workspaceSlug/task/$ticketId/{-$title}': typeof LayoutAuthenticatedWorkspaceSlugTaskTicketIdChar123TitleChar125Route
   '/dashboard/settings/account/developer': typeof LayoutAuthenticatedDashboardSettingsAccountDeveloperRoute
   '/dashboard/settings/account/information': typeof LayoutAuthenticatedDashboardSettingsAccountInformationRoute
@@ -907,6 +919,7 @@ export interface FileRoutesById {
   '/_layout/_authenticated/dashboard/workspace/create': typeof LayoutAuthenticatedDashboardWorkspaceCreateRoute
   '/portal/$workspaceId/status/incidents/$incidentId': typeof PortalWorkspaceIdStatusIncidentsIncidentIdRoute
   '/portal/$workspaceId/hc/$locale/': typeof PortalWorkspaceIdHcLocaleIndexRoute
+  '/_layout/_authenticated/dashboard/workspace/$workspaceId/quills': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsRouteRoute
   '/_layout/_authenticated/$workspaceSlug/task/$ticketId/{-$title}': typeof LayoutAuthenticatedWorkspaceSlugTaskTicketIdChar123TitleChar125Route
   '/_layout/_authenticated/dashboard/settings/account/developer': typeof LayoutAuthenticatedDashboardSettingsAccountDeveloperRoute
   '/_layout/_authenticated/dashboard/settings/account/information': typeof LayoutAuthenticatedDashboardSettingsAccountInformationRoute
@@ -1002,6 +1015,7 @@ export interface FileRouteTypes {
     | '/dashboard/workspace/create'
     | '/portal/$workspaceId/status/incidents/$incidentId'
     | '/portal/$workspaceId/hc/$locale/'
+    | '/dashboard/workspace/$workspaceId/quills'
     | '/$workspaceSlug/task/$ticketId/{-$title}'
     | '/dashboard/settings/account/developer'
     | '/dashboard/settings/account/information'
@@ -1090,6 +1104,7 @@ export interface FileRouteTypes {
     | '/dashboard/workspace/create'
     | '/portal/$workspaceId/status/incidents/$incidentId'
     | '/portal/$workspaceId/hc/$locale'
+    | '/dashboard/workspace/$workspaceId/quills'
     | '/$workspaceSlug/task/$ticketId/{-$title}'
     | '/dashboard/settings/account/developer'
     | '/dashboard/settings/account/information'
@@ -1185,6 +1200,7 @@ export interface FileRouteTypes {
     | '/_layout/_authenticated/dashboard/workspace/create'
     | '/portal/$workspaceId/status/incidents/$incidentId'
     | '/portal/$workspaceId/hc/$locale/'
+    | '/_layout/_authenticated/dashboard/workspace/$workspaceId/quills'
     | '/_layout/_authenticated/$workspaceSlug/task/$ticketId/{-$title}'
     | '/_layout/_authenticated/dashboard/settings/account/developer'
     | '/_layout/_authenticated/dashboard/settings/account/information'
@@ -1789,6 +1805,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectsRouteImport
       parentRoute: typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdRoute
     }
+    '/_layout/_authenticated/dashboard/workspace/$workspaceId/quills': {
+      id: '/_layout/_authenticated/dashboard/workspace/$workspaceId/quills'
+      path: '/quills'
+      fullPath: '/dashboard/workspace/$workspaceId/quills'
+      preLoaderRoute: typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsRouteRouteImport
+      parentRoute: typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdRoute
+    }
     '/_layout/_authenticated/dashboard/workspace/$workspaceId/search': {
       id: '/_layout/_authenticated/dashboard/workspace/$workspaceId/search'
       path: '/search'
@@ -2045,6 +2068,7 @@ const LayoutAuthenticatedDashboardSettingsRouteWithChildren =
   )
 
 interface LayoutAuthenticatedDashboardWorkspaceWorkspaceIdRouteChildren {
+  LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsRouteRoute: typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsRouteRoute
   LayoutAuthenticatedDashboardWorkspaceWorkspaceIdInboxRoute: typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdInboxRoute
   LayoutAuthenticatedDashboardWorkspaceWorkspaceIdMembersRoute: typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdMembersRoute
   LayoutAuthenticatedDashboardWorkspaceWorkspaceIdMyTasksRoute: typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdMyTasksRoute
@@ -2061,6 +2085,8 @@ interface LayoutAuthenticatedDashboardWorkspaceWorkspaceIdRouteChildren {
 
 const LayoutAuthenticatedDashboardWorkspaceWorkspaceIdRouteChildren: LayoutAuthenticatedDashboardWorkspaceWorkspaceIdRouteChildren =
   {
+    LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsRouteRoute:
+      LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsRouteRoute,
     LayoutAuthenticatedDashboardWorkspaceWorkspaceIdInboxRoute:
       LayoutAuthenticatedDashboardWorkspaceWorkspaceIdInboxRoute,
     LayoutAuthenticatedDashboardWorkspaceWorkspaceIdMembersRoute:

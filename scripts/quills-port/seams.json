@@ -5,6 +5,7 @@
 		"apps/web/src/quills",
 		"apps/web/src/routes/portal",
 		"apps/web/src/routes/quills",
+		"apps/web/src/routes/_layout/_authenticated/dashboard/workspace/$workspaceId/quills",
 		"scripts/quills-web",
 		".github/workflows/quills-web.yml",
 		"apps/docs/quills",
@@ -36,6 +37,18 @@
 			"state": "planned",
 			"lines": "portal redirect propagation across sign-in, sign-up, check-email and verification callback",
 			"plannedChange": "S2: retain the safe path-only redirect through both OTP and password verification flows; reject browser cross-origin and encoded-separator redirects at the shared auth boundary"
+		},
+		{
+			"file": "apps/web/src/components/app-sidebar.tsx",
+			"state": "existing",
+			"lines": "1 import + 1 <QuillsSidebarEntry /> element after <NavMain />",
+			"plannedChange": "none. RFC 0003 navigation seam: the entry links to /dashboard/workspace/{id}/quills and lives in apps/web/src/quills/team/sidebar-entry.tsx. Team pages add their links to apps/web/src/quills/team/nav.ts, not to the sidebar"
+		},
+		{
+			"file": "apps/web/src/hooks/use-user-websocket.ts",
+			"state": "existing",
+			"lines": "the QUILLS_CHANGED block: invalidate the legacy quills-* keys and the quills-web keys [\"quills\", workspaceId, userId] of the current user",
+			"plannedChange": "none"
 		},
 		{
 			"file": "apps/docs/docs.json",
