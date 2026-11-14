@@ -1,17 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { z } from "zod";
-import { TeamTicketPage } from "@/quills/pages/team-ticket/team-ticket-page";
-const searchSchema = z.object({
-  view: z.string().optional(),
-  status: z.string().optional(),
-});
+import { TeamTicketsPage } from "@/quills/pages/team-tickets/team-tickets-page";
+import { ticketSearch } from "@/quills/pages/team-tickets/ticket-scope";
+// An open ticket: the same two-pane page as the list, with the ticket in the main pane.
 export const Route = createFileRoute(
   "/_layout/_authenticated/feedback/$workspaceId/tickets/$ticketId/",
-)({ validateSearch: searchSchema, component: RouteComponent });
+)({ validateSearch: ticketSearch, component: RouteComponent });
 function RouteComponent() {
   const params = Route.useParams();
   return (
-    <TeamTicketPage
+    <TeamTicketsPage
       workspaceId={"workspaceId" in params ? String(params.workspaceId) : ""}
       params={params}
       search={Route.useSearch()}

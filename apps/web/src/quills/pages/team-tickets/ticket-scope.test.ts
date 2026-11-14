@@ -3,11 +3,13 @@ import { listTicketsFixture } from "../../api/team/list-tickets.fixture";
 import { getTicketFixture } from "../../api/team/get-ticket.fixture";
 import {
   priorityGroups,
+  statusFill,
   ticketHref,
   ticketListHref,
   ticketQuery,
   ticketRow,
   ticketScope,
+  ticketSearch,
 } from "./ticket-scope";
 
 const ticket = (id: string, priority: "urgent" | "low") =>
@@ -16,7 +18,7 @@ const ticket = (id: string, priority: "urgent" | "low") =>
 describe("ticket scope", () => {
   it("opens the open tab of all tickets by default", () => {
     const scope = ticketScope({});
-    expect(scope).toEqual({ mine: false, status: "open" });
+    expect(scope).toEqual({ mine: false, status: "open", q: "" });
     expect(ticketQuery(scope)).toEqual({
       sort: "priority",
       limit: "50",
@@ -25,33 +27,47 @@ describe("ticket scope", () => {
   });
 
   it("asks for the caller's tickets in one status", () => {
-    const scope = ticketScope({ view: "mine", status: "ticket_status_1" });
+    const scope = ticketScope({
+      view: "mine",
+      status: "ticket_status_1",
+      q: " login ",
+    });
     expect(ticketQuery(scope)).toEqual({
       sort: "priority",
       limit: "50",
       assignee: "me",
       statusId: "ticket_status_1",
+      search: "login",
     });
-    expect(ticketQuery({ mine: false, status: "all" })).toEqual({
+    expect(ticketQuery({ mine: false, status: "all", q: " " })).toEqual({
       sort: "priority",
       limit: "50",
     });
   });
 
   it("keeps the list of a ticket in its address", () => {
-    expect(ticketHref("w 1", "t/1", { mine: false, status: "open" })).toBe(
+    const open = { mine: false, status: "open", q: "" };
+    expect(ticketHref("w 1", "t/1", open)).toBe(
       "/feedback/w%201/tickets/t%2F1",
     );
-    const mine = { mine: true, status: "all" };
+    const mine = { mine: true, status: "all", q: "login" };
     expect(ticketHref("w1", "t1", mine)).toBe(
-      "/feedback/w1/tickets/t1?view=mine&status=all",
+      "/feedback/w1/tickets/t1?view=mine&status=all&q=login",
     );
     expect(ticketListHref("w1", mine)).toBe(
-      "/feedback/w1/my-tickets?status=all",
+      "/feedback/w1/my-tickets?status=all&q=login",
     );
-    expect(ticketListHref("w1", { mine: false, status: "open" })).toBe(
-      "/feedback/w1/tickets",
+    expect(ticketListHref("w1", open)).toBe("/feedback/w1/tickets");
+    expect(ticketListHref("w1", open, true)).toBe(
+      "/feedback/w1/tickets?new=true",
     );
+  });
+
+  it("reads the address and drops values that do not fit", () => {
+    expect(
+      ticketSearch.parse({ view: "all", status: "s1", q: 123, new: true }),
+    ).toEqual({ status: "s1", q: "123", new: true });
+    expect(ticketSearch.parse({ new: "yes", q: "x".repeat(201) })).toEqual({});
   });
 
   it("groups tickets by priority, the most urgent first", () => {
@@ -102,5 +118,11 @@ describe("ticket scope", () => {
     });
     expect(row.assignee).toEqual({ name: "Billing" });
     expect(ticketRow(getTicketFixture.ok(), "Nobody").assignee).toBeNull();
+  });
+
+  it("fills the status icon by the status category", () => {
+    expect(
+      ["open", "pending", "closed"].map((c) => statusFill(c as "open")),
+    ).toEqual([0, 0.5, 1]);
   });
 });

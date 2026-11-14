@@ -1,22 +1,29 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { Ticket } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useGetTicket } from "../../hooks/team/use-get-ticket";
+import { useListPrincipals } from "../../hooks/team/use-list-principals";
 import { useListTicketStatuses } from "../../hooks/team/use-list-ticket-statuses";
 import { useListTickets } from "../../hooks/team/use-list-tickets";
+import { useMarkTicketRead } from "../../hooks/team/use-mark-ticket-read";
 import { useTeamRuntime } from "../../team/runtime";
 import { TeamStateView } from "../../team/team-state-view";
-import { GroupedList } from "../../ui/inbox/grouped-list";
-import { ListHeader } from "../../ui/inbox/list-header";
-import { ConversationRow } from "../../ui/inbox/conversation-row";
-import { StatusTabs } from "../../ui/inbox/status-tabs";
+import { DetailLayout } from "../../ui/inbox/detail-layout";
+import { EmptySelection } from "../../ui/inbox/empty-selection";
 import { useListNavigation } from "../../ui/inbox/use-list-navigation";
 import { PageFrame } from "../../ui/page-frame";
-import { Button } from "../../ui/upstream";
+import { useDebouncedValue } from "../../ui/upstream";
+import { NewTicketPane } from "./parts/new-ticket-pane";
+import { TicketHeader } from "./parts/ticket-header";
+import { TicketListPane } from "./parts/ticket-list-pane";
+import { TicketProperties } from "./parts/ticket-properties";
+import { TicketThread } from "./parts/ticket-thread";
 import {
   priorityGroups,
   ticketHref,
+  ticketListHref,
   ticketQuery,
-  ticketRow,
   ticketScope,
 } from "./ticket-scope";
 
@@ -26,95 +33,135 @@ export interface TeamTicketsPageProps {
   search: Record<string, unknown>;
 }
 
-/** The ticket inbox: status tabs from the workspace ticket statuses, rows in priority groups. */
-export function TeamTicketsPage({ workspaceId, search }: TeamTicketsPageProps) {
+/**
+ * The tickets in two panes (design section 4): the list pane and the open ticket, the new
+ * ticket form, or an empty main pane. The open ticket also has its properties panel.
+ */
+export function TeamTicketsPage({
+  workspaceId,
+  params,
+  search,
+}: TeamTicketsPageProps) {
   const { t } = useTranslation("quills");
   const team = useTeamRuntime();
   const navigate = useNavigate();
+  const ticketId = params.ticketId ?? "";
+  const creating = search.new === true && !ticketId && team.permissions.create;
   const scope = ticketScope(search);
+  const q = useDebouncedValue(scope.q, 300);
   const list = useListTickets(
-    { param: { workspaceId }, query: ticketQuery(scope) },
+    { param: { workspaceId }, query: ticketQuery({ ...scope, q }) },
     team.viewer,
   );
   const statuses = useListTicketStatuses(
     { param: { workspaceId } },
     team.viewer,
   );
-  const [active, setActive] = useState<string | null>(null);
+  const ticket = useGetTicket(
+    { param: { workspaceId, ticketId } },
+    team.viewer,
+  );
+  // ponytail: the first 100 teammates (the API page size); add search when a workspace has more.
+  const people = useListPrincipals(
+    { param: { workspaceId: ticketId ? workspaceId : "" }, query: {} },
+    team.viewer,
+  );
+  const { mutate: markRead } = useMarkTicketRead(team.viewer);
+  useEffect(() => {
+    if (workspaceId && ticketId) markRead({ param: { workspaceId, ticketId } });
+  }, [markRead, workspaceId, ticketId]);
+
   const groups = priorityGroups(
     list.data?.pages.flatMap((page) => page.items) ?? [],
     (key) => t(key),
   );
-  const ids = groups.flatMap((group) => group.items.map((item) => item.id));
-  const open = (id: string) =>
-    void navigate({ href: ticketHref(workspaceId, id, scope) });
-  useListNavigation({ ids, activeId: active, onMove: setActive, onOpen: open });
+  const [highlight, setHighlight] = useState<string | null>(null);
+  const go = (href: string) => void navigate({ href });
+  const open = (id: string) => go(ticketHref(workspaceId, id, scope));
+  const back = () => go(ticketListHref(workspaceId, scope));
+  const nav = useListNavigation({
+    ids: groups.flatMap((group) => group.items.map((item) => item.id)),
+    activeId: ticketId || highlight,
+    onMove: ticketId ? open : setHighlight,
+    onOpen: ticketId ? undefined : open,
+    onBack: ticketId || creating ? back : undefined,
+  });
   const title = t(scope.mine ? "team-tickets.mine" : "team-tickets.title");
-  const tabs = [
-    { value: "open", label: t("team-tickets.open") },
-    ...(statuses.data?.items ?? []).map((status) => ({
-      value: status.id,
-      label: status.name,
-    })),
-    { value: "all", label: t("team-tickets.all") },
-  ];
+  const statusItems = statuses.data?.items ?? [];
 
   return (
     <PageFrame
-      titleKey="team-tickets.title"
-      displayTitle={title}
+      titleKey={
+        ticketId
+          ? "team-tickets.ticket"
+          : creating
+            ? "team-tickets.new.title"
+            : "team-tickets.title"
+      }
+      displayTitle={
+        ticketId ? ticket.data?.title : creating ? undefined : title
+      }
       landmark={false}
       variant="app"
     >
-      <ListHeader title={title} />
-      <StatusTabs
-        label={t("team-tickets.statusTabs")}
-        tabs={tabs}
-        value={scope.status}
-        onChange={(status) =>
-          void navigate({
-            to: ".",
-            search: (previous: Record<string, unknown>) => ({
-              ...previous,
-              status,
-            }),
-            replace: true,
-          })
-        }
-      />
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 [&>[role=alert]]:m-4 [&>[role=status]]:px-4">
-        <TeamStateView
-          loading={list.isLoading}
-          problem={list.error ?? null}
-          empty={!ids.length}
-          onRetry={() => void list.refetch()}
-        >
-          <GroupedList
-            label={title}
+      <DetailLayout
+        list={
+          <TicketListPane
+            scope={scope}
+            headingLevel={ticketId || creating ? 2 : 1}
+            statuses={statusItems}
             groups={groups}
-            getKey={(ticket) => ticket.id}
-            renderItem={(ticket) => (
-              <ConversationRow
-                {...ticketRow(ticket, t("team-tickets.noRequester"))}
-                href={ticketHref(workspaceId, ticket.id, scope)}
-                onOpen={() => open(ticket.id)}
-                selected={ticket.id === active}
-              />
-            )}
+            list={list}
+            activeId={ticketId || highlight}
+            onOpen={open}
+            onNew={
+              team.permissions.create
+                ? () => go(ticketListHref(workspaceId, scope, true))
+                : undefined
+            }
           />
-          {list.hasNextPage ? (
-            <div className="p-4">
-              <Button
-                variant="outline"
-                loading={list.isFetchingNextPage}
-                onClick={() => void list.fetchNextPage()}
+        }
+        listLabel={title}
+        itemOpen={Boolean(ticketId) || creating}
+        properties={
+          ticket.data ? (
+            <TicketProperties ticket={ticket.data} statuses={statusItems} />
+          ) : null
+        }
+        propertiesLabel={t("team-tickets.properties")}
+      >
+        {creating ? (
+          <NewTicketPane onBack={back} onCreated={open} />
+        ) : ticketId ? (
+          <>
+            <TicketHeader
+              ticket={ticket.data}
+              statuses={statusItems}
+              people={people.data?.items ?? []}
+              onBack={back}
+              onPrevious={nav.previous}
+              onNext={nav.next}
+            />
+            <div className="flex min-h-0 flex-1 flex-col [&>[role=alert]]:m-4 [&>[role=status]]:px-4">
+              <TeamStateView
+                loading={ticket.isLoading}
+                problem={ticket.error ?? null}
+                onRetry={() => void ticket.refetch()}
               >
-                {t("team-tickets.loadMore")}
-              </Button>
+                {ticket.data ? (
+                  <TicketThread key={ticketId} ticket={ticket.data} />
+                ) : null}
+              </TeamStateView>
             </div>
-          ) : null}
-        </TeamStateView>
-      </div>
+          </>
+        ) : (
+          <EmptySelection
+            icon={Ticket}
+            title={t("team-tickets.noSelection.title")}
+            text={t("team-tickets.noSelection.text")}
+          />
+        )}
+      </DetailLayout>
     </PageFrame>
   );
 }
