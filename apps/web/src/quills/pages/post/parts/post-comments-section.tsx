@@ -6,13 +6,14 @@ import { portalHref } from "../../../core/portal-href";
 import type { Viewer } from "../../../core/types";
 import { useCreatePortalComment } from "../../../hooks/feedback/use-create-portal-comment";
 import { useSetPortalCommentReaction } from "../../../hooks/feedback/use-set-portal-comment-reaction";
-import { PostComment } from "../../../ui/post/post-comment";
+import { commentText, PostComment } from "../../../ui/post/post-comment";
 import { Button } from "../../../ui/upstream";
 import { visibleComments } from "../../../core/visible-comments";
 import { runMutation } from "../run-mutation";
 import { CommentSheets } from "./comment-sheets";
 import { CreateCommentForm } from "./create-comment-form";
 import { PostAttachments } from "./post-attachments";
+import { TranslatedText } from "./translated-text";
 
 type Comment = ListPortalPostCommentsResponse["items"][number];
 type Emoji = SetPortalCommentReactionRequest["json"]["emoji"];
@@ -81,6 +82,15 @@ export function PostCommentsSection(props: PostCommentsSectionProps) {
         ...comment,
         reactions: reacted[comment.id] ?? comment.reactions,
       }}
+      body={
+        <TranslatedText
+          workspaceId={props.workspaceId}
+          viewer={props.viewer}
+          target={{ commentId: comment.id }}
+          content={comment.content}
+          className={commentText}
+        />
+      }
       attachments={
         <PostAttachments
           workspaceId={props.workspaceId}

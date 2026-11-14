@@ -25,6 +25,7 @@ export const meta = {
     "deleteQuillsPortalOwnComment",
     "setQuillsPortalFollow",
     "setQuillsPortalCommentReaction",
+    "translateQuillsPortalContent",
   ],
   states: ["loading", "failed", "ready", "done"],
 } satisfies PageMeta;

@@ -6,7 +6,6 @@ import { useListPortalPostComments } from "../../hooks/feedback/use-list-portal-
 import { useSetPortalFollow } from "../../hooks/feedback/use-set-portal-follow";
 import { useSetPortalVote } from "../../hooks/feedback/use-set-portal-vote";
 import { usePortalRuntime } from "../../portal/runtime";
-import { MarkdownContent } from "../../ui/markdown-content";
 import { PageFrame } from "../../ui/page-frame";
 import { PortalGate } from "../../ui/portal-gate";
 import { PostSidebar } from "../../ui/post/post-sidebar";
@@ -17,6 +16,7 @@ import { PostActions } from "./parts/post-actions";
 import { PostAttachments } from "./parts/post-attachments";
 import { PostCommentsSection } from "./parts/post-comments-section";
 import { RelatedRequests } from "./parts/related-requests";
+import { TranslatedText } from "./parts/translated-text";
 
 export interface PostPageProps {
   workspaceId: string;
@@ -122,7 +122,13 @@ export function PostPage(props: PostPageProps) {
                     {t("post.mergedInto", { title: data.mergedInto.title })}
                   </a>
                 ) : null}
-                <MarkdownContent customer content={data.content} />
+                <TranslatedText
+                  workspaceId={props.workspaceId}
+                  viewer={viewer}
+                  target={{ postId }}
+                  title={data.title}
+                  content={data.content}
+                />
                 <PostAttachments
                   workspaceId={props.workspaceId}
                   viewer={viewer}
