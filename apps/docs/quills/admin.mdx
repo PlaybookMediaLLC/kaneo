@@ -62,3 +62,28 @@ render in the browser; search engines that do not run JavaScript may not index t
 
 Before sharing the portal, follow [deployment checks](/quills/deployment) and test a customer account
 that is not a workspace member.
+
+## Review duplicate posts
+
+Open **Feedback > Duplicates** in the workspace (`/dashboard/workspace/{workspaceId}/quills/duplicates`).
+The queue shows pairs of posts that the assistant found similar, strongest match first.
+You need `quills:read` to see the queue and `quills:update` to decide.
+
+- **Merge** merges the duplicate into the post to keep. Votes on the duplicate then count on the kept post.
+- **Dismiss** removes the pair from the pending queue. **Restore** puts a dismissed pair back.
+
+The queue shows only pairs whose two posts are on boards that you can see.
+The API is `GET /quills/{workspaceId}/merge-suggestions?status=pending` (or `dismissed`).
+
+In the portal, a signed-in customer who types a title that strongly matches a post sees
+**Vote for this instead** next to that post, if the customer can vote on its board.
+
+## Read feedback insights
+
+Open **Feedback > Insights** (`/dashboard/workspace/{workspaceId}/quills/insights`) and select a range
+of 7, 30, 90 or 180 days. The page shows the most used tags on new posts, the sentiment of new posts,
+new posts and votes for each week, and the posts with the most new votes.
+It counts only the boards that you can see. Sentiment counts only the posts that the assistant analyzed.
+
+The API is `GET /quills/{workspaceId}/feedback/insights`. `from` and `to` are UTC days, at most
+180 days apart. The default is the last 30 days.
