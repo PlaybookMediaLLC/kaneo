@@ -27,9 +27,9 @@ export function TaskSyncForm({
       aria-labelledby="team-triage-task-sync-title"
       className="grid gap-2"
     >
-      <h3 id="team-triage-task-sync-title" className="text-sm font-medium">
+      <h2 id="team-triage-task-sync-title" className="text-sm font-semibold">
         {t("task-sync.title")}
-      </h3>
+      </h2>
       <PortalForm<TaskSyncValues>
         schema={schema}
         defaultValues={{ statusOnTaskDone }}

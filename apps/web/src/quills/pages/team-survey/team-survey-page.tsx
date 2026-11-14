@@ -1,16 +1,21 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { PortalProblem } from "../../core/types";
 import { useDeleteSurvey } from "../../hooks/team/use-delete-survey";
 import { useGetSurveyResults } from "../../hooks/team/use-get-survey-results";
+import { useListSurveys } from "../../hooks/team/use-list-surveys";
 import { useSetSurveyStatus } from "../../hooks/team/use-set-survey-status";
 import { useTeamRuntime } from "../../team/runtime";
 import { teamHref } from "../../team/team-href";
 import { TeamStateView } from "../../team/team-state-view";
-import { ConfirmAction } from "../../ui/confirm-action";
+import { DetailLayout } from "../../ui/inbox/detail-layout";
+import { ListRow } from "../../ui/inbox/list-row";
 import { PageFrame } from "../../ui/page-frame";
 import { ResultCard } from "../../ui/result-card";
-import { SURVEY_STATUS_KEYS, SURVEY_TYPE_KEYS } from "../../ui/survey-labels";
-import { SurveyBars } from "./parts/survey-bars";
+import { SurveyActions } from "./parts/survey-actions";
+import { SurveyProperties } from "./parts/survey-properties";
+import { SurveyResults } from "./parts/survey-results";
 
 export interface TeamSurveyPageProps {
   workspaceId: string;
@@ -18,137 +23,109 @@ export interface TeamSurveyPageProps {
   search: Record<string, unknown>;
 }
 
-const SCORE_KEYS = {
-  nps: "surveys.results.score.nps",
-  csat: "surveys.results.score.csat",
-  ces: "surveys.results.score.ces",
-  pmf: "surveys.results.score.pmf",
-} as const;
-const heading = "text-base font-semibold";
-const muted = "text-sm text-muted-foreground";
-
-// One survey: its results with simple bars, the latest comments, and the next status action.
+// One survey in three panes: the other surveys, its results with the status actions, and its properties.
 export function TeamSurveyPage({ workspaceId, params }: TeamSurveyPageProps) {
   const { t } = useTranslation("quills");
   const team = useTeamRuntime();
-  const param = { workspaceId, surveyId: params.surveyId ?? "" };
+  const navigate = useNavigate();
+  const [problem, setProblem] = useState<PortalProblem | null>(null);
+  const surveyId = params.surveyId ?? "";
+  const param = { workspaceId, surveyId };
   const results = useGetSurveyResults({ param }, team.viewer);
+  // ponytail: the newest 100 surveys (the API maximum), as on the list page.
+  const surveys = useListSurveys(
+    { param: { workspaceId }, query: { offset: "0", limit: "100" } },
+    team.viewer,
+  );
   const status = useSetSurveyStatus(team.viewer);
   const remove = useDeleteSurvey(team.viewer);
   const list = teamHref(workspaceId, "/surveys");
-  const back = (
-    <Link to={list} className={`${muted} underline-offset-4 hover:underline`}>
-      {t("surveys.actions.list")}
-    </Link>
-  );
-  const data = results.data;
-  const survey = data?.survey;
-  const scoreKey =
-    survey && survey.type in SCORE_KEYS
-      ? SCORE_KEYS[survey.type as keyof typeof SCORE_KEYS]
-      : null;
-  const rows = data
-    ? [
-        ...data.scores.map((s) => ({ label: String(s.value), count: s.count })),
-        ...data.choices,
-      ]
-    : [];
+  const href = (id: string) => `${list}/${encodeURIComponent(id)}`;
+  const items = surveys.data?.surveys ?? [];
+  const survey = remove.isSuccess ? undefined : results.data?.survey;
+  const run = (action: () => Promise<unknown>) => {
+    setProblem(null);
+    action().catch((error: PortalProblem) => setProblem(error));
+  };
   const move = (next: "active" | "closed") => () =>
-    status.mutateAsync({ param, json: { status: next } }).then(() => undefined);
+    run(() => status.mutateAsync({ param, json: { status: next } }));
 
   return (
     <PageFrame
       titleKey="surveys.title"
-      displayTitle={remove.isSuccess ? undefined : survey?.question}
-      eyebrow={back}
+      displayTitle={survey?.question}
+      variant="app"
       landmark={false}
-      wide
-      description={
-        survey && !remove.isSuccess
-          ? t("surveys.summary", {
-              type: t(SURVEY_TYPE_KEYS[survey.type]),
-              status: t(SURVEY_STATUS_KEYS[survey.status]),
-              responses: t("surveys.responses", { count: data.total }),
-            })
-          : undefined
-      }
-      actions={
-        survey && !remove.isSuccess ? (
-          <>
-            {survey.status === "draft" && team.permissions.update ? (
-              <ConfirmAction
-                labelKey="surveys.actions.activate"
-                onConfirm={move("active")}
-              />
-            ) : null}
-            {survey.status === "active" && team.permissions.update ? (
-              <ConfirmAction
-                labelKey="surveys.actions.close"
-                onConfirm={move("closed")}
-              />
-            ) : null}
-            {survey.status === "draft" && team.permissions.delete ? (
-              <ConfirmAction
-                labelKey="surveys.actions.delete"
-                onConfirm={() =>
-                  remove.mutateAsync({ param }).then(() => undefined)
-                }
-              />
-            ) : null}
-          </>
-        ) : null
-      }
     >
-      {remove.isSuccess ? (
-        <ResultCard titleKey="surveys.actions.deleted">{back}</ResultCard>
-      ) : (
-        <TeamStateView
-          loading={results.isLoading}
-          problem={results.error ?? null}
-          onRetry={() => void results.refetch()}
-        >
-          {data && survey ? (
-            <>
-              {scoreKey ? (
-                <p className="text-2xl font-semibold">
-                  {data.score === null
-                    ? t("surveys.results.noScore")
-                    : t(scoreKey, { score: data.score })}
-                </p>
-              ) : null}
-              {rows.length ? (
-                <section aria-labelledby="team-survey-answers">
-                  <h2 id="team-survey-answers" className={heading}>
-                    {t("surveys.results.answers")}
-                  </h2>
-                  <SurveyBars rows={rows} total={data.total} />
-                </section>
-              ) : null}
-              <section aria-labelledby="team-survey-comments">
-                <h2 id="team-survey-comments" className={heading}>
-                  {t("surveys.results.comments")}
-                </h2>
-                {data.comments.length ? (
-                  <ul className="mt-3 divide-y divide-border rounded-lg border border-border">
-                    {data.comments.map((comment) => (
-                      <li key={comment.id} className="px-4 py-3">
-                        <p>{comment.comment}</p>
-                        <p className={muted}>
-                          {comment.respondent ?? t("surveys.results.person")}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className={`mt-2 ${muted}`}>
-                    {t("surveys.results.noComments")}
-                  </p>
-                )}
-              </section>
-            </>
-          ) : null}
-        </TeamStateView>
-      )}
+      <DetailLayout
+        list={
+          <ul className="divide-y divide-border">
+            {items.map((item) => (
+              <li key={item.id}>
+                <ListRow
+                  href={href(item.id)}
+                  onOpen={() => void navigate({ to: href(item.id) })}
+                  selected={item.id === surveyId}
+                  title={item.question}
+                  preview={t("surveys.responses", {
+                    count: item.responseCount,
+                  })}
+                  time={item.updatedAt}
+                  compact
+                />
+              </li>
+            ))}
+          </ul>
+        }
+        listLabel={t("surveys.title")}
+        ids={items.map((item) => item.id)}
+        activeId={surveyId}
+        onMove={(id) => void navigate({ to: href(id) })}
+        onBack={() => void navigate({ to: list })}
+        properties={
+          survey && results.data ? (
+            <SurveyProperties survey={survey} total={results.data.total} />
+          ) : null
+        }
+        propertiesLabel={t("surveys.properties.title")}
+      >
+        <div className="grid gap-6 px-6 py-5">
+          <h1 tabIndex={-1} className="text-lg font-semibold outline-none">
+            {survey?.question ?? t("surveys.properties.survey")}
+          </h1>
+          {remove.isSuccess ? (
+            <ResultCard titleKey="surveys.actions.deleted">
+              <Link
+                to={list}
+                className="text-sm underline-offset-4 hover:underline"
+              >
+                {t("surveys.actions.list")}
+              </Link>
+            </ResultCard>
+          ) : (
+            <TeamStateView
+              loading={results.isLoading}
+              problem={results.error ?? null}
+              onRetry={() => void results.refetch()}
+            >
+              {results.data ? <SurveyResults results={results.data} /> : null}
+            </TeamStateView>
+          )}
+          <TeamStateView problem={problem}>{null}</TeamStateView>
+        </div>
+        <div className="grow" />
+        {survey ? (
+          <SurveyActions
+            status={survey.status}
+            canUpdate={team.permissions.update}
+            canDelete={team.permissions.delete}
+            busy={status.isPending || remove.isPending}
+            onActivate={move("active")}
+            onClose={move("closed")}
+            onDelete={() => run(() => remove.mutateAsync({ param }))}
+          />
+        ) : null}
+      </DetailLayout>
     </PageFrame>
   );
 }

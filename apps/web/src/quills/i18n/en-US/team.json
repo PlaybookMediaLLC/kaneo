@@ -6,7 +6,6 @@
 		"announce_one": "{{count}} shipped idea is not in the changelog",
 		"announce_other": "{{count}} shipped ideas are not in the changelog",
 		"boards": "Boards",
-		"description": "What waits for your team on the feedback boards.",
 		"momentum": "Most votes in the last 7 days",
 		"none": "Nothing waits here.",
 		"place": "{{board}} · {{status}}",
@@ -14,6 +13,7 @@
 		"posts_other": "{{count}} posts",
 		"review_one": "{{count}} new idea to review",
 		"review_other": "{{count}} new ideas to review",
+		"views": "Views",
 		"votes_one": "{{count}} vote",
 		"votes_other": "{{count}} votes"
 	},

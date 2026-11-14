@@ -4,6 +4,7 @@
 		"close": "Close survey",
 		"delete": "Delete draft",
 		"deleted": "The draft is deleted",
+		"label": "Survey actions",
 		"list": "All surveys"
 	},
 	"card": {
@@ -24,8 +25,14 @@
 		"title": "New survey",
 		"type": "Type"
 	},
-	"description": "Ask customers one short question in the portal and the widget.",
 	"none": "No surveys yet.",
+	"properties": {
+		"responses": "Responses",
+		"status": "Status",
+		"survey": "Survey",
+		"title": "Details",
+		"updated": "Updated"
+	},
 	"responses_one": "{{count}} response",
 	"responses_other": "{{count}} responses",
 	"results": {
@@ -47,7 +54,6 @@
 		"closed": "Closed",
 		"draft": "Draft"
 	},
-	"summary": "{{type}} · {{status}} · {{responses}}",
 	"title": "Surveys",
 	"types": {
 		"ces": "Customer effort (1 to 7)",

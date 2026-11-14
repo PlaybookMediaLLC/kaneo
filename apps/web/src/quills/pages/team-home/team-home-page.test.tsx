@@ -1,5 +1,7 @@
+import { within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { fetchAdminOverviewFixture } from "../../api/team/fetch-admin-overview.fixture";
+import { getTeamCountsFixture } from "../../api/team/get-team-counts.fixture";
 import { listBoardsFixture } from "../../api/team/list-boards.fixture";
 import { describePageContract } from "../../test/contracts";
 import { mockApi } from "../../test/mock-api";
@@ -48,15 +50,13 @@ describe("TeamHomePage", () => {
     loading: {
       prepare: () => {
         const api = mockApi();
-        api.defer(() => undefined);
-        api.defer(() => undefined);
+        for (let i = 0; i < 3; i++) api.defer(() => undefined);
       },
     },
     failed: {
       prepare: () => {
         const api = mockApi();
-        api.fail();
-        api.fail();
+        for (let i = 0; i < 3; i++) api.fail();
       },
     },
     ready: {
@@ -64,6 +64,7 @@ describe("TeamHomePage", () => {
         const api = mockApi();
         api.reply(fetchAdminOverviewFixture.ok());
         api.reply(listBoardsFixture.ok());
+        api.reply(getTeamCountsFixture.ok());
       },
     },
   });
@@ -85,6 +86,7 @@ describe("TeamHomePage", () => {
         }),
       );
       api.reply(listBoardsFixture.ok({ items: [board] }));
+      api.reply(getTeamCountsFixture.ok({ pendingSignals: 4 }));
       const view = renderPage(TeamHomePage, meta);
       expect(
         await view.findByRole("heading", { name: "12 new ideas to review" }),
@@ -102,28 +104,41 @@ describe("TeamHomePage", () => {
         "/portal/workspace_test_1/boards/board_test_1",
       );
       expect(view.getByText("3 posts")).toBeInTheDocument();
+      const views = view.getByRole("navigation", { name: "Views" });
+      expect(
+        await within(views).findByRole("link", { name: "Autopilot 4" }),
+      ).toHaveAttribute("href", "/feedback/workspace_test_1/autopilot");
+      expect(
+        within(views).getByRole("link", { name: "Triage" }),
+      ).toHaveAttribute("href", "/feedback/workspace_test_1/triage");
+      expect(
+        within(views).queryByRole("link", { name: "Overview" }),
+      ).toBeNull();
       const boards = new URL(api.calls("listQuillsBoards")[0].url);
       expect(boards.searchParams.get("counts")).toBe("true");
     });
 
     it("starts the sign-in redirect when the session ends", async () => {
       const api = mockApi();
-      api.reply({ message: "Unauthorized" }, 401);
-      api.reply({ message: "Unauthorized" }, 401);
+      for (let i = 0; i < 3; i++) api.reply({ message: "Unauthorized" }, 401);
       const view = renderPage(TeamHomePage, meta);
       await vi.waitFor(() => expect(handleUnauthorized).toHaveBeenCalled());
-      expect(view.queryByRole("link")).not.toBeInTheDocument();
+      expect(view.queryByRole("heading", { name: /to review/ })).toBeNull();
     });
 
     it("says when nothing waits", async () => {
       const api = mockApi();
       api.reply(fetchAdminOverviewFixture.ok());
       api.reply(listBoardsFixture.ok());
+      api.reply(getTeamCountsFixture.problem(403).body, 403);
       const view = renderPage(TeamHomePage, meta);
       expect(
         await view.findByRole("heading", { name: "0 new ideas to review" }),
       ).toBeInTheDocument();
       expect(view.getAllByText("Nothing waits here.")).toHaveLength(4);
+      // A refused count request leaves the counts out, not the page.
+      expect(view.getByRole("link", { name: "Autopilot" })).toBeVisible();
+      expect(view.queryByRole("alert")).toBeNull();
     });
   });
 });

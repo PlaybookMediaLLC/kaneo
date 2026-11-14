@@ -97,6 +97,25 @@ describe("TeamChangelogPage", () => {
   });
 
   describe("behavior", () => {
+    it("opens an update on the portal", async () => {
+      const api = mockApi();
+      api.reply(engagement);
+      api.reply(shipped);
+      const view = renderPage(TeamChangelogPage, meta);
+      const link = await view.findByRole("link", { name: /November release/ });
+      expect(link).toHaveAttribute(
+        "href",
+        "/portal/workspace_test_1/changelog/changelog_test_1",
+      );
+      expect(link).toHaveTextContent("🎉 2");
+      link.click();
+      await vi.waitFor(() =>
+        expect(view.router.state.location.pathname).toBe(
+          "/portal/workspace_test_1/changelog/changelog_test_1",
+        ),
+      );
+    });
+
     it("sends the chosen post IDs and nothing else", async () => {
       const api = mockApi();
       api.reply(engagement);

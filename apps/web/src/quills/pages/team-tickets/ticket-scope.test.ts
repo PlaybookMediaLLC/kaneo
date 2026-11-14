@@ -92,7 +92,7 @@ describe("ticket scope", () => {
       }),
       "Nobody",
     );
-    expect(row.person.name).toBe("Nobody");
+    expect(row.person?.name).toBe("Nobody");
     expect(row.shortId).toBe("T-7");
     expect(row.chips?.map((chip) => chip.label)).toEqual(["value", "Bug"]);
     expect(row.assignee).toEqual({ name: "Billing" });
