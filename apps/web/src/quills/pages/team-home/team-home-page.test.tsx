@@ -70,7 +70,7 @@ describe("TeamHomePage", () => {
   });
 
   describe("behavior", () => {
-    it("shows what waits for the team and links each board to its portal page", async () => {
+    it("shows what waits for the team, links each post to its page and each board to its portal page", async () => {
       const api = mockApi();
       api.reply(
         fetchAdminOverviewFixture.ok({
@@ -91,15 +91,22 @@ describe("TeamHomePage", () => {
       expect(
         await view.findByRole("heading", { name: "12 new ideas to review" }),
       ).toBeInTheDocument();
-      expect(view.getByText("Dark mode")).toBeInTheDocument();
+      expect(view.getByRole("link", { name: /^Dark mode/ })).toHaveAttribute(
+        "href",
+        "/feedback/workspace_test_1/posts/post_test_1",
+      );
       expect(
         view.getByRole("heading", {
           name: "1 shipped idea is not in the changelog",
         }),
       ).toBeInTheDocument();
       expect(view.getByText("CSV export")).toBeInTheDocument();
+      expect(view.getByRole("link", { name: /^Slack alerts/ })).toHaveAttribute(
+        "href",
+        "/feedback/workspace_test_1/posts/post_test_3",
+      );
       expect(view.getByText("5 votes")).toBeInTheDocument();
-      expect(view.getByRole("link", { name: "Ideas" })).toHaveAttribute(
+      expect(view.getByRole("link", { name: /^Ideas/ })).toHaveAttribute(
         "href",
         "/portal/workspace_test_1/boards/board_test_1",
       );

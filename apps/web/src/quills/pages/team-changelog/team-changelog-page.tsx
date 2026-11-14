@@ -59,7 +59,7 @@ export function TeamChangelogPage({ workspaceId }: TeamChangelogPageProps) {
         }
       />
       {/* The loading, empty and error states get a margin. */}
-      <div className="min-h-0 flex-1 overflow-y-auto [&>[role=alert]]:m-4 [&>[role=status]]:px-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 [&>[role=alert]]:m-4 [&>[role=status]]:px-4">
         <TeamStateView
           loading={list.isLoading || shipped.isLoading}
           problem={list.error ?? shipped.error ?? null}
@@ -69,10 +69,7 @@ export function TeamChangelogPage({ workspaceId }: TeamChangelogPageProps) {
             void shipped.refetch();
           }}
         >
-          <ul
-            aria-label={t("team-changelog.title")}
-            className="divide-y divide-border"
-          >
+          <ul aria-label={t("team-changelog.title")} className="grid gap-0.5">
             {items.map((item) => (
               <li key={item.id}>
                 <EngagementRow
