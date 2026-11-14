@@ -18,6 +18,7 @@ import { PostSort } from "../../ui/post/post-sort";
 import { SimilarPosts } from "../../ui/post/similar-posts";
 import { StateView } from "../../ui/state-view";
 import { meta } from "./meta";
+import { SurveyPrompt } from "./parts/survey-prompt";
 
 export interface FeedbackHomePageProps {
   workspaceId: string;
@@ -136,6 +137,7 @@ export function FeedbackHomePage(props: FeedbackHomePageProps) {
               workspaceId={props.workspaceId}
               posts={similar.data?.items ?? []}
             />
+            <SurveyPrompt workspaceId={workspace} viewer={viewer} />
             <PostSort
               sort={sort}
               onSortChange={(value) => {

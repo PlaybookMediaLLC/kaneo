@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { getPortalActiveSurveyFixture } from "../../api/feedback/get-portal-active-survey.fixture";
 import { getPortalUserStatsFixture } from "../../api/feedback/get-portal-user-stats.fixture";
 import { createPortalPostFixture } from "../../api/feedback/create-portal-post.fixture";
 import { listPortalBoardsFixture } from "../../api/feedback/list-portal-boards.fixture";
@@ -28,6 +29,8 @@ describe("FeedbackHomePage", () => {
     // A signed-in viewer also loads their activity.
     if (signedIn) api.reply(getPortalUserStatsFixture.ok());
     api.reply(listPortalPostsFixture.ok());
+    // A signed-in viewer also asks for a waiting survey.
+    if (signedIn) api.reply(getPortalActiveSurveyFixture.ok());
     return api;
   };
   describePageContract(meta, FeedbackHomePage, {

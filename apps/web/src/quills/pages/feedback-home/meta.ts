@@ -15,6 +15,8 @@ export const meta = {
     "setQuillsPortalVote",
     "findQuillsPortalSimilarPosts",
     "createQuillsPortalPost",
+    "getQuillsPortalActiveSurvey",
+    "submitQuillsPortalSurveyResponse",
   ],
   states: ["loading", "failed", "ready", "done"],
 } satisfies PageMeta;

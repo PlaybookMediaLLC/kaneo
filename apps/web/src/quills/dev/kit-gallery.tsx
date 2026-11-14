@@ -38,6 +38,7 @@ import { PortalNavigation } from "../ui/portal-navigation";
 import { PortalShell } from "../ui/portal-shell";
 import { ResultCard } from "../ui/result-card";
 import { StateView } from "../ui/state-view";
+import { SurveyCard } from "../ui/survey-card";
 import {
   Dialog,
   DialogTitle,
@@ -499,6 +500,20 @@ export function KitGallery() {
               onSubmit={async () => {
                 setConfirmed(true);
               }}
+            />
+            {/* RFC 0003 lane L2: in-app surveys. */}
+            <SurveyCard
+              survey={{
+                type: "nps",
+                question: demo,
+                options: [],
+                scale: { min: 0, max: 10 },
+              }}
+              done={confirmed}
+              onSubmit={async () => {
+                setConfirmed(true);
+              }}
+              onDismiss={() => setEmpty(true)}
             />
           </section>
         </div>
