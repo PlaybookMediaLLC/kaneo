@@ -33,7 +33,7 @@ describe("useRequestQuery", () => {
     const onChange = vi.fn();
     const view = renderQuillsHook(
       ({ q }: { q?: string }) => useRequestQuery(q, onChange),
-      { initialProps: { q: "csv" } },
+      { initialProps: { q: "csv" as string | undefined } },
     );
     view.rerender({ q: undefined });
     expect(view.result.current[0]).toBe("");
