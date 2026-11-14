@@ -21,9 +21,16 @@ describe("portal paths", () => {
     );
   });
 
-  it("registers the teammate link as pending issue 132", () => {
+  it("links a teammate to the conversation in the teammate app", () => {
+    process.env.KANEO_CLIENT_URL = "https://client.example.test";
+    expect(portalPaths.teammateConversation("w/a", "c/b")).toBe(
+      "https://client.example.test/feedback/w%2Fa/conversations/c%2Fb",
+    );
     expect(
       portalPathPatterns.find(({ id }) => id === "teammateConversation"),
-    ).toMatchObject({ pending: 132 });
+    ).toEqual({
+      id: "teammateConversation",
+      pattern: "/feedback/$workspaceId/conversations/$conversationId",
+    });
   });
 });

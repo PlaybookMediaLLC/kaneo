@@ -36,7 +36,23 @@ export const teamSections: readonly TeamNavSection[] = [
     id: "support",
     labelKey: "team.sections.support",
     icon: Headset,
-    items: [],
+    items: [
+      {
+        path: "/conversations/mine",
+        labelKey: "team-conversations.views.mine",
+        countKey: "myConversations",
+      },
+      {
+        path: "/conversations/unassigned",
+        labelKey: "team-conversations.views.unassigned",
+        countKey: "unassignedConversations",
+      },
+      {
+        path: "/conversations/all",
+        labelKey: "team-conversations.views.all",
+        countKey: "openConversations",
+      },
+    ],
     browse: [],
   },
   {
