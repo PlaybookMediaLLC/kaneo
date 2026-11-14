@@ -58,5 +58,6 @@
 	"signIn": "Sign in",
 	"signInRequired": "Sign in to continue.",
 	"breadcrumb": "Breadcrumb",
-	"breadcrumbSeparator": "/"
+	"breadcrumbSeparator": "/",
+	"submitAsFeedback": "Submit “{{query}}” as feedback"
 }

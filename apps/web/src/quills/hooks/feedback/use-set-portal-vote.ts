@@ -22,6 +22,7 @@ export function useSetPortalVote(viewer: Viewer) {
           "getPortalPost",
           "listPortalRoadmapPosts",
           "listPortalVotedPosts",
+          "getPortalUserStats",
         ].map((operation) =>
           queryClient.invalidateQueries({
             queryKey: quillsOperationKey(

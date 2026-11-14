@@ -76,3 +76,23 @@ it("toggles one status filter at a time", () => {
   expect(onStageChange.mock.calls).toEqual([[""], ["shipped"]]);
   expect(view.getByRole("button", { name: "Copy link" })).toBeInTheDocument();
 });
+
+it("shows the viewer's activity only when it is given", () => {
+  const view = renderComponent(
+    <BoardNavigation
+      workspaceId="workspace_1"
+      boards={[]}
+      stats={{ posts: 3, comments: 5, votes: 12 }}
+    />,
+  );
+  const activity = view.getByRole("heading", {
+    name: "Your activity",
+  }).parentElement!;
+  expect(activity).toHaveTextContent("Posts3");
+  expect(activity).toHaveTextContent("Comments5");
+  expect(activity).toHaveTextContent("Votes12");
+  view.rerender(<BoardNavigation workspaceId="workspace_1" boards={[]} />);
+  expect(
+    view.queryByRole("heading", { name: "Your activity" }),
+  ).not.toBeInTheDocument();
+});

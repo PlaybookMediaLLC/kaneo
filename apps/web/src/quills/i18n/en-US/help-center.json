@@ -24,5 +24,7 @@
 	"stillNeedHelp": "Still need help?",
 	"stillNeedHelpBody": "Tell us what you tried to do. Your feedback helps us improve this guide and the product.",
 	"submitFeedback": "Submit feedback",
-	"contactSupport": "Contact support"
+	"contactSupport": "Contact support",
+	"missing": "Tell us what was missing",
+	"missingTitle": "Missing from the article “{{title}}”"
 }

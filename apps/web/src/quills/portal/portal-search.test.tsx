@@ -73,6 +73,17 @@ describe("PortalSearch", () => {
     );
     const posts = new URL(api.calls("listQuillsPortalPosts")[0]!.url);
     expect(posts.searchParams.get("search")).toBe("export");
+    const submit = new URL(
+      view
+        .getByRole("link", { name: "Submit “export” as feedback" })
+        .getAttribute("href")!,
+      "http://portal.test",
+    );
+    expect(submit.pathname).toBe("/portal/workspace_test_1");
+    expect(Object.fromEntries(submit.searchParams)).toEqual({
+      openFeedback: "1",
+      title: "export",
+    });
   });
 
   it("opens with the keyboard and searches only help without portal access", async () => {

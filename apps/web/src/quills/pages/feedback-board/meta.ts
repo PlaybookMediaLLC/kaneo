@@ -11,6 +11,7 @@ export const meta = {
     "listQuillsPortalBoards",
     "listQuillsPortalPosts",
     "listQuillsPortalStatuses",
+    "getQuillsPortalUserStats",
     "findQuillsPortalSimilarPosts",
     "createQuillsPortalPost",
     "setQuillsPortalVote",

@@ -142,6 +142,7 @@ export function HelpCenterArticlePage(props: HelpCenterArticlePageProps) {
                 <ArticleFeedback
                   workspaceId={props.workspaceId}
                   articleId={data.article.id}
+                  articleTitle={data.article.title}
                   viewer={viewer}
                 />
                 <ArticleNextSteps

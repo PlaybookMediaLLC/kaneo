@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { getPortalUserStatsFixture } from "../../api/feedback/get-portal-user-stats.fixture";
 import { createPortalPostFixture } from "../../api/feedback/create-portal-post.fixture";
 import { listPortalBoardsFixture } from "../../api/feedback/list-portal-boards.fixture";
 import { listPortalPostsFixture } from "../../api/feedback/list-portal-posts.fixture";
@@ -20,10 +21,12 @@ describe("FeedbackHomePage", () => {
     canVote: true,
     canComment: true,
   };
-  const prepareHome = () => {
+  const prepareHome = (signedIn = false) => {
     const api = mockApi();
     api.reply(listPortalBoardsFixture.ok({ items: [board] }));
     api.reply(listPortalStatusesFixture.ok());
+    // A signed-in viewer also loads their activity.
+    if (signedIn) api.reply(getPortalUserStatsFixture.ok());
     api.reply(listPortalPostsFixture.ok());
     return api;
   };
@@ -38,10 +41,11 @@ describe("FeedbackHomePage", () => {
     },
     done: {
       prepare: () => {
-        const api = prepareHome();
+        const api = prepareHome(true);
         api.reply(createPortalPostFixture.ok());
         api.reply(listPortalPostsFixture.ok());
         api.reply(listPortalBoardsFixture.ok());
+        api.reply(getPortalUserStatsFixture.ok());
         return { viewer: { kind: "user", id: "account_test_1" } };
       },
       act: async (view) => {

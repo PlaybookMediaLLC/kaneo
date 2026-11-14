@@ -1,8 +1,9 @@
-import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { feedbackStages, type FeedbackStage } from "../../core/feedback-stages";
 import { portalHref } from "../../core/portal-href";
+import { useSearchPatch } from "../../core/use-search-patch";
 import { useFindPortalSimilarPosts } from "../../hooks/feedback/use-find-portal-similar-posts";
+import { useGetPortalUserStats } from "../../hooks/feedback/use-get-portal-user-stats";
 import { useListPortalBoards } from "../../hooks/feedback/use-list-portal-boards";
 import { useListPortalPosts } from "../../hooks/feedback/use-list-portal-posts";
 import { useListPortalStatuses } from "../../hooks/feedback/use-list-portal-statuses";
@@ -27,7 +28,6 @@ export interface FeedbackHomePageProps {
 export function FeedbackHomePage(props: FeedbackHomePageProps) {
   const portal = usePortalRuntime();
   const { viewer } = portal;
-  const navigate = useNavigate();
   const [stage, setStage] = useState(
     typeof props.search.stage === "string" ? props.search.stage : "",
   );
@@ -35,6 +35,8 @@ export function FeedbackHomePage(props: FeedbackHomePageProps) {
     typeof props.search.sort === "string" ? props.search.sort : "votes",
   );
   const [title, setTitle] = useState("");
+  const urlTitle =
+    typeof props.search.title === "string" ? props.search.title : undefined;
   const [votePostId, setVotePostId] = useState<string | null>(null);
   const canLoad = !portal.accessLoading && portal.access?.granted === true;
   const workspace = canLoad ? props.workspaceId : "";
@@ -43,6 +45,10 @@ export function FeedbackHomePage(props: FeedbackHomePageProps) {
     viewer,
   );
   const statuses = useListPortalStatuses({ param: { workspace } }, viewer);
+  const stats = useGetPortalUserStats(
+    { param: { workspace: viewer.kind === "user" ? workspace : "" } },
+    viewer,
+  );
   const posts = useListPortalPosts(
     {
       param: { workspace },
@@ -62,21 +68,13 @@ export function FeedbackHomePage(props: FeedbackHomePageProps) {
     viewer,
   );
   const vote = useSetPortalVote(viewer);
-  const remember = (search: Record<string, string>) =>
-    void navigate({
-      to: ".",
-      search: (previous: Record<string, unknown>) => ({
-        ...previous,
-        ...Object.fromEntries(
-          Object.entries(search).map(([key, value]) => [
-            key,
-            value || undefined,
-          ]),
-        ),
-      }),
-      replace: true,
-      resetScroll: false,
-    });
+  const remember = useSearchPatch();
+  // The given title is a one-time start. After the composer has read it, the
+  // address drops it, so a reload does not bring back a sent post or undo an edit.
+  useEffect(() => {
+    if (urlTitle && viewer.kind === "user" && boards.data)
+      remember({ title: undefined });
+  });
   const submittable =
     boards.data?.items.filter((board) => board.canSubmit) ?? [];
 
@@ -90,6 +88,7 @@ export function FeedbackHomePage(props: FeedbackHomePageProps) {
             workspaceId={props.workspaceId}
             stages={feedbackStages(statuses.data?.items ?? [])}
             stage={stage}
+            stats={stats.data}
             onStageChange={(value) => {
               setStage(value);
               remember({ stage: value });
@@ -124,10 +123,11 @@ export function FeedbackHomePage(props: FeedbackHomePageProps) {
                 workspaceId={props.workspaceId}
                 boards={submittable}
                 autoFocus={"openFeedback" in props.search}
+                initialTitle={urlTitle}
                 signInHref={
                   viewer.kind === "user"
                     ? undefined
-                    : `/auth/sign-in?redirect=${encodeURIComponent(portalHref(props.workspaceId))}`
+                    : `/auth/sign-in?redirect=${encodeURIComponent(portalHref(props.workspaceId, "", urlTitle ? { openFeedback: "1", title: urlTitle } : undefined))}`
                 }
                 onTitleChange={setTitle}
               />

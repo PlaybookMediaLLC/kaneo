@@ -15,22 +15,20 @@ export function useCreatePortalPost(viewer: Viewer) {
   >({
     mutationFn: (input) => createPortalPost(input),
     onSuccess: async (_data, input) => {
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspace,
-          viewer,
-          "feedback",
-          "listPortalPosts",
+      // The refreshes are independent, so they run together.
+      await Promise.all(
+        ["listPortalPosts", "listPortalBoards", "getPortalUserStats"].map(
+          (operation) =>
+            queryClient.invalidateQueries({
+              queryKey: quillsOperationKey(
+                input.param.workspace,
+                viewer,
+                "feedback",
+                operation,
+              ),
+            }),
         ),
-      });
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspace,
-          viewer,
-          "feedback",
-          "listPortalBoards",
-        ),
-      });
+      );
     },
   });
 }

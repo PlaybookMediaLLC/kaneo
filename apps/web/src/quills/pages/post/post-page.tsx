@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { portalHref } from "../../core/portal-href";
-import { useFindPortalSimilarPosts } from "../../hooks/feedback/use-find-portal-similar-posts";
 import { useGetPortalPost } from "../../hooks/feedback/use-get-portal-post";
 import { useListPortalPostComments } from "../../hooks/feedback/use-list-portal-post-comments";
 import { useSetPortalFollow } from "../../hooks/feedback/use-set-portal-follow";
@@ -12,12 +11,12 @@ import { PageFrame } from "../../ui/page-frame";
 import { PortalGate } from "../../ui/portal-gate";
 import { PostSidebar } from "../../ui/post/post-sidebar";
 import { PostVoteButton } from "../../ui/post/post-vote-button";
-import { SimilarPosts } from "../../ui/post/similar-posts";
 import { StateView } from "../../ui/state-view";
 import { meta } from "./meta";
 import { PostActions } from "./parts/post-actions";
 import { PostAttachments } from "./parts/post-attachments";
 import { PostCommentsSection } from "./parts/post-comments-section";
+import { RelatedRequests } from "./parts/related-requests";
 
 export interface PostPageProps {
   workspaceId: string;
@@ -49,15 +48,6 @@ export function PostPage(props: PostPageProps) {
   const currentVote = vote.data?.postId === post.data?.id ? vote.data : null;
   const here = portalHref(props.workspaceId, `posts/${postId}`);
   const data = post.data;
-  // Related requests help voters gather on one post instead of splitting into duplicates.
-  const title = data?.title.trim() ?? "";
-  const related = useFindPortalSimilarPosts(
-    {
-      param: { workspace: title.length >= 3 ? input.param.workspace : "" },
-      query: { title, limit: "5" },
-    },
-    viewer,
-  );
 
   return (
     <PageFrame
@@ -122,9 +112,15 @@ export function PostPage(props: PostPageProps) {
                   </p>
                 ) : null}
                 {data.mergedInto ? (
-                  <p className="text-sm text-muted-foreground">
+                  <a
+                    className="block rounded-xl bg-muted/60 px-4 py-3 text-sm hover:bg-muted"
+                    href={portalHref(
+                      props.workspaceId,
+                      `posts/${data.mergedInto.id}`,
+                    )}
+                  >
                     {t("post.mergedInto", { title: data.mergedInto.title })}
-                  </p>
+                  </a>
                 ) : null}
                 <MarkdownContent customer content={data.content} />
                 <PostAttachments
@@ -146,19 +142,18 @@ export function PostPage(props: PostPageProps) {
                     });
                   }}
                 />
-                {currentVote?.voted ? (
+                {currentVote?.voted &&
+                data.canComment &&
+                !data.isCommentsLocked ? (
                   <p role="status" className="text-sm text-muted-foreground">
                     {t("post.voteThanks")}
                   </p>
                 ) : null}
-                <SimilarPosts
+                <RelatedRequests
                   workspaceId={props.workspaceId}
-                  titleKey="post.related"
-                  posts={
-                    related.data?.items
-                      .filter((item) => item.id !== postId)
-                      .slice(0, 3) ?? []
-                  }
+                  viewer={viewer}
+                  postId={postId}
+                  title={data.title}
                 />
                 <PostCommentsSection
                   workspaceId={props.workspaceId}

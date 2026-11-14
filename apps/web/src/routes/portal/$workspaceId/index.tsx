@@ -12,6 +12,13 @@ const searchSchema = z.object({
     .catch(undefined),
   sort: z.enum(["newest", "oldest", "votes"]).optional().catch(undefined),
   openFeedback: z.unknown().optional(),
+  // The router reads "404" or "true" as a number or boolean, so the title is coerced back.
+  // Long titles are cut to the API limit without splitting an emoji.
+  title: z.coerce
+    .string()
+    .transform((value) => value.slice(0, 200).replace(/[\uD800-\uDBFF]$/, ""))
+    .optional()
+    .catch(undefined),
 });
 export const Route = createFileRoute("/portal/$workspaceId/")({
   validateSearch: searchSchema,

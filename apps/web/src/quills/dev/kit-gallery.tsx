@@ -1,6 +1,7 @@
 import { AttachmentPicker } from "../ui/attachment-picker";
 import { BoardSelect } from "../ui/post/board-select";
 import { CommentReactions } from "../ui/post/comment-reactions";
+import { ComposerDetails } from "../ui/post/composer-details";
 import { FeedbackEditor } from "../ui/feedback-editor";
 import { BoardNavigation } from "../ui/board-navigation";
 import { PortalSheetContent } from "../ui/portal-sheet-content";
@@ -413,6 +414,7 @@ export function KitGallery() {
               onEdit={() => setConfirmed(true)}
               onDelete={() => setEmpty(true)}
             />
+            <ComposerDetails defaultValue={empty ? "" : demo} />
             <div className="flex items-center gap-3">
               <CommentReactions
                 reactions={

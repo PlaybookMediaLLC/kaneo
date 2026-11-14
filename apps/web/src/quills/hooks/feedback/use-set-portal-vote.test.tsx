@@ -40,6 +40,12 @@ describe("useSetPortalVote", () => {
         "feedback",
         "listPortalVotedPosts",
       ),
+      quillsOperationKey(
+        "workspace_test_1",
+        { kind: "anonymous" },
+        "feedback",
+        "getPortalUserStats",
+      ),
     ],
   });
 });

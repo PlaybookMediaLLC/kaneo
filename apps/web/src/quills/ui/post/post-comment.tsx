@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { relativeTime } from "../../core/relative-time";
 import { MarkdownContent } from "../markdown-content";
 import { PersonAvatar } from "../person-avatar";
+import { cn } from "../upstream";
 import { CommentReactions } from "./comment-reactions";
 
 interface CommentItem {
@@ -51,7 +52,15 @@ export function PostComment({ comment, ...props }: PostCommentProps) {
   const [replying, setReplying] = useState(false);
   const author = comment.author.name?.trim() || t("post.anonymousAuthor");
   return (
-    <li className="grid grid-cols-[1.75rem_minmax(0,1fr)] gap-x-3">
+    <li
+      className={cn(
+        "grid grid-cols-[1.75rem_minmax(0,1fr)] gap-x-3",
+        // A team reply stands out, so customers see the official answer.
+        comment.author.isTeamMember &&
+          !comment.deleted &&
+          "-mx-3 rounded-xl bg-primary/5 p-3 ring-1 ring-primary/15 ring-inset",
+      )}
+    >
       <PersonAvatar
         name={author}
         avatarUrl={comment.author.avatarUrl}

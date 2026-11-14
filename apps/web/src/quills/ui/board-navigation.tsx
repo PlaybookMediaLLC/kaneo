@@ -11,6 +11,8 @@ export interface BoardNavigationProps {
   stages?: Array<{ value: string; label: string; color: string | null }>;
   stage?: string;
   onStageChange?: (value: string) => void;
+  /** The signed-in viewer's own activity; the section is hidden without it. */
+  stats?: { posts: number; comments: number; votes: number };
 }
 
 const section =
@@ -25,6 +27,7 @@ export function BoardNavigation({
   stages = [],
   stage,
   onStageChange,
+  stats,
 }: BoardNavigationProps) {
   const { t } = useTranslation("quills");
   return (
@@ -91,6 +94,33 @@ export function BoardNavigation({
               </li>
             ))}
           </ul>
+        </section>
+      ) : null}
+      {stats ? (
+        <section
+          aria-labelledby="feedback-activity"
+          className="hidden md:block"
+        >
+          <h2 id="feedback-activity">{t("feedback.activity")}</h2>
+          <dl className="grid grid-cols-3 gap-1.5 text-center">
+            {(
+              [
+                ["feedback.activityPosts", stats.posts],
+                ["feedback.activityComments", stats.comments],
+                ["feedback.activityVotes", stats.votes],
+              ] as const
+            ).map(([label, value]) => (
+              <div
+                key={label}
+                className="flex flex-col-reverse rounded-lg bg-muted/60 py-2"
+              >
+                <dt className="text-[11px] text-muted-foreground">
+                  {t(label)}
+                </dt>
+                <dd className="text-sm font-semibold tabular-nums">{value}</dd>
+              </div>
+            ))}
+          </dl>
         </section>
       ) : null}
       <section aria-labelledby="feedback-actions" className="hidden md:block">

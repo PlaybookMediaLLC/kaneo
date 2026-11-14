@@ -85,6 +85,35 @@ describe("PostComposer", () => {
     await waitFor(() => expect(localStorage.getItem("draft_test")).toBeNull());
   });
 
+  it("starts from a given title and searches for it", () => {
+    const onTitleChange = vi.fn();
+    const view = renderComponent(
+      <PostComposer
+        workspaceName="Acme"
+        boards={boards}
+        initialTitle="Bulk edit"
+        onTitleChange={onTitleChange}
+        onSubmit={vi.fn()}
+      />,
+    );
+    expect(view.getByLabelText("Title")).toHaveValue("Bulk edit");
+    expect(onTitleChange).toHaveBeenCalledWith("Bulk edit");
+  });
+
+  it("shows a given title to a visitor too", () => {
+    const view = renderComponent(
+      <PostComposer
+        workspaceName="Acme"
+        boards={boards}
+        initialTitle="Bulk edit"
+        signInHref="/auth/sign-in"
+        onTitleChange={vi.fn()}
+        onSubmit={vi.fn()}
+      />,
+    );
+    expect(view.getByLabelText("Title")).toHaveValue("Bulk edit");
+  });
+
   it("requires a title", async () => {
     const onSubmit = vi.fn(async () => undefined);
     const view = renderComponent(

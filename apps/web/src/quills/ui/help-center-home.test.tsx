@@ -66,6 +66,12 @@ describe("HelpCenterHome", () => {
       view.getByText("No articles match your search."),
     ).toBeInTheDocument();
     expect(
+      view.getByRole("link", { name: "Submit “reset” as feedback" }),
+    ).toHaveAttribute(
+      "href",
+      "/portal/workspace_test_1?openFeedback=1&title=reset",
+    );
+    expect(
       view.queryByRole("link", { name: /Guides/ }),
     ).not.toBeInTheDocument();
     expect(

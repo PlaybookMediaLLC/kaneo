@@ -96,7 +96,16 @@ export function HelpCenterHome(props: HelpCenterHomeProps) {
             links(props.results)
           ) : (
             <p className="text-muted-foreground">
-              {t("help-center.noResults")}
+              {t("help-center.noResults")}{" "}
+              <a
+                className="font-medium text-foreground underline-offset-4 hover:underline"
+                href={portalHref(props.workspaceId, "", {
+                  openFeedback: "1",
+                  title: props.searchQuery,
+                })}
+              >
+                {t("core.submitAsFeedback", { query: props.searchQuery })}
+              </a>
             </p>
           )}
         </section>

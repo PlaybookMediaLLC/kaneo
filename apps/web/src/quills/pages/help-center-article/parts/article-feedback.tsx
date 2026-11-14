@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { portalHref } from "../../../core/portal-href";
 import type { Viewer } from "../../../core/types";
 import { useRecordPublicArticleFeedback } from "../../../hooks/help-center/use-record-public-article-feedback";
 import { ConfirmAction } from "../../../ui/confirm-action";
@@ -7,6 +8,8 @@ import { StateView } from "../../../ui/state-view";
 export interface ArticleFeedbackProps {
   workspaceId: string;
   articleId: string;
+  /** Names the article in the feedback that a "No" vote leads to. */
+  articleTitle: string;
   viewer: Viewer;
 }
 
@@ -38,6 +41,22 @@ export function ArticleFeedback(props: ArticleFeedbackProps) {
       {record.isSuccess ? (
         <p role="status" className="text-sm">
           {t("help-center.thanks")}
+          {record.variables?.json.helpful === false ? (
+            <>
+              {" "}
+              <a
+                className="font-medium underline-offset-4 hover:underline"
+                href={portalHref(props.workspaceId, "", {
+                  openFeedback: "1",
+                  title: t("help-center.missingTitle", {
+                    title: props.articleTitle,
+                  }),
+                })}
+              >
+                {t("help-center.missing")}
+              </a>
+            </>
+          ) : null}
         </p>
       ) : (
         <StateView

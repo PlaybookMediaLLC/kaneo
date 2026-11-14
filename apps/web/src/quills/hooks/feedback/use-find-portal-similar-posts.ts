@@ -11,5 +11,7 @@ export function useFindPortalSimilarPosts(
   return useQuery({
     ...findPortalSimilarPostsQuery(input, viewer),
     enabled: Boolean(input.param.workspace && input.query.title),
+    // Suggestions are optional and rate limited, so a failure is not retried.
+    retry: false,
   });
 }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { readDraft, saveDraft } from "./composer-draft";
+import { readDraft, saveDraft, startingDraft } from "./composer-draft";
 
 describe("composer draft", () => {
   afterEach(() => {
@@ -14,6 +14,18 @@ describe("composer draft", () => {
     });
     saveDraft("draft", { title: " ", content: "" });
     expect(localStorage.getItem("draft")).toBeNull();
+  });
+  it("starts a given title as a new post and keeps the older draft saved", () => {
+    saveDraft("draft", { title: "Old", content: "Details" });
+    expect(startingDraft("draft", "Search text")).toEqual({
+      title: "Search text",
+      content: "",
+    });
+    expect(readDraft("draft")).toEqual({ title: "Old", content: "Details" });
+    expect(startingDraft("draft")).toEqual({
+      title: "Old",
+      content: "Details",
+    });
   });
   it("reads broken or blocked storage as no draft", () => {
     localStorage.setItem("draft", "{not json");

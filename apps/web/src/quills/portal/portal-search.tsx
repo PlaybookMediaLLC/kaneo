@@ -163,6 +163,16 @@ export function PortalSearch({ workspaceId }: PortalSearchProps) {
                   {t("core.searchEmpty")}
                 </p>
               ) : null}
+              {/* A search that found nothing useful is feedback, so offer to send it. */}
+              <a
+                className={`${row} mt-2 border-t border-border pt-3 text-muted-foreground`}
+                href={portalHref(workspaceId, "", {
+                  openFeedback: "1",
+                  title: term,
+                })}
+              >
+                {t("core.submitAsFeedback", { query: term })}
+              </a>
             </StateView>
           </div>
         ) : null}

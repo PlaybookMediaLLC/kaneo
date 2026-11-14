@@ -1,5 +1,6 @@
 import { waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vite-plus/test";
+import { getPortalUserStatsFixture } from "../../api/feedback/get-portal-user-stats.fixture";
 import { createPortalPostFixture } from "../../api/feedback/create-portal-post.fixture";
 import { listPortalBoardsFixture } from "../../api/feedback/list-portal-boards.fixture";
 import { listPortalPostsFixture } from "../../api/feedback/list-portal-posts.fixture";
@@ -24,10 +25,12 @@ describe("FeedbackBoardPage", () => {
     canVote: true,
     canComment: true,
   };
-  const prepareBoard = () => {
+  const prepareBoard = (signedIn = false) => {
     const api = mockApi();
     api.reply(listPortalBoardsFixture.ok({ items: [board] }));
     api.reply(listPortalStatusesFixture.ok());
+    // A signed-in viewer also loads their activity.
+    if (signedIn) api.reply(getPortalUserStatsFixture.ok());
     api.reply(listPortalPostsFixture.ok());
     return api;
   };
@@ -55,10 +58,11 @@ describe("FeedbackBoardPage", () => {
     },
     done: {
       prepare: () => {
-        const api = prepareBoard();
+        const api = prepareBoard(true);
         api.reply(createPortalPostFixture.ok());
         api.reply(listPortalPostsFixture.ok());
         api.reply(listPortalBoardsFixture.ok({ items: [board] }));
+        api.reply(getPortalUserStatsFixture.ok());
         return {
           ...options,
           viewer: { kind: "user" as const, id: "account_test_1" },

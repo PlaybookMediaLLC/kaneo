@@ -39,6 +39,19 @@ describe("PostSidebar", () => {
     expect(view.getByRole("button", { name: "Copy link" })).toBeInTheDocument();
   });
 
+  it("shows tags only when the post has them", () => {
+    const view = renderComponent(
+      <PostSidebar
+        {...props}
+        tags={[{ id: "tag_test_1", name: "Billing", color: "green" }]}
+      />,
+    );
+    expect(view.getByText("Tags")).toBeInTheDocument();
+    expect(view.getByText("Billing")).toBeInTheDocument();
+    view.rerender(<PostSidebar {...props} tags={[]} />);
+    expect(view.queryByText("Tags")).not.toBeInTheDocument();
+  });
+
   it("sends a visitor to sign in to follow", () => {
     const view = renderComponent(
       <PostSidebar {...props} signInHref="/auth/sign-in?redirect=%2Fp" />,

@@ -37,6 +37,9 @@ describe("ChangelogPage", () => {
           ),
         );
         expect(view.getByText("You’re all caught up")).toBeInTheDocument();
+        expect(
+          view.getByRole("link", { name: "Get email updates" }),
+        ).toHaveAttribute("href", "/portal/workspace_test_1/preferences");
       },
     },
   });

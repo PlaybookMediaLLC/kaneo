@@ -44,6 +44,10 @@ export function PostCommentsSection(props: PostCommentsSectionProps) {
   // ponytail: an edit of such a comment shows the old text until the page reloads;
   // keep the edit response here if people edit fresh comments on long threads.
   const [created, setCreated] = useState<Comment[]>([]);
+  // The reactions from each reaction reply, which can be newer than the loaded pages.
+  const [reacted, setReacted] = useState<Record<string, Comment["reactions"]>>(
+    {},
+  );
   const loaded = new Set(props.comments.map((comment) => comment.id));
   const all = [
     ...props.comments,
@@ -73,7 +77,10 @@ export function PostCommentsSection(props: PostCommentsSectionProps) {
   const render = (comment: Comment) => (
     <PostComment
       key={comment.id}
-      comment={comment}
+      comment={{
+        ...comment,
+        reactions: reacted[comment.id] ?? comment.reactions,
+      }}
       attachments={
         <PostAttachments
           workspaceId={props.workspaceId}
@@ -91,7 +98,12 @@ export function PostCommentsSection(props: PostCommentsSectionProps) {
                   param: { workspace: props.workspaceId, commentId },
                   json: { emoji: emoji as Emoji, reacted },
                 })
-                .then(() => undefined)
+                .then((result) =>
+                  setReacted((items) => ({
+                    ...items,
+                    [commentId]: result.reactions,
+                  })),
+                )
           : undefined
       }
       replyForm={

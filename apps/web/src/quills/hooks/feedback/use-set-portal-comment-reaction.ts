@@ -14,8 +14,11 @@ export function useSetPortalCommentReaction(viewer: Viewer) {
     SetPortalCommentReactionRequest
   >({
     mutationFn: (input) => setPortalCommentReaction(input),
-    onSuccess: async (_data, input) => {
-      await queryClient.invalidateQueries({
+    onSuccess: (_data, input) => {
+      // The reply carries the comment's reactions, so the page shows them at once and the
+      // refresh runs in the background. ponytail: it refetches every loaded comment page;
+      // patch the cached page with setQueryData if long threads make this costly.
+      void queryClient.invalidateQueries({
         queryKey: quillsOperationKey(
           input.param.workspace,
           viewer,

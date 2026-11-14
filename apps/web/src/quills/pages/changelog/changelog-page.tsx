@@ -45,6 +45,7 @@ export function ChangelogPage(props: ChangelogPageProps) {
     },
     viewer,
   );
+  const votedIds = new Set(voted.data?.postIds);
 
   return (
     <PageFrame
@@ -59,6 +60,12 @@ export function ChangelogPage(props: ChangelogPageProps) {
             href={changelogFeedUrl(props.workspaceId)}
           >
             {t("changelog.rss")}
+          </a>
+          <a
+            className="rounded-full bg-muted px-3 py-1 text-xs font-medium transition-colors hover:bg-muted/70"
+            href={portalHref(props.workspaceId, "preferences")}
+          >
+            {t("changelog.emailUpdates")}
           </a>
         </>
       }
@@ -90,7 +97,7 @@ export function ChangelogPage(props: ChangelogPageProps) {
                   key={entry.id}
                   workspaceId={props.workspaceId}
                   entry={entry}
-                  votedIds={new Set(voted.data?.postIds)}
+                  votedIds={votedIds}
                 />
               ))}
               {changelog.hasNextPage ? (

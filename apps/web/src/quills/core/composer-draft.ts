@@ -18,6 +18,14 @@ export function readDraft(key: string | undefined): ComposerDraft {
   return empty;
 }
 
+/**
+ * The draft to start from. A given title, such as a search that found nothing, starts a
+ * new post: it does not take the details of an older draft, which stays saved until typing.
+ */
+export function startingDraft(key: string | undefined, title?: string) {
+  return title ? { title, content: "" } : readDraft(key);
+}
+
 /** Saves a draft on this device; an empty draft removes the saved one. */
 export function saveDraft(key: string | undefined, draft: ComposerDraft) {
   if (!key) return;

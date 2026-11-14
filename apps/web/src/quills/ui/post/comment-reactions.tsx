@@ -2,7 +2,7 @@ import {
   IconFacePlusOutline18,
   IconHeartOutline18,
 } from "nucleo-ui-essential-outline-18";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ConfirmAction } from "../confirm-action";
 
@@ -28,6 +28,12 @@ export function CommentReactions({
 }: CommentReactionsProps) {
   const { t } = useTranslation("quills");
   const [picking, setPicking] = useState(false);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  // Closing the picker removes the focused emoji, so focus goes back to its toggle.
+  const close = () => {
+    setPicking(false);
+    toggleRef.current?.focus();
+  };
   const find = (emoji: string) =>
     reactions.find((reaction) => reaction.emoji === emoji);
   const toggle = (emoji: string) => onReact!(emoji, !find(emoji)?.reacted);
@@ -51,11 +57,8 @@ export function CommentReactions({
         .map((reaction) => (
           <ConfirmAction
             key={reaction.emoji}
-            labelKey="post.react"
-            label={t("post.reaction", {
-              emoji: reaction.emoji,
-              count: reaction.count,
-            })}
+            labelKey="post.reaction"
+            labelValues={{ emoji: reaction.emoji, count: reaction.count }}
             pressed={reaction.reacted}
             disabled={!onReact}
             className={chip}
@@ -66,8 +69,15 @@ export function CommentReactions({
           </ConfirmAction>
         ))}
       {onReact ? (
-        <span className="flex flex-wrap items-center gap-1">
+        <span
+          role="group"
+          className="flex flex-wrap items-center gap-1"
+          onKeyDown={(event) => {
+            if (event.key === "Escape" && picking) close();
+          }}
+        >
           <button
+            ref={toggleRef}
             type="button"
             aria-expanded={picking}
             aria-label={t("post.addReaction")}
@@ -80,13 +90,13 @@ export function CommentReactions({
             ? EMOJI.filter((emoji) => emoji !== LIKE).map((emoji) => (
                 <ConfirmAction
                   key={emoji}
-                  labelKey="post.react"
-                  label={t("post.reactWith", { emoji })}
+                  labelKey="post.reactWith"
+                  labelValues={{ emoji }}
                   pressed={Boolean(find(emoji)?.reacted)}
                   className={`${reset} size-7 justify-center rounded-full text-sm hover:bg-muted aria-pressed:bg-muted sm:size-7`}
                   onConfirm={async () => {
                     await toggle(emoji);
-                    setPicking(false);
+                    close();
                   }}
                 >
                   <span aria-hidden="true">{emoji}</span>

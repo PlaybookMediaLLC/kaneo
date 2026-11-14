@@ -1,3 +1,4 @@
+import { fireEvent, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { press } from "../../test/actions";
 import { renderComponent } from "../../test/render";
@@ -32,9 +33,25 @@ describe("CommentReactions", () => {
     press("Add reaction");
     press("React with 🎉");
     expect(onReact).toHaveBeenCalledWith("🎉", true);
+    const toggle = view.getByRole("button", { name: "Add reaction" });
+    await waitFor(() =>
+      expect(toggle).toHaveAttribute("aria-expanded", "false"),
+    );
+    expect(toggle).toHaveFocus();
+  });
+
+  it("closes the picker with Escape and returns focus", () => {
+    const view = renderComponent(
+      <CommentReactions reactions={reactions} onReact={vi.fn()} />,
+    );
+    press("Add reaction");
+    const emoji = view.getByRole("button", { name: "React with 👀" });
+    emoji.focus();
+    fireEvent.keyDown(emoji, { key: "Escape" });
     expect(
-      await view.findByRole("button", { name: "Add reaction" }),
-    ).toHaveAttribute("aria-expanded", "false");
+      view.queryByRole("button", { name: "React with 👀" }),
+    ).not.toBeInTheDocument();
+    expect(view.getByRole("button", { name: "Add reaction" })).toHaveFocus();
   });
 
   it("is read-only for a visitor", () => {

@@ -1,8 +1,9 @@
-import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { feedbackStages, type FeedbackStage } from "../../core/feedback-stages";
 import { portalHref } from "../../core/portal-href";
+import { useSearchPatch } from "../../core/use-search-patch";
 import { useFindPortalSimilarPosts } from "../../hooks/feedback/use-find-portal-similar-posts";
+import { useGetPortalUserStats } from "../../hooks/feedback/use-get-portal-user-stats";
 import { useListPortalBoards } from "../../hooks/feedback/use-list-portal-boards";
 import { useListPortalPosts } from "../../hooks/feedback/use-list-portal-posts";
 import { useListPortalStatuses } from "../../hooks/feedback/use-list-portal-statuses";
@@ -25,7 +26,6 @@ export interface FeedbackBoardPageProps {
 export function FeedbackBoardPage(props: FeedbackBoardPageProps) {
   const portal = usePortalRuntime();
   const { viewer } = portal;
-  const navigate = useNavigate();
   const boardId = props.params.boardId ?? "";
   const search =
     typeof props.search.search === "string" ? props.search.search : undefined;
@@ -44,6 +44,10 @@ export function FeedbackBoardPage(props: FeedbackBoardPageProps) {
     viewer,
   );
   const statuses = useListPortalStatuses({ param: { workspace } }, viewer);
+  const stats = useGetPortalUserStats(
+    { param: { workspace: viewer.kind === "user" ? workspace : "" } },
+    viewer,
+  );
   const posts = useListPortalPosts(
     {
       param: { workspace },
@@ -66,21 +70,7 @@ export function FeedbackBoardPage(props: FeedbackBoardPageProps) {
   );
   const vote = useSetPortalVote(viewer);
   const board = boards.data?.items.find((item) => item.id === boardId);
-  const remember = (patch: Record<string, string>) =>
-    void navigate({
-      to: ".",
-      search: (previous: Record<string, unknown>) => ({
-        ...previous,
-        ...Object.fromEntries(
-          Object.entries(patch).map(([key, value]) => [
-            key,
-            value || undefined,
-          ]),
-        ),
-      }),
-      replace: true,
-      resetScroll: false,
-    });
+  const remember = useSearchPatch();
   return (
     <PageFrame
       titleKey="feedback.title"
@@ -94,6 +84,7 @@ export function FeedbackBoardPage(props: FeedbackBoardPageProps) {
             boardId={boardId}
             stages={feedbackStages(statuses.data?.items ?? [])}
             stage={stage}
+            stats={stats.data}
             onStageChange={(value) => {
               setStage(value);
               remember({ stage: value });

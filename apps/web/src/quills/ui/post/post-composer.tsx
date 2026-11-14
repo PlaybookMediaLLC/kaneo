@@ -9,12 +9,13 @@ import {
 import { Controller } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
-import { readDraft, saveDraft } from "../../core/composer-draft";
+import { saveDraft, startingDraft } from "../../core/composer-draft";
 import type { PortalProblem } from "../../core/types";
 import { ArrowUpIcon } from "../arrow-up-icon";
 import { PortalForm } from "../portal-form";
-import { Input, Textarea, cn } from "../upstream";
+import { Input, cn } from "../upstream";
 import { BoardSelect } from "./board-select";
+import { ComposerDetails } from "./composer-details";
 
 interface PostComposerValues {
   boardId?: string;
@@ -31,6 +32,8 @@ export interface PostComposerProps {
   autoFocus?: boolean;
   /** Saves an unsent title and details on this device under this key. */
   draftKey?: string;
+  /** A title to start from, such as a search that found nothing. */
+  initialTitle?: string;
   /** A file control in the footer; it gets whether the form is sending. */
   attachments?: (submitting: boolean) => ReactNode;
   onTitleChange: (title: string) => void;
@@ -42,7 +45,9 @@ const card =
 
 export function PostComposer(props: PostComposerProps) {
   const { t } = useTranslation("quills");
-  const [draft] = useState(() => readDraft(props.draftKey));
+  const [draft] = useState(() =>
+    startingDraft(props.draftKey, props.initialTitle),
+  );
   const [expanded, setExpanded] = useState(
     Boolean(props.autoFocus || draft.title || draft.content),
   );
@@ -55,6 +60,11 @@ export function PostComposer(props: PostComposerProps) {
   });
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
+  // A restored or given title shows its similar posts at once.
+  const { onTitleChange } = props;
+  useEffect(() => {
+    if (draft.title.trim()) onTitleChange(draft.title);
+  }, [draft.title, onTitleChange]);
   // Similar-post search is rate limited, so it waits until typing pauses.
   const changeTitle = (value: string) => {
     setTitle(value);
@@ -87,6 +97,7 @@ export function PostComposer(props: PostComposerProps) {
     return (
       <div className={card} onBlur={collapse}>
         {titleInput({
+          defaultValue: draft.title,
           onChange: (event: { target: { value: string } }) =>
             changeTitle(event.target.value),
         })}
@@ -166,24 +177,11 @@ export function PostComposer(props: PostComposerProps) {
               </p>
             ) : null}
             {expanded ? (
-              <>
-                <Textarea
-                  unstyled
-                  className="text-sm text-muted-foreground [&_textarea]:resize-none"
-                  aria-label={t("feedback.content")}
-                  aria-describedby="feedback-details-hint"
-                  placeholder={t("feedback.details")}
-                  {...form.register("content", {
-                    onChange: () => remember(form.getValues()),
-                  })}
-                />
-                <p
-                  id="feedback-details-hint"
-                  className="text-xs text-muted-foreground"
-                >
-                  {t("feedback.detailsHint")}
-                </p>
-              </>
+              <ComposerDetails
+                {...form.register("content", {
+                  onChange: () => remember(form.getValues()),
+                })}
+              />
             ) : null}
           </>
         )}

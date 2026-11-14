@@ -9,5 +9,6 @@
 	"rss": "RSS feed",
 	"title": "Updates",
 	"requesters_one": "Requested by {{count}} person",
-	"requesters_other": "Requested by {{count}} people"
+	"requesters_other": "Requested by {{count}} people",
+	"emailUpdates": "Get email updates"
 }
