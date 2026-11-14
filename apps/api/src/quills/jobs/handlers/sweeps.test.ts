@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
+import { generateId } from "@kaneo/ids";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
+import { auditLog } from "../../../database/quills/schema/audit-log";
 import { changelogEntries } from "../../../database/quills/schema/changelog";
 import { conversations } from "../../../database/quills/schema/conversation";
 import { events } from "../../../database/quills/schema/events";
@@ -13,12 +15,14 @@ import {
 } from "../../../database/quills/schema/status";
 import * as kaneo from "../../../database/schema";
 import { jobQueue } from "../../../database/quills/schema/job-queue";
+import { kvStore } from "../../../database/quills/schema/kv";
 import { recordQuillsChange } from "../../events";
 import { enqueueQuillsJob } from "../queue";
 import {
   conversation,
   customer,
 } from "../../support/conversation-seed.fixture";
+import { digestWeek } from "./digest";
 import { harness } from "./harness.fixture";
 import { runQuillsSweeps } from "./sweeps";
 
@@ -402,6 +406,27 @@ describe.skipIf(!url)("Quills sweeps", () => {
         db.delete(jobQueue).where(eq(jobQueue.dedupeKey, "sweeps-probe")),
       );
     }
+  });
+
+  it("lists a quiet workspace until its weekly digest is done", async () => {
+    const { week, from } = digestWeek();
+    await h.drain(h.a);
+    expect(await runnable()).not.toContain(h.a);
+    // Earlier sweeps marked last week done. The audit history is append-only, so the row stays.
+    await h.system(h.a, async (db) => {
+      await db.delete(kvStore).where(eq(kvStore.key, `digest:${week}`));
+      await db.insert(auditLog).values({
+        eventType: "post.status_changed",
+        targetType: "post",
+        targetId: generateId("post"),
+        occurredAt: new Date(from.getTime() + 60_000),
+        actorType: "user",
+      });
+    });
+    expect(await runnable()).toContain(h.a);
+    // No one voted for or follows the post, so the sweep queues nothing and marks the week done.
+    await runQuillsSweeps(h.a);
+    expect(await runnable()).not.toContain(h.a);
   });
 
   it("skips an archived workspace", async () => {

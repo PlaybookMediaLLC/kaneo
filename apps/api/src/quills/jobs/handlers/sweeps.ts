@@ -181,9 +181,8 @@ const SWEEPS = [
   wakeSnoozedConversations,
   announceScheduledChangelog,
   runMaintenanceWindows,
-  // RFC 0003: the weekly digest. ponytail: quills.runnable_workspaces has no digest predicate, so
-  // a workspace gets its digests on its first runnable pass of the week (any due job or event).
-  // A forward migration that lists every Quills workspace once a week removes that wait.
+  // RFC 0003: the weekly digest. quills.runnable_workspaces lists a workspace until its digest
+  // of the last week is done (migration 0027).
   (db: Database) => queueWeeklyDigests(db),
 ];
 

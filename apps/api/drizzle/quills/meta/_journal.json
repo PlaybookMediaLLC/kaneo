@@ -190,6 +190,13 @@
 			"when": 1794616015027,
 			"tag": "0026_feedback_value_seams",
 			"breakpoints": true
+		},
+		{
+			"idx": 27,
+			"version": "7",
+			"when": 1794627047798,
+			"tag": "0027_weekly_digest_sweep",
+			"breakpoints": true
 		}
 	]
 }

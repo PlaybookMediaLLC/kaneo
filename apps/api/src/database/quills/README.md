@@ -313,9 +313,9 @@ one job per person. The sweeps queue the weekly digest (`jobs/handlers/digest.ts
 sweep of an ISO week (UTC), one `quills.mail` job per customer whose voted or followed posts
 changed status in the week before. The status changes come from the audit history. A cursor in
 `kv_store` (`digest:<week>`, expires after two weeks) keeps the place; the job key and the
-delivery ledger key (`digest:<principal>:<week>`) stop a second mail. `quills.runnable_workspaces`
-has no digest predicate yet, so a workspace gets its digests on its first runnable pass of the
-week.
+delivery ledger key (`digest:<principal>:<week>`) stop a second mail. Migration
+`0027_weekly_digest_sweep` makes `quills.runnable_workspaces` list a workspace with status
+changes in the last week until its digest cursor is done.
 
 `GET /quills/{workspaceId}/jobs` is paginated and omits payloads. The
 `POST /quills/{workspaceId}/jobs/{jobId}/retry` endpoint requeues a failed registered
