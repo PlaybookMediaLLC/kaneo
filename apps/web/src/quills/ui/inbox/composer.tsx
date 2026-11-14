@@ -9,6 +9,7 @@ import {
   MenuRadioGroup,
   MenuRadioItem,
   MenuTrigger,
+  Textarea,
 } from "../upstream";
 import { IconButton } from "./icon-button";
 import type { ComposerMode } from "./inbox-types";
@@ -50,7 +51,8 @@ export function Composer(props: ComposerProps) {
         current?.private && "border-warning/40 bg-warning/5",
       )}
     >
-      <textarea
+      <Textarea
+        unstyled
         ref={props.inputRef}
         aria-label={props.label}
         placeholder={props.label}
@@ -68,7 +70,7 @@ export function Composer(props: ComposerProps) {
           event.preventDefault();
           send();
         }}
-        className="block max-h-60 min-h-12 w-full resize-none bg-transparent px-2 py-1.5 text-sm outline-none [field-sizing:content] placeholder:text-muted-foreground"
+        className="block text-sm [&_textarea]:max-h-60 [&_textarea]:min-h-12 [&_textarea]:resize-none [&_textarea]:px-2 [&_textarea]:py-1.5 [&_textarea]:placeholder:text-muted-foreground"
       />
       <div className="flex items-center gap-1">
         {props.tools}
