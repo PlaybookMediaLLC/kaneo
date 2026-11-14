@@ -1,5 +1,20 @@
 {
 	"denied": "You do not have permission to see this page. Ask a workspace admin for access.",
+	"home": {
+		"announce_one": "{{count}} shipped idea is not in the changelog",
+		"announce_other": "{{count}} shipped ideas are not in the changelog",
+		"boards": "Boards",
+		"description": "What waits for your team on the feedback boards.",
+		"momentum": "Most votes in the last 7 days",
+		"none": "Nothing waits here.",
+		"place": "{{board}} · {{status}}",
+		"posts_one": "{{count}} post",
+		"posts_other": "{{count}} posts",
+		"review_one": "{{count}} new idea to review",
+		"review_other": "{{count}} new ideas to review",
+		"votes_one": "{{count}} vote",
+		"votes_other": "{{count}} votes"
+	},
 	"nav": {
 		"home": "Overview"
 	},
