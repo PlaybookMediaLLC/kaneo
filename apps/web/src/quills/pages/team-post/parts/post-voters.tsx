@@ -8,6 +8,7 @@ import { useListUsers } from "../../../hooks/team/use-list-users";
 import { useRemovePostVote } from "../../../hooks/team/use-remove-post-vote";
 import { useTeamRuntime } from "../../../team/runtime";
 import { PersonAvatar } from "../../../ui/person-avatar";
+import { IconButton } from "../../../ui/inbox/icon-button";
 import { Button, Input, useDebouncedValue } from "../../../ui/upstream";
 
 export interface PostVotersProps {
@@ -72,10 +73,9 @@ export function PostVoters({ workspaceId, post }: PostVotersProps) {
                 </span>
               ) : null}
               {voter.addedByPrincipalId && !locked ? (
-                <Button
-                  variant="ghost"
+                <IconButton
                   size="icon-xs"
-                  aria-label={t("team-post.removeVote", { name })}
+                  label={t("team-post.removeVote", { name })}
                   disabled={remove.isPending}
                   onClick={() =>
                     remove.mutate({
@@ -84,7 +84,7 @@ export function PostVoters({ workspaceId, post }: PostVotersProps) {
                   }
                 >
                   <X aria-hidden="true" />
-                </Button>
+                </IconButton>
               ) : null}
             </li>
           );

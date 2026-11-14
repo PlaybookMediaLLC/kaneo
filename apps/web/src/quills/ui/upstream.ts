@@ -9,6 +9,11 @@ export {
 } from "@/components/ui/card";
 export { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 export { Input } from "@/components/ui/input";
+export {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 export { Label } from "@/components/ui/label";
 export { Textarea } from "@/components/ui/textarea";
 export {
@@ -102,7 +107,24 @@ export {
   MenuSeparator,
   MenuTrigger,
 } from "@/components/ui/menu";
-export { CommandDialog, CommandDialogPopup } from "@/components/ui/command";
+export {
+  Combobox,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxPopup,
+  ComboboxTrigger,
+} from "@/components/ui/combobox";
+export {
+  Command,
+  CommandDialog,
+  CommandDialogPopup,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 export { Badge } from "@/components/ui/badge";
 export {
   Popover,

@@ -3,13 +3,8 @@ import { useTranslation } from "react-i18next";
 import type { GetPostResponse } from "../../../api/team/get-post";
 import { useTeamRuntime } from "../../../team/runtime";
 import { DetailHeader } from "../../../ui/inbox/detail-header";
-import {
-  Button,
-  Menu,
-  MenuItem,
-  MenuPopup,
-  MenuTrigger,
-} from "../../../ui/upstream";
+import { IconButton } from "../../../ui/inbox/icon-button";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../../../ui/upstream";
 import type { MergeMode } from "./merge-palette";
 import { PostMenu } from "./post-menu";
 
@@ -41,10 +36,8 @@ export function PostHeader({ post, ...props }: PostHeaderProps) {
             <Menu>
               <MenuTrigger
                 render={
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={t("team-post.mergeMenu")}
+                  <IconButton
+                    label={t("team-post.mergeMenu")}
                     disabled={
                       !team.permissions.update || Boolean(post.canonicalPostId)
                     }

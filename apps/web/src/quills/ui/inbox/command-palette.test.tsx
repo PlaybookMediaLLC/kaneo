@@ -11,10 +11,11 @@ const posts = [
 function renderPalette(items = posts, query = "dark") {
   const onSelect = vi.fn();
   const onQueryChange = vi.fn();
+  const onOpenChange = vi.fn();
   const view = renderComponent(
     <CommandPalette
       open
-      onOpenChange={() => undefined}
+      onOpenChange={onOpenChange}
       label="Merge into"
       chip="Merge into"
       placeholder="Find the request to merge this into…"
@@ -26,7 +27,7 @@ function renderPalette(items = posts, query = "dark") {
       onSelect={onSelect}
     />,
   );
-  return { view, onSelect, onQueryChange };
+  return { view, onSelect, onQueryChange, onOpenChange };
 }
 
 describe("CommandPalette", () => {
@@ -45,17 +46,24 @@ describe("CommandPalette", () => {
     ]);
   });
 
-  it("moves with the arrow keys and selects with Enter or the mouse", async () => {
-    const { view, onSelect } = renderPalette();
+  it("moves with the arrow keys and selects with Enter or a click", async () => {
+    const { view, onSelect, onQueryChange } = renderPalette();
     const field = await view.findByRole("combobox");
     fireEvent.keyDown(field, { key: "ArrowDown" });
     expect(view.getByRole("option", { name: "Dark theme" })).toHaveAttribute(
-      "aria-selected",
-      "true",
+      "data-highlighted",
     );
     fireEvent.keyDown(field, { key: "Enter" });
-    fireEvent.mouseDown(view.getByRole("option", { name: "Dark mode" }));
+    fireEvent.click(view.getByRole("option", { name: "Dark mode" }));
     expect(onSelect.mock.calls).toEqual([[posts[1]], [posts[0]]]);
+    // A selection does not replace the query with the text of the item.
+    expect(onQueryChange).not.toHaveBeenCalled();
+  });
+
+  it("closes with Escape", async () => {
+    const { view, onOpenChange } = renderPalette();
+    fireEvent.keyDown(await view.findByRole("combobox"), { key: "Escape" });
+    expect(onOpenChange.mock.calls[0]?.[0]).toBe(false);
   });
 
   it("says when the search has no results", async () => {

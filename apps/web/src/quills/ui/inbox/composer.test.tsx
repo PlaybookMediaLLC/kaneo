@@ -57,7 +57,9 @@ describe("Composer", () => {
   it("switches the mode and tints a private mode", async () => {
     const onModeChange = vi.fn();
     const { view } = renderComposer({ modes, mode: "note", onModeChange });
-    expect(view.getByRole("textbox").parentElement).toHaveClass("bg-warning/5");
+    expect(view.getByRole("textbox").closest("div")).toHaveClass(
+      "bg-warning/5",
+    );
     press("Mode: Note");
     fireEvent.click(await view.findByRole("menuitemradio", { name: "Reply" }));
     expect(onModeChange).toHaveBeenCalledWith("reply");

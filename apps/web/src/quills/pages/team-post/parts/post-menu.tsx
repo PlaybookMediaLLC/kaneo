@@ -3,8 +3,8 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { portalHref } from "../../../core/portal-href";
 import { useTeamRuntime } from "../../../team/runtime";
+import { IconButton } from "../../../ui/inbox/icon-button";
 import {
-  Button,
   Menu,
   MenuItem,
   MenuPopup,
@@ -46,15 +46,7 @@ export function PostMenu(props: PostMenuProps) {
   return (
     <>
       <Menu>
-        <MenuTrigger
-          render={
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label={t("team-post.more")}
-            />
-          }
-        >
+        <MenuTrigger render={<IconButton label={t("team-post.more")} />}>
           <Ellipsis aria-hidden="true" />
         </MenuTrigger>
         <MenuPopup align="end">

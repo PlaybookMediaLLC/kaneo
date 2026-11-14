@@ -2,7 +2,7 @@ import { fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { listUsersFixture } from "../../../api/team/list-users.fixture";
 import { TeamRuntimeProvider } from "../../../team/runtime";
-import { fill, press } from "../../../test/actions";
+import { fill } from "../../../test/actions";
 import { mockApi } from "../../../test/mock-api";
 import { renderComponent } from "../../../test/render";
 import { postTeam } from "../../team-post/post.fixture";
@@ -26,9 +26,9 @@ describe("AuthorPicker", () => {
     api.reply(listUsersFixture.ok({ items: [inboxCustomer] }));
     const onChange = vi.fn();
     const view = render(onChange);
-    press("Author: You");
+    fireEvent.click(view.getByRole("combobox", { name: "Author: You" }));
     fill("Find a customer", "barb");
-    fireEvent.click(await view.findByRole("button", { name: "Barbara" }));
+    fireEvent.click(await view.findByRole("option", { name: "Barbara" }));
     expect(onChange).toHaveBeenCalledWith({
       principalId: "principal_new",
       name: "Barbara",

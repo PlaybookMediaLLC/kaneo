@@ -3,8 +3,8 @@ import { type ReactNode, useContext } from "react";
 import { useTranslation } from "react-i18next";
 import type { PortalProblem } from "../../core/types";
 import { TeamStateView } from "../../team/team-state-view";
-import { Button } from "../upstream";
 import { DetailPaneContext } from "./detail-pane-context";
+import { IconButton } from "./icon-button";
 import { ListHeader } from "./list-header";
 import { SearchField, type SearchFieldProps } from "./search-field";
 
@@ -41,15 +41,13 @@ export function ListPane(props: ListPaneProps) {
           <>
             {props.actions}
             {pane ? (
-              <Button
-                variant="ghost"
-                size="icon-sm"
+              <IconButton
                 className="hidden md:inline-flex"
-                aria-label={t("inbox.hideList")}
+                label={t("inbox.hideList")}
                 onClick={pane.hideList}
               >
                 <PanelLeftClose aria-hidden="true" />
-              </Button>
+              </IconButton>
             ) : null}
           </>
         }

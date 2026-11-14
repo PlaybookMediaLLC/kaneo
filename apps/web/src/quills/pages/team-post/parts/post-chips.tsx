@@ -7,6 +7,7 @@ import { useListTags } from "../../../hooks/team/use-list-tags";
 import { useSetPostBoard } from "../../../hooks/team/use-set-post-board";
 import { useSetPostTags } from "../../../hooks/team/use-set-post-tags";
 import { useTeamRuntime } from "../../../team/runtime";
+import { IconButton } from "../../../ui/inbox/icon-button";
 import {
   Button,
   Menu,
@@ -105,11 +106,10 @@ export function PostChips({ workspaceId, post, boards }: PostChipsProps) {
         <Menu open={tagging} onOpenChange={setTagging}>
           <MenuTrigger
             render={
-              <Button
+              <IconButton
                 variant="outline"
-                size="icon-sm"
                 className="size-7 rounded-full"
-                aria-label={t("team-post.editTags")}
+                label={t("team-post.editTags")}
                 disabled={setTags.isPending}
               />
             }

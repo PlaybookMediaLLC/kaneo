@@ -8,6 +8,7 @@ import { useGetNotificationUnreadCount } from "../hooks/team/use-get-notificatio
 import { useListNotifications } from "../hooks/team/use-list-notifications";
 import { useMarkAllNotificationsRead } from "../hooks/team/use-mark-all-notifications-read";
 import { useMarkNotificationRead } from "../hooks/team/use-mark-notification-read";
+import { IconButton } from "../ui/inbox/icon-button";
 import {
   Button,
   cn,
@@ -69,11 +70,15 @@ export function NotificationsButton({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
-        render={<Button variant="ghost" size="icon-sm" className="relative" />}
-        aria-label={
-          count
-            ? t("team.notifications.unread", { count })
-            : t("team.notifications.title")
+        render={
+          <IconButton
+            className="relative"
+            label={
+              count
+                ? t("team.notifications.unread", { count })
+                : t("team.notifications.title")
+            }
+          />
         }
       >
         <Bell aria-hidden="true" />

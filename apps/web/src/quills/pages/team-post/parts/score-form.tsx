@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import type { PortalProblem } from "../../../core/types";
+import { FormSelect } from "../../../ui/form-select";
 import { PortalForm } from "../../../ui/portal-form";
 import { Field, FieldLabel, Input } from "../../../ui/upstream";
 
@@ -34,8 +35,6 @@ const numbers = [
   { name: "confidence", labelKey: "team-post.confidence" },
   { name: "effort", labelKey: "team-post.effort" },
 ] as const;
-const select =
-  "h-8 w-full rounded-lg border border-input bg-background px-2 text-sm";
 
 export interface ScoreFormProps {
   score: ScoreValues;
@@ -75,23 +74,19 @@ export function ScoreForm({ score, onSubmit }: ScoreFormProps) {
               ) : null}
             </Field>
           ))}
-          <Field>
-            <FieldLabel htmlFor="team-post-impact">
-              {t("team-post.impact")}
-            </FieldLabel>
-            <select
-              id="team-post-impact"
-              className={select}
-              {...form.register("impact", { setValueAs: toNumber })}
-            >
-              <option value="">{t("team-post.notScored")}</option>
-              {impacts.map((impact) => (
-                <option key={impact.value} value={impact.value}>
-                  {t(impact.labelKey)}
-                </option>
-              ))}
-            </select>
-          </Field>
+          <FormSelect
+            control={form.control}
+            name="impact"
+            label={t("team-post.impact")}
+            size="sm"
+            options={[
+              { value: null, label: t("team-post.notScored") },
+              ...impacts.map((impact) => ({
+                value: impact.value,
+                label: t(impact.labelKey),
+              })),
+            ]}
+          />
         </div>
       )}
     </PortalForm>

@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { PortalProblem } from "../../core/types";
 import { useGetBoardSettings } from "../../hooks/team/use-get-board-settings";
@@ -11,6 +11,16 @@ import { useTeamRuntime } from "../../team/runtime";
 import { TeamStateView } from "../../team/team-state-view";
 import { ListHeader } from "../../ui/inbox/list-header";
 import { PageFrame } from "../../ui/page-frame";
+import { PortalSelectContent } from "../../ui/portal-select-content";
+import {
+  Field,
+  FieldLabel,
+  Select,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../ui/upstream";
 import { BoardSegments } from "./parts/board-segments";
 import { BoardVotingForm } from "./parts/board-voting-form";
 import { TaskSyncForm } from "./parts/task-sync-form";
@@ -22,13 +32,11 @@ export interface TeamBoardsPageProps {
 }
 
 const heading = "text-sm font-semibold";
-const select = "h-8 rounded-lg border border-input bg-background px-2 text-sm";
 
 // The settings of one board (RFC 0004 D4): who can see it, portal voting and task sync.
 export function TeamBoardsPage({ workspaceId }: TeamBoardsPageProps) {
   const { t } = useTranslation("quills");
   const team = useTeamRuntime();
-  const boardField = useId();
   const [chosen, setChosen] = useState("");
   const param = { workspaceId };
   // ponytail: the first 100 boards (the API maximum); page them when a workspace has more.
@@ -66,23 +74,34 @@ export function TeamBoardsPage({ workspaceId }: TeamBoardsPageProps) {
         title={t("boards.title")}
         actions={
           items.length ? (
-            <span className="flex items-center gap-2 text-sm">
-              <label htmlFor={boardField} className="text-muted-foreground">
+            <Field className="flex-row items-center">
+              <FieldLabel className="font-normal text-muted-foreground">
                 {t("team-triage.board")}
-              </label>
-              <select
-                id={boardField}
-                className={select}
+              </FieldLabel>
+              <Select
+                items={items.map((item) => ({
+                  value: item.id,
+                  label: item.name,
+                }))}
                 value={boardId}
-                onChange={(event) => setChosen(event.target.value)}
+                onValueChange={(value) => {
+                  if (value) setChosen(value);
+                }}
               >
-                {items.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </span>
+                <SelectTrigger size="sm" className="w-auto min-w-28 max-w-56">
+                  <SelectValue />
+                </SelectTrigger>
+                <PortalSelectContent>
+                  <SelectGroup>
+                    {items.map((item) => (
+                      <SelectItem key={item.id} value={item.id}>
+                        {item.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </PortalSelectContent>
+              </Select>
+            </Field>
           ) : null
         }
       />

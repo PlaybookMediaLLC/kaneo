@@ -2,6 +2,7 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Button, Kbd } from "../upstream";
+import { IconButton } from "./icon-button";
 import type { InboxAction } from "./inbox-types";
 import { useKeyShortcuts } from "./use-key-shortcuts";
 
@@ -74,26 +75,22 @@ export function FloatingActionBar({
       </div>
       {onPrevious && onNext ? (
         <div className={pill}>
-          <Button
-            variant="ghost"
-            size="icon-sm"
+          <IconButton
             className="rounded-full"
-            aria-label={t("inbox.previous")}
+            label={t("inbox.previous")}
             aria-keyshortcuts="K"
             onClick={onPrevious}
           >
             <ChevronUp aria-hidden="true" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
+          </IconButton>
+          <IconButton
             className="rounded-full"
-            aria-label={t("inbox.next")}
+            label={t("inbox.next")}
             aria-keyshortcuts="J"
             onClick={onNext}
           >
             <ChevronDown aria-hidden="true" />
-          </Button>
+          </IconButton>
         </div>
       ) : null}
     </div>

@@ -7,8 +7,8 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { IconButton } from "../../../ui/inbox/icon-button";
 import {
-  Button,
   Menu,
   MenuItem,
   MenuPopup,
@@ -41,11 +41,9 @@ export function ConversationMenu(props: ConversationMenuProps) {
     <Menu>
       <MenuTrigger
         render={
-          <Button
-            variant="ghost"
-            size="icon-sm"
+          <IconButton
             disabled={props.disabled}
-            aria-label={t("team-conversations.more")}
+            label={t("team-conversations.more")}
           />
         }
       >

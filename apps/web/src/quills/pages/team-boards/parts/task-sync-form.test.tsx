@@ -21,7 +21,8 @@ describe("TaskSyncForm", () => {
     fieldName: "When a linked task is done, set the status to",
     issuePath: "statusOnTaskDone",
     submitName: "Save task sync",
-    validValue: "post_status_test_2",
+    select: true,
+    validValue: "Complete",
     expectedValues: { statusOnTaskDone: "post_status_test_2" },
   });
   describeFormContract({
@@ -36,7 +37,8 @@ describe("TaskSyncForm", () => {
     fieldName: "When a linked task is done, set the status to",
     issuePath: "statusOnTaskDone",
     submitName: "Save task sync",
-    validValue: "",
+    select: true,
+    validValue: "Do not change the status",
     expectedValues: { statusOnTaskDone: null },
   });
 });

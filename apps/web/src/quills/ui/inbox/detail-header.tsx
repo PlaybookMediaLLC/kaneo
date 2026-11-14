@@ -3,6 +3,7 @@ import { type ReactNode, useContext } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../upstream";
 import { DetailPaneContext } from "./detail-pane-context";
+import { IconButton } from "./icon-button";
 
 export interface DetailHeaderProps {
   /** The left side, such as the customer's avatar and name. */
@@ -54,28 +55,24 @@ export function DetailHeader({
         {actions}
         {onPrevious && onNext
           ? steps.map(({ key, label, icon: Icon, run }) => (
-              <Button
+              <IconButton
                 key={key}
-                variant="ghost"
-                size="icon-sm"
-                aria-label={label}
+                label={label}
                 aria-keyshortcuts={key}
                 onClick={run}
               >
                 <Icon aria-hidden="true" />
-              </Button>
+              </IconButton>
             ))
           : null}
         {panel ? (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={panel.label}
+          <IconButton
+            label={panel.label}
             aria-expanded={panel.open}
             onClick={panel.toggle}
           >
             <PanelRight aria-hidden="true" />
-          </Button>
+          </IconButton>
         ) : null}
       </div>
     </div>

@@ -34,6 +34,7 @@ import { ConversationReplyForm } from "../ui/conversation/conversation-reply-for
 import { MarkdownContent } from "../ui/markdown-content";
 import { ConfirmAction } from "../ui/confirm-action";
 import { PageFrame } from "../ui/page-frame";
+import { FormSelect } from "../ui/form-select";
 import { PortalForm } from "../ui/portal-form";
 import { PortalGate } from "../ui/portal-gate";
 import { PortalNavigation } from "../ui/portal-navigation";
@@ -43,6 +44,7 @@ import { StateView } from "../ui/state-view";
 import { SurveyCard } from "../ui/survey-card";
 import { CommandPalette } from "../ui/inbox/command-palette";
 import { Composer } from "../ui/inbox/composer";
+import { IconButton } from "../ui/inbox/icon-button";
 import { ConversationRow } from "../ui/inbox/conversation-row";
 import { DateSeparator } from "../ui/inbox/date-separator";
 import { DetailHeader } from "../ui/inbox/detail-header";
@@ -114,6 +116,7 @@ export function KitGallery() {
   const demo = t("core.gallery.demo");
   const schema = z.object({
     message: z.string().min(1, t("core.gallery.required")),
+    display: z.enum(["count", "hidden"]),
   });
   return (
     <PortalShell
@@ -236,7 +239,7 @@ export function KitGallery() {
             <PortalForm
               key={outcome}
               schema={schema}
-              defaultValues={{ message: "" }}
+              defaultValues={{ message: "", display: "count" }}
               submitKey="core.gallery.confirm"
               onSubmit={async () => {
                 if (outcome === "success") {
@@ -258,21 +261,38 @@ export function KitGallery() {
               }}
             >
               {(form) => (
-                <div>
-                  <Label htmlFor="gallery-message">
-                    {t("core.gallery.message")}
-                  </Label>
-                  <Input
-                    id="gallery-message"
-                    aria-invalid={Boolean(form.formState.errors.message)}
-                    {...form.register("message")}
+                <>
+                  <div>
+                    <Label htmlFor="gallery-message">
+                      {t("core.gallery.message")}
+                    </Label>
+                    <Input
+                      id="gallery-message"
+                      aria-invalid={Boolean(form.formState.errors.message)}
+                      {...form.register("message")}
+                    />
+                    {form.formState.errors.message ? (
+                      <p role="alert">
+                        {String(form.formState.errors.message.message)}
+                      </p>
+                    ) : null}
+                  </div>
+                  <FormSelect
+                    control={form.control}
+                    name="display"
+                    label={t("team-triage.voteDisplay")}
+                    options={[
+                      {
+                        value: "count",
+                        label: t("team-triage.voteDisplayCount"),
+                      },
+                      {
+                        value: "hidden",
+                        label: t("team-triage.voteDisplayHidden"),
+                      },
+                    ]}
                   />
-                  {form.formState.errors.message ? (
-                    <p role="alert">
-                      {String(form.formState.errors.message.message)}
-                    </p>
-                  ) : null}
-                </div>
+                </>
               )}
             </PortalForm>
           </section>
@@ -566,6 +586,9 @@ export function KitGallery() {
                   <Button size="sm" onClick={() => setPalette(true)}>
                     {demo}
                   </Button>
+                  <IconButton label={demo} onClick={() => setPalette(true)}>
+                    <ArrowUpIcon />
+                  </IconButton>
                 </>
               }
             />

@@ -4,7 +4,7 @@ import { createPostFixture } from "../../api/team/create-post.fixture";
 import type { ListPostsResponse } from "../../api/team/list-posts";
 import { listPostsFixture } from "../../api/team/list-posts.fixture";
 import { listUsersFixture } from "../../api/team/list-users.fixture";
-import { fill, press } from "../../test/actions";
+import { choose, fill, press } from "../../test/actions";
 import { describePageContract } from "../../test/contracts";
 import { mockApi } from "../../test/mock-api";
 import { renderPage } from "../../test/render";
@@ -170,13 +170,13 @@ describe("TeamPostsPage", () => {
     api.reply(createPostFixture.ok({ id: "post_dark" }));
     const view = renderPage(TeamPostsPage, meta, { search: { new: true } });
     await view.findByRole("dialog");
-    press("Author: You");
+    fireEvent.click(view.getByRole("combobox", { name: "Author: You" }));
     fill("Find a customer", "barb");
-    fireEvent.click(await view.findByRole("button", { name: "Barbara" }));
-    expect(view.getByRole("button", { name: "Author: Barbara" })).toBeVisible();
-    fireEvent.change(view.getByRole("combobox", { name: "Status" }), {
-      target: { value: "status_planned" },
-    });
+    fireEvent.click(await view.findByRole("option", { name: "Barbara" }));
+    expect(
+      view.getByRole("combobox", { name: "Author: Barbara" }),
+    ).toBeVisible();
+    await choose("Status", "Planned");
     press("Tags");
     fireEvent.click(await view.findByRole("menuitemcheckbox", { name: "UX" }));
     await createFlow(view);

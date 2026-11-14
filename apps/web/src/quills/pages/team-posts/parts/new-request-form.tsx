@@ -6,6 +6,7 @@ import type { ListBoardsResponse } from "../../../api/team/list-boards";
 import type { ListStatusesResponse } from "../../../api/team/list-statuses";
 import type { ListTagsResponse } from "../../../api/team/list-tags";
 import type { PortalProblem } from "../../../core/types";
+import { FormSelect } from "../../../ui/form-select";
 import { PortalForm } from "../../../ui/portal-form";
 import {
   Button,
@@ -26,9 +27,6 @@ const schema = z.object({
   tagIds: z.array(z.string()).max(50),
 });
 export type NewRequestValues = z.infer<typeof schema>;
-
-const select =
-  "h-8 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export interface NewRequestFormProps {
   boards: ListBoardsResponse["items"];
@@ -61,17 +59,17 @@ export function NewRequestForm(props: NewRequestFormProps) {
         const tagIds = form.watch("tagIds");
         return (
           <div className="me-auto flex flex-wrap items-center gap-2">
-            <select
-              aria-label={t("team-posts.status")}
-              className={select}
-              {...form.register("statusId")}
-            >
-              {props.statuses.map((status) => (
-                <option key={status.id} value={status.id}>
-                  {status.name}
-                </option>
-              ))}
-            </select>
+            <FormSelect
+              control={form.control}
+              name="statusId"
+              label={t("team-posts.status")}
+              hideLabel
+              size="sm"
+              options={props.statuses.map((status) => ({
+                value: status.id,
+                label: status.name,
+              }))}
+            />
             <Menu>
               <MenuTrigger
                 render={<Button type="button" variant="outline" size="sm" />}
@@ -117,17 +115,17 @@ export function NewRequestForm(props: NewRequestFormProps) {
               aria-hidden="true"
               className="size-4 text-muted-foreground"
             />
-            <select
-              aria-label={t("team-posts.board")}
-              className={select}
-              {...form.register("boardId")}
-            >
-              {props.boards.map((board) => (
-                <option key={board.id} value={board.id}>
-                  {board.name}
-                </option>
-              ))}
-            </select>
+            <FormSelect
+              control={form.control}
+              name="boardId"
+              label={t("team-posts.board")}
+              hideLabel
+              size="sm"
+              options={props.boards.map((board) => ({
+                value: board.id,
+                label: board.name,
+              }))}
+            />
           </div>
           <Input
             unstyled
