@@ -9,11 +9,13 @@ import jobWake from "./jobs/wake";
 import portalFeedback from "./portal/feedback/index";
 import contentPublic from "./content/public/index";
 import portal from "./portal/index";
+import portalSurveys from "./portal/surveys";
 import track from "./reporting/track";
 import portalSupport from "./support/customer/portal";
 import widgetFeedback from "./widget/feedback/index";
 import widgetHost from "./widget/host";
 import widget from "./widget/index";
+import widgetSurveys from "./widget/surveys";
 import widgetHelp from "./widget/help/index";
 import widgetKbAsk from "./widget/kb-ask";
 import widgetSupport from "./widget/support/index";
@@ -43,4 +45,6 @@ export default apiRouter()
   .route("/", portalSupport)
   .route("/", widgetSupport)
   .route("/", customerFiles)
-  .route("/", track);
+  .route("/", track)
+  .route("/", portalSurveys)
+  .route("/", widgetSurveys);
