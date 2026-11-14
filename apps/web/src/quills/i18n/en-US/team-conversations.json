@@ -1,0 +1,97 @@
+{
+	"actions": "Conversation actions",
+	"addNote": "Add note",
+	"addTag": "Add a tag",
+	"assignToMe": "Assign to me",
+	"attachment": "Attachment: {{name}}",
+	"cancel": "Cancel",
+	"channel": {
+		"email": "Email",
+		"github": "GitHub",
+		"messenger": "Chat"
+	},
+	"close": "Close",
+	"conversation": "Conversation",
+	"customer": {
+		"company": "Company",
+		"country": "Country",
+		"email": "Email",
+		"mrr": "MRR",
+		"name": "Name",
+		"plan": "Plan",
+		"segments": "Segments",
+		"title": "Customer"
+	},
+	"links": {
+		"board": "Board",
+		"create": "Create post",
+		"created": "Created the post “{{title}}”.",
+		"none": "None",
+		"postContent": "Details (optional)",
+		"postTitle": "Post title",
+		"posts": "Feedback",
+		"ticket": "Ticket",
+		"ticketName": "{{reference}} {{title}} · {{status}}",
+		"title": "Links"
+	},
+	"loadMore": "Load more conversations",
+	"no": "No",
+	"noMessages": "No messages yet.",
+	"noTeam": "No team",
+	"note": "Internal note",
+	"noteLabel": "Note for the team",
+	"priority": {
+		"high": "High",
+		"low": "Low",
+		"medium": "Medium",
+		"none": "No priority",
+		"urgent": "Urgent"
+	},
+	"problem": {
+		"conflict": "The conversation is not ready for this change. Fill in the required fields and try again.",
+		"failed": "The change could not be saved. Try again.",
+		"noAccess": "You do not have permission to make this change.",
+		"rateLimited": "There were too many changes. Wait a moment and try again."
+	},
+	"properties": {
+		"assignee": "Assignee",
+		"priority": "Priority",
+		"status": "Status",
+		"tags": "Tags",
+		"team": "Team",
+		"title": "Details"
+	},
+	"removeTag": "Remove the tag {{name}}",
+	"reopen": "Reopen",
+	"reply": "Reply",
+	"replyLabel": "Reply to the customer",
+	"saveNote": "Save note",
+	"send": "Send reply",
+	"snooze": "Snooze",
+	"status": {
+		"closed": "Closed",
+		"open": "Open",
+		"snoozed": "Snoozed"
+	},
+	"summary": {
+		"create": "Summarize",
+		"off": "AI is off for this workspace.",
+		"refresh": "Summarize again",
+		"requested": "The summary is on its way. It shows here when it is ready.",
+		"title": "AI summary"
+	},
+	"tabs": "Conversation status and pinned views",
+	"teammate": "Teammate",
+	"thread": "Messages",
+	"title": "Conversations",
+	"typing": "{{name}} is typing…",
+	"unassign": "Unassign",
+	"unassigned": "Unassigned",
+	"unknown": "Unknown",
+	"views": {
+		"all": "All conversations",
+		"mine": "My conversations",
+		"unassigned": "Unassigned"
+	},
+	"yes": "Yes"
+}

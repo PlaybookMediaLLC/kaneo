@@ -221,6 +221,7 @@ Merged: 7. The ticket target of `setQuillsConversationAttributeValue` belongs to
 | `shareQuillsPost` | `POST /conversations/{conversationId}/share-post` | update | `conversation_messages`, `conversations`, `posts` | `message.created` |
 | `getQuillsLinkedPostsForConversation` | `GET /conversations/{conversationId}/posts` | read | `post_external_links`, `posts`, `boards` | - |
 | `getQuillsLinkedConversationsForPost` | `GET /posts/{postId}/conversations` | read | `post_external_links`, `conversations` | - |
+| `getQuillsConversationTicketLink` | `GET /conversations/{conversationId}/ticket` (the paired customer ticket or null; RFC 0004 lane C) | read | `conversations`, `ticket_conversations`, `tickets`, `ticket_statuses` | - |
 
 Merged: 18. The inbox is the source's unified inbox: the conversation branch and the ticket branch
 (`support/ticket-list.ts`, shared with `listQuillsTickets`), each paged by its own keyset cursor and
@@ -501,7 +502,7 @@ for each audience), `readTogetherFn`.
 | `draftQuillsAttributeDescriptions`, `previewQuillsAttributeDetection` | deferred (P8) | AI authoring. |
 | `fetchQuillsCustomerContext` | deferred (P7) | Calls connected integrations. |
 | `unfurlQuillsLink`, `readQuillsTogether`, `getQuillsEmbedPreview` | built | See "RFC 0001 lane S1" above. |
-| `getQuillsConversationTicketLink` | out of scope | Ticket links (tickets slice). |
+| `getQuillsConversationTicketLink` | built | See "Participants, views, inbox, posts" above (RFC 0004 lane C). |
 | `supportQuillsReporting` | in `TICKETS.md` | Support reporting, not conversations. `attributeQuillsBreakdown` is built in lane S1 above. |
 | `sendQuillsConversationTyping` | in `customer/ROUTES.md` | Typing markers. `getQuillsConversationPresence` is built in lane S1 above. |
 | `captureQuillsVisitorContactEmail` changelog auto-subscribe | part | The address is stored; the changelog subscription side effect waits for a handler. |

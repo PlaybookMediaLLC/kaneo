@@ -49,8 +49,9 @@ export const portalPaths = {
       workspaceId,
       `/hc/${encodeURIComponent(locale)}/articles/${encodeURIComponent(idSlug)}`,
     ),
+  // The conversation in the teammate app (RFC 0004).
   teammateConversation: (workspaceId: string, conversationId: string) =>
-    `${clientBase()}/dashboard/workspace/${encodeURIComponent(workspaceId)}/quills/support/conversations/${encodeURIComponent(conversationId)}`,
+    `${clientBase()}/feedback/${encodeURIComponent(workspaceId)}/conversations/${encodeURIComponent(conversationId)}`,
 } as const;
 
 export const portalPathPatterns = [
@@ -87,8 +88,6 @@ export const portalPathPatterns = [
   },
   {
     id: "teammateConversation",
-    pattern:
-      "/dashboard/workspace/$workspaceId/quills/support/conversations/$conversationId",
-    pending: 132,
+    pattern: "/feedback/$workspaceId/conversations/$conversationId",
   },
 ] as const;
