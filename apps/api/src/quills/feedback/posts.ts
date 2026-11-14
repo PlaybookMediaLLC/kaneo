@@ -37,6 +37,7 @@ import {
 } from "../framework/define-route";
 import { memberUserIds } from "../framework/platform-reads";
 import { activityMetadata, recordActivity } from "./activity";
+import { demandOf, demandSchema, mrrSort } from "./demand";
 import {
   afterCursor,
   filterConditions,
@@ -112,7 +113,13 @@ const loadWithMembers = async (input: {
 });
 
 const filterQuery = filters.extend({
-  sort: z.enum(["newest", "oldest", "votes"]).default("newest"),
+  sort: z
+    .enum(["newest", "oldest", "votes", "rice", "mrr"])
+    .default("newest")
+    .openapi({
+      description:
+        "rice: the RICE score, posts without one last. mrr: the monthly revenue of the voters' companies.",
+    }),
   cursor: flexibleToTypeIdSchema("post").optional(),
   limit: pagingNumber(1, 100, 20),
 });
@@ -123,11 +130,11 @@ const listPosts = defineQuillsRoute({
   operationId: "listQuillsPosts",
   summary: "List the visible feedback posts",
   description:
-    "Leaves out merged posts, test-customer posts and posts on boards hidden by their project links. showDeleted=true lists posts deleted in the last 30 days.",
+    "Leaves out merged posts, test-customer posts and posts on boards hidden by their project links. showDeleted=true lists posts deleted in the last 30 days. Each post has its demand, as getQuillsPostDemand counts it, without segments.",
   action: "read",
   query: filterQuery,
   response: z.object({
-    items: z.array(postSchema),
+    items: z.array(postSchema.extend({ demand: demandSchema })),
     nextCursor: z.string().nullable(),
     hasMore: z.boolean(),
   }),
@@ -137,17 +144,25 @@ const listPosts = defineQuillsRoute({
   handler: async ({ db, query, loaded: projects }) => {
     // A cursor is a post the caller can see; a hidden or missing one is 404, not a probe.
     if (query.cursor) await findPost(db, query.cursor, projects, true);
+    const sort =
+      query.sort === "mrr" ? mrrSort(db, projects) : sorts[query.sort];
     const rows = await selectPosts(
       db,
       and(
         filterConditions(db, query, projects),
-        query.cursor && afterCursor(query.cursor, query.sort),
+        query.cursor && afterCursor(query.cursor, sort),
       ),
     )
-      .orderBy(...sorts[query.sort].order)
+      .orderBy(...sort.order)
       .limit(query.limit + 1);
     const hasMore = rows.length > query.limit;
-    const items = await withTags(db, rows.slice(0, query.limit));
+    const page = await withTags(db, rows.slice(0, query.limit));
+    const demand = await demandOf(
+      db,
+      page.map((post) => post.id),
+      projects,
+    );
+    const items = page.map((post) => ({ ...post, demand: demand(post.id) }));
     return { items, nextCursor: hasMore ? items.at(-1)!.id : null, hasMore };
   },
 });
