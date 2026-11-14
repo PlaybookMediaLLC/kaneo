@@ -84,6 +84,11 @@ import {
   type OnboardingEmailContent,
 } from "./templates/onboarding-email";
 import { StatusChangeEmail } from "./templates/status-change";
+import { ShippedEmail } from "./templates/shipped";
+import {
+  WeeklyDigestEmail,
+  type WeeklyDigestItem,
+} from "./templates/weekly-digest";
 import { NewCommentEmail } from "./templates/new-comment";
 import { ConversationMessageEmail } from "./templates/conversation-message";
 import { ConversationReplyEmail } from "./templates/conversation-reply";
@@ -1088,6 +1093,82 @@ export async function sendStatusChangeEmail(
 }
 
 // ============================================================================
+// Shipped Email
+// ============================================================================
+
+interface SendShippedParams {
+  to: string;
+  entryTitle: string;
+  entryUrl: string;
+  requestTitle: string;
+  workspaceName: string;
+  unsubscribeUrl: string;
+  oneClickUnsubscribeUrl?: string;
+  preferencesUrl?: string;
+  logoUrl?: string;
+}
+
+/** A changelog entry shipped a request that the recipient voted for or follows. */
+export async function sendShippedEmail(
+  params: SendShippedParams,
+): Promise<EmailResult> {
+  return sendEmail({
+    to: params.to,
+    subject: `Shipped: ${params.requestTitle}`,
+    react: ShippedEmail({
+      entryTitle: params.entryTitle,
+      entryUrl: params.entryUrl,
+      requestTitle: params.requestTitle,
+      organizationName: params.workspaceName,
+      unsubscribeUrl: params.unsubscribeUrl,
+      preferencesUrl: params.preferencesUrl,
+      logoUrl: params.logoUrl,
+    }),
+    extraHeaders: listUnsubscribeHeaders(
+      params.oneClickUnsubscribeUrl ?? params.unsubscribeUrl,
+    ),
+    emailType: "ShippedEmail",
+    preview: { entryUrl: params.entryUrl },
+  });
+}
+
+// ============================================================================
+// Weekly Digest Email
+// ============================================================================
+
+interface SendWeeklyDigestParams {
+  to: string;
+  items: readonly WeeklyDigestItem[];
+  myFeedbackUrl: string;
+  workspaceName: string;
+  unsubscribeUrl: string;
+  oneClickUnsubscribeUrl?: string;
+  logoUrl?: string;
+}
+
+/** One summary per person and week of the status changes on their feedback. */
+export async function sendWeeklyDigestEmail(
+  params: SendWeeklyDigestParams,
+): Promise<EmailResult> {
+  return sendEmail({
+    to: params.to,
+    subject: `Your feedback at ${params.workspaceName} this week`,
+    react: WeeklyDigestEmail({
+      items: params.items,
+      myFeedbackUrl: params.myFeedbackUrl,
+      organizationName: params.workspaceName,
+      unsubscribeUrl: params.unsubscribeUrl,
+      logoUrl: params.logoUrl,
+    }),
+    extraHeaders: listUnsubscribeHeaders(
+      params.oneClickUnsubscribeUrl ?? params.unsubscribeUrl,
+    ),
+    emailType: "WeeklyDigestEmail",
+    preview: { myFeedbackUrl: params.myFeedbackUrl },
+  });
+}
+
+// ============================================================================
 // New Comment Email
 // ============================================================================
 
@@ -1951,6 +2032,11 @@ export { OnboardingEmail } from "./templates/onboarding-email";
 export { MagicLinkEmail } from "./templates/magic-link";
 export { SignupNotAllowedEmail } from "./templates/signup-not-allowed";
 export { StatusChangeEmail } from "./templates/status-change";
+export { ShippedEmail } from "./templates/shipped";
+export {
+  WeeklyDigestEmail,
+  type WeeklyDigestItem,
+} from "./templates/weekly-digest";
 export { NewCommentEmail } from "./templates/new-comment";
 export { PostMentionEmail } from "./templates/post-mention";
 export { ChangelogPublishedEmail } from "./templates/changelog-published";
