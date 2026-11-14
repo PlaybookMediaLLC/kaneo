@@ -119,13 +119,13 @@ describe.skipIf(!url)("Quills weekly digest", () => {
   const lastWeek = new Date(from.getTime() + 24 * 60 * 60 * 1000);
   const people: Record<string, PrincipalId> = {};
   const titles: Record<string, string> = {};
+  const post: Record<string, PostId> = {};
 
   beforeAll(async () => {
     pool = new Pool({ connectionString: url, max: 6 });
     await startContract(pool, url!);
     const env = contractEnv();
     await enablePortal(env, env.a);
-    const post: Record<string, PostId> = {};
     for (const name of ["p1", "p2", "p3", "p4", "hidden", "late"]) {
       const created = await customerPost(env, env.a);
       post[name] = created.postId as PostId;
@@ -304,5 +304,33 @@ describe.skipIf(!url)("Quills weekly digest", () => {
     expect(stored!.matrix).toMatchObject({
       weekly_digest: { inApp: false, email: false },
     });
+  });
+
+  it("includes the voter of a duplicate that was merged into a changed post", async () => {
+    const env = contractEnv();
+    const duplicate = (await customerPost(env, env.a)).postId as PostId;
+    const voter = (await env.widgetVisitor(env.a)).principalId as PrincipalId;
+    await env.scoped(env.a, async (db) => {
+      await db
+        .update(posts)
+        .set({ canonicalPostId: post.p1! })
+        .where(eq(posts.id, duplicate));
+      await db
+        .insert(postVotes)
+        .values({ postId: duplicate, principalId: voter });
+      // The week is done after the first test: queue it again for the new voter.
+      await db.delete(kvStore).where(eq(kvStore.key, `digest:${week}`));
+      await queueWeeklyDigests(db);
+    });
+    expect((await digestJobs()).map((job) => job.key)).toContain(
+      `digest:${voter}:${week}`,
+    );
+    const sent = mail.digests.length;
+    await drain();
+    expect(mail.digests).toHaveLength(sent + 1);
+    // The digest names the post that the duplicate was merged into.
+    expect(mail.digests.at(-1)!.items).toEqual([
+      expect.objectContaining({ title: titles.p1 }),
+    ]);
   });
 });
