@@ -228,7 +228,7 @@ async function loadComment(db: Database, viewer: Viewer, id: PostCommentId) {
 }
 
 /** A live comment that the caller may see, on a post it may see. 404 otherwise. */
-async function findComment(
+export async function findComment(
   db: Database,
   viewer: Viewer,
   boardList: Board[],

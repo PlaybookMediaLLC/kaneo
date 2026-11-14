@@ -8,6 +8,7 @@ export * from "./preferences.fixture";
 export * from "./profile.fixture";
 export * from "./public-profile.fixture";
 export * from "./subscriptions.fixture";
+export * from "./translations.fixture";
 export * from "./unsubscribe.fixture";
 export * from "../support/customer/index.fixture";
 export * from "../files/customer.fixture";

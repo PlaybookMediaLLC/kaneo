@@ -6,6 +6,7 @@ import preferences from "./preferences";
 import profile from "./profile";
 import publicProfile from "./public-profile";
 import subscriptions from "./subscriptions";
+import translations from "./translations";
 import unsubscribe from "./unsubscribe";
 
 // Portal and public routes under /quills-public/{workspace}. Each module declares its routes
@@ -18,4 +19,5 @@ export default apiRouter()
   .route("/", inviteAccept)
   .route("/", subscriptions)
   .route("/", preferences)
-  .route("/", unsubscribe);
+  .route("/", unsubscribe)
+  .route("/", translations);
