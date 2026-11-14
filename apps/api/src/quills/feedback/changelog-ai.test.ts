@@ -51,17 +51,17 @@ vi.mock("../../ws", () => ({ broadcastToUserAndWait: vi.fn(async () => {}) }));
 const url = process.env.QUILLS_TEST_DATABASE_URL;
 const app = contractApp(quillsRouter, publicRouter);
 
-const draft = (postIds: string[], workspace = contractEnv().a) =>
-  app
-    .request(`/quills/${workspace}/changelog/drafts`, {
-      method: "POST",
-      headers: {
-        "x-test-user": contractEnv().owner,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ postIds }),
-    })
-    .then(async (res) => ({ status: res.status, body: await res.json() }));
+const draft = async (postIds: string[], workspace = contractEnv().a) => {
+  const res = await app.request(`/quills/${workspace}/changelog/drafts`, {
+    method: "POST",
+    headers: {
+      "x-test-user": contractEnv().owner,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ postIds }),
+  });
+  return { status: res.status, body: await res.json() };
+};
 
 const usage = () =>
   contractEnv().scoped(contractEnv().a, (db) =>
