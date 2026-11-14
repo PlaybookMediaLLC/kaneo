@@ -7,6 +7,7 @@ import type { JobQueueRow } from "../../database/quills/schema/job-queue";
 import { workspaceUserTable, userTable } from "../../database/schema";
 import { roleHasWorkspacePermission } from "../../utils/require-workspace-permission";
 import { broadcastToUserAndWait } from "../../ws";
+import { subscribeToEvent } from "../../events";
 import { fanOut } from "./fanout";
 import { deliverCustomerChange } from "./handlers/customer-stream";
 import { fanOutIntegrations, runIntegrationJob } from "./handlers/integration";
@@ -20,6 +21,10 @@ import { runTransferJob } from "./handlers/transfer";
 import { runQuillsSweeps } from "./handlers/sweeps";
 import { runWipeJob } from "./handlers/wipe";
 import { runWorkflowJob } from "./handlers/workflow";
+import {
+  handOffTaskStatus,
+  runTaskSyncJob,
+} from "../integrations/task-sync-job";
 import {
   claimFrom,
   enqueueQuillsEvent,
@@ -47,9 +52,17 @@ const handlers: Record<
   "quills.domain_check": runDomainCheckJob,
   "quills.wipe": runWipeJob,
   "quills.transfer": runTransferJob,
-  "quills.workflow": runWorkflowJob,
+  // A task-sync job (RFC 0003, D12) names its Kaneo task.
+  "quills.workflow": (workspaceId, job) =>
+    "taskId" in (job.payload as object)
+      ? runTaskSyncJob(workspaceId, job)
+      : runWorkflowJob(workspaceId, job),
   "quills.ai": runAiJob,
 };
+
+// Task sync (RFC 0003, D12): every Kaneo path that changes a task's status publishes this event
+// after its commit (task controllers, bulk updates and the GitHub, GitLab and Gitea webhooks).
+void subscribeToEvent("task.status_changed", handOffTaskStatus);
 
 export async function deliverQuillsChange(
   workspaceId: string,
