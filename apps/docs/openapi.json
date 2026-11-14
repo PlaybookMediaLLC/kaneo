@@ -121878,6 +121878,143 @@
         }
       }
     },
+    "/quills/{workspaceId}/conversations/{conversationId}/ticket": {
+      "get": {
+        "operationId": "getQuillsConversationTicketLink",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get the customer ticket of a conversation",
+        "description": "The customer ticket paired with the conversation, or null. A deleted ticket is null.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "conversationId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The paired customer ticket",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ticket": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "number": {
+                          "type": "number"
+                        },
+                        "reference": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string"
+                            },
+                            "category": {
+                              "type": "string",
+                              "enum": [
+                                "open",
+                                "pending",
+                                "closed"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "category"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "number",
+                        "reference",
+                        "title",
+                        "status"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ticket"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Conversation or related record not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The conversation is not in the required state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
     "/quills/{workspaceId}/inbox/assistant-counts": {
       "get": {
         "operationId": "fetchQuillsAssistantInboxCounts",

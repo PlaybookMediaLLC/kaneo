@@ -6,11 +6,12 @@ import participants from "./conversation-participants";
 import posts from "./conversation-posts";
 import state from "./conversation-state";
 import tags from "./conversation-tags";
+import ticket from "./conversation-ticket";
 import views from "./conversation-views";
 import conversations from "./conversations";
 import inbox from "./inbox";
 
-/** Teammate routes for support conversations, messages, state, tags, attributes, views and the inbox. */
+/** Teammate routes for support conversations, messages, state, tags, attributes, views, the inbox and the paired ticket. */
 export default apiRouter<BaseVariables & { workspaceId: string }>()
   // Static paths first, so /conversations/bulk never reads as a conversation ID.
   .route("/", bulk)
@@ -22,4 +23,5 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", participants)
   .route("/", views)
   .route("/", inbox)
-  .route("/", posts);
+  .route("/", posts)
+  .route("/", ticket);

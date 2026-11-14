@@ -5,6 +5,7 @@ export * from "./conversation-participants.fixture";
 export * from "./conversation-posts.fixture";
 export * from "./conversation-state.fixture";
 export * from "./conversation-tags.fixture";
+export * from "./conversation-ticket.fixture";
 export * from "./conversation-views.fixture";
 export * from "./conversations.fixture";
 export * from "./inbox.fixture";
