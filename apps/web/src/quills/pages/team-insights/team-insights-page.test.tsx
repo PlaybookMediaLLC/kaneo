@@ -76,9 +76,12 @@ describe("TeamInsightsPage", () => {
       api.reply(getFeedbackInsightsFixture.ok());
       const view = renderPage(TeamInsightsPage, meta);
       await view.findByText("No new post has a tag in this range.");
-      fireEvent.change(view.getByLabelText("Range"), {
-        target: { value: "180" },
-      });
+      expect(view.getByRole("tablist", { name: "Range" })).toBeInTheDocument();
+      expect(view.getByRole("tab", { name: "Last 30 days" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      fireEvent.click(view.getByRole("tab", { name: "Last 180 days" }));
       await view.findByText("No new post has a tag in this range.");
       const [first, second] = api
         .calls("getQuillsFeedbackInsights")
