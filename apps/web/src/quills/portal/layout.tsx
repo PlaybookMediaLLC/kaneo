@@ -83,6 +83,12 @@ export function PortalRoute() {
                   <>
                     <a
                       className="text-muted-foreground hover:text-foreground"
+                      href={portalHref(workspaceId, "my-feedback")}
+                    >
+                      {t("my-feedback.nav")}
+                    </a>
+                    <a
+                      className="text-muted-foreground hover:text-foreground"
                       href={portalHref(workspaceId, "preferences")}
                     >
                       {t("core.navPreferences")}
