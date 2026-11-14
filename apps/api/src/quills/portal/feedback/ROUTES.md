@@ -94,6 +94,14 @@ similar posts, voted posts, roadmap posts, the changelog, the feed and the sitem
 | `listQuillsPortalRoadmapPosts` | `GET /portal/roadmaps/{roadmapId}/posts` (`statusId` of a column, `bucketId`, `search`, `sort`, offset paging) | read | roadmaps, posts, boards, post_tag_assignments, user_segments | - | contract |
 | `listQuillsPortalChangelog` | `GET /portal/changelog` (offset paging, 1-50) | read | changelog_* , posts, post_votes, principal | - | contract |
 | `getQuillsPortalChangelogEntry` | `GET /portal/changelog/{entryId}` | read | same | - | contract |
+| `setQuillsPortalChangelogReaction` | `PUT /portal/changelog/{entryId}/reactions` `{emoji, reacted}` (120 per 10 min; RFC 0003, `../changelog-engagement.ts`) | update | changelog_reactions | `changelog.reacted` / `changelog.unreacted` when changed | contract, rollback, uniqueness, foreign entry |
+| `markQuillsPortalChangelogRead` | `PUT /portal/changelog/read` (120 per 10 min) | update | changelog_reads | none: the caller's own read mark | contract, rollback, per-caller marks |
+| `getQuillsPortalChangelogUnread` | `GET /portal/changelog/unread` (at most 99; 0 without a profile) | read | changelog_entries, changelog_reads, principal | - | contract, per-caller counts |
+| `listQuillsPortalMyFeedback` | `GET /portal/my-feedback` (`filter` all, mine, voted or following; offset paging, 1-50; RFC 0003, `../my-feedback.ts`) | read | posts, post_votes, post_subscriptions, boards, post_statuses | - | contract, visibility |
+
+Each changelog entry also returns `reactions` (counts without test customers, and whether the
+caller reacted) and `unread`. The read mark is the caller's last mark, else the time its profile
+was created, so a new visitor does not see the whole history as new.
 
 Every portal write sets `ensureCustomer`, so the caller's customer profile exists before the
 write. Every portal route checks the private-portal gate (403 `Portal access required`).
@@ -104,7 +112,10 @@ The same factories under `/widget/`: `listQuillsWidgetBoards`, `listQuillsWidget
 `findQuillsWidgetSimilarPosts`, `getQuillsWidgetPost`, `createQuillsWidgetPost`,
 `setQuillsWidgetVote`, `setQuillsWidgetFollow`, `listQuillsWidgetVotedPosts`,
 `getQuillsWidgetUserStats`, `listQuillsWidgetPostComments`, `createQuillsWidgetComment`,
-`setQuillsWidgetCommentReaction`, `listQuillsWidgetChangelog`, `getQuillsWidgetChangelogEntry`.
+`setQuillsWidgetCommentReaction`, `listQuillsWidgetChangelog`, `getQuillsWidgetChangelogEntry`,
+`setQuillsWidgetChangelogReaction`, `markQuillsWidgetChangelogRead`,
+`getQuillsWidgetChangelogUnread`. Without sign-in, a widget visitor reacts only while the
+workspace allows anonymous interaction.
 Every widget route needs a widget session, also for reads. Edit and delete of own content,
 statuses, tags and roadmaps are portal only, as in the source.
 
@@ -185,7 +196,6 @@ Both show what an anonymous visitor of a public portal sees; a private portal gi
 | Voter avatars (`FeedbackPost.voters`) | Not served: names of voters are private by default. |
 | Edit history display (`showPublicEditHistory`) | No read route for edit history yet. |
 | Public user profiles (`public-profile.ts`) | Built in RFC 0001 lane M1; see `../ROUTES.md`, "Public profiles". |
-| Changelog reactions and read markers (RFC 0003 `PUT /updates/:id/read`, update reactions) | No table; needs a migration. |
 | Request activity (RFC 0005), article feedback, attachments (RFC 0004) | Out of scope; need tables and the storage flow. |
 | `holdImages` | Customer content is plain text, so it has no images. Links are found with a plain-text pattern. |
 | Retention of anonymous widget people | Each anonymous session creates a customer and a principal. Retention deletes the expired session, not the person. |
