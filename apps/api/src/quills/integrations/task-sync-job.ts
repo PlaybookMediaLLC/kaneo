@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
-import platformDb from "../../database";
 import { withQuillsSystemWorkspace } from "../../database/quills/client";
 import { boards } from "../../database/quills/schema/boards";
 import { hookDeliveries } from "../../database/quills/schema/hook-deliveries";
@@ -9,9 +8,8 @@ import type { JobQueueRow } from "../../database/quills/schema/job-queue";
 import { postTasks } from "../../database/quills/schema/platform-links";
 import { posts } from "../../database/quills/schema/posts";
 import { postStatuses } from "../../database/quills/schema/statuses";
-import { projectTable, taskTable } from "../../database/schema";
-import { taskIsCompleted } from "../../task/task-is-completed";
 import { recordQuillsChange } from "../events";
+import { doneTaskWorkspace } from "../framework/platform-reads";
 import { enqueueQuillsJob, finishQuillsJob } from "../jobs/queue";
 import { statusOnTaskDone } from "./task-sync";
 
@@ -23,26 +21,6 @@ import { statusOnTaskDone } from "./task-sync";
 export const taskSyncPayloadSchema = z
   .object({ taskId: z.string().min(1).max(200) })
   .strict();
-
-/**
- * The workspace of a task that is in a done column now. With `workspaceId`, the task must also be
- * in that workspace. Undefined for a task that is not done, deleted or in another workspace.
- */
-async function doneTaskWorkspace(taskId: string, workspaceId?: string) {
-  const [task] = await platformDb
-    .select({ workspaceId: projectTable.workspaceId })
-    .from(taskTable)
-    .innerJoin(projectTable, eq(projectTable.id, taskTable.projectId))
-    .where(
-      and(
-        eq(taskTable.id, taskId),
-        taskIsCompleted,
-        workspaceId ? eq(projectTable.workspaceId, workspaceId) : undefined,
-      ),
-    )
-    .limit(1);
-  return task?.workspaceId;
-}
 
 /**
  * The durable handoff: one task-sync job for a done task with a post link. It runs after the

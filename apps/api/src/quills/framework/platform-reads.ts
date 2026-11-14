@@ -16,6 +16,7 @@ import { hasInstanceAdminRole } from "../../utils/instance-admin-role";
 import type { QuillsAction } from "../with-quills-request";
 import { listAccessibleProjectIds } from "../../project-access/list-accessible-project-ids";
 import { requireWorkspaceEntitlement } from "../../billing/controllers/require-entitlement";
+import { taskIsCompleted } from "../../task/task-is-completed";
 
 // The only module that reads public tables for Quills routes. Every read filters on workspaceId.
 
@@ -32,6 +33,28 @@ export async function taskProjectId(workspaceId: string, taskId: string) {
   if (!task?.projectId)
     throw new HTTPException(404, { message: "Task not found" });
   return task.projectId;
+}
+
+/**
+ * The workspace of a task that is in a done column now (task sync, RFC 0003 D12). With
+ * `workspaceId`, the task must also be in that workspace. Undefined for a task that is not done,
+ * deleted or in another workspace. Without `workspaceId`, it serves only Kaneo's own handoff of a
+ * committed task change, never a caller-supplied ID.
+ */
+export async function doneTaskWorkspace(taskId: string, workspaceId?: string) {
+  const [task] = await platformDb
+    .select({ workspaceId: projectTable.workspaceId })
+    .from(taskTable)
+    .innerJoin(projectTable, eq(projectTable.id, taskTable.projectId))
+    .where(
+      and(
+        eq(taskTable.id, taskId),
+        taskIsCompleted,
+        workspaceId ? eq(projectTable.workspaceId, workspaceId) : undefined,
+      ),
+    )
+    .limit(1);
+  return task?.workspaceId;
 }
 
 /** A Kaneo team of this workspace. 404 otherwise. */
