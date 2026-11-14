@@ -49,7 +49,7 @@ const params = z.object({
 const conflict = (message: string) => new HTTPException(409, { message });
 
 /** The source rule above, as one condition on `feedback_signals`. */
-const readable = and(
+export const readable = and(
   notTest(feedbackSignals.principalId),
   or(
     isNull(feedbackSignals.ticketId),

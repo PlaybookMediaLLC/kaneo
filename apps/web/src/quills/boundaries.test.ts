@@ -24,6 +24,7 @@ describe("Quills web import boundary", () => {
       ...sourceFiles(resolve(web, "quills")),
       ...sourceFiles(resolve(web, "routes/portal")),
       ...sourceFiles(resolve(web, "routes/quills")),
+      ...sourceFiles(resolve(web, "routes/_layout/_authenticated/feedback")),
       ...sourceFiles(
         resolve(
           web,

@@ -37,20 +37,10 @@ describe("QuillsSidebarEntry", () => {
     state.canRead = true;
   });
 
-  it("links the workspace sidebar to the team shell and marks it active there", async () => {
-    const view = renderEntry("/dashboard/workspace/workspace_1/quills/other");
-    const link = await view.findByRole("link", { name: "Feedback" });
-    expect(link).toHaveAttribute(
-      "href",
-      "/dashboard/workspace/workspace_1/quills",
-    );
-    expect(link).toHaveAttribute("data-active", "true");
-  });
-
-  it("is not active on another workspace page", async () => {
+  it("links the workspace sidebar to the teammate app", async () => {
     const view = renderEntry("/dashboard/workspace/workspace_1/inbox");
     const link = await view.findByRole("link", { name: "Feedback" });
-    expect(link).toHaveAttribute("data-active", "false");
+    expect(link).toHaveAttribute("href", "/feedback/workspace_1");
   });
 
   it("hides the shortcut from a member without Quills read access", () => {

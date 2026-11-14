@@ -124546,6 +124546,97 @@
         }
       }
     },
+    "/quills/{workspaceId}/reporting/team-counts": {
+      "get": {
+        "operationId": "getQuillsTeamCounts",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Count the views of the teammate app",
+        "description": "Open conversations assigned to the caller, unassigned and in total (test customers and spam not counted, as in the inbox counts); live tickets in an open status, as `listQuillsTickets` with `statusCategory=open`; pending merge suggestions whose two posts are visible to you; pending feedback signals that the autopilot list shows.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Counts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "myConversations": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "unassignedConversations": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "openConversations": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "openTickets": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "pendingDuplicates": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "pendingSignals": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "myConversations",
+                    "unassignedConversations",
+                    "openConversations",
+                    "openTickets",
+                    "pendingDuplicates",
+                    "pendingSignals"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
     "/quills/{workspaceId}/transfer/export-runs": {
       "get": {
         "operationId": "listQuillsExportRuns",

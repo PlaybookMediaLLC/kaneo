@@ -1,4 +1,6 @@
 {
+	"back": "Back to the workspace",
+	"browse": "Browse",
 	"denied": "You do not have permission to see this page. Ask a workspace admin for access.",
 	"home": {
 		"announce_one": "{{count}} shipped idea is not in the changelog",
@@ -15,9 +17,18 @@
 		"votes_one": "{{count}} vote",
 		"votes_other": "{{count}} votes"
 	},
+	"menu": "Views",
 	"nav": {
 		"home": "Overview"
 	},
-	"navigation": "Feedback sections",
-	"title": "Feedback"
+	"navigation": "App sections",
+	"sections": {
+		"changelog": "Changelog",
+		"feedback": "Feedback",
+		"insights": "Insights",
+		"settings": "Settings",
+		"support": "Support"
+	},
+	"title": "Feedback",
+	"views": "{{section}} views"
 }

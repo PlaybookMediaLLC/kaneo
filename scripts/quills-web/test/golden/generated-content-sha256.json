@@ -1,5 +1,5 @@
 {
-	"apps/web/src/quills/api/portal/get-public-portal-config.fixture.ts": "85e961035eefd3470d05ae0253ecacde2b33d7a48035cdafe9b698eb52fd80ca",
+	"apps/web/src/quills/api/portal/get-public-portal-config.fixture.ts": "4f1c0262c42c3ac14b27ca77493c1d8d64b21e462408545fc704e2bc428c160a",
 	"apps/web/src/quills/api/portal/get-public-portal-config.test.ts": "3fab83698b0be7c6afc4810c153cd2ab97d44b94b81cef7c09c4bd7d8e27bf7a",
 	"apps/web/src/quills/api/portal/get-public-portal-config.ts": "e307ac7f56aaa0d69d6f8043afa362a8992cec8b50789e3ae185f53fc530e0bf",
 	"apps/web/src/quills/api/portal/portal-config.type.ts": "e42460dc18fe2229da4525f285c00abb521ed2f8b3068927c086427fd213577c",

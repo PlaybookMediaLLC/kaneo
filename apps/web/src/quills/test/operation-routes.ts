@@ -1496,6 +1496,11 @@ export const quillsOperationRoutes = [
     path: "/api/quills/{workspaceId}/tags/{tagId}",
   },
   {
+    operationId: "getQuillsTeamCounts",
+    method: "GET",
+    path: "/api/quills/{workspaceId}/reporting/team-counts",
+  },
+  {
     operationId: "getQuillsTicket",
     method: "GET",
     path: "/api/quills/{workspaceId}/tickets/{ticketId}",

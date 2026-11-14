@@ -41,6 +41,13 @@ import { PortalShell } from "../ui/portal-shell";
 import { ResultCard } from "../ui/result-card";
 import { StateView } from "../ui/state-view";
 import { SurveyCard } from "../ui/survey-card";
+import { ActionBar } from "../ui/inbox/action-bar";
+import { DetailLayout } from "../ui/inbox/detail-layout";
+import { GroupedList } from "../ui/inbox/grouped-list";
+import { ListHeader } from "../ui/inbox/list-header";
+import { ListRow } from "../ui/inbox/list-row";
+import { PropertyRow } from "../ui/inbox/property-row";
+import { StatusTabs } from "../ui/inbox/status-tabs";
 import {
   Dialog,
   DialogTitle,
@@ -524,6 +531,79 @@ export function KitGallery() {
               }}
               onDismiss={() => setEmpty(true)}
             />
+            {/* RFC 0004 lane S: the inbox list and detail primitives. */}
+            <ListHeader
+              title={t("inbox.title")}
+              headingLevel={2}
+              onFilters={() => setEmpty(!empty)}
+              onDisplay={() => setPending(!pending)}
+            />
+            <StatusTabs
+              label={demo}
+              tabs={[
+                { value: "open", label: demo, count: 2 },
+                { value: "all", label: t("inbox.unassigned") },
+              ]}
+              value={pending ? "all" : "open"}
+              onChange={(value) => setPending(value === "all")}
+            />
+            <div className="h-96 overflow-hidden rounded-lg border border-border">
+              <DetailLayout
+                listLabel={t("inbox.title")}
+                ids={["row_1", "row_2"]}
+                activeId={voted ? "row_2" : "row_1"}
+                onMove={(id) => setVoted(id === "row_2")}
+                onBack={() => setConfirmed(false)}
+                propertiesLabel={demo}
+                properties={
+                  <PropertyRow label={demo}>
+                    {t("inbox.unassigned")}
+                  </PropertyRow>
+                }
+                list={
+                  <GroupedList
+                    label={t("inbox.title")}
+                    groups={[
+                      {
+                        id: "open",
+                        label: demo,
+                        items: empty ? [] : ["row_1", "row_2"],
+                      },
+                    ]}
+                    getKey={(id) => id}
+                    renderItem={(id) => (
+                      <ListRow
+                        compact
+                        href={`#${id}`}
+                        onOpen={() => setVoted(id === "row_2")}
+                        selected={(id === "row_2") === voted}
+                        person={{ name: demo }}
+                        shortId={id}
+                        title={demo}
+                        preview={demo}
+                        chips={[{ id: "chip", label: demo }]}
+                        time="2026-01-01T00:00:00.000Z"
+                        assignee={pending ? { name: demo } : null}
+                        unread={!confirmed}
+                      />
+                    )}
+                  />
+                }
+              >
+                <p className="flex-1 p-4">{demo}</p>
+                <ActionBar
+                  label={demo}
+                  actions={[
+                    {
+                      id: "reply",
+                      label: demo,
+                      shortcut: "r",
+                      onSelect: () => setConfirmed(true),
+                    },
+                  ]}
+                />
+              </DetailLayout>
+            </div>
           </section>
         </div>
       </PageFrame>

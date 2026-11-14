@@ -287,10 +287,10 @@ export function Translated() { return <button aria-label={t("quills:core.action"
 }`,
   );
   const team =
-    "apps/web/src/routes/_layout/_authenticated/dashboard/workspace/$workspaceId/quills";
+    "apps/web/src/routes/_layout/_authenticated/feedback/$workspaceId";
   await write(
     "apps/web/src/quills/pages/team-gated/meta.ts",
-    'export const meta = {id:"team-gated",audience:"teammate",route:"/dashboard/workspace/$workspaceId/quills/gated",token:"none",operations:[],states:["ready"]};',
+    'export const meta = {id:"team-gated",audience:"teammate",route:"/feedback/$workspaceId/gated",token:"none",operations:[],states:["ready"]};',
   );
   await write(
     "apps/web/src/quills/pages/team-gated/team-gated-page.tsx",
@@ -301,7 +301,7 @@ export function TeamGatedPage() { const items = useTeamItems(); return <PageFram
   );
   await write(
     "apps/web/src/quills/pages/team-ready/meta.ts",
-    'export const meta = {id:"team-ready",audience:"teammate",route:"/dashboard/workspace/$workspaceId/quills/ready",token:"none",operations:[],states:["ready"]};',
+    'export const meta = {id:"team-ready",audience:"teammate",route:"/feedback/$workspaceId/ready",token:"none",operations:[],states:["ready"]};',
   );
   await write(
     "apps/web/src/quills/pages/team-ready/team-ready-page.tsx",
@@ -311,7 +311,7 @@ export function TeamReadyPage() { const items = useTeamItems(); return <PageFram
   );
   await write(
     `${team}/ready/index.tsx`,
-    'import { TeamReadyPage } from "@/quills/pages/team-ready/team-ready-page"; export const Route = createFileRoute("/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/ready/")({component:TeamReadyPage});',
+    'import { TeamReadyPage } from "@/quills/pages/team-ready/team-ready-page"; export const Route = createFileRoute("/_layout/_authenticated/feedback/$workspaceId/ready/")({component:TeamReadyPage});',
   );
   await write(
     `${team}/ready/index.test.tsx`,
@@ -472,11 +472,11 @@ describe("conformance negative cases", () => {
     const ready = documents.filter((d) => d.file.includes("/team-ready/"));
     assert.deepEqual(await inspectDocuments(root, ready, "C14"), []);
   });
-  it("matches a teammate page with its route in the D24 folder", async () => {
+  it("matches a teammate page with its route in the teammate app folder", async () => {
     const selected = documents.filter(
       (d) =>
         d.file.includes("/team-ready/") ||
-        d.file.includes("/quills/ready/index"),
+        d.file.includes("/feedback/$workspaceId/ready/index"),
     );
     assert.equal(selected.length, 4);
     for (const rule of ["C1", "C5", "C6"])

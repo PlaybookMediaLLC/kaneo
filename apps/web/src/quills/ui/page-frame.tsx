@@ -22,6 +22,11 @@ export interface PageFrameProps {
   wide?: boolean;
   /** Set false inside the app shell, which already has the main landmark. */
   landmark?: boolean;
+  /**
+   * "app" fills the teammate app panel without the portal header and width. The page
+   * renders its own h1, such as the ListHeader or the item header of a DetailLayout.
+   */
+  variant?: "portal" | "app";
 }
 
 export function PageFrame({
@@ -37,9 +42,11 @@ export function PageFrame({
   actions,
   wide = false,
   landmark = true,
+  variant = "portal",
 }: PageFrameProps) {
   const { t } = useTranslation("quills");
   const heading = useRef<HTMLHeadingElement>(null);
+  const root = useRef<HTMLDivElement>(null);
   const title = displayTitle || t(titleKey);
 
   useEffect(() => {
@@ -47,7 +54,7 @@ export function PageFrame({
   }, [title]);
 
   useEffect(() => {
-    heading.current?.focus();
+    (heading.current ?? root.current?.querySelector("h1"))?.focus();
   }, [titleKey]);
 
   useEffect(() => {
@@ -83,6 +90,16 @@ export function PageFrame({
   );
 
   const Root = landmark ? "main" : "div";
+  if (variant === "app")
+    return (
+      <Root
+        ref={root}
+        className="flex h-full min-h-0 flex-col"
+        data-page={titleKey}
+      >
+        {children}
+      </Root>
+    );
   return (
     <Root
       className={cn(

@@ -2,7 +2,7 @@ import type { PageMeta } from "../../core/types";
 export const meta = {
   id: "team-duplicates",
   feature: "duplicates",
-  route: "/dashboard/workspace/$workspaceId/quills/duplicates",
+  route: "/feedback/$workspaceId/duplicates",
   audience: "teammate",
   mailLinked: false,
   token: "none",

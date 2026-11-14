@@ -2,7 +2,7 @@ import type { PageMeta } from "../../core/types";
 export const meta = {
   id: "team-surveys",
   feature: "surveys",
-  route: "/dashboard/workspace/$workspaceId/quills/surveys",
+  route: "/feedback/$workspaceId/surveys",
   audience: "teammate",
   mailLinked: false,
   token: "none",

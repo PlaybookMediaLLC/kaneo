@@ -115,7 +115,7 @@ it("refuses confirmation in a frame", async () => {
 - `query <operationId> --area <area> [--paged] [--poll <seconds>]` creates the operation, fixture, hook and contract tests. Poll intervals below 10 seconds are invalid.
 - `mutation <operationId> --area <area> --invalidates <operationId,...> [--optimistic <operationId>]` creates the mutation and hook files and invalidates every declared operation prefix after success.
 - `type <area>/<Name> --from <operationId> --at <response.path>` derives a view type from an operation response; an `items[]` segment selects the array item type.
-- `page <name> --route <route> --audience <audience> --feature <feature> [--token none|query|fragment] [--mail-linked] [--search key:type,...] [--operations id,...]` creates a declaration, page, contract test and thin route. A `teammate` page route must start with `/dashboard/workspace/$workspaceId/quills` and takes no token.
+- `page <name> --route <route> --audience <audience> --feature <feature> [--token none|query|fragment] [--mail-linked] [--search key:type,...] [--operations id,...]` creates a declaration, page, contract test and thin route. A `teammate` page route must start with `/feedback/$workspaceId` and takes no token.
 - `component [group/]<Name>` creates a shared display component and test.
 - `part <page>/<Name>` creates a page-local component and test.
 - `form <page>/<Name> --operation <operationId>` derives a Zod schema and defaults from the OpenAPI JSON request body, then creates a `PortalForm` part and test. Add labelled controls for the generated fields.
@@ -189,15 +189,17 @@ The `gated` condition is required. Status, help-center, CSAT and unsubscribe pag
 
 ### Teammate pages
 
-Teammate pages live inside the Kaneo app shell at `/dashboard/workspace/{id}/quills/` (RFC 0002 D24, RFC 0003 D1). Their thin routes live in the fork-owned folder `apps/web/src/routes/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/`. The layout route of that folder renders the team shell (`quills/team/team-route.tsx`), loads the `quills` translations and provides the teammate runtime.
+Teammate pages live in the teammate app at `/feedback/{id}/` (RFC 0004 D1). The app has its own shell and does not use Kaneo's workspace layout. Their thin routes live in the fork-owned folder `apps/web/src/routes/_layout/_authenticated/feedback/$workspaceId/`. The layout route of that folder renders the app shell (`quills/team/team-route.tsx`), loads the `quills` translations and provides the teammate runtime. The old folder `.../dashboard/workspace/$workspaceId/quills/` keeps only one splat route, which redirects an old address to the same sub-path and search under `/feedback/{id}`.
 
 ```sh
 node scripts/quills-web/cli.mjs feature autopilot
 node scripts/quills-web/cli.mjs query listQuillsFeedbackSignals --area team
-node scripts/quills-web/cli.mjs page team-autopilot --route '/dashboard/workspace/$workspaceId/quills/autopilot' --audience teammate --feature autopilot --operations listQuillsFeedbackSignals
+node scripts/quills-web/cli.mjs page team-autopilot --route '/feedback/$workspaceId/autopilot' --audience teammate --feature autopilot --operations listQuillsFeedbackSignals
 ```
 
-Then add one entry for the page to `apps/web/src/quills/team/nav.ts`, and run `pnpm --filter @kaneo/web build` once to regenerate `routeTree.gen.ts` for the typecheck. Lane Z regenerates the route tree after the merge.
+Then add the page as a view to its section in `apps/web/src/quills/team/nav.ts` (`{ path, labelKey, countKey? }`), and run `pnpm --filter @kaneo/web build` once to regenerate `routeTree.gen.ts` for the typecheck. Lane Z regenerates the route tree after the merge. The rail shows a section when it has at least one view, and the section column shows its views, their counts and the "Browse" group. A count key names a value of `getQuillsTeamCounts`.
+
+Build inbox pages from the primitives in `apps/web/src/quills/ui/inbox/`: `ListHeader`, `StatusTabs`, `GroupedList`, `ListRow`, `DetailLayout`, `PropertyRow`, `ActionBar` and the `useListNavigation` hook. Render such a page as `<PageFrame variant="app" landmark={false}>`: the page then fills the panel, and its `ListHeader` or item header gives the h1. Link a teammate view with `teamHref(workspaceId, path)` from `quills/team/team-href.ts`.
 
 The rules for a teammate page:
 
@@ -205,7 +207,7 @@ The rules for a teammate page:
 2. The page reads `useTeamRuntime()`: the workspace ID, the signed-in user (`viewer`) and the Quills permissions. Pass `team.viewer` to every generated hook.
 3. The page passes query state through `TeamStateView`. On 401 it starts the sign-in redirect. On 403 it shows the denied state. The permissions only show or hide controls. The teammate API is the authority (RFC 0003 D2).
 4. A teammate page, its parts and its forms do not use `PortalGate` or `usePortalRuntime` (C14). The team shell has no portal runtime.
-5. Pass `landmark={false}` to `PageFrame`, because the app shell already has the `main` landmark.
+5. Pass `landmark={false}` to `PageFrame`, because the app shell already has the `main` landmark. An inbox page also passes `variant="app"`.
 6. The route is the index of its own folder (`quills/<path>/index.tsx`) and does not prefetch.
 7. The generated page test answers each declared query through `mockApi` in declaration order. Call the hooks in the same order. `renderPage` gives a teammate page the user `user_test_1` and all Quills permissions; set `permissions` to change them.
 8. For a teammate page with operations, the page contract replaces the portal access check with "shows the denied state when the teammate API refuses access".

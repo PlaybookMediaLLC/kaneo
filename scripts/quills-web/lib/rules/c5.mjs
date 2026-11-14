@@ -1,5 +1,5 @@
 import { imports, resolveImport, valueOf, nameOf } from "./ast.mjs";
-import { teamRoutes } from "../files.mjs";
+import { legacyTeamRoutes, teamRoutes } from "../files.mjs";
 export function check({ documents, report }) {
   for (const d of documents)
     for (const i of [
@@ -40,7 +40,8 @@ export function check({ documents, report }) {
         !target.startsWith("apps/web/src/quills/") &&
         !target.startsWith("apps/web/src/routes/portal/") &&
         !target.startsWith("apps/web/src/routes/quills/") &&
-        !target.startsWith(`${teamRoutes}/`)
+        !target.startsWith(`${teamRoutes}/`) &&
+        !target.startsWith(`${legacyTeamRoutes}/`)
       )
         report(
           "C5",

@@ -1,4 +1,4 @@
-import { Link, useLocation } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { MessagesSquare } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -12,18 +12,18 @@ import {
   useActiveWorkspace,
   useWorkspacePermission,
 } from "../ui/upstream";
+import { teamHref } from "./team-href";
 
-// The one seam in the upstream sidebar (app-sidebar.tsx). The entry is only a
-// shortcut; the teammate API still decides access to every Quills page.
+// The one seam in the upstream sidebar (app-sidebar.tsx). The entry opens the
+// teammate app, which has its own shell. It is only a shortcut; the teammate
+// API still decides access to every Quills page.
 export function QuillsSidebarEntry() {
   // The sidebar renders before any Quills route loads the translations.
   useState(ensureQuillsI18n);
   const { t } = useTranslation("quills");
   const { data: workspace } = useActiveWorkspace();
   const { canReadQuills } = useWorkspacePermission();
-  const pathname = useLocation({ select: (location) => location.pathname });
   if (!workspace || !canReadQuills()) return null;
-  const url = `/dashboard/workspace/${encodeURIComponent(workspace.id)}/quills`;
   return (
     <SidebarGroup className="px-2 py-0">
       <SidebarGroupContent>
@@ -31,9 +31,8 @@ export function QuillsSidebarEntry() {
           <SidebarMenuItem>
             <SidebarMenuButton
               tooltip={t("team.title")}
-              isActive={pathname === url || pathname.startsWith(`${url}/`)}
               className="h-8 text-sm"
-              render={<Link to={url} />}
+              render={<Link to={teamHref(workspace.id)} />}
             >
               <MessagesSquare aria-hidden="true" />
               <span>{t("team.title")}</span>

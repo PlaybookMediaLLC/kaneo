@@ -9,6 +9,7 @@ export const getPublicPortalConfigFixture = {
           allowEditAfterEngagement: false,
           allowDeleteAfterEngagement: false,
           showPublicEditHistory: false,
+          ai: false,
         },
         portalAccess: { isPrivate: false },
         branding: {

@@ -3,8 +3,11 @@ import { spawnSync } from "node:child_process";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// The teammate folder of RFC 0002 D24, inside the upstream workspace layout.
+// The teammate app folder of RFC 0004 D1, with its own shell at /feedback/{id}.
 export const teamRoutes =
+  "apps/web/src/routes/_layout/_authenticated/feedback/$workspaceId";
+// The old teammate folder (RFC 0002 D24). It keeps only the redirect to teamRoutes.
+export const legacyTeamRoutes =
   "apps/web/src/routes/_layout/_authenticated/dashboard/workspace/$workspaceId/quills";
 const owned = [
   "apps/web/src/quills/",

@@ -4,6 +4,7 @@ import { useDeleteSurvey } from "../../hooks/team/use-delete-survey";
 import { useGetSurveyResults } from "../../hooks/team/use-get-survey-results";
 import { useSetSurveyStatus } from "../../hooks/team/use-set-survey-status";
 import { useTeamRuntime } from "../../team/runtime";
+import { teamHref } from "../../team/team-href";
 import { TeamStateView } from "../../team/team-state-view";
 import { ConfirmAction } from "../../ui/confirm-action";
 import { PageFrame } from "../../ui/page-frame";
@@ -34,7 +35,7 @@ export function TeamSurveyPage({ workspaceId, params }: TeamSurveyPageProps) {
   const results = useGetSurveyResults({ param }, team.viewer);
   const status = useSetSurveyStatus(team.viewer);
   const remove = useDeleteSurvey(team.viewer);
-  const list = `/dashboard/workspace/${encodeURIComponent(workspaceId)}/quills/surveys`;
+  const list = teamHref(workspaceId, "/surveys");
   const back = (
     <Link to={list} className={`${muted} underline-offset-4 hover:underline`}>
       {t("surveys.actions.list")}
