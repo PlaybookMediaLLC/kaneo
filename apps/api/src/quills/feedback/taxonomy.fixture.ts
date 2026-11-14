@@ -5,3 +5,5 @@ export * from "./changelog.fixture";
 export * from "./moderation.fixture";
 export * from "./merge.fixture";
 export * from "./post-views.fixture";
+// RFC 0003 lane L5.
+export * from "./changelog-engagement.fixture";

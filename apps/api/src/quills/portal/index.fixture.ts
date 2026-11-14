@@ -12,3 +12,5 @@ export * from "./unsubscribe.fixture";
 export * from "../support/customer/index.fixture";
 export * from "../files/customer.fixture";
 export * from "../reporting/track.fixture";
+// RFC 0003 lane L5.
+export * from "./changelog-engagement.fixture";

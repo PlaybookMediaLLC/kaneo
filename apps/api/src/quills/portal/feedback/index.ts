@@ -1,5 +1,6 @@
 import { apiRouter } from "../../../openapi";
 import { boardRoutes, taxonomyRoutes } from "./boards";
+import { changelogEngagementRoutes } from "../changelog-engagement";
 import { changelogRoutes } from "./changelog";
 import { commentRoutes, ownCommentRoutes } from "./comments";
 import feeds from "./feeds";
@@ -18,5 +19,6 @@ export default apiRouter()
   .route("/", ownCommentRoutes)
   .route("/", attachments)
   .route("/", roadmaps)
+  .route("/", changelogEngagementRoutes("portal"))
   .route("/", changelogRoutes("portal"))
   .route("/", feeds);
