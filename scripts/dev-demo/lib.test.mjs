@@ -9,7 +9,6 @@ import {
   demoEnv,
   isPortInUse,
   parseArgs,
-  parseEnvFile,
 } from "./lib.mjs";
 
 const secrets = {
@@ -25,23 +24,17 @@ test("parseArgs accepts --reset and refuses other arguments", () => {
   assert.throws(() => parseArgs(["--rest"]), /Unknown argument --rest/);
 });
 
-test("parseEnvFile reads assignments, quotes and export, and skips comments", () => {
-  assert.deepEqual(
-    parseEnvFile(
-      '# key\nQUILLS_AI_API_KEY="sk-1"\n\nexport QUILLS_AI_MODEL = m\nBAD LINE\n',
-    ),
-    { QUILLS_AI_API_KEY: "sk-1", QUILLS_AI_MODEL: "m" },
-  );
-});
-
-test("aiEnv is off without a key, and the user's file wins over the defaults", () => {
+test("aiEnv is off without a key, and takes only the file's QUILLS_AI_ keys", () => {
   assert.equal(aiEnv({}), null);
   assert.equal(aiEnv({ QUILLS_AI_API_KEY: "" }), null);
-  assert.deepEqual(aiEnv({ QUILLS_AI_API_KEY: "k", QUILLS_AI_MODEL: "m" }), {
-    ...AI_DEFAULTS,
-    QUILLS_AI_API_KEY: "k",
-    QUILLS_AI_MODEL: "m",
-  });
+  assert.deepEqual(
+    aiEnv({ QUILLS_AI_API_KEY: "k", QUILLS_AI_MODEL: "m", DATABASE_URL: "x" }),
+    {
+      ...AI_DEFAULTS,
+      QUILLS_AI_API_KEY: "k",
+      QUILLS_AI_MODEL: "m",
+    },
+  );
 });
 
 test("demoEnv points every URL and the database at the demo stack", () => {
@@ -62,10 +55,15 @@ test("demoEnv points every URL and the database at the demo stack", () => {
     assert.equal(env[key], "http://127.0.0.1:2");
   for (const key of ["KANEO_CLIENT_URL", "CORS_ORIGINS", "VITE_CLIENT_URL"])
     assert.equal(env[key], "http://127.0.0.1:3");
-  assert.equal(env.SMTP_HOST, "");
-  assert.equal(env.REDIS_URL, "");
-  // AI off: a key from the shell does not turn it on.
-  assert.equal(env.QUILLS_AI_API_KEY, undefined);
+  for (const key of [
+    "SMTP_HOST",
+    "EMAIL_SMTP_HOST",
+    "RESEND_API_KEY",
+    "REDIS_URL",
+  ])
+    assert.equal(env[key], "");
+  // AI off: an empty key also wins over a key in a root .env.
+  assert.equal(env.QUILLS_AI_API_KEY, "");
 });
 
 test("demoEnv adds the AI settings when AI is on", () => {

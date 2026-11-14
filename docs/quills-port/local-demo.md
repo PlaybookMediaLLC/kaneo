@@ -54,12 +54,16 @@ Both use the password that the command prints at start.
   container and the volume:
   `docker rm -f kaneo-demo-postgres && docker volume rm kaneo-demo-postgres-data`.
 - `~/.config/kaneo/quills-ai.env` (optional): when it sets `QUILLS_AI_API_KEY`, AI is on through
-  OpenRouter, with `anthropic/claude-sonnet-5.5` and `openai/text-embedding-3-small`. Values in
-  the file replace these defaults. The command says "AI on" or "AI off" at start and never prints
+  OpenRouter, with `anthropic/claude-sonnet-5.5` and `openai/text-embedding-3-small`. The
+  file's `QUILLS_AI_` values replace these defaults, and the command ignores its other keys. The command says "AI on" or "AI off" at start and never prints
   the key.
 
-A root `.env` cannot send demo mail or use a shared Redis: the command sets `SMTP_HOST` and the
-Redis variables to empty values.
+The API loads a root `.env`, but values that the command sets win. The command sets the mail
+variables (`SMTP_HOST`, `EMAIL_SMTP_HOST`, the Resend keys and `EMAIL_SES_ACCESS_KEY_ID`), the
+Redis variables and, when AI is off, `QUILLS_AI_API_KEY` to empty values. Thus the demo sends no
+mail, uses no shared Redis, and AI stays off without the AI file. Only the API gets the AI key.
+
+Only one demo runs at a time on a machine. The lock file is `~/.config/kaneo/dev-demo.lock`.
 
 ## Ports
 

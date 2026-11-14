@@ -18,24 +18,16 @@ export function parseArgs(argv) {
   return { reset: argv.includes("--reset") };
 }
 
-/** KEY=VALUE lines. Blank lines, # comments, `export ` and quotes around a value are allowed. */
-export function parseEnvFile(text) {
-  const env = {};
-  for (const line of text.split(/\r?\n/)) {
-    const match = line.match(
-      /^\s*(?:export\s+)?([A-Za-z_]\w*)\s*=\s*(.*?)\s*$/,
-    );
-    if (match) env[match[1]] = match[2].replace(/^(['"])(.*)\1$/, "$2");
-  }
-  return env;
-}
-
-/** The AI settings: OpenRouter defaults under the user's file. Null without an API key. */
+/** The QUILLS_AI_ settings of the user's file over the OpenRouter defaults. Null without a key. */
 export function aiEnv(fileEnv) {
-  return fileEnv.QUILLS_AI_API_KEY ? { ...AI_DEFAULTS, ...fileEnv } : null;
+  if (!fileEnv.QUILLS_AI_API_KEY) return null;
+  const own = Object.entries(fileEnv).filter(([key]) =>
+    key.startsWith("QUILLS_AI_"),
+  );
+  return { ...AI_DEFAULTS, ...Object.fromEntries(own) };
 }
 
-/** The environment of the API, the seed and the web app. */
+/** The environment of the API, the seed and the web app. Only the API gets `ai`. */
 export function demoEnv(base, secrets, ai, ports = PORTS) {
   // 127.0.0.1, not localhost: the browser keeps the demo's cookies apart from a dev stack on localhost.
   const api = `http://127.0.0.1:${ports.api}`;
@@ -58,8 +50,13 @@ export function demoEnv(base, secrets, ai, ports = PORTS) {
     CORS_ORIGINS: web,
     VITE_API_URL: api,
     VITE_CLIENT_URL: web,
-    // A root .env cannot point the demo at real mail or a shared Redis: dotenv keeps set values.
+    // A root .env cannot turn on AI, send real mail or use a shared Redis: dotenv keeps set values.
+    QUILLS_AI_API_KEY: "",
     SMTP_HOST: "",
+    EMAIL_SMTP_HOST: "",
+    EMAIL_RESEND_API_KEY: "",
+    RESEND_API_KEY: "",
+    EMAIL_SES_ACCESS_KEY_ID: "",
     REDIS_URL: "",
     REDIS_SENTINELS: "",
     REDIS_CLUSTER_NODES: "",

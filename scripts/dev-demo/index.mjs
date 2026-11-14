@@ -15,7 +15,14 @@ import {
   PORTS,
   WORKSPACE,
 } from "./lib.mjs";
-import { aiFile, loadSecrets, readEnv, secretsFile } from "./secrets.mjs";
+import {
+  aiFile,
+  loadSecrets,
+  lock,
+  readEnv,
+  secretsFile,
+  unlock,
+} from "./secrets.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const children = [];
@@ -79,11 +86,13 @@ async function stop(code) {
   }
   for (const child of children) signalGroup(child, "SIGKILL");
   if (ownsContainer) stopContainer();
+  unlock();
   process.exit(code);
 }
 
 async function main() {
   const { reset } = parseArgs(process.argv.slice(2));
+  lock();
   for (const [name, port] of [
     ["API", PORTS.api],
     ["web app", PORTS.web],
@@ -103,7 +112,7 @@ async function main() {
     password: secrets.POSTGRES_PASSWORD,
   });
   await waitHealthy();
-  const env = demoEnv(process.env, secrets, ai);
+  const env = demoEnv(process.env, secrets, null);
   await finish(
     // The root build:dependencies filter matches no package, so name the two apps here.
     run(
@@ -123,7 +132,12 @@ async function main() {
     ),
     "The package build",
   );
-  const api = run("api", "pnpm", ["--filter", "@kaneo/api", "dev"], env);
+  const api = run(
+    "api",
+    "pnpm",
+    ["--filter", "@kaneo/api", "dev"],
+    demoEnv(process.env, secrets, ai),
+  );
   const web = run(
     "web",
     "pnpm",
@@ -176,6 +190,8 @@ async function main() {
 
 process.on("SIGINT", () => void stop(0));
 process.on("SIGTERM", () => void stop(0));
+// The children run in their own sessions, so a closed terminal reaches only this process.
+process.on("SIGHUP", () => void stop(0));
 main().catch((error) => {
   console.error(`[demo] ${error.message}`);
   void stop(1);

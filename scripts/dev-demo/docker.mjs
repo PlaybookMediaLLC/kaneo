@@ -6,7 +6,7 @@ export const VOLUME = "kaneo-demo-postgres-data";
 const docker = (args, options = {}) =>
   spawnSync("docker", args, { encoding: "utf8", ...options });
 
-export function containerState() {
+function containerState() {
   const result = docker(["inspect", "-f", "{{.State.Status}}", CONTAINER]);
   return result.status === 0 ? result.stdout.trim() : "missing";
 }
