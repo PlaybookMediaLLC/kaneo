@@ -5,7 +5,6 @@ import {
   tickets,
   ticketStatuses,
 } from "../../database/quills/schema/tickets";
-import { TICKET_STATUS_CATEGORIES } from "../../database/quills/types";
 import { defineQuillsRoute } from "../framework/define-route";
 import {
   conversationParams,
@@ -34,7 +33,7 @@ const getTicketLink = defineQuillsRoute({
         title: z.string(),
         status: z.object({
           name: z.string(),
-          category: z.enum(TICKET_STATUS_CATEGORIES),
+          category: z.enum(ticketStatuses.category.enumValues),
         }),
       })
       .nullable(),
