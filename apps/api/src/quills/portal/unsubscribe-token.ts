@@ -33,7 +33,7 @@ export const MAIL_TYPES = {
   unsubscribe_digest: "weekly_digest",
 } as const;
 
-/** Sets the mail cell of one matrix type. The other types keep their cells. */
+/** Sets the email channel of one matrix type. The other channels and types keep their values. */
 export async function setMailPreference(
   db: Database,
   principalId: PrincipalId,
@@ -50,7 +50,7 @@ export async function setMailPreference(
         notificationPreferences.principalId,
       ],
       set: {
-        matrix: sql`coalesce(${notificationPreferences.matrix}, '{}'::jsonb) || ${JSON.stringify(cell)}::jsonb`,
+        matrix: sql`coalesce(${notificationPreferences.matrix}, '{}'::jsonb) || jsonb_build_object(${type}::text, coalesce(${notificationPreferences.matrix} -> ${type}::text, '{}'::jsonb) || ${JSON.stringify({ email })}::jsonb)`,
         updatedAt: new Date(),
       },
     });

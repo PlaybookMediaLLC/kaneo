@@ -259,6 +259,22 @@ describe.skipIf(!url)("Quills weekly digest", () => {
       (digest) => digest.to === `${env.customerA}@example.test`,
     )!;
     const token = new URL(sent.unsubscribeUrl).searchParams.get("token");
+    // The customer turned the in-app digest off before: the link keeps that choice.
+    await env.scoped(env.a, (db) =>
+      db
+        .insert(notificationPreferences)
+        .values({
+          principalId: people.customerA!,
+          matrix: { weekly_digest: { inApp: false } },
+        })
+        .onConflictDoUpdate({
+          target: [
+            notificationPreferences.workspaceId,
+            notificationPreferences.principalId,
+          ],
+          set: { matrix: { weekly_digest: { inApp: false } } },
+        }),
+    );
     const res = await app.request(
       `/quills-public/${env.a}/unsubscribe/confirm`,
       {
@@ -279,5 +295,14 @@ describe.skipIf(!url)("Quills weekly digest", () => {
       { headers: { "x-test-user": env.customerA } },
     );
     expect(await preference.json()).toEqual({ weeklyDigest: false });
+    const [stored] = await env.scoped(env.a, (db) =>
+      db
+        .select({ matrix: notificationPreferences.matrix })
+        .from(notificationPreferences)
+        .where(eq(notificationPreferences.principalId, people.customerA!)),
+    );
+    expect(stored!.matrix).toMatchObject({
+      weekly_digest: { inApp: false, email: false },
+    });
   });
 });
