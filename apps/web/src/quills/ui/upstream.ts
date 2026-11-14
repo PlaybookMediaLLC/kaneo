@@ -93,6 +93,7 @@ export { default as useGetTask } from "@/hooks/queries/task/use-get-task";
 export {
   Menu,
   MenuCheckboxItem,
+  MenuGroup,
   MenuGroupLabel,
   MenuItem,
   MenuPopup,

@@ -64,6 +64,10 @@ export function TeamRoute() {
             workspaceName={
               workspace?.id === workspaceId ? workspace.name : undefined
             }
+            workspaceLogo={
+              workspace?.id === workspaceId ? workspace.logo : undefined
+            }
+            workspaceRole={permission.role}
           >
             <Outlet />
           </TeamShell>

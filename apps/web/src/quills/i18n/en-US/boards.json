@@ -1,6 +1,5 @@
 {
 	"description": "Choose who can see each feedback board in the portal and the widget.",
-	"nav": "Boards and voting",
 	"none": "No boards yet.",
 	"segments": {
 		"all": "No segment is selected, so every customer that the board allows can see it.",

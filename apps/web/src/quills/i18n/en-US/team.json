@@ -1,7 +1,11 @@
 {
-	"back": "Back to the workspace",
-	"browse": "Browse",
+	"back": "Back to Kaneo",
 	"denied": "You do not have permission to see this page. Ask a workspace admin for access.",
+	"desktop": {
+		"denied": "The browser blocks notifications for this site. Allow them in the site settings.",
+		"text": "For new posts and comments",
+		"title": "Desktop notifications"
+	},
 	"home": {
 		"announce_one": "{{count}} shipped idea is not in the changelog",
 		"announce_other": "{{count}} shipped ideas are not in the changelog",
@@ -17,18 +21,37 @@
 		"votes_one": "{{count}} vote",
 		"votes_other": "{{count}} votes"
 	},
-	"menu": "Views",
+	"menu": "Menu",
 	"nav": {
-		"home": "Overview"
-	},
-	"navigation": "App sections",
-	"sections": {
-		"changelog": "Changelog",
-		"feedback": "Feedback",
-		"insights": "Insights",
+		"allRequests": "All",
+		"home": "Overview",
+		"members": "Members",
+		"roadmap": "Roadmap",
 		"settings": "Settings",
-		"support": "Support"
+		"share": "Share"
 	},
-	"title": "Feedback",
-	"views": "{{section}} views"
+	"navigation": "Teammate app",
+	"newRequest": "New request",
+	"notifications": {
+		"new_one": "{{count}} new notification",
+		"new_other": "{{count}} new notifications",
+		"readAll": "Mark all as read",
+		"title": "Notifications",
+		"unread_one": "Notifications, {{count}} unread",
+		"unread_other": "Notifications, {{count}} unread"
+	},
+	"roles": {
+		"admin": "Admin",
+		"member": "Member",
+		"owner": "Owner"
+	},
+	"sections": {
+		"conversations": "Conversations",
+		"requests": "Requests",
+		"workspace": "Workspace"
+	},
+	"shareCopied": "Link copied",
+	"support": "Support",
+	"switcher": "Workspaces",
+	"title": "Feedback"
 }

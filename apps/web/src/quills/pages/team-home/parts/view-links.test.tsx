@@ -23,14 +23,16 @@ const render = (counts?: { pendingDuplicates: number }) =>
 describe("ViewLinks", () => {
   it("links each view by section with its count, but not the overview", () => {
     const view = render({ pendingDuplicates: 2 });
-    expect(view.getByRole("region", { name: "Feedback" })).toContainElement(
+    expect(view.getByRole("region", { name: "Workspace" })).toContainElement(
       view.getByRole("link", { name: "Duplicates 2" }),
     );
     expect(view.getByRole("link", { name: "Duplicates 2" })).toHaveAttribute(
       "href",
       "/feedback/workspace_test_1/duplicates",
     );
-    expect(view.getByRole("region", { name: "Settings" })).toBeInTheDocument();
+    expect(
+      view.getByRole("region", { name: "Conversations" }),
+    ).toBeInTheDocument();
     expect(view.queryByRole("link", { name: "Overview" })).toBeNull();
   });
 

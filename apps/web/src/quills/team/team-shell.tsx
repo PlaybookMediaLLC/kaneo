@@ -1,4 +1,3 @@
-import { useLocation } from "@tanstack/react-router";
 import { Menu } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -7,74 +6,57 @@ import {
   Button,
   Sheet,
   SheetContent,
-  SheetHeader,
-  SheetPanel,
   SheetTitle,
   SheetTrigger,
 } from "../ui/upstream";
-import { activeSection, viewPath, visibleSections } from "./active-nav";
-import { IconRail } from "./icon-rail";
 import { useTeamRuntime } from "./runtime";
-import { SectionNav } from "./section-nav";
+import { TeamSidebar, type TeamSidebarProps } from "./team-sidebar";
 
-export interface TeamShellProps {
-  workspaceId: string;
-  workspaceName?: string;
+export type TeamShellProps = Omit<TeamSidebarProps, "counts" | "onNavigate"> & {
   children: ReactNode;
-}
+};
 
 /**
- * The teammate app layout (RFC 0004 D2): the icon rail, the views of the current section and
- * the main panel. Below md the rail is a top bar and the views open in a sheet. An open item
- * (DetailLayout) hides the views column, because its compact list takes that place.
+ * The teammate app layout (RFC 0004 revision 2): one light sidebar and the white main
+ * surface. Below md the sidebar opens as a sheet from a menu button in a top bar.
  */
-export function TeamShell({
-  workspaceId,
-  workspaceName,
-  children,
-}: TeamShellProps) {
+export function TeamShell({ children, ...sidebar }: TeamShellProps) {
   const { t } = useTranslation("quills");
   const team = useTeamRuntime();
   // The counts are only labels: a refused or failed request shows none.
-  const counts = useGetTeamCounts({ param: { workspaceId } }, team.viewer);
-  const pathname = useLocation({ select: (location) => location.pathname });
+  const counts = useGetTeamCounts(
+    { param: { workspaceId: sidebar.workspaceId } },
+    team.viewer,
+  );
   const [menuOpen, setMenuOpen] = useState(false);
-  const section = activeSection(viewPath(pathname, workspaceId));
-  const views = (onNavigate?: () => void) =>
-    section ? (
-      <SectionNav
-        workspaceId={workspaceId}
-        workspaceName={workspaceName}
-        section={section}
-        counts={counts.data}
-        onNavigate={onNavigate}
-      />
-    ) : null;
   return (
-    <div className="group/shell flex h-svh min-h-0 w-full flex-col bg-muted md:flex-row">
-      <IconRail
-        workspaceId={workspaceId}
-        sections={visibleSections()}
-        activeId={section?.id}
-        menu={
-          <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-            <SheetTrigger
-              render={<Button variant="ghost" size="icon-sm" />}
-              aria-label={t("team.menu")}
-            >
-              <Menu aria-hidden="true" />
-            </SheetTrigger>
-            <SheetContent side="left">
-              <SheetHeader>
-                <SheetTitle>{section ? t(section.labelKey) : null}</SheetTitle>
-              </SheetHeader>
-              <SheetPanel>{views(() => setMenuOpen(false))}</SheetPanel>
-            </SheetContent>
-          </Sheet>
-        }
-      />
-      <div className="hidden w-56 shrink-0 overflow-y-auto md:block md:group-has-[[data-slot=detail-layout]]/shell:hidden">
-        {views()}
+    <div className="flex h-svh min-h-0 w-full flex-col bg-sidebar md:flex-row">
+      <div className="flex items-center gap-2 border-b border-border px-2 py-1.5 md:hidden">
+        <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+          <SheetTrigger
+            render={<Button variant="ghost" size="icon-sm" />}
+            aria-label={t("team.menu")}
+          >
+            <Menu aria-hidden="true" />
+          </SheetTrigger>
+          <SheetContent
+            side="left"
+            className="w-75 max-w-[85vw] bg-sidebar p-0"
+          >
+            <SheetTitle className="sr-only">{t("team.navigation")}</SheetTitle>
+            <TeamSidebar
+              {...sidebar}
+              counts={counts.data}
+              onNavigate={() => setMenuOpen(false)}
+            />
+          </SheetContent>
+        </Sheet>
+        <p className="truncate text-sm font-semibold">
+          {sidebar.workspaceName}
+        </p>
+      </div>
+      <div className="hidden w-75 shrink-0 md:flex">
+        <TeamSidebar {...sidebar} counts={counts.data} />
       </div>
       <main className="min-h-0 min-w-0 flex-1 overflow-auto bg-background md:my-2 md:me-2 md:rounded-xl md:border md:border-border md:shadow-xs">
         {children}
