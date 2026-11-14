@@ -70195,6 +70195,218 @@
         }
       }
     },
+    "/quills/{workspaceId}/feedback/insights": {
+      "get": {
+        "operationId": "getQuillsFeedbackInsights",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get topic and sentiment insights for a date range",
+        "description": "Counts only the posts on boards you can see, without deleted posts and test customers. `from` and `to` are UTC days, both included, at most 180 days apart; the default is the last 30 days. Weeks start on Monday (UTC). Tags are the 20 most used on new posts; top posts are the 10 with the most new votes.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "required": false,
+            "name": "from",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "required": false,
+            "name": "to",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "boardId",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Insights for the range",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "from": {
+                      "type": "string"
+                    },
+                    "to": {
+                      "type": "string"
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "color": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "color",
+                          "count"
+                        ]
+                      }
+                    },
+                    "sentiment": {
+                      "type": "object",
+                      "properties": {
+                        "positive": {
+                          "type": "number"
+                        },
+                        "neutral": {
+                          "type": "number"
+                        },
+                        "negative": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "positive",
+                        "neutral",
+                        "negative"
+                      ]
+                    },
+                    "weeks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "week": {
+                            "type": "string"
+                          },
+                          "posts": {
+                            "type": "number"
+                          },
+                          "votes": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "week",
+                          "posts",
+                          "votes"
+                        ]
+                      }
+                    },
+                    "topPosts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "boardName": {
+                            "type": "string"
+                          },
+                          "newVotes": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title",
+                          "boardName",
+                          "newVotes"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "from",
+                    "to",
+                    "tags",
+                    "sentiment",
+                    "weeks",
+                    "topPosts"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The range is not valid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Board not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
     "/quills/{workspaceId}/webhooks": {
       "get": {
         "operationId": "listQuillsWebhooks",
@@ -137993,13 +138205,20 @@
                               },
                               "boardName": {
                                 "type": "string"
+                              },
+                              "statusName": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
                               }
                             },
                             "required": [
                               "id",
                               "title",
                               "voteCount",
-                              "boardName"
+                              "boardName",
+                              "statusName"
                             ]
                           },
                           "target": {
@@ -138016,13 +138235,20 @@
                               },
                               "boardName": {
                                 "type": "string"
+                              },
+                              "statusName": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
                               }
                             },
                             "required": [
                               "id",
                               "title",
                               "voteCount",
-                              "boardName"
+                              "boardName",
+                              "statusName"
                             ]
                           },
                           "hybridScore": {
@@ -138092,6 +138318,227 @@
           },
           "404": {
             "description": "Post not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/merge-suggestions": {
+      "get": {
+        "operationId": "listQuillsMergeSuggestions",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "List the pending or dismissed merge suggestions",
+        "description": "Only suggestions whose two posts are visible to you. Pending ones come strongest first, dismissed ones most recent first.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "dismissed"
+              ],
+              "default": "pending"
+            },
+            "required": false,
+            "name": "status",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 10000000,
+              "default": 0
+            },
+            "required": false,
+            "name": "offset",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of suggestions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "accepted",
+                              "dismissed",
+                              "expired"
+                            ]
+                          },
+                          "source": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "voteCount": {
+                                "type": "number"
+                              },
+                              "boardName": {
+                                "type": "string"
+                              },
+                              "statusName": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "title",
+                              "voteCount",
+                              "boardName",
+                              "statusName"
+                            ]
+                          },
+                          "target": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "voteCount": {
+                                "type": "number"
+                              },
+                              "boardName": {
+                                "type": "string"
+                              },
+                              "statusName": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "title",
+                              "voteCount",
+                              "boardName",
+                              "statusName"
+                            ]
+                          },
+                          "hybridScore": {
+                            "type": "number"
+                          },
+                          "llmConfidence": {
+                            "type": "number"
+                          },
+                          "llmReasoning": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "resolvedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "status",
+                          "source",
+                          "target",
+                          "hybridScore",
+                          "llmConfidence",
+                          "llmReasoning",
+                          "createdAt",
+                          "resolvedAt"
+                        ]
+                      }
+                    },
+                    "nextOffset": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextOffset"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
             "content": {
               "application/json": {
                 "schema": {
