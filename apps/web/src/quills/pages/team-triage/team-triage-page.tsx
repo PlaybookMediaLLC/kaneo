@@ -6,9 +6,13 @@ import { useSetPostScore } from "../../hooks/team/use-set-post-score";
 import { useTeamRuntime } from "../../team/runtime";
 import { TeamStateView } from "../../team/team-state-view";
 import { ListHeader } from "../../ui/inbox/list-header";
-import { StatusTabs } from "../../ui/inbox/status-tabs";
 import { PageFrame } from "../../ui/page-frame";
-import { Button } from "../../ui/upstream";
+import {
+  Button,
+  MenuGroupLabel,
+  MenuRadioGroup,
+  MenuRadioItem,
+} from "../../ui/upstream";
 import { TriageTable } from "./parts/triage-table";
 
 export interface TeamTriagePageProps {
@@ -47,15 +51,21 @@ export function TeamTriagePage({ workspaceId }: TeamTriagePageProps) {
 
   return (
     <PageFrame titleKey="team-triage.title" variant="app" landmark={false}>
-      <ListHeader title={t("team-triage.title")} />
-      <StatusTabs
-        label={t("team-triage.sort")}
-        tabs={sorts.map((item) => ({
-          value: item.value,
-          label: t(item.labelKey),
-        }))}
-        value={sort}
-        onChange={(value) => setSort(value as Sort)}
+      <ListHeader
+        title={t("team-triage.title")}
+        filters={
+          <MenuRadioGroup
+            value={sort}
+            onValueChange={(value) => setSort(value as Sort)}
+          >
+            <MenuGroupLabel>{t("team-triage.sort")}</MenuGroupLabel>
+            {sorts.map((item) => (
+              <MenuRadioItem key={item.value} value={item.value}>
+                {t(item.labelKey)}
+              </MenuRadioItem>
+            ))}
+          </MenuRadioGroup>
+        }
       />
       <div className={body}>
         <TeamStateView
