@@ -1,6 +1,7 @@
 import { fireEvent, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { createPortalPostFixture } from "../api/feedback/create-portal-post.fixture";
+import { improvePortalPostDraftFixture } from "../api/feedback/improve-portal-post-draft.fixture";
 import { createPortalUploadFixture } from "../api/files/create-portal-upload.fixture";
 import { preparePortalUploadFixture } from "../api/files/prepare-portal-upload.fixture";
 import { fill, press } from "../test/actions";
@@ -86,5 +87,48 @@ describe("FeedbackComposer", () => {
       attachmentIds: [],
       idempotencyKey: expect.any(String),
     });
+  });
+
+  it("replaces the title, details and board with an accepted AI suggestion", async () => {
+    const api = mockApi();
+    api.reply(
+      improvePortalPostDraftFixture.ok({
+        title: "Export reports as CSV",
+        problem: "I cannot share a report with my team.",
+        boardId: "board_test_2",
+      }),
+    );
+    const view = renderComponent(
+      <PortalRuntimeProvider value={runtime}>
+        <FeedbackComposer
+          workspaceId="workspace_test_1"
+          boards={[
+            { id: "board_test_1", name: "Ideas" },
+            { id: "board_test_2", name: "Reports" },
+          ]}
+          onTitleChange={vi.fn()}
+        />
+      </PortalRuntimeProvider>,
+    );
+    fireEvent.focus(view.getByLabelText("Title"));
+    fill("Title", "csv");
+    fill("Details", "boss wants reports");
+    press("Improve with AI");
+    await view.findByRole("region", { name: "Suggestion from AI" });
+    const [request] = api.calls("improveQuillsPortalPostDraft");
+    expect(await request!.json()).toEqual({
+      title: "csv",
+      details: "boss wants reports",
+      boardId: "board_test_1",
+    });
+    press("Use this");
+    expect(view.getByLabelText("Title")).toHaveValue("Export reports as CSV");
+    expect(view.getByLabelText("Details")).toHaveValue(
+      "I cannot share a report with my team.",
+    );
+    expect(view.getByRole("combobox", { name: "Board" })).toHaveTextContent(
+      "Reports",
+    );
+    expect(api.calls("createQuillsPortalPost")).toHaveLength(0);
   });
 });

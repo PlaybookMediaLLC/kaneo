@@ -3,6 +3,7 @@ import { useFeedbackAttachments } from "../core/use-feedback-attachments";
 import { useCreatePortalPost } from "../hooks/feedback/use-create-portal-post";
 import { AttachmentPicker } from "../ui/attachment-picker";
 import { PostComposer } from "../ui/post/post-composer";
+import { ImproveDraft } from "./improve-draft";
 import { usePortalRuntime } from "./runtime";
 
 export interface FeedbackComposerProps extends Omit<
@@ -33,6 +34,14 @@ export function FeedbackComposer({
           onFilesChange={files.setFiles}
           onRemove={files.remove}
           onRemoveFile={files.removeFile}
+        />
+      )}
+      assist={(draft, apply) => (
+        <ImproveDraft
+          workspaceId={workspaceId}
+          viewer={portal.viewer}
+          draft={draft}
+          onApply={apply}
         />
       )}
       onSubmit={async (values) => {

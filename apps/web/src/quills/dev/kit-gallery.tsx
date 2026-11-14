@@ -13,6 +13,7 @@ import { portalHref } from "../core/portal-href";
 import type { PortalProblemKind } from "../core/types";
 import { PostSort } from "../ui/post/post-sort";
 import { PostComposer } from "../ui/post/post-composer";
+import { ComposerSignIn } from "../ui/post/composer-sign-in";
 import { SimilarPosts } from "../ui/post/similar-posts";
 import { StatusIcon } from "../ui/post/status-icon";
 import { ArrowUpIcon } from "../ui/arrow-up-icon";
@@ -318,6 +319,7 @@ export function KitGallery() {
               onTitleChange={() => {}}
               onSubmit={async () => setConfirmed(true)}
             />
+            <ComposerSignIn href={portalHref("gallery")} />
             <SimilarPosts
               workspaceId="gallery"
               posts={
