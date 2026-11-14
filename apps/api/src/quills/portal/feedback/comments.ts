@@ -26,6 +26,7 @@ import {
   z,
 } from "../../../openapi";
 import { principal } from "../../../database/quills/schema/auth";
+import { FEEDBACK_REACTION_EMOJIS } from "../../../database/quills/types";
 import {
   postCommentEditHistory,
   postCommentReactions,
@@ -57,8 +58,6 @@ import {
 // ../../widget/feedback. Private (internal) comments, other people's held comments and
 // test-customer comments never reach a customer. A deleted comment keeps its place without text.
 
-/** A bounded reaction set (packages/widget RFC 0003); 👍 doubles as the widget's comment vote. */
-const EMOJI = ["👍", "❤️", "🎉", "😄", "😕", "👀", "🚀"] as const;
 const MAX_DEPTH = 10;
 const postParams = z.object({ postId: flexibleToTypeIdSchema("post") });
 const commentParams = z.object({
@@ -560,7 +559,10 @@ export const setReaction = (audience: Customer) =>
     action: "update",
     rateLimit: { limit: 120, windowSeconds: 600 },
     params: commentParams,
-    body: z.object({ emoji: z.enum(EMOJI), reacted: z.boolean() }),
+    body: z.object({
+      emoji: z.enum(FEEDBACK_REACTION_EMOJIS),
+      reacted: z.boolean(),
+    }),
     response: z.object({
       commentId: z.string(),
       changed: z.boolean(),
