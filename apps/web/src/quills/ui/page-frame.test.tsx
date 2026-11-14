@@ -59,3 +59,17 @@ it("leaves the main landmark to the app shell when asked", () => {
   expect(view.queryByRole("main")).not.toBeInTheDocument();
   expect(view.getAllByRole("heading", { level: 1 })).toHaveLength(1);
 });
+
+it("fills the app panel and focuses the heading that the page renders", () => {
+  const view = renderComponent(
+    <PageFrame titleKey="team.title" landmark={false} variant="app">
+      <h1 tabIndex={-1}>All conversations</h1>
+    </PageFrame>,
+  );
+  expect(view.queryByRole("main")).toBeNull();
+  expect(view.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+  expect(
+    view.getByRole("heading", { name: "All conversations" }),
+  ).toHaveFocus();
+  expect(document.title).toBe("Feedback");
+});
