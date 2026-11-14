@@ -33,6 +33,10 @@ const onSuggestion = (body?: object, dismissed = false) =>
   });
 
 export const getQuillsMergeSuggestionsForPost = onPost;
+export const listQuillsMergeSuggestions = fixture({
+  seed: seedPosts,
+  valid: () => ({ query: { status: "pending" } }),
+});
 export const fetchQuillsMergeSuggestionSummary = fixture({
   seed: seedPosts,
   valid: () => ({}),

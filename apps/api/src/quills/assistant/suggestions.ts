@@ -12,8 +12,10 @@ import {
 import { boards } from "../../database/quills/schema/boards";
 import { mergeSuggestions } from "../../database/quills/schema/merge-suggestions";
 import { posts } from "../../database/quills/schema/posts";
+import { postStatuses } from "../../database/quills/schema/statuses";
 import { defineQuillsRoute, type Database } from "../framework/define-route";
 import { mergePosts } from "../feedback/merge";
+import { page, pageQuery } from "../feedback/schemas";
 import { loadProjects, visiblePost } from "../feedback/visibility";
 import { uniqueConflict } from "../support/conversation-model";
 import { requireEmbeddings } from "./provider";
@@ -41,6 +43,7 @@ const postSummary = z.object({
   title: z.string(),
   voteCount: z.number(),
   boardName: z.string(),
+  statusName: z.string().nullable(),
 });
 const suggestionSchema = z.object({
   id: z.string(),
@@ -62,12 +65,30 @@ async function summaries(db: Database, ids: PostId[]) {
           title: posts.title,
           voteCount: posts.voteCount,
           boardName: boards.name,
+          statusName: postStatuses.name,
         })
         .from(posts)
         .innerJoin(boards, eq(boards.id, posts.boardId))
+        .leftJoin(postStatuses, eq(postStatuses.id, posts.statusId))
         .where(inArray(posts.id, ids))
     : [];
   return new Map(rows.map((row) => [row.id, row]));
+}
+
+/** Pairs each suggestion with its two post summaries. A pair without both is left out. */
+async function withPosts(
+  db: Database,
+  rows: (typeof mergeSuggestions.$inferSelect)[],
+) {
+  const byId = await summaries(
+    db,
+    rows.flatMap((row) => [row.sourcePostId, row.targetPostId]),
+  );
+  return rows.flatMap((row) => {
+    const source = byId.get(row.sourcePostId);
+    const target = byId.get(row.targetPostId);
+    return source && target ? [{ ...row, source, target }] : [];
+  });
 }
 
 const forPost = defineQuillsRoute({
@@ -104,17 +125,46 @@ const forPost = defineQuillsRoute({
       )
       .orderBy(desc(mergeSuggestions.hybridScore))
       .limit(20);
-    const byId = await summaries(
-      db,
-      rows.flatMap((row) => [row.sourcePostId, row.targetPostId]),
-    );
-    return {
-      items: rows.flatMap((row) => {
-        const source = byId.get(row.sourcePostId);
-        const target = byId.get(row.targetPostId);
-        return source && target ? [{ ...row, source, target }] : [];
-      }),
-    };
+    return { items: await withPosts(db, rows) };
+  },
+});
+
+const list = defineQuillsRoute({
+  method: "get",
+  path: "/merge-suggestions",
+  operationId: "listQuillsMergeSuggestions",
+  summary: "List the pending or dismissed merge suggestions",
+  description:
+    "Only suggestions whose two posts are visible to you. Pending ones come strongest first, dismissed ones most recent first.",
+  action: "read",
+  query: z.object({
+    status: z.enum(["pending", "dismissed"]).default("pending"),
+    ...pageQuery,
+  }),
+  load: loadProjects,
+  response: z.object({
+    items: z.array(suggestionSchema),
+    nextOffset: z.number().nullable(),
+  }),
+  responseDescription: "One page of suggestions",
+  handler: async ({ db, query, loaded }) => {
+    const rows = await db
+      .select()
+      .from(mergeSuggestions)
+      .where(
+        and(eq(mergeSuggestions.status, query.status), bothVisible(db, loaded)),
+      )
+      .orderBy(
+        ...(query.status === "pending"
+          ? [desc(mergeSuggestions.hybridScore)]
+          : [desc(mergeSuggestions.resolvedAt)]),
+        desc(mergeSuggestions.createdAt),
+        desc(mergeSuggestions.id),
+      )
+      .offset(query.offset)
+      .limit(query.limit + 1);
+    const result = page(rows, query);
+    return { ...result, items: await withPosts(db, result.items) };
   },
 });
 
@@ -345,6 +395,7 @@ const mergeCheck = defineQuillsRoute({
 
 export default apiRouter<BaseVariables & { workspaceId: string }>()
   .openapi(...forPost)
+  .openapi(...list)
   .openapi(...summary)
   .openapi(...counts)
   .openapi(...accept)
