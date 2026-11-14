@@ -83,7 +83,7 @@ async function signalIn(
           .returning({ id: principal.id })
       )[0]!.id;
     const source = options.source ?? "conversation";
-    let parent: { conversationId: string } | { ticketId: string };
+    let parent: { conversationId?: string; ticketId?: string };
     if (source === "conversation") {
       const [row] = await db
         .insert(conversations)
