@@ -154,6 +154,10 @@ export const ID_PREFIXES = {
   raw_feedback: "raw_feedback",
   feedback_signal: "feedback_signal",
   feedback_suggestion: "feedback_suggestion",
+  // RFC 0003: surveys and the post and comment translation cache.
+  survey: "survey",
+  survey_response: "survey_response",
+  content_translation: "content_translation",
 
   user_mapping: "user_mapping",
   post_merge_suggestion: "post_merge_sug",

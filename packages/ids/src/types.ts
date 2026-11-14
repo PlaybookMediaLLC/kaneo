@@ -314,6 +314,15 @@ export type FeedbackSignalId = EntityIdMap["feedback_signal"];
 /** Feedback suggestion ID - e.g., feedback_suggestion_01h455vb4pex5vsknk084sn02q */
 export type FeedbackSuggestionId = EntityIdMap["feedback_suggestion"];
 
+/** Survey ID - e.g., survey_01h455vb4pex5vsknk084sn02q */
+export type SurveyId = EntityIdMap["survey"];
+
+/** Survey response ID - e.g., survey_response_01h455vb4pex5vsknk084sn02q */
+export type SurveyResponseId = EntityIdMap["survey_response"];
+
+/** Post or comment translation ID - e.g., content_translation_01h455vb4pex5vsknk084sn02q */
+export type ContentTranslationId = EntityIdMap["content_translation"];
+
 /** External user mapping ID - e.g., user_mapping_01h455vb4pex5vsknk084sn02q */
 export type ExternalUserMappingId = EntityIdMap["user_mapping"];
 
