@@ -1,12 +1,11 @@
 import { eq } from "drizzle-orm";
 import { posts } from "../../database/quills/schema/posts";
 import { fixture } from "../framework/contract";
-// Installs the answers of the portal AI prompts.
-import { hiddenOf } from "./feedback/ai.fixture";
-import { probe, scene, type Scene } from "./feedback/seed.fixture";
+import { aiScene, hiddenOf } from "./feedback/ai.fixture";
+import { probe, type Scene } from "./feedback/seed.fixture";
 
 export const translateQuillsPortalContent = fixture<Scene>({
-  seed: (env) => scene(env, "portal"),
+  seed: aiScene,
   valid: (s) => ({ body: { postId: s.a.postId, locale: "de" } }),
   foreign: (s) => ({ postId: s.b.postId }),
   hidden: hiddenOf,

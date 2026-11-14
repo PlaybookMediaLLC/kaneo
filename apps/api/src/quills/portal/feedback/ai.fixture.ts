@@ -19,7 +19,11 @@ export const portalAiReply = (request: Parameters<typeof fallback>[0]) => {
     return chatReply({ title: "Titel", content: "Inhalt" });
   return fallback(request);
 };
-provider.reply(portalAiReply);
+/** A portal scene with the portal AI answers installed: other fixtures replace the shared reply. */
+export const aiScene = (env: Parameters<typeof scene>[0]) => {
+  provider.reply(portalAiReply);
+  return scene(env, "portal");
+};
 
 /** Values that no response may contain: hidden rows of A and every row of B. */
 export const hiddenOf = (s: Scene) => [
@@ -30,7 +34,7 @@ export const hiddenOf = (s: Scene) => [
 ];
 
 export const improveQuillsPortalPostDraft = fixture<Scene>({
-  seed: (env) => scene(env, "portal"),
+  seed: aiScene,
   valid: (s) => ({
     body: {
       title: "csv export",
