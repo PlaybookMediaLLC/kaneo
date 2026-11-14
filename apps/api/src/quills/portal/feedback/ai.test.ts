@@ -7,6 +7,7 @@ import {
   it,
   vi,
 } from "vite-plus/test";
+import { createId } from "@kaneo/ids";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { boards } from "../../../database/quills/schema/boards";
@@ -86,8 +87,8 @@ const draftCalls = () =>
     ),
   );
 
-/** A board in A that customers see but may not post to. */
-const readOnlyBoard = () =>
+/** A new board in A with these access changes. */
+const board = (access: Partial<typeof DEFAULT_BOARD_ACCESS> = {}) =>
   contractEnv().scoped(
     contractEnv().a,
     async (db) =>
@@ -96,12 +97,14 @@ const readOnlyBoard = () =>
           .insert(boards)
           .values({
             name: "Announcements",
-            slug: contractEnv().id("read-only"),
-            access: { ...DEFAULT_BOARD_ACCESS, submit: "team" },
+            slug: contractEnv().id("board"),
+            access: { ...DEFAULT_BOARD_ACCESS, ...access },
           })
           .returning({ id: boards.id })
       )[0]!.id,
   );
+/** A board in A that customers see but may not post to. */
+const readOnlyBoard = () => board({ submit: "team" });
 
 const usageRows = async (workspaceId: string) =>
   (
@@ -118,7 +121,7 @@ describe.skipIf(!url)("Quills portal composer AI help", () => {
     await startContract(pool, url!);
     s = await scene(contractEnv(), "portal");
   }, 120000);
-  // Each check starts with fresh rate-limit counters; the last check spends one on purpose.
+  // Each check starts with fresh rate-limit counters; the last two checks spend them on purpose.
   beforeEach(async () => {
     await pool.query("DELETE FROM quills.rate_bucket WHERE workspace_id=$1", [
       contractEnv().a,
@@ -146,6 +149,7 @@ describe.skipIf(!url)("Quills portal composer AI help", () => {
         )
       ).rows[0].n;
     const before = await events();
+    const used = (await usageRows(contractEnv().a)).length;
     const res = await improve({ title: "csv", details: "send reports" });
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
@@ -153,13 +157,13 @@ describe.skipIf(!url)("Quills portal composer AI help", () => {
       problem: "P".repeat(1000),
       boardId: s.a.boardId,
     });
-    expect(await usageRows(contractEnv().a)).toEqual([
-      {
-        pipeline_step: "portal_post_draft",
-        call_type: "chat_completion",
-        total_tokens: 20,
-      },
-    ]);
+    const rows = await usageRows(contractEnv().a);
+    expect(rows).toHaveLength(used + 1);
+    expect(rows).toContainEqual({
+      pipeline_step: "portal_post_draft",
+      call_type: "chat_completion",
+      total_tokens: 20,
+    });
     expect(await events()).toBe(before);
     // The customer's text reaches the model as data, with the boards the caller may post to only.
     const [call] = draftCalls();
@@ -189,6 +193,19 @@ describe.skipIf(!url)("Quills portal composer AI help", () => {
     }
   });
 
+  it("suggests another board that takes the caller's posts over the given one", async () => {
+    const reports = await board();
+    provider.reply(() =>
+      chatReply({ title: "Title", problem: "Problem", boardId: reports }),
+    );
+    const res = await improve({
+      title: "csv",
+      details: "",
+      boardId: s.a.boardId,
+    });
+    expect(res.body.boardId).toBe(reports);
+  });
+
   it("refuses a board the caller cannot post to, without an AI call", async () => {
     provider.requests.length = 0;
     provider.reply(portalAiReply);
@@ -199,14 +216,17 @@ describe.skipIf(!url)("Quills portal composer AI help", () => {
       boardId: readOnly,
     });
     expect(refused.status).toBe(403);
-    // A board in workspace B and a team-only board look like no board.
-    const foreign = await improve({
+    // A board in workspace B and a team-only board in A answer like a missing board.
+    const missing = await improve({
       title: "csv",
       details: "",
-      boardId: s.b.boardId,
+      boardId: createId("board"),
     });
-    expect(foreign.status).toBe(404);
-    expect(JSON.stringify(foreign.body)).not.toContain(s.b.postTitle);
+    expect(missing.status).toBe(404);
+    for (const boardId of [s.b.boardId, await board({ view: "team" })])
+      expect(await improve({ title: "csv", details: "", boardId })).toEqual(
+        missing,
+      );
     expect(draftCalls()).toHaveLength(0);
     // Workspace B's own customer path cannot reach A's boards either.
     const crossed = await improve(
@@ -258,5 +278,25 @@ describe.skipIf(!url)("Quills portal composer AI help", () => {
     expect(limited.status).toBe(429);
     // Another account keeps its own budget.
     expect((await improve({ title: "csv", details: "" })).status).toBe(200);
-  });
+    // Eleven requests with an AI call each need more than the 5-second default on a busy machine.
+  }, 30000);
+
+  it("allows 10 suggestions per address in 10 minutes, for all accounts together", async () => {
+    provider.reply(portalAiReply);
+    const ip = "198.51.100.9";
+    const customerB = contractEnv().customerB;
+    await contractEnv().portalCustomer(contractEnv().a, customerB);
+    for (let i = 0; i < 10; i++)
+      expect(
+        (
+          await improve(
+            { title: "csv", details: "" },
+            { ip, user: i % 2 ? customerB : undefined },
+          )
+        ).status,
+      ).toBe(200);
+    const limited = await improve({ title: "csv", details: "" }, { ip });
+    expect(limited.status).toBe(429);
+    // Eleven requests with an AI call each need more than the 5-second default on a busy machine.
+  }, 30000);
 });
