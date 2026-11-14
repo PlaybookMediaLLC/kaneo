@@ -6,8 +6,11 @@ import { useListTickets } from "../../hooks/team/use-list-tickets";
 import { useMarkTicketRead } from "../../hooks/team/use-mark-ticket-read";
 import { useTeamRuntime } from "../../team/runtime";
 import { TeamStateView } from "../../team/team-state-view";
+import { ConversationRow } from "../../ui/inbox/conversation-row";
+import { DetailHeader } from "../../ui/inbox/detail-header";
 import { DetailLayout } from "../../ui/inbox/detail-layout";
-import { ListRow } from "../../ui/inbox/list-row";
+import { ListPane } from "../../ui/inbox/list-pane";
+import { useListNavigation } from "../../ui/inbox/use-list-navigation";
 import { PageFrame } from "../../ui/page-frame";
 import {
   priorityGroups,
@@ -56,6 +59,14 @@ export function TeamTicketPage({
   ).flatMap((group) => group.items);
   const go = (href: string) => void navigate({ href });
   const open = (id: string) => go(ticketHref(workspaceId, id, scope));
+  const back = () => go(ticketListHref(workspaceId, scope));
+  const nav = useListNavigation({
+    ids: items.map((item) => item.id),
+    activeId: ticketId,
+    onMove: open,
+    onBack: back,
+  });
+  const title = t(scope.mine ? "team-tickets.mine" : "team-tickets.title");
 
   return (
     <PageFrame
@@ -66,42 +77,45 @@ export function TeamTicketPage({
     >
       <DetailLayout
         list={
-          <ul className="divide-y divide-border">
-            {items.map((item) => (
-              <li key={item.id}>
-                <ListRow
-                  {...ticketRow(item, t("team-tickets.noRequester"))}
-                  href={ticketHref(workspaceId, item.id, scope)}
-                  onOpen={() => open(item.id)}
-                  selected={item.id === ticketId}
-                  compact
-                />
-              </li>
-            ))}
-          </ul>
+          <ListPane title={title} headingLevel={2} loading={list.isLoading}>
+            <ul className="grid gap-0.5">
+              {items.map((item) => (
+                <li key={item.id}>
+                  <ConversationRow
+                    {...ticketRow(item, t("team-tickets.noRequester"))}
+                    href={ticketHref(workspaceId, item.id, scope)}
+                    onOpen={() => open(item.id)}
+                    selected={item.id === ticketId}
+                  />
+                </li>
+              ))}
+            </ul>
+          </ListPane>
         }
-        listLabel={t(scope.mine ? "team-tickets.mine" : "team-tickets.title")}
-        ids={items.map((item) => item.id)}
-        activeId={ticketId}
-        onMove={open}
-        onBack={() => go(ticketListHref(workspaceId, scope))}
+        listLabel={title}
         properties={
           ticket.data ? <TicketProperties ticket={ticket.data} /> : null
         }
         propertiesLabel={t("team-tickets.properties")}
       >
-        <header className="flex flex-col gap-2 border-b border-border px-4 py-3">
-          <p className="text-xs text-muted-foreground">
-            {ticket.data?.reference}
-          </p>
-          <h1
-            tabIndex={-1}
-            className="text-lg font-semibold leading-tight outline-none"
-          >
-            {ticket.data?.title ?? t("team-tickets.ticket")}
-          </h1>
-          {ticket.data ? <TicketPickers ticket={ticket.data} /> : null}
-        </header>
+        <DetailHeader onBack={back} onPrevious={nav.previous} onNext={nav.next}>
+          <div className="min-w-0">
+            <p className="text-xs text-muted-foreground">
+              {ticket.data?.reference}
+            </p>
+            <h1
+              tabIndex={-1}
+              className="truncate text-lg font-semibold leading-tight outline-none"
+            >
+              {ticket.data?.title ?? t("team-tickets.ticket")}
+            </h1>
+          </div>
+        </DetailHeader>
+        {ticket.data ? (
+          <div className="border-b border-border px-4 py-2">
+            <TicketPickers ticket={ticket.data} />
+          </div>
+        ) : null}
         <div className="flex flex-1 flex-col [&>[role=alert]]:m-4 [&>[role=status]]:px-4">
           <TeamStateView
             loading={ticket.isLoading}

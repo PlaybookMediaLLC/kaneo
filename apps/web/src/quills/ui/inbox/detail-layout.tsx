@@ -1,98 +1,110 @@
-import { ArrowLeft, ChevronDown, ChevronUp, PanelRight } from "lucide-react";
-import type { ReactNode } from "react";
+import { PanelLeftOpen } from "lucide-react";
+import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Button,
+  cn,
   Sheet,
   SheetContent,
   SheetHeader,
   SheetPanel,
   SheetTitle,
-  SheetTrigger,
 } from "../upstream";
-import { useListNavigation } from "./use-list-navigation";
+import { DetailPaneContext } from "./detail-pane-context";
 
 export interface DetailLayoutProps {
-  /** The compact list (ListRow with `compact`). Hidden below md. */
+  /** The list pane (ListPane), about 360 px wide. Hidden below md while an item is open. */
   list: ReactNode;
   listLabel: string;
-  /** The IDs of the compact list in order, for J, K and the arrow keys. */
-  ids: readonly string[];
-  activeId: string;
-  /** Opens another item of the list. */
-  onMove: (id: string) => void;
-  /** Esc and the back button: return to the list. */
-  onBack: () => void;
-  /** The open item: its header, its thread and the ActionBar. */
+  /** False when no item is open: below md the list then fills the screen. */
+  itemOpen?: boolean;
+  /** The main pane: DetailHeader, the thread and the composer, or EmptySelection. */
   children: ReactNode;
-  /** The properties panel (PropertyRow items). A sheet below lg. */
-  properties: ReactNode;
-  propertiesLabel: string;
+  /** The right panel (PropertyRow items). DetailHeader shows its toggle; below lg it is a sheet. */
+  properties?: ReactNode;
+  propertiesLabel?: string;
 }
 
-/** The three panes of an open inbox item (RFC 0004 D3): compact list, item and properties. */
-export function DetailLayout(props: DetailLayoutProps) {
+const wide = () => window.matchMedia?.("(min-width: 64rem)").matches ?? true;
+
+/**
+ * The panes of the conversation, ticket and request views (design section 2): the list pane,
+ * the main pane and the right panel. The list pane and the panel can be hidden.
+ */
+export function DetailLayout({
+  list,
+  listLabel,
+  itemOpen = true,
+  children,
+  properties,
+  propertiesLabel = "",
+}: DetailLayoutProps) {
   const { t } = useTranslation("quills");
-  const { next, previous } = useListNavigation(props);
-  const step = [
-    { key: "k", labelKey: "inbox.previous", icon: ChevronUp, run: previous },
-    { key: "j", labelKey: "inbox.next", icon: ChevronDown, run: next },
-  ] as const;
+  const [listOpen, setListOpen] = useState(true);
+  const [panelOpen, setPanelOpen] = useState(true);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const panel = properties
+    ? {
+        label: propertiesLabel,
+        open: panelOpen,
+        toggle: () =>
+          wide() ? setPanelOpen((open) => !open) : setSheetOpen(true),
+      }
+    : null;
   return (
-    <div data-slot="detail-layout" className="flex h-full min-h-0">
-      <section
-        aria-label={props.listLabel}
-        className="hidden w-72 shrink-0 overflow-y-auto border-e border-border md:block"
-      >
-        {props.list}
-      </section>
-      <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
-        <div className="flex items-center gap-1 border-b border-border px-2 py-1.5">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={t("inbox.back")}
-            aria-keyshortcuts="Escape"
-            onClick={props.onBack}
+    <DetailPaneContext.Provider
+      value={{ hideList: () => setListOpen(false), panel }}
+    >
+      <div data-slot="detail-layout" className="flex h-full min-h-0">
+        {listOpen ? (
+          <section
+            aria-label={listLabel}
+            className={cn(
+              "min-h-0 w-full shrink-0 flex-col border-e border-border md:flex md:w-90",
+              itemOpen ? "hidden" : "flex",
+            )}
           >
-            <ArrowLeft aria-hidden="true" />
-          </Button>
-          {step.map(({ key, labelKey, icon: Icon, run }) => (
+            {list}
+          </section>
+        ) : (
+          <div className="hidden shrink-0 border-e border-border p-2 md:block">
             <Button
-              key={key}
               variant="ghost"
               size="icon-sm"
-              aria-label={t(labelKey)}
-              aria-keyshortcuts={key.toUpperCase()}
-              onClick={run}
+              aria-label={t("inbox.showList")}
+              onClick={() => setListOpen(true)}
             >
-              <Icon aria-hidden="true" />
+              <PanelLeftOpen aria-hidden="true" />
             </Button>
-          ))}
-          <Sheet>
-            <SheetTrigger
-              render={<Button variant="ghost" size="sm" />}
-              className="ms-auto lg:hidden"
-            >
-              <PanelRight aria-hidden="true" />
-              {props.propertiesLabel}
-            </SheetTrigger>
+          </div>
+        )}
+        <div
+          className={cn(
+            "min-h-0 min-w-0 flex-1 flex-col",
+            itemOpen ? "flex" : "hidden md:flex",
+          )}
+        >
+          {children}
+        </div>
+        {properties && panelOpen ? (
+          <aside
+            aria-label={propertiesLabel}
+            className="hidden w-80 shrink-0 overflow-y-auto border-s border-border px-5 py-4 lg:block"
+          >
+            {properties}
+          </aside>
+        ) : null}
+        {properties ? (
+          <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
             <SheetContent>
               <SheetHeader>
-                <SheetTitle>{props.propertiesLabel}</SheetTitle>
+                <SheetTitle>{propertiesLabel}</SheetTitle>
               </SheetHeader>
-              <SheetPanel>{props.properties}</SheetPanel>
+              <SheetPanel>{properties}</SheetPanel>
             </SheetContent>
           </Sheet>
-        </div>
-        <div className="flex min-h-0 flex-1 flex-col">{props.children}</div>
+        ) : null}
       </div>
-      <aside
-        aria-label={props.propertiesLabel}
-        className="hidden w-80 shrink-0 overflow-y-auto border-s border-border px-4 py-3 lg:block"
-      >
-        {props.properties}
-      </aside>
-    </div>
+    </DetailPaneContext.Provider>
   );
 }

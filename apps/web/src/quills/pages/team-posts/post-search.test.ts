@@ -55,6 +55,16 @@ describe("postListInput", () => {
     });
   });
 
+  it("filters one status that the sidebar opens", () => {
+    const { input, none } = postListInput(
+      "ws",
+      { status: "complete", statusId: "planned" },
+      statuses,
+    );
+    expect(none).toBe(false);
+    expect(input.query.statusIds).toBe("planned");
+  });
+
   it("sends no status filter for All", () => {
     const { input } = postListInput("ws", { status: "all" }, statuses);
     expect(input.query).toEqual({ sort: "newest", limit: "50" });

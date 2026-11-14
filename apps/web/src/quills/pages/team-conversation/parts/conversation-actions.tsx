@@ -12,7 +12,7 @@ import type { GetConversationResponse } from "../../../api/team/get-conversation
 import { useAssignConversation } from "../../../hooks/team/use-assign-conversation";
 import { useSetConversationStatus } from "../../../hooks/team/use-set-conversation-status";
 import { useTeamRuntime } from "../../../team/runtime";
-import { ActionBar } from "../../../ui/inbox/action-bar";
+import { FloatingActionBar } from "../../../ui/inbox/floating-action-bar";
 import { ActionProblem } from "./action-problem";
 
 export interface ConversationActionsProps {
@@ -50,7 +50,7 @@ export function ConversationActions({
       <div className="px-4">
         <ActionProblem problem={status.error ?? assign.error ?? null} />
       </div>
-      <ActionBar
+      <FloatingActionBar
         label={t("team-conversations.actions")}
         actions={[
           {

@@ -1,6 +1,6 @@
 import { FilePlus, ThumbsUp, Undo2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { ActionBar } from "../../../ui/inbox/action-bar";
+import { FloatingActionBar } from "../../../ui/inbox/floating-action-bar";
 import type { Signal } from "./signal-detail";
 
 export interface SignalActionsProps {
@@ -57,6 +57,6 @@ export function SignalActions({ signal, busy, ...props }: SignalActionsProps) {
     .filter((action) => action.show)
     .map((action) => ({ ...action, disabled: busy }));
   return actions.length ? (
-    <ActionBar label={t("autopilot.actions")} actions={actions} />
+    <FloatingActionBar label={t("autopilot.actions")} actions={actions} />
   ) : null;
 }

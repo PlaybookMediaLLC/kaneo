@@ -14,4 +14,11 @@ describe("PersonAvatar", () => {
     const view = renderComponent(<PersonAvatar name={null} />);
     expect(view.container.firstElementChild).toHaveTextContent("");
   });
+
+  it("shows two initials on the tone of the name when colored", () => {
+    const view = renderComponent(<PersonAvatar name="Ada Lovelace" colored />);
+    const avatar = view.container.firstElementChild!;
+    expect(avatar).toHaveTextContent("AL");
+    expect(avatar.className).toMatch(/bg-\w+\/\d+/);
+  });
 });

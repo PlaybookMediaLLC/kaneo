@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { ListRow } from "../../../ui/inbox/list-row";
+import { RequestRow } from "../../../ui/inbox/request-row";
 import type { Suggestion } from "./suggestion-detail";
 
 export interface SuggestionListRowProps {
@@ -17,13 +17,13 @@ export function SuggestionListRow({
 }: SuggestionListRowProps) {
   const { t } = useTranslation("quills");
   return (
-    <ListRow
+    <RequestRow
       {...row}
       title={suggestion.source.title}
-      preview={t("duplicates.duplicateOf", {
+      detail={t("duplicates.duplicateOf", {
         target: suggestion.target.title,
       })}
-      chips={[
+      badges={[
         {
           id: "match",
           label: t("duplicates.match", {

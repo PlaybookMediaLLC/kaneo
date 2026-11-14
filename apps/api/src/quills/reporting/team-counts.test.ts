@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
-import { eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as kaneo from "../../database/schema";
@@ -10,6 +10,7 @@ import {
 import { feedbackSignals } from "../../database/quills/schema/feedback-signals";
 import { mergeSuggestions } from "../../database/quills/schema/merge-suggestions";
 import { posts } from "../../database/quills/schema/posts";
+import { postStatuses } from "../../database/quills/schema/statuses";
 import { ticketStatuses, tickets } from "../../database/quills/schema/tickets";
 import quillsRouter from "../index";
 import {
@@ -19,7 +20,7 @@ import {
   stopContract,
   type ContractEnv,
 } from "../framework/contract";
-import { postIn } from "../feedback/seeds.fixture";
+import { postIn, statusIn } from "../feedback/seeds.fixture";
 import {
   call,
   customer,
@@ -49,7 +50,9 @@ vi.mock("../../database/index", () => ({
 const url = process.env.QUILLS_TEST_DATABASE_URL;
 const app = contractApp(quillsRouter);
 
-type Counts = Record<string, number>;
+type Counts = Record<string, number> & {
+  postStatuses: { id: string; name: string; count: number }[];
+};
 const counts = async (user: string) => {
   const res = await call(
     app,
@@ -63,8 +66,13 @@ const counts = async (user: string) => {
 };
 const delta = (after: Counts, before: Counts) =>
   Object.fromEntries(
-    Object.keys(after).map((key) => [key, after[key]! - before[key]!]),
+    Object.keys(after)
+      .filter((key) => key !== "postStatuses")
+      .map((key) => [key, after[key]! - before[key]!]),
   );
+/** The post count of one status in the counts, or undefined when the status is not listed. */
+const postsIn = (counts: Counts, statusId: string) =>
+  counts.postStatuses.find((status) => status.id === statusId)?.count;
 
 type Conversation = Partial<typeof conversations.$inferInsert>;
 /** A conversation in `workspaceId` with one visitor message, and a signal from it when asked. */
@@ -161,7 +169,11 @@ describe.skipIf(!url)("Quills teammate app counts", () => {
       status: "open",
       assignedAgentPrincipalId: owner,
     });
-    await conversationIn(env, env.a, visitor, { status: "open" });
+    // The queue: open and waiting for a team reply.
+    await conversationIn(env, env.a, visitor, {
+      status: "open",
+      waitingSince: new Date(),
+    });
     await conversationIn(env, env.a, visitor, {
       status: "open",
       assignedAgentPrincipalId: visitor as never,
@@ -171,7 +183,7 @@ describe.skipIf(!url)("Quills teammate app counts", () => {
       env,
       env.a,
       visitor,
-      { status: "snoozed" },
+      { status: "snoozed", waitingSince: new Date() },
       "dismissed",
     );
     await conversationIn(env, env.a, visitor, { status: "closed" }, "pending");
@@ -224,6 +236,7 @@ describe.skipIf(!url)("Quills teammate app counts", () => {
       myConversations: 1,
       unassignedConversations: 1,
       openConversations: 3,
+      queueConversations: 1,
       openTickets: 1,
       pendingDuplicates: 2,
       pendingSignals: 1,
@@ -232,9 +245,63 @@ describe.skipIf(!url)("Quills teammate app counts", () => {
       myConversations: 0,
       unassignedConversations: 1,
       openConversations: 3,
+      queueConversations: 1,
       openTickets: 1,
       pendingDuplicates: 1,
       pendingSignals: 1,
     });
+  });
+
+  it("counts the visible posts of each open status, in status order", async () => {
+    const env = contractEnv();
+    const status = await statusIn(env, env.a);
+    const tester = await testCustomer(env);
+    const shown = await postIn(env, env.a, { statusId: status as never });
+    // The member cannot open the project of this board; the owner can.
+    const hidden = await postIn(env, env.a, { statusId: status as never });
+    await linkedProject(env, hidden.boardId);
+    // Not counted: a deleted post, a merged post and a test customer's post.
+    await postIn(env, env.a, {
+      statusId: status as never,
+      deletedAt: new Date(),
+    });
+    await postIn(env, env.a, {
+      statusId: status as never,
+      canonicalPostId: shown.postId,
+    });
+    await postIn(env, env.a, {
+      statusId: status as never,
+      principalId: tester as never,
+    });
+    // A complete status and a status of workspace B are not listed.
+    const [complete] = await env.scoped(env.a, (db) =>
+      db
+        .insert(postStatuses)
+        .values({ name: "Done", slug: env.id("status"), category: "complete" })
+        .returning({ id: postStatuses.id }),
+    );
+    await postIn(env, env.a, { statusId: complete!.id });
+    const foreign = await statusIn(env, env.b);
+
+    const owner = await counts(env.owner);
+    expect(postsIn(owner, status)).toBe(2);
+    expect(postsIn(owner, complete!.id)).toBeUndefined();
+    expect(postsIn(owner, foreign)).toBeUndefined();
+    expect(postsIn(await counts(member), status)).toBe(1);
+    const ordered = await env.scoped(env.a, (db) =>
+      db
+        .select({ id: postStatuses.id })
+        .from(postStatuses)
+        .where(
+          and(
+            eq(postStatuses.category, "active"),
+            isNull(postStatuses.deletedAt),
+          ),
+        )
+        .orderBy(asc(postStatuses.position), asc(postStatuses.id)),
+    );
+    expect(owner.postStatuses.map((row) => row.id)).toEqual(
+      ordered.map((row) => row.id),
+    );
   });
 });

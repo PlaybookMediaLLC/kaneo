@@ -8,7 +8,7 @@ import { useListTicketMessages } from "../../../hooks/team/use-list-ticket-messa
 import { useReplyTicket } from "../../../hooks/team/use-reply-ticket";
 import { useTeamRuntime } from "../../../team/runtime";
 import { TeamStateView } from "../../../team/team-state-view";
-import { ActionBar } from "../../../ui/inbox/action-bar";
+import { FloatingActionBar } from "../../../ui/inbox/floating-action-bar";
 import { timeline } from "../timeline";
 import { TicketComposerForm } from "./ticket-composer-form";
 import { TicketTimeline } from "./ticket-timeline";
@@ -64,7 +64,7 @@ export function TicketThread({ ticket }: TicketThreadProps) {
         />
       ) : null}
       {team.permissions.update ? (
-        <ActionBar
+        <FloatingActionBar
           label={t("team-tickets.actions")}
           actions={[
             {

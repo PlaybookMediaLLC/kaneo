@@ -1,11 +1,23 @@
 {
 	"assignedTo": "Assigned to {{name}}",
 	"back": "Back to the list",
-	"display": "Display",
+	"backTo": "Back to {{name}}",
+	"comments_one": "{{count}} comment",
+	"comments_other": "{{count}} comments",
 	"filters": "Filters",
+	"hideList": "Hide the list",
+	"mode": "Mode: {{mode}}",
 	"next": "Next",
+	"noResults": "No results",
+	"note": "Note",
 	"previous": "Previous",
+	"send": "Send",
+	"showList": "Show the list",
 	"title": "Inbox",
+	"today": "Today",
 	"unassigned": "Unassigned",
-	"unread": "Unread"
+	"unread": "Unread",
+	"votes_one": "{{count}} vote",
+	"votes_other": "{{count}} votes",
+	"yesterday": "Yesterday"
 }

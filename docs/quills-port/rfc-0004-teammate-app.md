@@ -93,5 +93,5 @@ pass, and the review team finds no blocking issue.
 | Lane | Revision | Status |
 |---|---|---|
 | S, D, P, C, T, R | 1 (Plain-style shell) | merged |
-| S2 | 2: sidebar shell and shared thread parts | planned |
+| S2 | 2: sidebar shell and shared thread parts | built (lane branch `feat/ta-s2`) |
 | C2, P2, T2, R2 | 2: conversations, requests, tickets, other pages | planned |

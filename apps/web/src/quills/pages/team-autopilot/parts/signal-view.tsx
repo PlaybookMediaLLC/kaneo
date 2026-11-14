@@ -2,7 +2,10 @@ import { useTranslation } from "react-i18next";
 import type { PortalProblem } from "../../../core/types";
 import { teamHref } from "../../../team/team-href";
 import { TeamStateView } from "../../../team/team-state-view";
+import { DetailHeader } from "../../../ui/inbox/detail-header";
 import { DetailLayout } from "../../../ui/inbox/detail-layout";
+import { ListPane } from "../../../ui/inbox/list-pane";
+import { useListNavigation } from "../../../ui/inbox/use-list-navigation";
 import { SignalActions, type SignalActionsProps } from "./signal-actions";
 import { SignalDetail, type Signal } from "./signal-detail";
 import { SignalListRow } from "./signal-list-row";
@@ -25,33 +28,42 @@ export interface SignalViewProps {
 /** The open signal in three panes: the compact list, the signal with its decisions, and its properties. */
 export function SignalView({ signal, signals, ...props }: SignalViewProps) {
   const { t } = useTranslation("quills");
+  const nav = useListNavigation({
+    ids: signals.map((item) => item.id),
+    activeId: signal.id,
+    onMove: props.onMove,
+    onBack: props.onBack,
+  });
   return (
     <DetailLayout
       list={
-        <ul className="divide-y divide-border">
-          {signals.map((item) => (
-            <li key={item.id}>
-              <SignalListRow
-                signal={item}
-                href={teamHref(props.workspaceId, "/autopilot")}
-                compact
-                selected={item.id === signal.id}
-                onOpen={() => props.onMove(item.id)}
-              />
-            </li>
-          ))}
-        </ul>
+        <ListPane title={t("autopilot.title")} headingLevel={2}>
+          <ul className="grid gap-0.5">
+            {signals.map((item) => (
+              <li key={item.id}>
+                <SignalListRow
+                  signal={item}
+                  href={teamHref(props.workspaceId, "/autopilot")}
+                  compact
+                  selected={item.id === signal.id}
+                  onOpen={() => props.onMove(item.id)}
+                />
+              </li>
+            ))}
+          </ul>
+        </ListPane>
       }
       listLabel={t("autopilot.title")}
-      ids={signals.map((item) => item.id)}
-      activeId={signal.id}
-      onMove={props.onMove}
-      onBack={props.onBack}
       properties={
         <SignalProperties workspaceId={props.workspaceId} signal={signal} />
       }
       propertiesLabel={t("autopilot.properties")}
     >
+      <DetailHeader
+        onBack={props.onBack}
+        onPrevious={nav.previous}
+        onNext={nav.next}
+      />
       <SignalDetail signal={signal} />
       <p
         role="status"

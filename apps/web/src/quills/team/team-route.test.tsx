@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-router";
 import { act } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { getNotificationUnreadCountFixture } from "../api/team/get-notification-unread-count.fixture";
 import { getTeamCountsFixture } from "../api/team/get-team-counts.fixture";
 import { quillsKey } from "../api/keys";
 import { mockApi } from "../test/mock-api";
@@ -75,22 +76,27 @@ describe("TeamRoute", () => {
   });
 
   it("renders the app shell without the Kaneo sidebar, with the runtime for the page", async () => {
-    mockApi().reply(getTeamCountsFixture.ok());
+    const api = mockApi();
+    api.reply(getNotificationUnreadCountFixture.ok());
+    api.reply(getTeamCountsFixture.ok());
     const view = renderTeam("/feedback/workspace_1");
     expect(await view.findByRole("status")).toHaveTextContent(
       "workspace_1:user_1:true:false",
     );
     expect(
-      view.getByRole("navigation", { name: "App sections" }),
+      view.getByRole("navigation", { name: "Teammate app" }),
     ).toBeInTheDocument();
     expect(view.getByRole("main")).toContainElement(view.getByRole("status"));
-    expect(view.getByText("Acme")).toBeVisible();
+    expect(view.getByRole("button", { name: /^Acme/ })).toBeVisible();
   });
 
   it("drops the Quills data of the previous workspace on a switch", async () => {
     const api = mockApi();
-    api.reply(getTeamCountsFixture.ok());
-    api.reply(getTeamCountsFixture.ok());
+    // The bell asks first, then the shell; once per workspace.
+    for (let switches = 0; switches < 2; switches++) {
+      api.reply(getNotificationUnreadCountFixture.ok());
+      api.reply(getTeamCountsFixture.ok());
+    }
     const view = renderTeam("/feedback/workspace_1");
     await view.findByRole("status");
     const user = { kind: "user", id: "user_1" } as const;
@@ -103,7 +109,7 @@ describe("TeamRoute", () => {
     expect(view.queryClient.getQueryData(previous)).toBeUndefined();
     expect(view.queryClient.getQueryData(next)).toEqual({ items: [] });
     // The active workspace is another one, so its name is not shown.
-    expect(view.queryByText("Acme")).toBeNull();
+    expect(view.queryByRole("button", { name: /^Acme/ })).toBeNull();
   });
 
   it("shows the archived state instead of the app for an archived workspace", async () => {

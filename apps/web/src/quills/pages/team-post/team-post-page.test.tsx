@@ -176,7 +176,7 @@ describe("TeamPostPage", () => {
         "/feedback/workspace_test_1/posts/post_sso",
       ),
     );
-    press("Back to the list");
+    press(/^Back to /);
     await waitFor(() =>
       expect(view.router.state.location.pathname).toBe(
         "/feedback/workspace_test_1/posts",

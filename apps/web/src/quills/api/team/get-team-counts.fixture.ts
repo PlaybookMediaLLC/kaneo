@@ -6,9 +6,18 @@ export const getTeamCountsFixture = {
         myConversations: 0,
         unassignedConversations: 0,
         openConversations: 0,
+        queueConversations: 0,
         openTickets: 0,
         pendingDuplicates: 0,
         pendingSignals: 0,
+        postStatuses: [
+          {
+            id: "post_status_test_1",
+            name: "Under review",
+            color: "gray",
+            count: 0,
+          },
+        ],
       },
       ...overrides,
     }) satisfies GetTeamCountsResponse,

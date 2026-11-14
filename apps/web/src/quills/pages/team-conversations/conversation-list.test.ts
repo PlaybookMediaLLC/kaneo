@@ -34,9 +34,10 @@ describe("conversation list", () => {
     ).toEqual({ view: "mine", status: "snoozed", savedView: "view_1" });
     expect(readContext({ view: "other", status: 3, savedView: "" })).toEqual({
       view: "all",
-      status: "open",
+      status: "any",
       savedView: undefined,
     });
+    expect(readContext({}, "open").status).toBe("open");
   });
 
   it("filters a view by its assignee and status tab", () => {
@@ -46,10 +47,23 @@ describe("conversation list", () => {
       assignee: "mine",
       status: "closed",
     });
-    expect(listQuery({ view: "all", status: "open" })).toEqual({
+    expect(listQuery({ view: "open", status: "open" })).toEqual({
       sort: "priority",
       limit: "50",
       status: "open",
+    });
+    expect(listQuery({ view: "all", status: "any" })).toEqual({
+      sort: "priority",
+      limit: "50",
+    });
+  });
+
+  it("lists the open conversations that wait for a team reply in the queue", () => {
+    expect(listQuery({ view: "queue", status: "closed" })).toEqual({
+      sort: "waiting",
+      limit: "50",
+      status: "open",
+      waitingOnly: "true",
     });
   });
 
@@ -116,22 +130,32 @@ describe("conversation list", () => {
           tags: [{ id: "tag_1", name: "Billing", color: "gray" }],
         }),
         people,
-        "Unknown",
+        { unknown: "Unknown", closed: "Resolved" },
       ),
     ).toMatchObject({
       person: { name: "grace@example.test" },
-      title: "Export fails",
-      preview: null,
-      chips: [{ id: "tag_1", label: "Billing" }],
+      preview: "Export fails",
+      badge: null,
       assignee: { name: "Ada" },
       unread: true,
     });
     expect(
-      rowData(conversation({ subject: "Refund" }), people, "Unknown"),
+      rowData(
+        conversation({
+          subject: "Refund",
+          status: "closed",
+          lastMessagePreview:
+            "**Thanks**, see [the docs](https://example.test)",
+        }),
+        people,
+        { unknown: "Unknown", closed: "Resolved" },
+      ),
     ).toMatchObject({
       person: { name: "Unknown" },
       title: "Refund",
+      preview: "Thanks, see the docs",
       assignee: null,
+      badge: { label: "Resolved", tone: "success" },
     });
   });
 

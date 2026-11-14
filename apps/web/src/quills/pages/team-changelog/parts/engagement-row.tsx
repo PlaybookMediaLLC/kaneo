@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { ListRow } from "../../../ui/inbox/list-row";
+import { RequestRow } from "../../../ui/inbox/request-row";
 
 export interface EngagementRowProps {
   item: {
@@ -18,16 +18,16 @@ export interface EngagementRowProps {
 export function EngagementRow({ item, href, onOpen }: EngagementRowProps) {
   const { t } = useTranslation("quills");
   return (
-    <ListRow
+    <RequestRow
       href={href}
       onOpen={onOpen}
       title={item.title}
-      preview={
+      detail={
         item.reactions.length
           ? t("team-changelog.reads", { count: item.readCount })
           : t("team-changelog.readsNoReactions", { count: item.readCount })
       }
-      chips={item.reactions.map((reaction) => ({
+      badges={item.reactions.map((reaction) => ({
         id: reaction.emoji,
         label: `${reaction.emoji} ${reaction.count}`,
       }))}

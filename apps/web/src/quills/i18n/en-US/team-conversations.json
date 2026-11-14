@@ -69,6 +69,7 @@
 	"send": "Send reply",
 	"snooze": "Snooze",
 	"status": {
+		"any": "All",
 		"closed": "Closed",
 		"open": "Open",
 		"snoozed": "Snoozed"
@@ -89,8 +90,10 @@
 	"unassigned": "Unassigned",
 	"unknown": "Unknown",
 	"views": {
-		"all": "All conversations",
+		"all": "All",
 		"mine": "My conversations",
+		"open": "Open",
+		"queue": "Queue",
 		"unassigned": "Unassigned"
 	},
 	"yes": "Yes"

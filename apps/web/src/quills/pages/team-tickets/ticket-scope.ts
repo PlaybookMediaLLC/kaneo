@@ -4,7 +4,7 @@ import type {
 } from "../../api/team/list-tickets";
 import { teamHref } from "../../team/team-href";
 import type { ListGroup } from "../../ui/inbox/grouped-list";
-import type { ListRowProps } from "../../ui/inbox/list-row";
+import type { ConversationRowProps } from "../../ui/inbox/conversation-row";
 
 export type Ticket = ListTicketsResponse["items"][number];
 
@@ -76,23 +76,24 @@ export const priorityGroups = (
     items: tickets.filter((ticket) => ticket.priority === priority),
   }));
 
-/** The row of a ticket: the requester, the reference, the status and type chips, and the assignee. */
+/** The row of a ticket: the requester, the title, the reference and type, the status badge and the assignee. */
 export const ticketRow = (
   ticket: Ticket,
   noRequester: string,
-): Omit<ListRowProps, "href" | "onOpen"> => ({
+): Omit<ConversationRowProps, "href" | "onOpen"> => ({
   person: {
     name: ticket.requester?.displayName ?? noRequester,
     avatarUrl: ticket.requester?.avatarUrl,
   },
-  shortId: ticket.reference,
   title: ticket.title,
-  chips: [
-    { id: "status", label: ticket.status.name },
-    ...(ticket.ticketType
-      ? [{ id: "type", label: ticket.ticketType.name }]
-      : []),
-  ],
+  preview: [ticket.reference, ticket.ticketType?.name]
+    .filter(Boolean)
+    .join(" · "),
+  badge: {
+    id: "status",
+    label: ticket.status.name,
+    tone: ticket.status.category === "closed" ? "success" : "neutral",
+  },
   time: ticket.updatedAt,
   assignee:
     ticket.assignee.principalId || ticket.assignee.teamId

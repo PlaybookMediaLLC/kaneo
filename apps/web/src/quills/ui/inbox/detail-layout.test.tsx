@@ -1,36 +1,33 @@
-import { fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { press } from "../../test/actions";
 import { renderComponent } from "../../test/render";
-import { ShortcutListener } from "../upstream";
+import { DetailHeader } from "./detail-header";
 import { DetailLayout } from "./detail-layout";
+import { ListPane } from "./list-pane";
 
-function renderDetail(activeId = "b") {
-  const onMove = vi.fn();
-  const onBack = vi.fn();
-  const view = renderComponent(
-    <>
-      <ShortcutListener />
-      <DetailLayout
-        list={<p>Compact list</p>}
-        listLabel="Conversations"
-        ids={["a", "b", "c"]}
-        activeId={activeId}
-        onMove={onMove}
-        onBack={onBack}
-        properties={<p>Status: open</p>}
-        propertiesLabel="Details"
-      >
+function renderDetail(itemOpen = true) {
+  return renderComponent(
+    <DetailLayout
+      list={
+        <ListPane title="Open" headingLevel={2}>
+          <p>Compact list</p>
+        </ListPane>
+      }
+      listLabel="Conversations"
+      itemOpen={itemOpen}
+      properties={<p>Status: open</p>}
+      propertiesLabel="Details"
+    >
+      <DetailHeader>
         <h1>Export fails</h1>
-      </DetailLayout>
-    </>,
+      </DetailHeader>
+    </DetailLayout>,
   );
-  return { view, onMove, onBack };
 }
 
 describe("DetailLayout", () => {
-  it("shows the compact list, the item and the properties in named panes", () => {
-    const { view } = renderDetail();
+  it("shows the list pane, the item and the right panel in named panes", () => {
+    const view = renderDetail();
     expect(
       view.getByRole("region", { name: "Conversations" }),
     ).toHaveTextContent("Compact list");
@@ -40,27 +37,36 @@ describe("DetailLayout", () => {
     ).toHaveTextContent("Status: open");
   });
 
-  it("moves to the previous and next item and goes back, by button and by key", () => {
-    const { view, onMove, onBack } = renderDetail();
-    press("Previous");
-    press("Next");
-    expect(onMove.mock.calls).toEqual([["a"], ["c"]]);
-    fireEvent.keyDown(document.body, { key: "j" });
-    fireEvent.keyDown(document.body, { key: "ArrowUp" });
-    expect(onMove.mock.calls.slice(2)).toEqual([["c"], ["a"]]);
-    press("Back to the list");
-    fireEvent.keyDown(document.body, { key: "Escape" });
-    expect(onBack).toHaveBeenCalledTimes(2);
-    expect(view.getByRole("button", { name: "Next" })).toHaveAttribute(
-      "aria-keyshortcuts",
-      "J",
-    );
+  it("hides and shows the list pane", () => {
+    const view = renderDetail();
+    press("Hide the list");
+    expect(view.queryByRole("region", { name: "Conversations" })).toBeNull();
+    press("Show the list");
+    expect(view.getByRole("region", { name: "Conversations" })).toBeVisible();
   });
 
-  it("opens the properties in a sheet on small screens", async () => {
-    const { view } = renderDetail();
+  it("toggles the right panel from the header on wide screens", () => {
+    const view = renderDetail();
+    const toggle = view.getByRole("button", { name: "Details" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    press("Details");
+    expect(view.queryByRole("complementary", { name: "Details" })).toBeNull();
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("opens the right panel in a sheet on small screens", async () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    const view = renderDetail();
     press("Details");
     const sheet = await view.findByRole("dialog", { name: "Details" });
     expect(sheet).toHaveTextContent("Status: open");
+    vi.unstubAllGlobals();
+  });
+
+  it("shows the list in place of the main pane on small screens while no item is open", () => {
+    const view = renderDetail(false);
+    expect(view.getByRole("region", { name: "Conversations" })).toHaveClass(
+      "flex",
+    );
   });
 });

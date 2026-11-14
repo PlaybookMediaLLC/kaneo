@@ -31,12 +31,15 @@ Completion checks:         authenticated endpoint, tenant/object access, read/ex
 |---|---|---|---|---|---|
 | `getQuillsAnalyticsData` | `GET /reporting/analytics?period=7d\|30d\|90d\|12m` | read | posts, post_votes, post_comments, principal, post_statuses, boards, changelog_entries | - | contract, `reporting.test.ts` (hidden board, test customer, deleted post) |
 | `fetchQuillsAdminOverview` | `GET /reporting/admin-overview` | read | conversations, posts, post_statuses, post_votes, changelog_entries, changelog_entry_posts, kb_articles, status_incidents, status_subscriptions | - | contract, `reporting.test.ts` |
-| `getQuillsTeamCounts` | `GET /reporting/team-counts` | read | conversations, principal, tickets, ticket_statuses, merge_suggestions, posts, boards, board_projects, feedback_signals | - | contract, `team-counts.test.ts` (spam, test customer, hidden board, deleted ticket, workspace B) |
+| `getQuillsTeamCounts` | `GET /reporting/team-counts` | read | conversations, principal, tickets, ticket_statuses, merge_suggestions, posts, post_statuses, boards, board_projects, feedback_signals | - | contract, `team-counts.test.ts` (spam, test customer, hidden board, deleted, merged and test-customer posts, deleted ticket, workspace B) |
 | `getQuillsVisitorAnalyticsData` | `GET /reporting/visitor-analytics?period=…&surface=all\|portal\|widget` | read | visitor_stats_daily, visitor_top_stats | - | contract, `reporting.test.ts` (rollup leaves out test customers) |
 
 - `getQuillsTeamCounts` (RFC 0004) gives the counts of the teammate app navigation. Each count uses the
   rule of the list that it counts: the inbox open queue, `listQuillsTickets` with `statusCategory=open`,
-  `fetchQuillsMergeSuggestionSummary` and the pending autopilot list.
+  `fetchQuillsMergeSuggestionSummary` and the pending autopilot list. Revision 2 adds the queue (open
+  conversations with `waiting_since` set, as `listQuillsConversations` with `waitingOnly=true`) and
+  `postStatuses`: each live status of the `active` category in position order (at most 100), with
+  the count of `getQuillsPostFilterCounts` (visible boards; no deleted, merged or test-customer posts).
 - Feedback analytics are computed from live rows under the caller's board visibility. The
   `analytics_daily_stats` and `analytics_top_posts` snapshots count every board, so these routes do not read them.
 - A period is whole UTC days with today included (as in visitor analytics); the previous period has the same

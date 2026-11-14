@@ -1,6 +1,6 @@
 import { GitMerge, Undo2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { ActionBar } from "../../../ui/inbox/action-bar";
+import { FloatingActionBar } from "../../../ui/inbox/floating-action-bar";
 import type { Suggestion } from "./suggestion-detail";
 
 export interface SuggestionActionsProps {
@@ -52,6 +52,6 @@ export function SuggestionActions({
     .filter((action) => canDecide && action.show)
     .map((action) => ({ ...action, disabled: busy }));
   return actions.length ? (
-    <ActionBar label={t("duplicates.actions")} actions={actions} />
+    <FloatingActionBar label={t("duplicates.actions")} actions={actions} />
   ) : null;
 }

@@ -9,8 +9,11 @@ import { useSetSurveyStatus } from "../../hooks/team/use-set-survey-status";
 import { useTeamRuntime } from "../../team/runtime";
 import { teamHref } from "../../team/team-href";
 import { TeamStateView } from "../../team/team-state-view";
+import { DetailHeader } from "../../ui/inbox/detail-header";
 import { DetailLayout } from "../../ui/inbox/detail-layout";
-import { ListRow } from "../../ui/inbox/list-row";
+import { ListPane } from "../../ui/inbox/list-pane";
+import { RequestRow } from "../../ui/inbox/request-row";
+import { useListNavigation } from "../../ui/inbox/use-list-navigation";
 import { PageFrame } from "../../ui/page-frame";
 import { ResultCard } from "../../ui/result-card";
 import { SurveyActions } from "./parts/survey-actions";
@@ -49,6 +52,13 @@ export function TeamSurveyPage({ workspaceId, params }: TeamSurveyPageProps) {
   };
   const move = (next: "active" | "closed") => () =>
     run(() => status.mutateAsync({ param, json: { status: next } }));
+  const back = () => void navigate({ to: list });
+  const nav = useListNavigation({
+    ids: items.map((item) => item.id),
+    activeId: surveyId,
+    onMove: (id) => void navigate({ to: href(id) }),
+    onBack: back,
+  });
 
   return (
     <PageFrame
@@ -59,29 +69,31 @@ export function TeamSurveyPage({ workspaceId, params }: TeamSurveyPageProps) {
     >
       <DetailLayout
         list={
-          <ul className="divide-y divide-border">
-            {items.map((item) => (
-              <li key={item.id}>
-                <ListRow
-                  href={href(item.id)}
-                  onOpen={() => void navigate({ to: href(item.id) })}
-                  selected={item.id === surveyId}
-                  title={item.question}
-                  preview={t("surveys.responses", {
-                    count: item.responseCount,
-                  })}
-                  time={item.updatedAt}
-                  compact
-                />
-              </li>
-            ))}
-          </ul>
+          <ListPane
+            title={t("surveys.title")}
+            headingLevel={2}
+            loading={surveys.isLoading}
+          >
+            <ul className="grid gap-0.5">
+              {items.map((item) => (
+                <li key={item.id}>
+                  <RequestRow
+                    href={href(item.id)}
+                    onOpen={() => void navigate({ to: href(item.id) })}
+                    selected={item.id === surveyId}
+                    title={item.question}
+                    detail={t("surveys.responses", {
+                      count: item.responseCount,
+                    })}
+                    time={item.updatedAt}
+                    compact
+                  />
+                </li>
+              ))}
+            </ul>
+          </ListPane>
         }
         listLabel={t("surveys.title")}
-        ids={items.map((item) => item.id)}
-        activeId={surveyId}
-        onMove={(id) => void navigate({ to: href(id) })}
-        onBack={() => void navigate({ to: list })}
         properties={
           survey && results.data ? (
             <SurveyProperties survey={survey} total={results.data.total} />
@@ -89,6 +101,11 @@ export function TeamSurveyPage({ workspaceId, params }: TeamSurveyPageProps) {
         }
         propertiesLabel={t("surveys.properties.title")}
       >
+        <DetailHeader
+          onBack={back}
+          onPrevious={nav.previous}
+          onNext={nav.next}
+        />
         <div className="grid gap-6 px-6 py-5">
           <h1 tabIndex={-1} className="text-lg font-semibold outline-none">
             {survey?.question ?? t("surveys.properties.survey")}

@@ -1,7 +1,7 @@
 import { Play, Square, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { GetSurveyResultsResponse } from "../../../api/team/get-survey-results";
-import { ActionBar } from "../../../ui/inbox/action-bar";
+import { FloatingActionBar } from "../../../ui/inbox/floating-action-bar";
 
 export interface SurveyActionsProps {
   status: GetSurveyResultsResponse["survey"]["status"];
@@ -47,6 +47,6 @@ export function SurveyActions({ status, busy, ...props }: SurveyActionsProps) {
     .filter((action) => action.show)
     .map((action) => ({ ...action, disabled: busy }));
   return actions.length ? (
-    <ActionBar label={t("surveys.actions.label")} actions={actions} />
+    <FloatingActionBar label={t("surveys.actions.label")} actions={actions} />
   ) : null;
 }

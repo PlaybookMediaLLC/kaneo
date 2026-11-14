@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
-import { ListRow } from "../../../ui/inbox/list-row";
+import { plainText } from "../../../core/plain-text";
+import { RequestRow } from "../../../ui/inbox/request-row";
 import type { Signal } from "./signal-detail";
 
 export interface SignalListRowProps {
@@ -15,14 +16,14 @@ export function SignalListRow({ signal, ...row }: SignalListRowProps) {
   const { t } = useTranslation("quills");
   const { source } = signal;
   return (
-    <ListRow
+    <RequestRow
       {...row}
       person={{
         name: signal.customer.displayName ?? t("autopilot.anonymousName"),
       }}
       title={signal.suggestedTitle}
-      preview={signal.excerpt}
-      chips={[
+      detail={plainText(signal.excerpt)}
+      badges={[
         {
           id: source.type,
           label:
