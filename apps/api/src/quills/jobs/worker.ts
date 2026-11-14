@@ -21,6 +21,7 @@ import { runTransferJob } from "./handlers/transfer";
 import { runQuillsSweeps } from "./handlers/sweeps";
 import { runWipeJob } from "./handlers/wipe";
 import { runWorkflowJob } from "./handlers/workflow";
+import { runCrmNoteJob } from "../integrations/crm-notes";
 import {
   handOffTaskStatus,
   runTaskSyncJob,
@@ -40,13 +41,15 @@ const handlers: Record<
   (workspaceId: string, job: JobQueueRow) => Promise<unknown>
 > = {
   // Integration deliveries and GitHub inbox comments share this queue until a quills.integration queue
-  // is runnable (integrations/ROUTES.md). A webhook job names its webhook.
+  // is runnable (integrations/ROUTES.md). A webhook job names its webhook; a CRM note job names `crm`.
   "quills.webhook": (workspaceId, job) =>
     "operationId" in (job.payload as object)
       ? runIntegrationJob(workspaceId, job)
       : "webhookId" in (job.payload as object)
         ? runWebhookJob(workspaceId, job)
-        : runGitHubCommentJob(workspaceId, job),
+        : "crm" in (job.payload as object)
+          ? runCrmNoteJob(workspaceId, job)
+          : runGitHubCommentJob(workspaceId, job),
   "quills.mail": runMailJob,
   "quills.notification": runNotificationJob,
   "quills.domain_check": runDomainCheckJob,

@@ -23,7 +23,7 @@ const login = "https://login.salesforce.com/services/oauth2";
  * no port. Null otherwise. The token answer names the instance, so it is checked before it is stored,
  * and again before each call.
  */
-function salesforceInstance(value: unknown) {
+export function salesforceInstance(value: unknown) {
   const url = URL.parse(text(value));
   return url?.protocol === "https:" &&
     !url.username &&
