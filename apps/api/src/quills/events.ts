@@ -385,6 +385,8 @@ export const changeSchema = z.object({
     "changelog.reacted",
     "changelog.unreacted",
     "board.settings_updated",
+    // RFC 0003 lane L2: a deleted draft survey.
+    "survey.deleted",
   ]),
   entityType: z.enum([
     "board",

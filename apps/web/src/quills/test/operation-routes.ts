@@ -446,6 +446,11 @@ export const quillsOperationRoutes = [
     path: "/api/quills/{workspaceId}/status/templates",
   },
   {
+    operationId: "createQuillsSurvey",
+    method: "POST",
+    path: "/api/quills/{workspaceId}/surveys",
+  },
+  {
     operationId: "createQuillsTag",
     method: "POST",
     path: "/api/quills/{workspaceId}/tags",
@@ -754,6 +759,11 @@ export const quillsOperationRoutes = [
     operationId: "deleteQuillsStatusTemplate",
     method: "DELETE",
     path: "/api/quills/{workspaceId}/status/templates/{templateId}",
+  },
+  {
+    operationId: "deleteQuillsSurvey",
+    method: "DELETE",
+    path: "/api/quills/{workspaceId}/surveys/{surveyId}",
   },
   {
     operationId: "deleteQuillsTag",
@@ -1231,6 +1241,11 @@ export const quillsOperationRoutes = [
     path: "/api/quills/{workspaceId}/integration-platform-credentials",
   },
   {
+    operationId: "getQuillsPortalActiveSurvey",
+    method: "GET",
+    path: "/api/quills-public/{workspace}/portal/surveys/active",
+  },
+  {
     operationId: "getQuillsPortalChangelogEntry",
     method: "GET",
     path: "/api/quills-public/{workspace}/portal/changelog/{entryId}",
@@ -1426,6 +1441,11 @@ export const quillsOperationRoutes = [
     path: "/api/quills/{workspaceId}/support/reporting",
   },
   {
+    operationId: "getQuillsSurveyResults",
+    method: "GET",
+    path: "/api/quills/{workspaceId}/surveys/{surveyId}/results",
+  },
+  {
     operationId: "getQuillsTag",
     method: "GET",
     path: "/api/quills/{workspaceId}/tags/{tagId}",
@@ -1484,6 +1504,11 @@ export const quillsOperationRoutes = [
     operationId: "getQuillsWebhook",
     method: "GET",
     path: "/api/quills/{workspaceId}/webhooks/{webhookId}",
+  },
+  {
+    operationId: "getQuillsWidgetActiveSurvey",
+    method: "GET",
+    path: "/api/quills-public/{workspace}/widget/surveys/active",
   },
   {
     operationId: "getQuillsWidgetCapabilities",
@@ -2134,6 +2159,11 @@ export const quillsOperationRoutes = [
     operationId: "listQuillsStatusTemplates",
     method: "GET",
     path: "/api/quills/{workspaceId}/status/templates",
+  },
+  {
+    operationId: "listQuillsSurveys",
+    method: "GET",
+    path: "/api/quills/{workspaceId}/surveys",
   },
   {
     operationId: "listQuillsTags",
@@ -3106,6 +3136,11 @@ export const quillsOperationRoutes = [
     path: "/api/quills/{workspaceId}/assistant/slack",
   },
   {
+    operationId: "setQuillsSurveyStatus",
+    method: "PUT",
+    path: "/api/quills/{workspaceId}/surveys/{surveyId}/status",
+  },
+  {
     operationId: "setQuillsTicketPriority",
     method: "POST",
     path: "/api/quills/{workspaceId}/tickets/{ticketId}/priority",
@@ -3291,6 +3326,11 @@ export const quillsOperationRoutes = [
     path: "/api/quills-public/{workspace}/support/conversations/{conversationId}/csat",
   },
   {
+    operationId: "submitQuillsPortalSurveyResponse",
+    method: "POST",
+    path: "/api/quills-public/{workspace}/portal/surveys/{surveyId}/responses",
+  },
+  {
     operationId: "submitQuillsPublicArticleFeedbackReason",
     method: "POST",
     path: "/api/quills-public/{workspace}/hc/feedback/{feedbackId}/reason",
@@ -3299,6 +3339,11 @@ export const quillsOperationRoutes = [
     operationId: "submitQuillsWidgetCsat",
     method: "POST",
     path: "/api/quills-public/{workspace}/widget/conversations/{conversationId}/csat",
+  },
+  {
+    operationId: "submitQuillsWidgetSurveyResponse",
+    method: "POST",
+    path: "/api/quills-public/{workspace}/widget/surveys/{surveyId}/responses",
   },
   {
     operationId: "subscribeQuillsMyChangelog",
@@ -3649,6 +3694,11 @@ export const quillsOperationRoutes = [
     operationId: "updateQuillsStatusTemplate",
     method: "PATCH",
     path: "/api/quills/{workspaceId}/status/templates/{templateId}",
+  },
+  {
+    operationId: "updateQuillsSurvey",
+    method: "PATCH",
+    path: "/api/quills/{workspaceId}/surveys/{surveyId}",
   },
   {
     operationId: "updateQuillsTag",

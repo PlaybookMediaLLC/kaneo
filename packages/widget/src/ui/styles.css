@@ -493,3 +493,10 @@
 @media (pointer: coarse) {
   .qb-widget :is(.qb-image-viewer button, .qb-helpful-actions button, .qb-jump-latest, .qb-activity-trigger) { min-height: 44px; min-width: 44px; }
 }
+.qb-survey { margin-bottom: 16px; }
+.qb-survey h2 { margin-bottom: 12px; }
+.qb-survey-answers { flex-wrap: wrap; justify-content: flex-start; gap: 6px; }
+.qb-widget .qb-survey-answers button { min-width: 36px; min-height: 36px; padding: 0 10px; }
+.qb-survey textarea { display: block; width: 100%; margin-top: 12px; padding: 8px 12px; border: 1px solid var(--qb-line); border-radius: 12px; background: var(--qb-input); color: var(--qb-ink); font: inherit; font-size: 13px; resize: vertical; }
+.qb-survey .qb-composer-actions { margin-top: 12px; }
+.qb-survey [role="status"] { color: var(--qb-ink); font-size: 13px; }

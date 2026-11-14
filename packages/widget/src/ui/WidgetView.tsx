@@ -13,6 +13,7 @@ import { ConversationView } from "./ConversationView.js";
 import { ActivityView } from "./ActivityView.js";
 import { ArticleView } from "./ArticleView.js";
 import { ConnectionStatus } from "./ConnectionStatus.js";
+import { SurveyPrompt } from "./SurveyPrompt.js";
 import { useDrafts, emptyDraft } from "./useDrafts.js";
 import { useWidgetNavigation } from "./useWidgetNavigation.js";
 import { useAction } from "./useAction.js";
@@ -64,6 +65,9 @@ export function WidgetView({
   onFollowFeedback,
   onReactToUpdate,
   onShareUpdate,
+  survey,
+  onAnswerSurvey,
+  onDismissSurvey,
 }: WidgetViewProps) {
   const [attachmentReset, setAttachmentReset] = useState(0);
   const close = () => {
@@ -414,6 +418,18 @@ export function WidgetView({
             conversations={conversations}
             openConversation={(id) => open("messages", id)}
             teamAvailability={teamAvailability}
+            survey={
+              survey &&
+              onAnswerSurvey && (
+                <SurveyPrompt
+                  key={survey.id}
+                  survey={survey}
+                  offline={offline}
+                  onAnswer={(answer) => onAnswerSurvey(survey.id, answer)}
+                  onDismiss={() => onDismissSurvey?.(survey.id)}
+                />
+              )
+            }
           />
         ) : tab === "messages" ? (
           <MessagesView
