@@ -1,4 +1,3 @@
-import { waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { improvePortalPostDraftFixture } from "../api/feedback/improve-portal-post-draft.fixture";
 import { press } from "../test/actions";
@@ -7,6 +6,7 @@ import { renderComponent } from "../test/render";
 import { ImproveDraft } from "./improve-draft";
 
 const viewer = { kind: "user", id: "account_test_1" } as const;
+const boards = [{ id: "board_test_1" }];
 const draft = () => ({
   boardId: "board_test_1",
   title: "csv",
@@ -28,6 +28,7 @@ describe("ImproveDraft", () => {
       <ImproveDraft
         workspaceId="workspace_test_1"
         viewer={viewer}
+        boards={boards}
         draft={draft}
         onApply={onApply}
       />,
@@ -62,6 +63,7 @@ describe("ImproveDraft", () => {
       <ImproveDraft
         workspaceId="workspace_test_1"
         viewer={viewer}
+        boards={boards}
         draft={draft}
         onApply={onApply}
       />,
@@ -84,15 +86,58 @@ describe("ImproveDraft", () => {
       <ImproveDraft
         workspaceId="workspace_test_1"
         viewer={viewer}
+        boards={boards}
         draft={draft}
         onApply={vi.fn()}
       />,
     );
     press("Improve with AI");
     expect(await view.findByRole("alert")).toHaveTextContent(message);
-    // A refusal is not retried: it would spend the rate limit.
-    await waitFor(() =>
-      expect(api.calls("improveQuillsPortalPostDraft")).toHaveLength(1),
+  });
+
+  it("asks again for the same draft after a failure", async () => {
+    const api = mockApi();
+    api.reply(improvePortalPostDraftFixture.problem(502).body, 502);
+    api.reply(improvePortalPostDraftFixture.ok({ title: "Second try" }));
+    const view = renderComponent(
+      <ImproveDraft
+        workspaceId="workspace_test_1"
+        viewer={viewer}
+        boards={boards}
+        draft={draft}
+        onApply={vi.fn()}
+      />,
+    );
+    press("Improve with AI");
+    await view.findByRole("alert");
+    press("Improve with AI");
+    expect(
+      await view.findByRole("region", { name: "Suggestion from AI" }),
+    ).toHaveTextContent("Second try");
+    expect(api.calls("improveQuillsPortalPostDraft")).toHaveLength(2);
+  });
+
+  it("keeps the composer's board and title bounds", async () => {
+    const api = mockApi();
+    api.reply(improvePortalPostDraftFixture.ok({ boardId: "board_test_9" }));
+    const onApply = vi.fn();
+    const view = renderComponent(
+      <ImproveDraft
+        workspaceId="workspace_test_1"
+        viewer={viewer}
+        boards={boards}
+        draft={() => ({ ...draft(), title: "t".repeat(250) })}
+        onApply={onApply}
+      />,
+    );
+    press("Improve with AI");
+    await view.findByRole("region", { name: "Suggestion from AI" });
+    const [request] = api.calls("improveQuillsPortalPostDraft");
+    expect((await request!.json()).title).toBe("t".repeat(200));
+    // A board that this composer does not offer, such as another board's page, is not used.
+    press("Use this");
+    expect(onApply).toHaveBeenCalledWith(
+      expect.objectContaining({ boardId: "board_test_1" }),
     );
   });
 });

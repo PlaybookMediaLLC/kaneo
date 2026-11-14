@@ -40,6 +40,7 @@ export function FeedbackComposer({
         <ImproveDraft
           workspaceId={workspaceId}
           viewer={portal.viewer}
+          boards={props.boards}
           draft={draft}
           onApply={apply}
         />

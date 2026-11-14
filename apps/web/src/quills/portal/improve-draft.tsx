@@ -10,6 +10,8 @@ type PostComposerValues = Parameters<PostComposerProps["onSubmit"]>[0];
 export interface ImproveDraftProps {
   workspaceId: string;
   viewer: Viewer;
+  /** The composer's boards: a suggested board outside them is not used. */
+  boards: Array<{ id: string }>;
   /** Reads the draft when the writer asks for help. */
   draft: () => PostComposerValues;
   /** Replaces the draft with the suggestion that the writer accepted. */
@@ -22,19 +24,21 @@ const problemKeys: Partial<Record<PortalProblemKind, string>> = {
   rateLimited: "assist.aiRateLimited",
 };
 
+/** The route's request for a draft, within the route's bounds. */
+const request = (values: PostComposerValues) => ({
+  title: values.title.trim().slice(0, 200),
+  details: values.content.trim().slice(0, 4000),
+  boardId: values.boardId,
+});
+
 /** "Improve with AI": a suggested title, problem statement and board that the writer can use. */
 export function ImproveDraft(props: ImproveDraftProps) {
   const { t } = useTranslation("quills");
-  const [asked, setAsked] = useState<PostComposerValues | null>(null);
+  const [asked, setAsked] = useState<ReturnType<typeof request> | null>(null);
   const suggestion = useImprovePortalPostDraft(
     {
       param: { workspace: asked ? props.workspaceId : "" },
-      json: {
-        title: asked?.title.trim() ?? "",
-        // The composer takes longer details than the AI route reads.
-        details: asked?.content.trim().slice(0, 4000) ?? "",
-        boardId: asked?.boardId,
-      },
+      json: asked ?? { title: "", details: "" },
     },
     props.viewer,
   );
@@ -47,7 +51,16 @@ export function ImproveDraft(props: ImproveDraftProps) {
         size="sm"
         className="justify-self-start"
         loading={Boolean(asked) && suggestion.isFetching}
-        onClick={() => setAsked(props.draft())}
+        onClick={() => {
+          const next = request(props.draft());
+          // The same draft is the same query: ask again only after a failure.
+          if (
+            suggestion.isError &&
+            JSON.stringify(next) === JSON.stringify(asked)
+          )
+            void suggestion.refetch();
+          else setAsked(next);
+        }}
       >
         {t("assist.improve")}
       </Button>
@@ -74,7 +87,9 @@ export function ImproveDraft(props: ImproveDraftProps) {
               size="sm"
               onClick={() => {
                 props.onApply({
-                  boardId: data.boardId ?? asked.boardId,
+                  boardId: props.boards.some((b) => b.id === data.boardId)
+                    ? data.boardId!
+                    : asked.boardId,
                   title: data.title,
                   content: data.problem,
                 });
