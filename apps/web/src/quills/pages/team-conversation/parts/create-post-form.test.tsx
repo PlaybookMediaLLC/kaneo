@@ -19,9 +19,9 @@ describe("CreatePostForm", () => {
           onCancel={vi.fn()}
         />,
       ),
-    fieldName: "Post title",
+    fieldName: "Request title",
     issuePath: "title",
-    submitName: "Create post",
+    submitName: "Create request",
     validValue: "Faster export",
     expectedValues: { boardId: "board_1", title: "Faster export", content: "" },
     invalidValue: " ",
@@ -35,14 +35,14 @@ describe("CreatePostForm", () => {
     expect(view.getByRole("combobox", { name: "Board" })).toHaveTextContent(
       "Ideas",
     );
-    press("Create post");
-    expect(await view.findByLabelText("Post title")).toHaveAttribute(
+    press("Create request");
+    expect(await view.findByLabelText("Request title")).toHaveAttribute(
       "aria-invalid",
       "true",
     );
-    fill("Post title", "Faster export");
+    fill("Request title", "Faster export");
     fill("Details (optional)", "Asked in support.");
-    press("Create post");
+    press("Create request");
     await vi.waitFor(() =>
       expect(onSubmit).toHaveBeenCalledWith({
         boardId: "board_1",

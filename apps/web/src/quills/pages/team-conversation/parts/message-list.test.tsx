@@ -28,6 +28,8 @@ const message = (
     isInternal: boolean;
     authorName: string | null;
     content: string;
+    systemKind: string | null;
+    createdAt: string;
   }>,
 ) => ({
   id,
@@ -48,7 +50,7 @@ const message = (
 });
 
 describe("MessageList", () => {
-  it("shows the thread oldest first, marks notes and shows the customer typing", async () => {
+  it("shows the thread oldest first with day lines, bubbles, notes, events and the typing", async () => {
     const api = mockApi();
     api.reply(getConversationTypingFixture.ok({ visitorTyping: true }));
     const view = render(
@@ -57,7 +59,12 @@ describe("MessageList", () => {
         conversationId="conversation_test_1"
         customerName="Grace"
         messages={[
-          message("m4", { senderType: "system", content: "Ada closed this" }),
+          message("m4", {
+            senderType: "system",
+            systemKind: "chat_ended",
+            content: "Conversation ended",
+            createdAt: "2026-11-02T09:00:00.000Z",
+          }),
           message("m3", {
             senderType: "agent",
             isInternal: true,
@@ -71,13 +78,22 @@ describe("MessageList", () => {
           }),
           message("m1", { content: "Export fails" }),
         ]}
+        people={[]}
       />,
     );
-    const items = view.getAllByRole("listitem").map((item) => item.textContent);
-    expect(items[0]).toContain("Grace");
-    expect(items[0]).toContain("Export fails");
-    expect(items[2]).toContain("Internal note");
-    expect(items[3]).toBe("Ada closed this");
+    const items = view.getAllByRole("listitem");
+    expect(items[0]).toHaveTextContent("Grace");
+    expect(items[0]).toHaveTextContent("Export fails");
+    // A day line starts the thread and each new day.
+    expect(items[0]!.querySelector("time")).toHaveAttribute(
+      "datetime",
+      "2026-11-01T10:00:00.000Z",
+    );
+    expect(items[1]!.querySelectorAll("time")).toHaveLength(1);
+    expect(items[2]).toHaveTextContent("Note");
+    expect(items[2]).toHaveTextContent("Check the invoice");
+    expect(items[3]).toHaveTextContent("Conversation ended");
+    expect(items[3]!.querySelectorAll("time")).toHaveLength(2);
     expect(await view.findByText("Grace is typing…")).toBeInTheDocument();
   });
 
@@ -90,6 +106,7 @@ describe("MessageList", () => {
         conversationId="conversation_test_1"
         customerName="Grace"
         messages={[]}
+        people={[]}
       />,
     );
     expect(view.getByText("No messages yet.")).toBeInTheDocument();

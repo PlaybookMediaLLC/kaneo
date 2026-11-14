@@ -10,6 +10,9 @@ export const meta = {
     "listQuillsConversationViews",
     "listQuillsConversations",
     "listQuillsPrincipals",
+    "listQuillsUsers",
+    "startQuillsAgentConversation",
+    "createQuillsConversationView",
   ],
-  states: ["loading", "failed", "ready"],
+  states: ["loading", "failed", "ready", "done"],
 } satisfies PageMeta;
