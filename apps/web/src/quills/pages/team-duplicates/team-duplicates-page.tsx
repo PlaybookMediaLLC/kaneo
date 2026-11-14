@@ -103,7 +103,10 @@ export function TeamDuplicatesPage({ workspaceId }: TeamDuplicatesPageProps) {
           suggestions={ordered}
           message={message}
           problem={problem}
-          onMove={setOpenId}
+          onMove={(id) => {
+            setProblem(null);
+            setOpenId(id);
+          }}
           onBack={() => {
             setCursor(open.id);
             setOpenId(null);
