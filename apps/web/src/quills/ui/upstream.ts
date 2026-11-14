@@ -102,7 +102,15 @@ export {
   MenuSeparator,
   MenuTrigger,
 } from "@/components/ui/menu";
-export { CommandDialog, CommandDialogPopup } from "@/components/ui/command";
+export {
+  Command,
+  CommandDialog,
+  CommandDialogPopup,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 export { Badge } from "@/components/ui/badge";
 export {
   Popover,

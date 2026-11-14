@@ -30,7 +30,7 @@ describe("MergePalette", () => {
       view.getByRole("combobox", { name: "Find the request to merge here…" }),
       { target: { value: "sign" } },
     );
-    fireEvent.mouseDown(
+    fireEvent.click(
       await view.findByRole("option", { name: /Single sign-on/ }),
     );
     await waitFor(() => expect(onClose).toHaveBeenCalled());

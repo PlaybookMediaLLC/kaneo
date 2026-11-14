@@ -196,7 +196,7 @@ describe("TeamPostPage", () => {
     const option = await view.findByRole("option", { name: /Single sign-on/ });
     // The search leaves out this request.
     expect(view.queryByRole("option", { name: /Export to CSV/ })).toBeNull();
-    fireEvent.mouseDown(option);
+    fireEvent.click(option);
     await waitFor(() => expect(api.calls("mergeQuillsPost")).toHaveLength(1));
     expect(new URL(api.calls("mergeQuillsPost")[0]!.url).pathname).toBe(
       "/api/quills/workspace_test_1/posts/post_export/merge",
