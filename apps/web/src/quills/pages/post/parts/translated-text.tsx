@@ -10,22 +10,23 @@ export interface TranslatedTextProps {
   /** The post or the comment that holds the text. */
   target: { postId: string } | { commentId: string };
   content: string;
-  /** A post's title: its translation shows above the text. */
-  title?: string;
   className?: string;
 }
 
 // ponytail: the content language is taken to be English, the only portal language today.
 // Compare with a workspace language setting when one exists.
-const browserLocale = () => {
+/** The browser language when it is not English, else null: then no text offers a translation. */
+export const browserLocale = () => {
   const locale = globalThis.navigator?.language ?? "en";
   return /^en(-|$)/i.test(locale) ? null : locale;
 };
 
-/** A post or comment text with "Translate" when the browser language is not English. */
+/** A post or comment text with "Translate" when the browser language is not English. A post's translated title shows above its text. */
 export function TranslatedText(props: TranslatedTextProps) {
   const { t } = useTranslation("quills");
-  const [on, setOn] = useState(false);
+  // The toggle belongs to one text: after an edit the new original shows.
+  const [translatedFor, setTranslatedFor] = useState<string | null>(null);
+  const on = translatedFor === props.content;
   const locale = browserLocale();
   const translation = useTranslatePortalContent(
     {
@@ -47,7 +48,7 @@ export function TranslatedText(props: TranslatedTextProps) {
         <button
           type="button"
           className="justify-self-start text-xs text-muted-foreground transition-colors hover:text-foreground"
-          onClick={() => setOn(!on)}
+          onClick={() => setTranslatedFor(on ? null : props.content)}
         >
           {t(on ? "assist.showOriginal" : "assist.translate")}
         </button>

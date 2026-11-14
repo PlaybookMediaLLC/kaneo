@@ -13,7 +13,7 @@ import { runMutation } from "../run-mutation";
 import { CommentSheets } from "./comment-sheets";
 import { CreateCommentForm } from "./create-comment-form";
 import { PostAttachments } from "./post-attachments";
-import { TranslatedText } from "./translated-text";
+import { browserLocale, TranslatedText } from "./translated-text";
 
 type Comment = ListPortalPostCommentsResponse["items"][number];
 type Emoji = SetPortalCommentReactionRequest["json"]["emoji"];
@@ -41,6 +41,8 @@ export function PostCommentsSection(props: PostCommentsSectionProps) {
   const create = useCreatePortalComment(props.viewer);
   const react = useSetPortalCommentReaction(props.viewer);
   const signedIn = props.viewer.kind === "user";
+  // English readers get the plain comment, with no translation query for each comment.
+  const translatable = browserLocale() !== null;
   // Comments load oldest first, so a new one can fall past the loaded pages.
   // ponytail: an edit of such a comment shows the old text until the page reloads;
   // keep the edit response here if people edit fresh comments on long threads.
@@ -83,13 +85,15 @@ export function PostCommentsSection(props: PostCommentsSectionProps) {
         reactions: reacted[comment.id] ?? comment.reactions,
       }}
       body={
-        <TranslatedText
-          workspaceId={props.workspaceId}
-          viewer={props.viewer}
-          target={{ commentId: comment.id }}
-          content={comment.content}
-          className={commentText}
-        />
+        translatable ? (
+          <TranslatedText
+            workspaceId={props.workspaceId}
+            viewer={props.viewer}
+            target={{ commentId: comment.id }}
+            content={comment.content}
+            className={commentText}
+          />
+        ) : undefined
       }
       attachments={
         <PostAttachments

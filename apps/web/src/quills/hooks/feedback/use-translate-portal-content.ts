@@ -11,9 +11,12 @@ export function useTranslatePortalContent(
   return useQuery({
     ...translatePortalContentQuery(input, viewer),
     enabled: Boolean(input.param.workspace),
-    // Each call spends an AI request and the rate limit: keep the answer, never retry a refusal.
-    staleTime: Number.POSITIVE_INFINITY,
+    // The key has no source text, so each toggle asks the server again and its cache answers.
+    // An edited text then never shows an old translation. A hidden translation is dropped.
+    staleTime: 0,
+    gcTime: 0,
     refetchOnWindowFocus: false,
+    // A refusal spends an AI request and the rate limit: never retry it.
     retry: false,
   });
 }

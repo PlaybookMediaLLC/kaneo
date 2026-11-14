@@ -126,7 +126,6 @@ export function PostPage(props: PostPageProps) {
                   workspaceId={props.workspaceId}
                   viewer={viewer}
                   target={{ postId }}
-                  title={data.title}
                   content={data.content}
                 />
                 <PostAttachments

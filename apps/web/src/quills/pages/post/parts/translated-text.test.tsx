@@ -13,7 +13,6 @@ const post = (
     workspaceId="workspace_test_1"
     viewer={{ kind: "anonymous" }}
     target={{ postId: "post_test_1" }}
-    title="Dark mode"
     content="Please add dark mode."
   />
 );
@@ -53,12 +52,29 @@ describe("TranslatedText", () => {
     });
     press("Show original");
     expect(view.getByText("Please add dark mode.")).toBeInTheDocument();
-    // The translation is kept: a second toggle makes no new call.
+  });
+
+  it("shows the new original after an edit and translates the new text", async () => {
+    browser("de");
+    const api = mockApi();
+    api.reply(translatePortalContentFixture.ok({ content: "Alter Text" }));
+    api.reply(translatePortalContentFixture.ok({ content: "Neuer Text" }));
+    const show = (content: string) => (
+      <TranslatedText
+        workspaceId="workspace_test_1"
+        viewer={{ kind: "anonymous" }}
+        target={{ postId: "post_test_1" }}
+        content={content}
+      />
+    );
+    const view = renderComponent(show("Old text"));
     press("Translate");
-    expect(
-      await view.findByText("Bitte Dunkelmodus hinzufügen."),
-    ).toBeInTheDocument();
-    expect(api.calls()).toHaveLength(1);
+    await view.findByText("Alter Text");
+    view.rerender(show("New text"));
+    expect(view.getByText("New text")).toBeInTheDocument();
+    press("Translate");
+    expect(await view.findByText("Neuer Text")).toBeInTheDocument();
+    expect(api.calls("translateQuillsPortalContent")).toHaveLength(2);
   });
 
   it("keeps the original text when the translation fails", async () => {

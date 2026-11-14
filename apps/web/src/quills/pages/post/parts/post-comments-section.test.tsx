@@ -1,5 +1,5 @@
 import { fireEvent, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createPortalCommentFixture } from "../../../api/feedback/create-portal-comment.fixture";
 import { listPortalPostCommentsFixture } from "../../../api/feedback/list-portal-post-comments.fixture";
 import { setPortalCommentReactionFixture } from "../../../api/feedback/set-portal-comment-reaction.fixture";
@@ -20,6 +20,8 @@ const reply = listPortalPostCommentsFixture.comment({
 });
 
 describe("PostCommentsSection", () => {
+  afterEach(() => vi.restoreAllMocks());
+
   it("threads replies under their parent and likes a comment", async () => {
     const api = mockApi();
     api.reply(setPortalCommentReactionFixture.ok());
@@ -127,6 +129,5 @@ describe("PostCommentsSection", () => {
       commentId: "comment_test_1",
       locale: "es",
     });
-    vi.restoreAllMocks();
   });
 });
