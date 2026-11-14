@@ -6,7 +6,7 @@ import { principal, settings } from "../../database/quills/schema/auth";
 import { segments, userSegments } from "../../database/quills/schema/segments";
 import { surveyResponses } from "../../database/quills/schema/surveys";
 import * as kaneo from "../../database/schema";
-import { apiRouter } from "../../openapi";
+import { apiRouter, type BaseVariables } from "../../openapi";
 import {
   contractApp,
   contractEnv,
@@ -15,7 +15,10 @@ import {
   stopContract,
 } from "../framework/contract";
 import { role, users } from "../framework/contract-world";
-import { buildQuillsRoute } from "../framework/define-route";
+import {
+  buildQuillsRoute,
+  type AnyQuillsRoute,
+} from "../framework/define-route";
 import { registry } from "../framework/registry";
 import quillsRouter from "../index";
 import publicRouter from "../public";
@@ -245,6 +248,19 @@ describe.skipIf(!url)("Quills in-app surveys", () => {
         })
       ).status,
     ).toBe(404);
+    const draft = await team("POST", "/surveys", {
+      body: { type: "nps", question: "Mine?" },
+    });
+    const retarget = (targetSegmentIds: unknown) =>
+      team("PATCH", `/surveys/${draft.body.id}`, {
+        body: { targetSegmentIds },
+      });
+    expect((await retarget([foreign])).status).toBe(404);
+    const everyone = await retarget(null);
+    expect([everyone.status, everyone.body.targetSegmentIds]).toEqual([
+      200,
+      null,
+    ]);
     const list = await team("GET", "/surveys?limit=100");
     expect(JSON.stringify(list.body)).not.toContain("B only");
     // The outsider of B is not a member of A.
@@ -330,6 +346,55 @@ describe.skipIf(!url)("Quills in-app surveys", () => {
       [env().a],
     );
     expect((await portal("GET", "/surveys/active")).body.survey).toBeNull();
+  });
+
+  it("gives a customer the latest active survey that they did not answer", async () => {
+    const first = await activeSurvey({ type: "nps", question: "First?" });
+    const second = await team("POST", "/surveys", {
+      body: { type: "csat", question: "Second?" },
+    });
+    await team("PUT", `/surveys/${second.body.id}/status`, {
+      body: { status: "active" },
+    });
+    expect((await portal("GET", "/surveys/active")).body.survey?.id).toBe(
+      second.body.id,
+    );
+    expect(
+      (await answer(second.body.id, { score: 5, comment: "  Quick setup  " }))
+        .status,
+    ).toBe(200);
+    expect((await portal("GET", "/surveys/active")).body.survey?.id).toBe(
+      first,
+    );
+    // The stored answer reaches the results, trimmed and with the person's name.
+    const results = (await team("GET", `/surveys/${second.body.id}/results`))
+      .body;
+    expect(results).toMatchObject({ total: 1, score: 100 });
+    expect(results.comments).toEqual([
+      expect.objectContaining({
+        comment: "Quick setup",
+        score: 5,
+        choice: null,
+        respondent: env().customerA,
+      }),
+    ]);
+    // An anonymous widget session never answers, also an untargeted survey.
+    const anonymous = await call(
+      "POST",
+      `/quills-public/${env().a}/widget/anonymous-session`,
+    );
+    expect(
+      (
+        await widget(
+          "POST",
+          `/surveys/${first}/responses`,
+          anonymous.body.sessionToken,
+          {
+            score: 3,
+          },
+        )
+      ).status,
+    ).toBe(404);
   });
 
   it("keeps one answer per person, also for parallel submits", async () => {
@@ -435,6 +500,12 @@ describe.skipIf(!url)("Quills in-app surveys", () => {
     expect(nps.scores).toHaveLength(11);
     expect(nps.scores[10]).toEqual({ value: 10, count: 2 });
     expect(nps.survey.responseCount).toBe(5);
+    // A 6 is a detractor and a 7 is passive: 2 promoters and 3 detractors of 7 give -14.
+    const negative = await respond(
+      await activeSurvey({ type: "nps", question: "NPS below zero?" }),
+      [10, 9, 8, 7, 6, 0, 0].map((score) => ({ score })),
+    );
+    expect(negative).toMatchObject({ total: 7, score: -14 });
     const csat = await respond(
       await activeSurvey({ type: "csat", question: "CSAT?" }),
       [5, 4, 3, 1].map((score) => ({ score })),
@@ -506,16 +577,16 @@ describe.skipIf(!url)("Quills in-app surveys", () => {
     const declared = [...registry.keys()].find(
       (d) => d.operationId === "submitQuillsPortalSurveyResponse",
     )!;
+    const failure: Partial<AnyQuillsRoute> = {
+      handler: async (input) => {
+        await declared.handler(input);
+        throw new Error("Injected failure after the write");
+      },
+    };
     const failing = contractApp(
       apiRouter(),
-      apiRouter().openapi(
-        ...buildQuillsRoute({
-          ...declared,
-          handler: async (input: never) => {
-            await declared.handler(input);
-            throw new Error("Injected failure after the write");
-          },
-        }),
+      apiRouter<BaseVariables & { workspaceId: string }>().openapi(
+        ...buildQuillsRoute({ ...declared, ...failure }),
       ),
     );
     const res = await answer(id, { score: 8 }, { target: failing });

@@ -30,10 +30,10 @@ async function scene(env: ContractEnv, who: Customer) {
       return { id: row!.id, question };
     });
   for (const values of [
-    { status: "draft" },
-    { status: "closed" },
+    { status: "draft" as const },
+    { status: "closed" as const },
     { targetSegmentIds: [createId("segment")] },
-  ] as const)
+  ] satisfies Partial<typeof surveys.$inferInsert>[])
     hidden.push((await add(env.a, values)).question);
   const b = await add(env.b, {});
   hidden.push(b.question, b.id);
@@ -86,8 +86,3 @@ export function surveyFixtures(who: Customer): Record<string, Fixture> {
     ),
   };
 }
-
-const portal = surveyFixtures("portal");
-export const getQuillsPortalActiveSurvey = portal.getQuillsPortalActiveSurvey!;
-export const submitQuillsPortalSurveyResponse =
-  portal.submitQuillsPortalSurveyResponse!;
