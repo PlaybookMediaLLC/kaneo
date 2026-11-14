@@ -26,7 +26,8 @@ export function FeedbackView({
       (status === "all" || (post.status ?? "open") === status) &&
       `${post.title} ${post.body}`.toLowerCase().includes(term),
   );
-  if (sort === "votes") filtered.sort((a, b) => b.votes - a.votes);
+  if (sort === "votes")
+    filtered.sort((a, b) => (b.votes ?? 0) - (a.votes ?? 0));
   else if (sort === "title")
     filtered.sort((a, b) => a.title.localeCompare(b.title));
   return (
@@ -112,10 +113,12 @@ export function FeedbackView({
                     {post.following && " · Following"}
                   </small>
                 </span>
-                <span className="qb-votes" aria-label={`${post.votes} votes`}>
-                  <Icon name="up" />
-                  {post.votes}
-                </span>
+                {post.votes !== undefined && (
+                  <span className="qb-votes" aria-label={`${post.votes} votes`}>
+                    <Icon name="up" />
+                    {post.votes}
+                  </span>
+                )}
               </button>
             ))}
           </div>

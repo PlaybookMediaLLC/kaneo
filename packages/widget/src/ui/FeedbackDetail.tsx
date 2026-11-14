@@ -56,7 +56,7 @@ export function FeedbackDetail({
         <button
           type="button"
           className="qb-votes"
-          aria-label={`${post.voted ? "Voted" : "Vote"} · ${post.votes}`}
+          aria-label={`${post.voted ? "Voted" : "Vote"}${post.votes === undefined ? "" : ` · ${post.votes}`}`}
           aria-pressed={!!post.voted}
           disabled={!onVote || offline || action.pending}
           onClick={() => {

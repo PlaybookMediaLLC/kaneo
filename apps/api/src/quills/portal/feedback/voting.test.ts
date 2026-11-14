@@ -10,6 +10,7 @@ import { posts, postVotes } from "../../../database/quills/schema/posts";
 import * as kaneo from "../../../database/schema";
 import quillsRouter from "../../index";
 import publicRouter from "../../public";
+import { enableWidget } from "../../widget/seed.fixture";
 import {
   contractApp,
   contractEnv,
@@ -48,7 +49,12 @@ let client = 0;
 async function request(
   method: string,
   path: string,
-  options: { user?: string; body?: unknown; teammate?: boolean } = {},
+  options: {
+    user?: string;
+    bearer?: string;
+    body?: unknown;
+    teammate?: boolean;
+  } = {},
 ) {
   const env = contractEnv();
   const res = await app.request(
@@ -59,6 +65,7 @@ async function request(
       method,
       headers: {
         ...(options.user && { "x-test-user": options.user }),
+        ...(options.bearer && { authorization: `Bearer ${options.bearer}` }),
         ...(options.body !== undefined && {
           "content-type": "application/json",
         }),
@@ -246,6 +253,26 @@ describe.skipIf(!url)("Quills customer voting", () => {
     expect(similar.body.items).toHaveLength(2);
     for (const item of similar.body.items)
       expect(item).not.toHaveProperty("voteCount");
+    // The widget hides them too.
+    await enableWidget(env, env.a);
+    const visitor = await env.widgetVisitor(env.a);
+    const widget = await request("GET", `/widget/posts?boardId=${boardId}`, {
+      bearer: visitor.token,
+    });
+    expect(widget.status).toBe(200);
+    expect(widget.body.items).toHaveLength(2);
+    for (const item of widget.body.items)
+      expect(item).not.toHaveProperty("voteCount");
+    const widgetVote = await request(
+      "PUT",
+      `/widget/posts/${postIds[1]}/vote`,
+      {
+        bearer: visitor.token,
+        body: { voted: true },
+      },
+    );
+    expect(widgetVote.body).toMatchObject({ voted: true });
+    expect(widgetVote.body).not.toHaveProperty("voteCount");
     const boardsList = await request("GET", "/portal/boards", as);
     expect(
       boardsList.body.items.find((b: { id: string }) => b.id === boardId),

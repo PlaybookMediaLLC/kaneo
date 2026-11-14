@@ -232,7 +232,7 @@ async function present(
         avatarUrl: anonymous ? null : httpUrl(row.authorAvatar),
         isTeamMember: !!row.authorTeammate,
       },
-      ...shownVotes(viewer, board, row.voteCount),
+      ...shownVotes(board, row.voteCount),
       commentCount: row.commentCount,
       pending: row.moderationState === "pending",
       isAuthor: !!viewer.principalId && row.principalId === viewer.principalId,
@@ -448,7 +448,7 @@ export const similarPosts = (audience: Customer) =>
           return {
             id: row.id,
             title: row.title,
-            ...shownVotes(viewer, board, row.voteCount),
+            ...shownVotes(board, row.voteCount),
             stage: stageOf(
               row.slug ? { slug: row.slug, category: row.category! } : null,
             ),
@@ -891,7 +891,7 @@ export const setVote = (audience: Customer) =>
       return {
         postId: post.id,
         voted: body.voted,
-        ...shownVotes(viewer, post.board, current!.voteCount),
+        ...shownVotes(post.board, current!.voteCount),
         changed,
         importance: stored?.importance ?? null,
         // For the event only; the response schema leaves it out.

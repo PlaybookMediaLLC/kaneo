@@ -230,18 +230,11 @@ export async function visibleBoards(db: Database, viewer: Viewer) {
     .filter((board) => allows(viewer, board.access, "view"));
 }
 
-/**
- * `{ voteCount }`, or nothing on the portal when the board hides vote counts (RFC 0003, D6).
- * ponytail: the widget keeps its counts until packages/widget can show a post without one.
- */
+/** `{ voteCount }`, or nothing when the board hides vote counts from customers (RFC 0003, D6). */
 export const shownVotes = (
-  viewer: Pick<Viewer, "audience">,
   board: Pick<Board, "voting"> | undefined,
   voteCount: number,
-) =>
-  viewer.audience === "portal" && board?.voting.voteDisplay === "hidden"
-    ? {}
-    : { voteCount };
+) => (board?.voting.voteDisplay === "hidden" ? {} : { voteCount });
 
 const own = (viewer: Viewer, column: AnyColumn) =>
   viewer.principalId ? eq(column, viewer.principalId) : sql`false`;

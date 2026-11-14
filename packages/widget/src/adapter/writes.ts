@@ -29,7 +29,7 @@ export const writes = (api: Api) => ({
     ),
   /** Desired state, not a toggle: a retry changes nothing. */
   vote: (postId: string, voted: boolean, signal?: AbortSignal) =>
-    api.request<{ postId: string; voted: boolean; voteCount: number }>(
+    api.request<{ postId: string; voted: boolean; voteCount?: number }>(
       "PUT",
       `/widget/posts/${id(postId)}/vote`,
       { voted },

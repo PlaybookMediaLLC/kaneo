@@ -305,7 +305,6 @@ const listRoadmapPosts = defineQuillsRoute({
       items: rows.slice(0, query.limit).map(({ voteCount, ...row }) => ({
         ...row,
         ...shownVotes(
-          viewer,
           boardList.find((b) => b.id === row.board.id),
           voteCount,
         ),

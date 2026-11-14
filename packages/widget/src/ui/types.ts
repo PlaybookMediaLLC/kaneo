@@ -46,7 +46,8 @@ export interface FeedbackPost {
   title: string;
   body: string;
   author: string;
-  votes: number;
+  /** Missing when the board hides vote counts. */
+  votes?: number;
   voted?: boolean;
   following?: boolean;
   status?: FeedbackStatus;

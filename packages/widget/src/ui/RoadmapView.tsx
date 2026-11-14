@@ -46,10 +46,12 @@ export function RoadmapView({
                       {post.author}
                     </small>
                   </span>
-                  <span className="qb-votes">
-                    <Icon name="up" />
-                    {post.votes}
-                  </span>
+                  {post.votes !== undefined && (
+                    <span className="qb-votes">
+                      <Icon name="up" />
+                      {post.votes}
+                    </span>
+                  )}
                 </button>
               ),
             )}

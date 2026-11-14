@@ -35,7 +35,7 @@ export const eventSchemas = {
   vote: z.object({
     postId: z.string(),
     voted: z.boolean(),
-    voteCount: countSchema,
+    voteCount: z.optional(countSchema),
   }),
   "comment:created": z.object({
     postId: z.string(),

@@ -177,7 +177,7 @@ unsubscribe()
 | `open`            | `{ view?, postId?, articleId?, entryId? }` |
 | `close`           | `{}`                                       |
 | `post:created`    | `{ id, title, board, statusId }`           |
-| `vote`            | `{ postId, voted, voteCount }`             |
+| `vote`            | `{ postId, voted, voteCount? }` — no count when the board hides counts |
 | `comment:created` | `{ postId, commentId, parentId }`          |
 | `identify`        | `{ success, user, anonymous, error? }`     |
 | `email-submitted` | `{ email }`                                |

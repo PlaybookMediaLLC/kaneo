@@ -22,7 +22,7 @@ export interface ApiPost {
   status: { id: string } | null;
   stage: Stage | null;
   author: Person;
-  voteCount: number;
+  voteCount?: number;
   voted: boolean;
   following: boolean;
   createdAt: string;
