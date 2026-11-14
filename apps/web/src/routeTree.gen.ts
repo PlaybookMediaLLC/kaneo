@@ -109,6 +109,7 @@ import { Route as LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsChangelo
 import { Route as LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsDuplicatesIndexRouteImport } from './routes/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/duplicates/index'
 import { Route as LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsInsightsIndexRouteImport } from './routes/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/insights/index'
 import { Route as LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsSurveysIndexRouteImport } from './routes/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/surveys/index'
+import { Route as LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsTriageIndexRouteImport } from './routes/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/triage/index'
 import { Route as LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectProjectIdTaskTaskIdRouteImport } from './routes/_layout/_authenticated/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId_'
 import { Route as LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsSurveysSurveyIdIndexRouteImport } from './routes/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/surveys/$surveyId/index'
 
@@ -739,6 +740,15 @@ const LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsSurveysIndexRoute =
         LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsRouteRoute,
     } as any,
   )
+const LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsTriageIndexRoute =
+  LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsTriageIndexRouteImport.update(
+    {
+      id: '/triage/',
+      path: '/triage/',
+      getParentRoute: () =>
+        LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsRouteRoute,
+    } as any,
+  )
 const LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectProjectIdTaskTaskIdRoute =
   LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectProjectIdTaskTaskIdRouteImport.update(
     {
@@ -857,6 +867,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/workspace/$workspaceId/quills/duplicates/': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsDuplicatesIndexRoute
   '/dashboard/workspace/$workspaceId/quills/insights/': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsInsightsIndexRoute
   '/dashboard/workspace/$workspaceId/quills/surveys/': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsSurveysIndexRoute
+  '/dashboard/workspace/$workspaceId/quills/triage/': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsTriageIndexRoute
   '/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectProjectIdTaskTaskIdRoute
   '/dashboard/workspace/$workspaceId/quills/surveys/$surveyId/': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsSurveysSurveyIdIndexRoute
 }
@@ -953,6 +964,7 @@ export interface FileRoutesByTo {
   '/dashboard/workspace/$workspaceId/quills/duplicates': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsDuplicatesIndexRoute
   '/dashboard/workspace/$workspaceId/quills/insights': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsInsightsIndexRoute
   '/dashboard/workspace/$workspaceId/quills/surveys': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsSurveysIndexRoute
+  '/dashboard/workspace/$workspaceId/quills/triage': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsTriageIndexRoute
   '/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectProjectIdTaskTaskIdRoute
   '/dashboard/workspace/$workspaceId/quills/surveys/$surveyId': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsSurveysSurveyIdIndexRoute
 }
@@ -1058,6 +1070,7 @@ export interface FileRoutesById {
   '/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/duplicates/': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsDuplicatesIndexRoute
   '/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/insights/': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsInsightsIndexRoute
   '/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/surveys/': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsSurveysIndexRoute
+  '/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/triage/': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsTriageIndexRoute
   '/_layout/_authenticated/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId_': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectProjectIdTaskTaskIdRoute
   '/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/surveys/$surveyId/': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsSurveysSurveyIdIndexRoute
 }
@@ -1162,6 +1175,7 @@ export interface FileRouteTypes {
     | '/dashboard/workspace/$workspaceId/quills/duplicates/'
     | '/dashboard/workspace/$workspaceId/quills/insights/'
     | '/dashboard/workspace/$workspaceId/quills/surveys/'
+    | '/dashboard/workspace/$workspaceId/quills/triage/'
     | '/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId'
     | '/dashboard/workspace/$workspaceId/quills/surveys/$surveyId/'
   fileRoutesByTo: FileRoutesByTo
@@ -1258,6 +1272,7 @@ export interface FileRouteTypes {
     | '/dashboard/workspace/$workspaceId/quills/duplicates'
     | '/dashboard/workspace/$workspaceId/quills/insights'
     | '/dashboard/workspace/$workspaceId/quills/surveys'
+    | '/dashboard/workspace/$workspaceId/quills/triage'
     | '/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId'
     | '/dashboard/workspace/$workspaceId/quills/surveys/$surveyId'
   id:
@@ -1362,6 +1377,7 @@ export interface FileRouteTypes {
     | '/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/duplicates/'
     | '/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/insights/'
     | '/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/surveys/'
+    | '/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/triage/'
     | '/_layout/_authenticated/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId_'
     | '/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/surveys/$surveyId/'
   fileRoutesById: FileRoutesById
@@ -2082,6 +2098,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsSurveysIndexRouteImport
       parentRoute: typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsRouteRoute
     }
+    '/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/triage/': {
+      id: '/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/triage/'
+      path: '/triage'
+      fullPath: '/dashboard/workspace/$workspaceId/quills/triage/'
+      preLoaderRoute: typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsTriageIndexRouteImport
+      parentRoute: typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsRouteRoute
+    }
     '/_layout/_authenticated/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId_': {
       id: '/_layout/_authenticated/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId_'
       path: '/project/$projectId/task/$taskId'
@@ -2253,6 +2276,7 @@ interface LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsRouteRouteChildr
   LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsDuplicatesIndexRoute: typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsDuplicatesIndexRoute
   LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsInsightsIndexRoute: typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsInsightsIndexRoute
   LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsSurveysIndexRoute: typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsSurveysIndexRoute
+  LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsTriageIndexRoute: typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsTriageIndexRoute
   LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsSurveysSurveyIdIndexRoute: typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsSurveysSurveyIdIndexRoute
 }
 
@@ -2270,6 +2294,8 @@ const LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsRouteRouteChildren: 
       LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsInsightsIndexRoute,
     LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsSurveysIndexRoute:
       LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsSurveysIndexRoute,
+    LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsTriageIndexRoute:
+      LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsTriageIndexRoute,
     LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsSurveysSurveyIdIndexRoute:
       LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsSurveysSurveyIdIndexRoute,
   }

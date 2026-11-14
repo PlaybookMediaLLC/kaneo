@@ -32,6 +32,10 @@ import testConversations from "./support/test-conversations";
 // RFC 0003 lane L5.
 import changelogAi from "./feedback/changelog-ai";
 import changelogEngagement from "./feedback/changelog-engagement";
+// RFC 0003, lane L3.
+import boardSettings from "./feedback/board-settings";
+import demand from "./feedback/demand";
+import scores from "./feedback/scores";
 import { brandText } from "@kaneo/branding";
 import { apiRouter, z, type BaseVariables } from "../openapi";
 import { settings } from "../database/quills/schema/auth";
@@ -110,4 +114,8 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   // RFC 0003 lane L5.
   .route("/", changelogAi)
   .route("/", changelogEngagement)
+  // RFC 0003, lane L3.
+  .route("/", boardSettings)
+  .route("/", demand)
+  .route("/", scores)
   .openapi(...context);

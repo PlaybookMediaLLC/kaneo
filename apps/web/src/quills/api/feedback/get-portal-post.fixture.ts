@@ -26,6 +26,7 @@ export const getPortalPostFixture = {
         isCommentsLocked: false,
         authorOnlyReplies: false,
         mergedInto: { id: "id_test_1", title: "value" },
+        importance: null,
       },
       ...overrides,
     }) satisfies GetPortalPostResponse,

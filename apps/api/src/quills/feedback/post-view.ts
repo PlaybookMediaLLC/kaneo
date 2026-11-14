@@ -28,7 +28,33 @@ export const postSchema = z.object({
   tags: z.array(
     z.object({ id: z.string(), name: z.string(), color: z.string() }),
   ),
+  score: z.object({
+    reach: z.number().nullable(),
+    impact: z.number().nullable(),
+    confidence: z.number().nullable(),
+    effort: z.number().nullable(),
+    rice: z.number().nullable().openapi({
+      description:
+        "reach × impact × confidence ÷ 100 ÷ effort. Null when an input is missing.",
+    }),
+  }),
 });
+
+type Score = {
+  reach: number | null;
+  impact: number | null;
+  confidence: number | null;
+  effort: number | null;
+};
+
+/** The RICE score (RFC 0003, D5), or null when an input is missing. The table keeps effort above 0. */
+export const riceOf = (s: Score) =>
+  s.reach === null ||
+  s.impact === null ||
+  s.confidence === null ||
+  s.effort === null
+    ? null
+    : (s.reach * s.impact * s.confidence) / 100 / s.effort;
 
 const fields = {
   id: posts.id,
@@ -49,6 +75,12 @@ const fields = {
   createdAt: posts.createdAt,
   updatedAt: posts.updatedAt,
   deletedAt: posts.deletedAt,
+  score: {
+    reach: posts.scoreReach,
+    impact: posts.scoreImpact,
+    confidence: posts.scoreConfidence,
+    effort: posts.scoreEffort,
+  },
 };
 
 /** Posts joined to their board and author. The caller adds filters, order and limit. */
@@ -88,6 +120,7 @@ export async function withTags(db: Database, rows: Row[]) {
     : [];
   return rows.map((row) => ({
     ...row,
+    score: { ...row.score, rice: riceOf(row.score) },
     tags: tags
       .filter((tag) => tag.postId === row.id)
       .map(({ id, name, color }) => ({ id, name, color })),

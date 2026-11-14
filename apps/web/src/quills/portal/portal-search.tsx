@@ -127,9 +127,11 @@ export function PortalSearch({ workspaceId }: PortalSearchProps) {
                           <span className="min-w-0 flex-1 truncate">
                             {post.title}
                           </span>
-                          <span className="text-xs text-muted-foreground">
-                            {t("post.votes", { count: post.voteCount })}
-                          </span>
+                          {post.voteCount === undefined ? null : (
+                            <span className="text-xs text-muted-foreground">
+                              {t("post.votes", { count: post.voteCount })}
+                            </span>
+                          )}
                         </a>
                       </li>
                     ))}

@@ -31,6 +31,7 @@ import {
   type QuillsCaller,
 } from "../../framework/audience";
 import type { Database } from "../../framework/define-route";
+import { votingOf } from "../../feedback/board-voting";
 import { notFound, notTest } from "../../feedback/visibility";
 import { bool, parseJson, record, str } from "../../settings/area";
 
@@ -209,6 +210,7 @@ export async function visibleBoards(db: Database, viewer: Viewer) {
       slug: boards.slug,
       description: boards.description,
       access: boards.access,
+      settings: boards.settings,
     })
     .from(boards)
     .where(
@@ -218,10 +220,28 @@ export async function visibleBoards(db: Database, viewer: Viewer) {
       ),
     )
     .orderBy(asc(boards.name), asc(boards.id));
+  // Only the voting keys leave the settings JSON; the other keys stay on the server.
   return rows
-    .map((row) => ({ ...row, access: accessOf(row.access) }))
+    .map(({ settings, ...row }) => ({
+      ...row,
+      access: accessOf(row.access),
+      voting: votingOf(settings),
+    }))
     .filter((board) => allows(viewer, board.access, "view"));
 }
+
+/**
+ * `{ voteCount }`, or nothing on the portal when the board hides vote counts (RFC 0003, D6).
+ * ponytail: the widget keeps its counts until packages/widget can show a post without one.
+ */
+export const shownVotes = (
+  viewer: Pick<Viewer, "audience">,
+  board: Pick<Board, "voting"> | undefined,
+  voteCount: number,
+) =>
+  viewer.audience === "portal" && board?.voting.voteDisplay === "hidden"
+    ? {}
+    : { voteCount };
 
 const own = (viewer: Viewer, column: AnyColumn) =>
   viewer.principalId ? eq(column, viewer.principalId) : sql`false`;
