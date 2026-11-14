@@ -4,6 +4,7 @@ import { postTags } from "../../../database/quills/schema/boards";
 import { posts } from "../../../database/quills/schema/posts";
 import { postStatuses } from "../../../database/quills/schema/statuses";
 import { defineQuillsRoute } from "../../framework/define-route";
+import { DEFAULT_SORTS, VOTE_DISPLAYS } from "../../feedback/board-voting";
 import {
   capabilities,
   postVisible,
@@ -44,6 +45,13 @@ export const listBoards = (audience: Customer) =>
           canSubmit: z.boolean(),
           canVote: z.boolean(),
           canComment: z.boolean(),
+          voteDisplay: z.enum(VOTE_DISPLAYS).openapi({
+            description: "hidden: the board's posts come without voteCount",
+          }),
+          defaultSort: z.enum(DEFAULT_SORTS).nullable().openapi({
+            description:
+              "The board's post order when the caller names none. Null: no board default.",
+          }),
         }),
       ),
     }),
@@ -69,8 +77,9 @@ export const listBoards = (audience: Customer) =>
               .groupBy(posts.boardId)
           : null;
       return {
-        items: boardList.map(({ access, ...board }) => ({
+        items: boardList.map(({ access, voting, ...board }) => ({
           ...board,
+          ...voting,
           postCount: counts
             ? (counts.find((c) => c.boardId === board.id)?.count ?? 0)
             : null,

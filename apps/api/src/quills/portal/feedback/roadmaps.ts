@@ -39,7 +39,13 @@ import {
   roadmapNotFound,
   roadmapParams,
 } from "../../feedback/roadmaps";
-import { postVisible, viewerFor, visibleBoards, type Viewer } from "./viewer";
+import {
+  postVisible,
+  shownVotes,
+  viewerFor,
+  visibleBoards,
+  type Viewer,
+} from "./viewer";
 
 // Public roadmaps (audience: "portal"). A team roadmap never shows; a segment roadmap shows only
 // to a signed-in member of one of its segments. The admin filter and segment IDs stay server-side.
@@ -201,7 +207,9 @@ const listRoadmapPosts = defineQuillsRoute({
       z.object({
         id: z.string(),
         title: z.string(),
-        voteCount: z.number(),
+        voteCount: z.number().optional().openapi({
+          description: "Left out when the post's board hides vote counts",
+        }),
         commentCount: z.number(),
         statusId: z.string().nullable(),
         eta: nullableResponseTimestamp,
@@ -294,7 +302,14 @@ const listRoadmapPosts = defineQuillsRoute({
       );
     }
     return {
-      items: rows.slice(0, query.limit),
+      items: rows.slice(0, query.limit).map(({ voteCount, ...row }) => ({
+        ...row,
+        ...shownVotes(
+          viewer,
+          boardList.find((b) => b.id === row.board.id),
+          voteCount,
+        ),
+      })),
       total: total!.n,
       hasMore: rows.length > query.limit,
       buckets,
