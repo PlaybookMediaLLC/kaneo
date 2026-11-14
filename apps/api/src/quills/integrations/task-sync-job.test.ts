@@ -179,7 +179,7 @@ describe.skipIf(!url)("Quills task sync", () => {
   beforeAll(async () => {
     pool = new Pool({ connectionString: url, max: 6 });
     await h.start(pool, url!);
-    [complete, open] = await h.system(h.a, async (db) =>
+    const ids = await h.system(h.a, async (db) =>
       Promise.all(
         ["complete", "open"].map(
           async (slug) =>
@@ -192,6 +192,8 @@ describe.skipIf(!url)("Quills task sync", () => {
         ),
       ),
     );
+    complete = ids[0]!;
+    open = ids[1]!;
   }, 120000);
   afterAll(async () => {
     await h.stop();
