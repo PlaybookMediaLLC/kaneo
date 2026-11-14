@@ -10,7 +10,7 @@
 	"apps/web/src/quills/hooks/portal/use-get-public-portal-config.ts": "a9ec0dd4d7df6110913d64934f477aace35ab6dbf7f938829f0522b6bdc15d75",
 	"apps/web/src/quills/hooks/portal/use-record-portal-access-denied.test.tsx": "b3e039edf36fba8d2828a14274b7ad78e099755d4921dc19da604e0f1e242757",
 	"apps/web/src/quills/hooks/portal/use-record-portal-access-denied.ts": "ca1f816741773b3443067ad544b96a39ce4d2c235d49e1b0bea55a6669914a35",
-	"apps/web/src/quills/i18n/en-US/core.json": "35bd6ba94fbbee5779bd917e80019fcb1235f772e6e53006a9008558729a4c62",
+	"apps/web/src/quills/i18n/en-US/core.json": "c5a23c1cc6820e3c24a5286144ba594d0bbb1caf1cb9f4a922f3ccb5e47a7e74",
 	"apps/web/src/quills/i18n/en-US/sample.json": "a8e1e0b0edcf0803782fec62493d32fbb39dfc0b018d437aa040e6b03eaa6710",
 	"apps/web/src/quills/pages/sample/meta.ts": "960c964d10cd008b2c5c1c54760833d2e9167c50e29c2397401d5d0a42116277",
 	"apps/web/src/quills/pages/sample/parts/sample-detail.test.tsx": "81f5a6e15bc1f4cf443cc4c5368df05aec0a99d27b97393c7ae13306b5a68e3d",

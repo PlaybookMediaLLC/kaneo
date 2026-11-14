@@ -3,10 +3,14 @@ import { spawnSync } from "node:child_process";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// The teammate folder of RFC 0002 D24, inside the upstream workspace layout.
+export const teamRoutes =
+  "apps/web/src/routes/_layout/_authenticated/dashboard/workspace/$workspaceId/quills";
 const owned = [
   "apps/web/src/quills/",
   "apps/web/src/routes/portal/",
   "apps/web/src/routes/quills/",
+  `${teamRoutes}/`,
   "scripts/quills-web/",
 ];
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");

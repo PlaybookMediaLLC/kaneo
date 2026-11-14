@@ -1,8 +1,11 @@
 import { pathToFileURL } from "node:url";
 import { join } from "node:path";
 import { valueOf, nameOf } from "./ast.mjs";
+// Route IDs keep pathless layout segments such as /_layout; page routes do not.
 const normalized = (path) =>
-  typeof path === "string" ? path.replace(/\/$/, "") : path;
+  typeof path === "string"
+    ? path.replace(/\/_[^/]+/g, "").replace(/\/$/, "")
+    : path;
 export async function check({ root, documents, report }) {
   const metas = documents.filter((d) => d.kind === "meta");
   const routePaths = new Set(

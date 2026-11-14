@@ -1,3 +1,4 @@
+import { lazy } from "react";
 export { Button } from "@/components/ui/button";
 export {
   Card,
@@ -20,7 +21,7 @@ export {
   SheetPanel,
 } from "@/components/ui/sheet";
 export { toast } from "@/lib/toast";
-export { HttpError } from "@/lib/http-error";
+export { HttpError, handleUnauthorized } from "@/lib/http-error";
 export { authClient } from "@/lib/auth-client";
 export { i18n } from "@/lib/i18n";
 export { getSafeRedirectPath } from "@/components/auth/auth-methods";
@@ -58,3 +59,19 @@ export {
 export { Kbd } from "@/components/ui/kbd";
 
 export { useDebouncedValue } from "@/hooks/use-debounced-value";
+
+// Loaded on demand: the app sidebar imports the Quills entry, so a static
+// import would form a cycle and pull the app shell into portal pages.
+export const WorkspaceLayout = lazy(
+  () => import("@/components/common/workspace-layout"),
+);
+export {
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+} from "@/components/ui/sidebar";
+export { default as useActiveWorkspace } from "@/hooks/queries/workspace/use-active-workspace";
+export { useWorkspacePermission } from "@/hooks/use-workspace-permission";

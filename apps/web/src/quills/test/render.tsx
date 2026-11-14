@@ -20,6 +20,7 @@ import {
   PortalRuntimeProvider,
   type PortalRuntimeValue,
 } from "../portal/runtime";
+import { TeamRuntimeProvider, type TeamPermissions } from "../team/runtime";
 import { i18n } from "../ui/upstream";
 
 afterEach(() => cleanup());
@@ -47,11 +48,12 @@ export function createQuillsTestQueryClient() {
 
 export function renderComponent(element: ReactElement) {
   const client = createQuillsTestQueryClient();
-  return render(element, {
+  const result = render(element, {
     wrapper: ({ children }) => (
       <Providers client={client}>{children}</Providers>
     ),
   });
+  return Object.assign(result, { queryClient: client });
 }
 
 export interface RenderPageOptions {
@@ -63,6 +65,8 @@ export interface RenderPageOptions {
   accessLoading?: boolean;
   accessProblem?: PortalRuntimeValue["accessProblem"];
   retryAccess?: () => void;
+  /** Teammate pages only: the Quills permissions of the signed-in user. */
+  permissions?: Partial<TeamPermissions>;
 }
 
 export function renderPage(
@@ -75,7 +79,11 @@ export function renderPage(
   options: RenderPageOptions = {},
 ) {
   const workspaceId = options.workspaceId ?? "workspace_test_1";
-  const viewer = options.viewer ?? { kind: "anonymous" };
+  const teammate = meta.audience === "teammate";
+  // A teammate page always runs inside the signed-in app shell.
+  const viewer: Viewer =
+    options.viewer ??
+    (teammate ? { kind: "user", id: "user_test_1" } : { kind: "anonymous" });
   const runtime: PortalRuntimeValue = {
     config: {
       name: "Test workspace",
@@ -118,15 +126,37 @@ export function renderPage(
     history: createMemoryHistory({ initialEntries: [initialPath] }),
   });
   const client = createQuillsTestQueryClient();
+  const page = (
+    <Page
+      workspaceId={workspaceId}
+      params={routeParams}
+      search={options.search ?? {}}
+    />
+  );
   const result = render(
     <Providers client={client}>
       <RouterContextProvider router={router}>
         <PortalRuntimeProvider value={runtime}>
-          <Page
-            workspaceId={workspaceId}
-            params={routeParams}
-            search={options.search ?? {}}
-          />
+          {teammate && viewer.kind === "user" ? (
+            <TeamRuntimeProvider
+              value={{
+                workspaceId,
+                viewer,
+                permissions: {
+                  read: true,
+                  create: true,
+                  update: true,
+                  delete: true,
+                  manageSettings: true,
+                  ...options.permissions,
+                },
+              }}
+            >
+              {page}
+            </TeamRuntimeProvider>
+          ) : (
+            page
+          )}
         </PortalRuntimeProvider>
       </RouterContextProvider>
     </Providers>,

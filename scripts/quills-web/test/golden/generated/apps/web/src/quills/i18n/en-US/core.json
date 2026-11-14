@@ -1,4 +1,8 @@
 {
+	"breadcrumb": "Breadcrumb",
+	"breadcrumbSeparator": "/",
+	"copyFailed": "The link could not be copied.",
+	"copyLink": "Copy link",
 	"empty": "Nothing is here yet.",
 	"frameBlocked": "Open this page in a new tab to continue.",
 	"gallery": {
@@ -20,6 +24,7 @@
 		"success": "Success",
 		"title": "Quills component kit"
 	},
+	"linkCopied": "Link copied",
 	"loading": "Loading…",
 	"navFeedback": "Feedback",
 	"navHelp": "Help",
@@ -46,6 +51,14 @@
 	"retry": "Try again",
 	"retryAfter": "Try again in {{count}} seconds",
 	"sample-card": "TODO sample-card",
+	"search": "Search",
+	"searchEmpty": "No results found.",
+	"searchLabel": "Search feedback and help",
+	"searchPlaceholder": "Search…",
+	"searchShortcut": "⌘K",
+	"share": "Share",
+	"shareFailed": "Sharing is not available. Copy the link instead.",
 	"signIn": "Sign in",
-	"signInRequired": "Sign in to continue."
+	"signInRequired": "Sign in to continue.",
+	"submitAsFeedback": "Submit “{{query}}” as feedback"
 }

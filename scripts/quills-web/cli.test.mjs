@@ -242,3 +242,80 @@ test("generates each framework kind without overwriting", async () => {
     /Refusing to overwrite/,
   );
 });
+
+test("generates a teammate page in the D24 folder with teammate problem mapping", async () => {
+  const root = await fixtureRoot();
+  const team =
+    "apps/web/src/routes/_layout/_authenticated/dashboard/workspace/$workspaceId/quills";
+  await generateFeature(root, "team-sample");
+  await generateOperation(root, "query", "fetchQuillsAdminOverview", {
+    area: "team",
+  });
+  const operation = await readFile(
+    `${root}/apps/web/src/quills/api/team/fetch-admin-overview.ts`,
+    "utf8",
+  );
+  assert.match(operation, /toPortalProblem\(response, "teammate", false\)/);
+  assert.match(operation, /client\["quills"\]\[":workspaceId"\]/);
+  await assert.rejects(
+    () =>
+      generatePage(root, "team-wrong", {
+        route: "/portal/$workspaceId/team-wrong",
+        audience: "teammate",
+        feature: "team-sample",
+      }),
+    /teammate page route must stay under/,
+  );
+  await assert.rejects(
+    () =>
+      generatePage(root, "team-token", {
+        route: "/dashboard/workspace/$workspaceId/quills/token",
+        audience: "teammate",
+        feature: "team-sample",
+        token: "query",
+      }),
+    /cannot take a mail token/,
+  );
+  await generatePage(root, "team-sample", {
+    route: "/dashboard/workspace/$workspaceId/quills/sample",
+    audience: "teammate",
+    feature: "team-sample",
+    operations: "fetchQuillsAdminOverview",
+  });
+  const route = await readFile(`${root}/${team}/sample/index.tsx`, "utf8");
+  assert.match(
+    route,
+    /createFileRoute\(\s*"\/_layout\/_authenticated\/dashboard\/workspace\/\$workspaceId\/quills\/sample\/",?\s*\)/,
+  );
+  assert.doesNotMatch(route, /beforeLoad|quillsPortal/);
+  assert.match(
+    await readFile(`${root}/${team}/sample/index.test.tsx`, "utf8"),
+    /from "\.\/index"/,
+  );
+  const page = await readFile(
+    `${root}/apps/web/src/quills/pages/team-sample/team-sample-page.tsx`,
+    "utf8",
+  );
+  assert.match(page, /useTeamRuntime\(\)/);
+  assert.match(page, /<TeamStateView/);
+  assert.match(page, /landmark=\{false\}/);
+  assert.doesNotMatch(page, /usePortalRuntime|PortalGate/);
+  const test = await readFile(
+    `${root}/apps/web/src/quills/pages/team-sample/team-sample-page.test.tsx`,
+    "utf8",
+  );
+  assert.match(test, /api\.reply\(fetchAdminOverviewFixture\.ok\(\)\)/);
+  assert.match(test, /api\.defer\(/);
+  assert.match(test, /api\.fail\(\)/);
+  assert.match(
+    await readFile(
+      `${root}/apps/web/src/quills/pages/team-sample/meta.ts`,
+      "utf8",
+    ),
+    /audience: "teammate"[\s\S]*states: \["loading", "failed", "ready"\]/,
+  );
+  for (const file of await generatedSources(`${root}/apps/web/src`))
+    await transform(await readFile(file, "utf8"), {
+      loader: file.endsWith(".tsx") ? "tsx" : "ts",
+    });
+});

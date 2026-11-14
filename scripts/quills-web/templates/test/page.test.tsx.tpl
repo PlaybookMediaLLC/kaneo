@@ -1,6 +1,6 @@
 import { describe } from "vite-plus/test";
 import { describePageContract } from "../../test/contracts";
-import { meta } from "./meta";
+{{IMPORTS}}import { meta } from "./meta";
 import { {{NAME}} } from {{LOCAL}};
 describe({{NAME_JSON}}, () => {
   describePageContract(meta, {{NAME}}, {

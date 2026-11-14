@@ -139,6 +139,9 @@ describe("user WebSocket lifecycle", () => {
     expect(predicate({ queryKey: ["projects", "user-a", "workspace"] })).toBe(
       false,
     );
+    expect(client.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["quills", "workspace", "user-a"],
+    });
   });
   it("keeps an archived board open to show its archived state and refreshes on restore", () => {
     renderHook(useUserWebSocket);

@@ -115,7 +115,7 @@ it("refuses confirmation in a frame", async () => {
 - `query <operationId> --area <area> [--paged] [--poll <seconds>]` creates the operation, fixture, hook and contract tests. Poll intervals below 10 seconds are invalid.
 - `mutation <operationId> --area <area> --invalidates <operationId,...> [--optimistic <operationId>]` creates the mutation and hook files and invalidates every declared operation prefix after success.
 - `type <area>/<Name> --from <operationId> --at <response.path>` derives a view type from an operation response; an `items[]` segment selects the array item type.
-- `page <name> --route <route> --audience <audience> --feature <feature> [--token none|query|fragment] [--mail-linked] [--search key:type,...] [--operations id,...]` creates a declaration, page, contract test and thin route.
+- `page <name> --route <route> --audience <audience> --feature <feature> [--token none|query|fragment] [--mail-linked] [--search key:type,...] [--operations id,...]` creates a declaration, page, contract test and thin route. A `teammate` page route must start with `/dashboard/workspace/$workspaceId/quills` and takes no token.
 - `component [group/]<Name>` creates a shared display component and test.
 - `part <page>/<Name>` creates a page-local component and test.
 - `form <page>/<Name> --operation <operationId>` derives a Zod schema and defaults from the OpenAPI JSON request body, then creates a `PortalForm` part and test. Add labelled controls for the generated fields.
@@ -132,7 +132,7 @@ The generator exits 0 on success, 1 for a finding or refused write, and 2 for in
 
 ## Runtime contract
 
-Pages declare metadata in `pages/<page>/meta.ts`, render `PageFrame` as their root, read data through generated hooks, pass query state through `StateView`, and send writes through `ConfirmAction` or `PortalForm`. Token pages remove the token before any request. Persist a token only when a sign-in round trip is required, and take it once afterward. `PortalGate` is applied by each page according to its audience; public pages do not inherit a private feedback gate.
+Pages declare metadata in `pages/<page>/meta.ts`, render `PageFrame` as their root, read data through generated hooks, pass query state through `StateView`, and send writes through `ConfirmAction` or `PortalForm`. Token pages remove the token before any request. Persist a token only when a sign-in round trip is required, and take it once afterward. `PortalGate` is applied by each page according to its audience; public pages do not inherit a private feedback gate. Teammate pages use `TeamStateView` instead (see below).
 
 Imports from upstream web code go only through `apps/web/src/quills/ui/upstream.ts`. Package imports and relative Quills imports are allowed. Routes may import their one Quills page through `@/quills/...`.
 
@@ -187,6 +187,30 @@ return (
 
 The `gated` condition is required. Status, help-center, CSAT and unsubscribe pages have the `public` audience: they may use the public config and branding, but access loading, an access denial, or an access request failure must not hide them. Portal, signed-in and teammate pages use the access result.
 
+### Teammate pages
+
+Teammate pages live inside the Kaneo app shell at `/dashboard/workspace/{id}/quills/` (RFC 0002 D24, RFC 0003 D1). Their thin routes live in the fork-owned folder `apps/web/src/routes/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/`. The layout route of that folder renders the team shell (`quills/team/team-route.tsx`), loads the `quills` translations and provides the teammate runtime.
+
+```sh
+node scripts/quills-web/cli.mjs feature autopilot
+node scripts/quills-web/cli.mjs query listQuillsFeedbackSignals --area team
+node scripts/quills-web/cli.mjs page team-autopilot --route '/dashboard/workspace/$workspaceId/quills/autopilot' --audience teammate --feature autopilot --operations listQuillsFeedbackSignals
+```
+
+Then add one entry for the page to `apps/web/src/quills/team/nav.ts`, and run `pnpm --filter @kaneo/web build` once to regenerate `routeTree.gen.ts` for the typecheck. Lane Z regenerates the route tree after the merge.
+
+The rules for a teammate page:
+
+1. A teammate operation is an OpenAPI operation under `/quills/{workspaceId}/`. The generated operation calls `toPortalProblem(response, "teammate")`, so a 403 becomes `noAccess` and a 401 becomes `authRequired`. Its key comes from `quillsKey` with the workspace and the signed-in user.
+2. The page reads `useTeamRuntime()`: the workspace ID, the signed-in user (`viewer`) and the Quills permissions. Pass `team.viewer` to every generated hook.
+3. The page passes query state through `TeamStateView`. On 401 it starts the sign-in redirect. On 403 it shows the denied state. The permissions only show or hide controls. The teammate API is the authority (RFC 0003 D2).
+4. A teammate page, its parts and its forms do not use `PortalGate` or `usePortalRuntime` (C14). The team shell has no portal runtime.
+5. Pass `landmark={false}` to `PageFrame`, because the app shell already has the `main` landmark.
+6. The route is the index of its own folder (`quills/<path>/index.tsx`) and does not prefetch.
+7. The generated page test answers each declared query through `mockApi` in declaration order. Call the hooks in the same order. `renderPage` gives a teammate page the user `user_test_1` and all Quills permissions; set `permissions` to change them.
+8. For a teammate page with operations, the page contract replaces the portal access check with "shows the denied state when the teammate API refuses access".
+9. On `QUILLS_CHANGED` the app invalidates every `quills` key of that workspace and user. The team shell removes the cached `quills` data of any other workspace or user.
+
 ## Conformance rules
 
 - C1 thin route with one Quills page or layout.
@@ -202,7 +226,7 @@ The `gated` condition is required. Status, help-center, CSAT and unsubscribe pag
 - C11 declared operation IDs exist in OpenAPI and are used by the page.
 - C12 no `TODO(quills-web)` marker remains.
 - C13 one named component per file; shared UI receives data and callbacks through props.
-- C14 pages use `PageFrame`, `StateView` and generated hooks.
+- C14 pages use `PageFrame`, `StateView` and generated hooks. Teammate pages use `TeamStateView` and never `PortalGate` or `usePortalRuntime`.
 - C15 tests use the Quills kit and contract helper; no snapshots, test IDs or waits.
 - C16 fixtures use fixed safe values and `satisfies` the response type.
 - C17 no barrel file and no default export.

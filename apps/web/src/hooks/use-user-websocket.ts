@@ -194,6 +194,10 @@ export function useUserWebSocket() {
             message.type === "QUILLS_CHANGED" &&
             typeof message.workspaceId === "string"
           ) {
+            // quills-web keys start with ["quills", workspaceId, userId].
+            void queryClient.invalidateQueries({
+              queryKey: ["quills", message.workspaceId, userId],
+            });
             void queryClient.invalidateQueries({
               predicate: (query) =>
                 [

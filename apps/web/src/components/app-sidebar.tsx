@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/sidebar";
 import { VersionDisplay } from "@/components/version-display";
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
+import { QuillsSidebarEntry } from "@/quills/team/sidebar-entry";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { setOpenMobile } = useSidebar();
@@ -39,6 +40,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent className="overflow-hidden gap-1 py-1">
         <NavMain />
+        <QuillsSidebarEntry />
         <NavProjects />
       </SidebarContent>
       <SidebarFooter>

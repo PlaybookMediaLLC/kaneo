@@ -25,6 +25,11 @@ describe("toPortalProblem", () => {
       toPortalProblem(new Response("denied", { status: 403 })),
     ).resolves.toEqual({ kind: "notFound" });
   });
+  it("shows a teammate 403 as a denied action", async () => {
+    await expect(
+      toPortalProblem(new Response("denied", { status: 403 }), "teammate"),
+    ).resolves.toEqual({ kind: "noAccess" });
+  });
   it("does not return a server response message", async () => {
     await expect(
       toPortalProblem(new Response("private details", { status: 500 })),

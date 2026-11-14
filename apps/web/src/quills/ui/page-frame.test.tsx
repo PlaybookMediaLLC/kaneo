@@ -49,3 +49,13 @@ it("puts the rail after the title and shows the description and actions", () => 
   expect(view.getByRole("button", { name: "Subscribe" })).toBeInTheDocument();
   expect(view.getByRole("main")).toHaveClass("max-w-5xl");
 });
+
+it("leaves the main landmark to the app shell when asked", () => {
+  const view = renderComponent(
+    <PageFrame titleKey="core.gallery.title" landmark={false}>
+      content
+    </PageFrame>,
+  );
+  expect(view.queryByRole("main")).not.toBeInTheDocument();
+  expect(view.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+});

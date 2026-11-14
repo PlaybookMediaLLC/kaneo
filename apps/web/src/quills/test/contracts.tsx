@@ -23,10 +23,13 @@ type RequestShape = {
 const problemForStatus = (
   operationId: string,
   status: number,
+  path: string,
 ): PortalProblemKind => {
   if (status === 400 || status === 422) return "invalid";
   if (status === 401) return "authRequired";
-  if (status === 403) return "notFound";
+  // Teammate routes live under /api/quills/; their 403 is a denied action.
+  if (status === 403)
+    return path.startsWith("/api/quills/") ? "noAccess" : "notFound";
   if (status === 404)
     return /Token|Csat/i.test(operationId) ? "gone" : "notFound";
   if (status === 409) return "conflict";
@@ -87,7 +90,7 @@ export function describeOperationContract(input: {
       ).rejects.toMatchObject({
         kind:
           input.statusProblems?.[status] ??
-          problemForStatus(input.operationId, status),
+          problemForStatus(input.operationId, status, input.path),
       });
     });
   it("maps a network failure", async () => {
@@ -343,7 +346,16 @@ export function describePageContract(
     await waitFor(() => expect(document.querySelector("h1")).toHaveFocus());
     expect(document.title).not.toBe("");
   });
-  if (meta.audience !== "public" && meta.audience !== "development")
+  // The teammate API is the authority (RFC 0003 D2): its 403 shows the denied state.
+  if (meta.audience === "teammate" && meta.operations.length)
+    it("shows the denied state when the teammate API refuses access", async () => {
+      const api = mockApi();
+      for (const _operation of meta.operations)
+        api.reply({ message: "Forbidden" }, 403);
+      const view = renderPage(Page, meta);
+      expect(await view.findByRole("alert")).toHaveTextContent(/permission/i);
+    });
+  else if (meta.audience !== "public" && meta.audience !== "development")
     it("does not expose page data without audience access", () => {
       const api = mockApi();
       renderPage(Page, meta, { accessGranted: false });

@@ -24,6 +24,12 @@ describe("Quills web import boundary", () => {
       ...sourceFiles(resolve(web, "quills")),
       ...sourceFiles(resolve(web, "routes/portal")),
       ...sourceFiles(resolve(web, "routes/quills")),
+      ...sourceFiles(
+        resolve(
+          web,
+          "routes/_layout/_authenticated/dashboard/workspace/$workspaceId/quills",
+        ),
+      ),
     ];
     const violations: string[] = [];
     for (const file of files) {
