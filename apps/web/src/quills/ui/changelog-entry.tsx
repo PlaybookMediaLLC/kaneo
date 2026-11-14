@@ -19,7 +19,7 @@ export interface ChangelogEntryProps {
     linkedPosts: Array<{
       id: string;
       title: string;
-      voteCount: number;
+      voteCount?: number;
       stage: string | null;
     }>;
     requesterCount: number;

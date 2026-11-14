@@ -107,8 +107,9 @@ caller reacted) and `unread`. The read mark is the caller's last mark, else the 
 was created, so a new visitor does not see the whole history as new.
 
 RFC 0003 voting-bias controls: a board's settings JSON holds `voteDisplay` and `defaultSort`.
-With `voteDisplay` `hidden`, the portal and widget posts, similar posts, roadmap posts and the vote
-response leave out `voteCount`; the vote still works. The `random` order hashes the caller's principal (or "anonymous") and the UTC day,
+With `voteDisplay` `hidden`, the portal and widget posts, similar posts, roadmap posts, the vote
+response, my-feedback and the posts that a changelog entry links leave out `voteCount`; the vote
+still works. The `random` order hashes the caller's principal (or "anonymous") and the UTC day,
 so one viewer pages through one order for one day. `voting.test.ts` covers these rules.
 
 Every portal write sets `ensureCustomer`, so the caller's customer profile exists before the

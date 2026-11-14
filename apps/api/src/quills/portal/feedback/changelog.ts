@@ -39,6 +39,7 @@ import { notFound, notTest } from "../../feedback/visibility";
 import {
   httpUrl,
   postVisible,
+  shownVotes,
   STAGES,
   stageOf,
   title,
@@ -93,7 +94,9 @@ const entry = z.object({
     z.object({
       id: z.string(),
       title: z.string(),
-      voteCount: z.number(),
+      voteCount: z.number().optional().openapi({
+        description: "Left out when the post's board hides vote counts",
+      }),
       stage: z.enum(STAGES).nullable(),
     }),
   ),
@@ -179,7 +182,8 @@ async function present(
   const items = rows.slice(0, page.limit);
   const ids = items.map((row) => row.id);
   if (!ids.length) return { items: [], hasMore: false };
-  const boardIds = (await visibleBoards(db, viewer)).map((b) => b.id);
+  const boardList = await visibleBoards(db, viewer);
+  const boardIds = boardList.map((b) => b.id);
   const categories = await db
     .select({
       entryId: changelogEntryCategories.changelogEntryId,
@@ -199,6 +203,7 @@ async function present(
       entryId: changelogEntryPosts.changelogEntryId,
       id: posts.id,
       title: posts.title,
+      boardId: posts.boardId,
       voteCount: posts.voteCount,
       slug: postStatuses.slug,
       category: postStatuses.category,
@@ -244,7 +249,10 @@ async function present(
         .map((p) => ({
           id: p.id,
           title: p.title,
-          voteCount: p.voteCount,
+          ...shownVotes(
+            boardList.find((b) => b.id === p.boardId),
+            p.voteCount,
+          ),
           stage: stageOf(
             p.slug ? { slug: p.slug, category: p.category! } : null,
           ),

@@ -5,6 +5,10 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { toUuid, type BoardId, type PostId } from "@kaneo/ids";
 import { settings } from "../../../database/quills/schema/auth";
+import {
+  changelogEntries,
+  changelogEntryPosts,
+} from "../../../database/quills/schema/changelog";
 import { boards } from "../../../database/quills/schema/boards";
 import { posts, postVotes } from "../../../database/quills/schema/posts";
 import * as kaneo from "../../../database/schema";
@@ -253,6 +257,33 @@ describe.skipIf(!url)("Quills customer voting", () => {
     expect(similar.body.items).toHaveLength(2);
     for (const item of similar.body.items)
       expect(item).not.toHaveProperty("voteCount");
+    // So do the caller's own list and the posts that an update links.
+    const mine = await request("GET", "/portal/my-feedback", as);
+    const minePost = mine.body.items.find(
+      (item: { id: string }) => item.id === postIds[0],
+    );
+    expect(minePost).toBeDefined();
+    expect(minePost).not.toHaveProperty("voteCount");
+    const entryId = await env.scoped(env.a, async (db) => {
+      const [entry] = await db
+        .insert(changelogEntries)
+        .values({
+          title: "Zanzibar shipped",
+          content: "Shipped",
+          publishedAt: new Date(Date.now() - 60_000),
+        })
+        .returning({ id: changelogEntries.id });
+      await db
+        .insert(changelogEntryPosts)
+        .values({ changelogEntryId: entry!.id, postId: postIds[0]! });
+      return entry!.id;
+    });
+    const updates = await request("GET", "/portal/changelog", as);
+    const linked = updates.body.entries.find(
+      (item: { id: string }) => item.id === entryId,
+    ).linkedPosts;
+    expect(linked).toHaveLength(1);
+    expect(linked[0]).not.toHaveProperty("voteCount");
     // The widget hides them too.
     await enableWidget(env, env.a);
     const visitor = await env.widgetVisitor(env.a);

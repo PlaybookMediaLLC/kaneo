@@ -12,6 +12,7 @@ import { defineQuillsRoute, type Database } from "../framework/define-route";
 import {
   postVisible,
   principalOf,
+  shownVotes,
   STAGES,
   stageOf,
   viewerFor,
@@ -66,7 +67,9 @@ const list = defineQuillsRoute({
         board: z.object({ id: z.string(), name: z.string() }),
         status: z.object({ name: z.string(), color: z.string() }).nullable(),
         stage: z.enum(STAGES).nullable(),
-        voteCount: z.number(),
+        voteCount: z.number().optional().openapi({
+          description: "Left out when the post's board hides vote counts",
+        }),
         isAuthor: z.boolean(),
         voted: z.boolean(),
         following: z.boolean(),
@@ -80,7 +83,8 @@ const list = defineQuillsRoute({
     const viewer = await viewerFor(db, "portal", caller);
     if (!viewer.principalId) return { items: [], nextOffset: null };
     const me = viewer.principalId;
-    const boardIds = (await visibleBoards(db, viewer)).map((b) => b.id);
+    const boardList = await visibleBoards(db, viewer);
+    const boardIds = boardList.map((b) => b.id);
     const rows = await db
       .select({
         id: posts.id,
@@ -118,7 +122,10 @@ const list = defineQuillsRoute({
             ? { slug: row.statusSlug, category: row.statusCategory! }
             : null,
         ),
-        voteCount: row.voteCount,
+        ...shownVotes(
+          boardList.find((b) => b.id === row.boardId),
+          row.voteCount,
+        ),
         isAuthor: row.isAuthor,
         voted: row.voted,
         following: row.following,

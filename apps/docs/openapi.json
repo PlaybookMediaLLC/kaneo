@@ -14122,7 +14122,8 @@
                             ]
                           },
                           "voteCount": {
-                            "type": "number"
+                            "type": "number",
+                            "description": "Left out when the post's board hides vote counts"
                           },
                           "isAuthor": {
                             "type": "boolean"
@@ -14144,7 +14145,6 @@
                           "board",
                           "status",
                           "stage",
-                          "voteCount",
                           "isAuthor",
                           "voted",
                           "following",
@@ -19841,7 +19841,8 @@
                                   "type": "string"
                                 },
                                 "voteCount": {
-                                  "type": "number"
+                                  "type": "number",
+                                  "description": "Left out when the post's board hides vote counts"
                                 },
                                 "stage": {
                                   "type": [
@@ -19860,7 +19861,6 @@
                               "required": [
                                 "id",
                                 "title",
-                                "voteCount",
                                 "stage"
                               ]
                             }
@@ -20054,7 +20054,8 @@
                             "type": "string"
                           },
                           "voteCount": {
-                            "type": "number"
+                            "type": "number",
+                            "description": "Left out when the post's board hides vote counts"
                           },
                           "stage": {
                             "type": [
@@ -20073,7 +20074,6 @@
                         "required": [
                           "id",
                           "title",
-                          "voteCount",
                           "stage"
                         ]
                       }
@@ -23203,7 +23203,8 @@
                                   "type": "string"
                                 },
                                 "voteCount": {
-                                  "type": "number"
+                                  "type": "number",
+                                  "description": "Left out when the post's board hides vote counts"
                                 },
                                 "stage": {
                                   "type": [
@@ -23222,7 +23223,6 @@
                               "required": [
                                 "id",
                                 "title",
-                                "voteCount",
                                 "stage"
                               ]
                             }
@@ -23426,7 +23426,8 @@
                             "type": "string"
                           },
                           "voteCount": {
-                            "type": "number"
+                            "type": "number",
+                            "description": "Left out when the post's board hides vote counts"
                           },
                           "stage": {
                             "type": [
@@ -23445,7 +23446,6 @@
                         "required": [
                           "id",
                           "title",
-                          "voteCount",
                           "stage"
                         ]
                       }
