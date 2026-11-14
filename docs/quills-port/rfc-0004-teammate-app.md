@@ -93,5 +93,21 @@ pass, and the review team finds no blocking issue.
 | Lane | Revision | Status |
 |---|---|---|
 | S, D, P, C, T, R | 1 (Plain-style shell) | merged |
-| S2 | 2: sidebar shell and shared thread parts | built (lane branch `feat/ta-s2`) |
-| C2, P2, T2, R2 | 2: conversations, requests, tickets, other pages | planned |
+| S2, C2, P2, T2, R2 | 2 (UserJot layout) | merged |
+
+The review of 2026-11-14 found two blocking issues, both fixed: a detail pane carried a draft or
+an open form to the next item, and a reopened view showed stale cached data. Open items:
+
+1. A failed or slow request list hides the open request (`team-post-page.tsx`). The page tests
+   answer requests in a fixed order, so the fix needs those tests reworked.
+2. The list pane beside an open request has no "Load more".
+3. A deleted request cannot be restored from the app (`restoreQuillsPost` has no client).
+4. A snoozed conversation has no "Unsnooze"; only Resolve, then Reopen.
+5. The changelog `requesterCount` still reveals the voters of a board with hidden counts.
+6. A ticket read refetches the sidebar counts; the generator needs an invalidation target.
+7. The New request and "Track as post" forms show no error for an empty board list or details
+   over 10,000 characters.
+8. Smaller items: the merge palette shows "No results" on a failed search; each hidden tab shows
+   its own desktop notification; some controls show without their permission (the API refuses
+   the action); no digest test covers merged-duplicate voters; the AI chip of the request detail
+   is not built.
