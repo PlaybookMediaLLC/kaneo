@@ -1,6 +1,8 @@
 import type { ListBoardsResponse } from "../../api/team/list-boards";
 import type { ListPostsResponse } from "../../api/team/list-posts";
 import type { ListStatusesResponse } from "../../api/team/list-statuses";
+import type { ListTagsResponse } from "../../api/team/list-tags";
+import type { ListUsersResponse } from "../../api/team/list-users";
 
 // A small feedback inbox for the tests of the inbox and the post view.
 const created = "2026-01-01T00:00:00.000Z";
@@ -100,3 +102,40 @@ export const inboxPosts = {
   nextCursor: null,
   hasMore: false,
 } satisfies ListPostsResponse;
+
+const tag = (id: string, name: string) => ({
+  id,
+  name,
+  color: "gray",
+  description: null,
+  aiPrompt: null,
+  isPublic: true,
+  createdAt: created,
+});
+
+export const inboxTags = {
+  tags: [tag("tag_api", "API"), tag("tag_ux", "UX")],
+  nextOffset: null,
+} satisfies ListTagsResponse;
+
+/** A customer that a teammate can post for or vote for. */
+export const inboxCustomer = {
+  principalId: "principal_new",
+  userId: "user_new",
+  name: "Barbara",
+  email: "barbara@example.test",
+  contactEmail: null,
+  image: null,
+  emailVerified: true,
+  isLead: false,
+  country: null,
+  locale: null,
+  externalId: null,
+  attributes: [],
+  companyId: null,
+  blockedAt: null,
+  joinedAt: created,
+  postCount: 0,
+  commentCount: 0,
+  voteCount: 0,
+} satisfies ListUsersResponse["items"][number];
