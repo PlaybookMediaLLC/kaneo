@@ -1,6 +1,7 @@
 -- RFC 0003 seams: six new tables and nullable columns on boards, posts and post_votes. Each new
 -- CHECK on posts and post_votes reads that table once under the ACCESS EXCLUSIVE lock of its ADD
 -- COLUMN (the new columns are null, so no row fails). The locks stay until the batch commits.
+-- Rollback: restore the verified backup; the previous application rejects this migration ledger.
 CREATE TABLE "quills"."feedback_signals" (
 	"workspace_id" text DEFAULT nullif(current_setting('quills.workspace_id', true), '') NOT NULL,
 	"id" uuid NOT NULL,
