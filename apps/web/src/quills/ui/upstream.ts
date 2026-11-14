@@ -108,6 +108,15 @@ export {
   MenuTrigger,
 } from "@/components/ui/menu";
 export {
+  Combobox,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxPopup,
+  ComboboxTrigger,
+} from "@/components/ui/combobox";
+export {
   Command,
   CommandDialog,
   CommandDialogPopup,

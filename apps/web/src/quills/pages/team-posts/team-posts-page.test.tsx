@@ -170,10 +170,12 @@ describe("TeamPostsPage", () => {
     api.reply(createPostFixture.ok({ id: "post_dark" }));
     const view = renderPage(TeamPostsPage, meta, { search: { new: true } });
     await view.findByRole("dialog");
-    press("Author: You");
+    fireEvent.click(view.getByRole("combobox", { name: "Author: You" }));
     fill("Find a customer", "barb");
-    fireEvent.click(await view.findByRole("button", { name: "Barbara" }));
-    expect(view.getByRole("button", { name: "Author: Barbara" })).toBeVisible();
+    fireEvent.click(await view.findByRole("option", { name: "Barbara" }));
+    expect(
+      view.getByRole("combobox", { name: "Author: Barbara" }),
+    ).toBeVisible();
     await choose("Status", "Planned");
     press("Tags");
     fireEvent.click(await view.findByRole("menuitemcheckbox", { name: "UX" }));
