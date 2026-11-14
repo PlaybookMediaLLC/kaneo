@@ -9,6 +9,11 @@ export {
 } from "@/components/ui/card";
 export { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 export { Input } from "@/components/ui/input";
+export {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 export { Label } from "@/components/ui/label";
 export { Textarea } from "@/components/ui/textarea";
 export {
