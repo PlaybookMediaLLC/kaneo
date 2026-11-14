@@ -3,6 +3,7 @@ import { boardRoutes, taxonomyRoutes } from "./boards";
 import { changelogEngagementRoutes } from "../changelog-engagement";
 import { changelogRoutes } from "./changelog";
 import { commentRoutes, ownCommentRoutes } from "./comments";
+import ai from "./ai";
 import feeds from "./feeds";
 import { ownPostRoutes, postRoutes } from "./posts";
 import attachments from "./attachment-routes";
@@ -21,4 +22,5 @@ export default apiRouter()
   .route("/", roadmaps)
   .route("/", changelogEngagementRoutes("portal"))
   .route("/", changelogRoutes("portal"))
-  .route("/", feeds);
+  .route("/", feeds)
+  .route("/", ai);

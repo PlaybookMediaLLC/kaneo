@@ -32,3 +32,4 @@ export {
   getQuillsPortalFile,
   discardQuillsPortalFile,
 } from "./attachment-routes.fixture";
+export { improveQuillsPortalPostDraft } from "./ai.fixture";

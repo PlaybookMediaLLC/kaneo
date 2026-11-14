@@ -37,6 +37,8 @@ export interface PostCommentProps {
   ) => Promise<void>;
   /** The reply form; the Reply control is hidden without it. */
   replyForm?: (parentId: string, close: () => void) => ReactNode;
+  /** The comment's text; the stored text by default. */
+  body?: ReactNode;
   /** The comment's files, shown under its text. */
   attachments?: ReactNode;
   /** Replies, shown under the comment. */
@@ -45,6 +47,9 @@ export interface PostCommentProps {
 
 const action =
   "text-xs text-muted-foreground transition-colors hover:text-foreground";
+/** The style of a comment's text, for a `body` that replaces it. */
+export const commentText =
+  "mt-1 text-sm leading-relaxed [&>*+*]:mt-2 [&_p]:whitespace-pre-line";
 
 /** One comment with its likes, reply control, author actions and replies. */
 export function PostComment({ comment, ...props }: PostCommentProps) {
@@ -92,11 +97,13 @@ export function PostComment({ comment, ...props }: PostCommentProps) {
           </p>
         ) : (
           <>
-            <MarkdownContent
-              customer
-              content={comment.content}
-              className="mt-1 text-sm leading-relaxed [&>*+*]:mt-2 [&_p]:whitespace-pre-line"
-            />
+            {props.body ?? (
+              <MarkdownContent
+                customer
+                content={comment.content}
+                className={commentText}
+              />
+            )}
             {props.attachments}
           </>
         )}

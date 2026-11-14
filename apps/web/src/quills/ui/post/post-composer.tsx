@@ -16,6 +16,7 @@ import { PortalForm } from "../portal-form";
 import { Input, cn } from "../upstream";
 import { BoardSelect } from "./board-select";
 import { ComposerDetails } from "./composer-details";
+import { ComposerSignIn } from "./composer-sign-in";
 
 interface PostComposerValues {
   boardId?: string;
@@ -36,6 +37,11 @@ export interface PostComposerProps {
   initialTitle?: string;
   /** A file control in the footer; it gets whether the form is sending. */
   attachments?: (submitting: boolean) => ReactNode;
+  /** A helper under the details: it reads the draft and can replace it. */
+  assist?: (
+    draft: () => PostComposerValues,
+    apply: (values: PostComposerValues) => void,
+  ) => ReactNode;
   onTitleChange: (title: string) => void;
   onSubmit: (values: PostComposerValues) => Promise<PortalProblem | void>;
 }
@@ -101,17 +107,7 @@ export function PostComposer(props: PostComposerProps) {
           onChange: (event: { target: { value: string } }) =>
             changeTitle(event.target.value),
         })}
-        {expanded ? (
-          <p className="mt-2 border-t border-border pt-3 text-sm text-muted-foreground">
-            {t("feedback.signInToSubmit")}{" "}
-            <a
-              className="font-medium text-foreground underline-offset-4 hover:underline"
-              href={props.signInHref}
-            >
-              {t("feedback.signIn")}
-            </a>
-          </p>
-        ) : null}
+        {expanded ? <ComposerSignIn href={props.signInHref} /> : null}
       </div>
     );
 
@@ -183,6 +179,12 @@ export function PostComposer(props: PostComposerProps) {
                 })}
               />
             ) : null}
+            {expanded &&
+              props.assist?.(form.getValues, (values) => {
+                form.reset(values, { keepDefaultValues: true });
+                changeTitle(values.title);
+                remember(values);
+              })}
           </>
         )}
       </PortalForm>

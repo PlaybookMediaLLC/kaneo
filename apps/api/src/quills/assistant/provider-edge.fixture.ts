@@ -13,10 +13,9 @@ export type ProviderRequest = {
   body: any;
   authorization?: string;
 };
-export type Reply = (request: ProviderRequest) => {
-  status?: number;
-  json: unknown;
-};
+type Answer = { status?: number; json: unknown };
+/** A test can hold an answer back, for example until a second request arrives. */
+export type Reply = (request: ProviderRequest) => Answer | Promise<Answer>;
 export const EMBEDDING = Array.from({ length: 1536 }, () => 0.01);
 
 export const chatReply = (content: unknown, toolCalls?: unknown[]) => ({
@@ -33,7 +32,7 @@ export const chatReply = (content: unknown, toolCalls?: unknown[]) => ({
     usage: { prompt_tokens: 12, completion_tokens: 8, total_tokens: 20 },
   },
 });
-const fallback: Reply = ({ path, body }) =>
+export const fallback: Reply = ({ path, body }) =>
   path.endsWith("/embeddings")
     ? {
         json: {
@@ -58,14 +57,14 @@ export const provider = {
 const server = createServer((req, res) => {
   let raw = "";
   req.on("data", (chunk) => (raw += chunk));
-  req.on("end", () => {
+  req.on("end", async () => {
     const request = {
       path: req.url ?? "",
       body: raw ? JSON.parse(raw) : null,
       authorization: req.headers.authorization,
     };
     provider.requests.push(request);
-    const answer = reply(request);
+    const answer = await reply(request);
     res
       .writeHead(answer.status ?? 200, { "content-type": "application/json" })
       .end(JSON.stringify(answer.json));

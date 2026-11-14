@@ -182,8 +182,12 @@ export type QuillsRouteDeclaration<
   signIn?: boolean;
   /** Portal: create the caller's customer profile and principal when missing. */
   ensureCustomer?: boolean;
-  /** Non-teammate writes: attempts per client IP and workspace, counted even when the request fails. */
-  rateLimit?: { limit: number; windowSeconds: number };
+  /**
+   * Non-teammate writes: attempts per client IP and workspace, counted even when the request fails.
+   * `per: "caller"` also counts each signed-in portal account, so one account cannot spend the
+   * limit from many addresses, and many accounts cannot spend it from one address.
+   */
+  rateLimit?: { limit: number; windowSeconds: number; per?: "caller" };
   /**
    * Portal, widget and public reads (RSS, XML) and signed reads (HTML): the handler returns the
    * document as a string (the response schema is a string), sent with this content type instead of
@@ -885,6 +889,15 @@ export function buildQuillsRoute<
       if (d.rateLimit)
         await enforceRateLimit(c, params.workspace, d.operationId, d.rateLimit);
       const credentials = await readCredentials(c, audience, params.workspace);
+      // The account bucket needs the session, so it is counted after the session read.
+      if (d.rateLimit?.per === "caller" && credentials.account)
+        await enforceRateLimit(
+          c,
+          params.workspace,
+          d.operationId,
+          d.rateLimit,
+          credentials.account.id,
+        );
       // `call` may wait on a provider or object storage, so it holds no pooled connection: `prepare`
       // reads with the caller first, and the handler's transaction must find the same caller again.
       let seen: { workspaceId: string; caller: QuillsCaller } | undefined;

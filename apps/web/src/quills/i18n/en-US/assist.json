@@ -1,0 +1,16 @@
+{
+	"aiEmpty": "Write a title or some details first.",
+	"aiFailed": "AI help failed. Try again.",
+	"aiRateLimited": "You asked for AI help too often. Try again in a few minutes.",
+	"aiUnavailable": "AI help is not available right now.",
+	"apply": "Use this",
+	"articles": "These articles may answer your question",
+	"dismiss": "Dismiss",
+	"improve": "Improve with AI",
+	"showOriginal": "Show original",
+	"suggestion": "Suggestion from AI",
+	"suggestionNote": "Check the text before you use it. It replaces your title and details.",
+	"translate": "Translate",
+	"translateFailed": "The translation is not available. Try again later.",
+	"translating": "Translating…"
+}

@@ -6,13 +6,14 @@ import { portalHref } from "../../../core/portal-href";
 import type { Viewer } from "../../../core/types";
 import { useCreatePortalComment } from "../../../hooks/feedback/use-create-portal-comment";
 import { useSetPortalCommentReaction } from "../../../hooks/feedback/use-set-portal-comment-reaction";
-import { PostComment } from "../../../ui/post/post-comment";
+import { commentText, PostComment } from "../../../ui/post/post-comment";
 import { Button } from "../../../ui/upstream";
 import { visibleComments } from "../../../core/visible-comments";
 import { runMutation } from "../run-mutation";
 import { CommentSheets } from "./comment-sheets";
 import { CreateCommentForm } from "./create-comment-form";
 import { PostAttachments } from "./post-attachments";
+import { browserLocale, TranslatedText } from "./translated-text";
 
 type Comment = ListPortalPostCommentsResponse["items"][number];
 type Emoji = SetPortalCommentReactionRequest["json"]["emoji"];
@@ -40,6 +41,8 @@ export function PostCommentsSection(props: PostCommentsSectionProps) {
   const create = useCreatePortalComment(props.viewer);
   const react = useSetPortalCommentReaction(props.viewer);
   const signedIn = props.viewer.kind === "user";
+  // English readers get the plain comment, with no translation query for each comment.
+  const translatable = browserLocale() !== null;
   // Comments load oldest first, so a new one can fall past the loaded pages.
   // ponytail: an edit of such a comment shows the old text until the page reloads;
   // keep the edit response here if people edit fresh comments on long threads.
@@ -81,6 +84,17 @@ export function PostCommentsSection(props: PostCommentsSectionProps) {
         ...comment,
         reactions: reacted[comment.id] ?? comment.reactions,
       }}
+      body={
+        translatable ? (
+          <TranslatedText
+            workspaceId={props.workspaceId}
+            viewer={props.viewer}
+            target={{ commentId: comment.id }}
+            content={comment.content}
+            className={commentText}
+          />
+        ) : undefined
+      }
       attachments={
         <PostAttachments
           workspaceId={props.workspaceId}

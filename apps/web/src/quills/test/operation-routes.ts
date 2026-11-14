@@ -1706,6 +1706,11 @@ export const quillsOperationRoutes = [
     path: "/api/quills/{workspaceId}/status/subscribers/import",
   },
   {
+    operationId: "improveQuillsPortalPostDraft",
+    method: "POST",
+    path: "/api/quills-public/{workspace}/portal/post-draft/improve",
+  },
+  {
     operationId: "inspectQuillsIntegrationSync",
     method: "GET",
     path: "/api/quills/{workspaceId}/integration-syncs/{syncId}",
@@ -3469,6 +3474,11 @@ export const quillsOperationRoutes = [
     operationId: "translateQuillsConversationMessages",
     method: "POST",
     path: "/api/quills/{workspaceId}/conversations/{conversationId}/messages/{messageId}/translate",
+  },
+  {
+    operationId: "translateQuillsPortalContent",
+    method: "POST",
+    path: "/api/quills-public/{workspace}/portal/translations",
   },
   {
     operationId: "unblockQuillsUser",

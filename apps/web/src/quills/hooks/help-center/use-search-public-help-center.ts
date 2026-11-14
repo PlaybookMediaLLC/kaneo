@@ -13,5 +13,7 @@ export function useSearchPublicHelpCenter(
     enabled: Boolean(input.param.workspace && input.json.query.trim()),
     staleTime: Number.POSITIVE_INFINITY,
     refetchOnWindowFocus: false,
+    // A 404 means no help center: retrying it only delays the empty result.
+    retry: false,
   });
 }

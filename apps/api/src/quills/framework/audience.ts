@@ -368,16 +368,19 @@ export function verifyIdentityToken(token: string, secret: string) {
 
 /**
  * Counts one attempt for this client in its own committed transaction, so a failed request
- * still spends budget. 429 over the limit.
+ * still spends budget. 429 over the limit. With `account`, the bucket is that signed-in account's.
  */
 export async function enforceRateLimit(
   c: Context,
   workspace: string,
   name: string,
   rule: { limit: number; windowSeconds: number },
+  account?: string,
 ) {
   // ponytail: the bucket is per workspace and client IP; a client spreading attempts over many workspaces gets a budget in each.
-  const key = `${name}:${readClientIp(c.req.raw.headers) ?? "unknown"}`;
+  const key = account
+    ? `${name}:account:${account}`
+    : `${name}:${readClientIp(c.req.raw.headers) ?? "unknown"}`;
   const count = await withQuillsAudience({ workspace }, async (db) => {
     const [row] = await db
       .insert(rateBucket)

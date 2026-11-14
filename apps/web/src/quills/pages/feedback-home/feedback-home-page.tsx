@@ -9,6 +9,7 @@ import { useListPortalPosts } from "../../hooks/feedback/use-list-portal-posts";
 import { useListPortalStatuses } from "../../hooks/feedback/use-list-portal-statuses";
 import { useSetPortalVote } from "../../hooks/feedback/use-set-portal-vote";
 import { FeedbackComposer } from "../../portal/feedback-composer";
+import { HelpSuggestions } from "../../portal/help-suggestions";
 import { usePortalRuntime } from "../../portal/runtime";
 import { SimilarRequests } from "../../portal/similar-requests";
 import { BoardNavigation } from "../../ui/board-navigation";
@@ -145,6 +146,7 @@ export function FeedbackHomePage(props: FeedbackHomePageProps) {
                 )
               }
             />
+            <HelpSuggestions workspaceId={props.workspaceId} title={title} />
             <SurveyPrompt workspaceId={workspace} viewer={viewer} />
             <PostSort
               sort={sort}
