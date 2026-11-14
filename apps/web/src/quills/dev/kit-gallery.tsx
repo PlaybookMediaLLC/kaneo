@@ -44,6 +44,7 @@ import { StateView } from "../ui/state-view";
 import { SurveyCard } from "../ui/survey-card";
 import { CommandPalette } from "../ui/inbox/command-palette";
 import { Composer } from "../ui/inbox/composer";
+import { IconButton } from "../ui/inbox/icon-button";
 import { ConversationRow } from "../ui/inbox/conversation-row";
 import { DateSeparator } from "../ui/inbox/date-separator";
 import { DetailHeader } from "../ui/inbox/detail-header";
@@ -585,6 +586,9 @@ export function KitGallery() {
                   <Button size="sm" onClick={() => setPalette(true)}>
                     {demo}
                   </Button>
+                  <IconButton label={demo} onClick={() => setPalette(true)}>
+                    <ArrowUpIcon />
+                  </IconButton>
                 </>
               }
             />
