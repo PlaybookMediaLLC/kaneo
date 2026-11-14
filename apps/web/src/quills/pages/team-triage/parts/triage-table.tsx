@@ -18,7 +18,7 @@ export interface TriageTableProps {
 }
 
 const cell = "px-3 py-2 text-right tabular-nums";
-const head = "px-3 py-2 text-right font-medium";
+const head = "px-3 py-2 text-right font-medium whitespace-nowrap";
 
 /** Requests with their demand and RICE score, and an inline score editor. */
 export function TriageTable(props: TriageTableProps) {
@@ -28,14 +28,16 @@ export function TriageTable(props: TriageTableProps) {
   });
   if (!props.posts.length)
     return (
-      <p className="text-sm text-muted-foreground">{t("team-triage.none")}</p>
+      <p className="px-4 py-6 text-sm text-muted-foreground">
+        {t("team-triage.none")}
+      </p>
     );
   return (
-    <div className="overflow-x-auto rounded-lg border border-border">
+    <div className="overflow-x-auto">
       <table className="w-full text-sm">
-        <thead className="bg-muted/50 text-muted-foreground">
+        <thead className="border-b border-border text-xs text-muted-foreground">
           <tr>
-            <th scope="col" className="px-3 py-2 text-left font-medium">
+            <th scope="col" className="py-2 ps-4 pe-3 text-left font-medium">
               {t("team-triage.post")}
             </th>
             <th scope="col" className={head}>
@@ -70,7 +72,10 @@ export function TriageTable(props: TriageTableProps) {
               rice === null ? t("team-triage.unset") : number.format(rice);
             const row = (
               <tr key={post.id}>
-                <th scope="row" className="px-3 py-2 text-left font-medium">
+                <th
+                  scope="row"
+                  className="py-2 ps-4 pe-3 text-left font-medium"
+                >
                   {post.title}
                 </th>
                 <td className={cell}>{post.voteCount}</td>

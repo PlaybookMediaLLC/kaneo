@@ -9,11 +9,7 @@ export const meta = {
   operations: [
     "listQuillsPosts",
     "getQuillsRevenueAtRisk",
-    "listQuillsBoards",
-    "getQuillsBoardSettings",
-    "listQuillsStatuses",
     "setQuillsPostScore",
-    "updateQuillsBoardSettings",
   ],
   states: ["loading", "failed", "ready", "done"],
 } satisfies PageMeta;
