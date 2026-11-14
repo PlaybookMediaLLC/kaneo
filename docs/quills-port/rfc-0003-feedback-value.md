@@ -225,8 +225,9 @@ Known limits after the merge:
    only, so a HubSpot note fails with `write_access_required` until an operator adds the scope.
 2. CRM notes (feature 19) take the company from `companies.externalId`. A workspace that keeps
    the IDs of another system there can send a note to the wrong company.
-3. Task sync (feature 12) starts from the in-process `task.status_changed` event. If the process
-   stops between the task update and the enqueue, that one sync is lost.
+3. Task sync (feature 12) starts from the in-process `task.status_changed` and `task.moved`
+   events. If the process stops between the task update and the enqueue, that one sync is lost.
+   A column that becomes final and an import that publishes only `task.updated` do not sync.
 4. The widget screenshot (feature 6) shows sticky elements and inner scroll areas at their
    unscrolled position, and images from other origins without CORS stay blank.
 5. A survey (feature 2) uses `updated_at` as its activation time, so an edit to an active survey

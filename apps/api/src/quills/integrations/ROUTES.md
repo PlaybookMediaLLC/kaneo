@@ -157,12 +157,14 @@ Task sync (feature 12, D12). The board settings routes (`feedback/board-settings
 `taskSync.statusOnTaskDone`, a live post status of the workspace (`manage_settings`, `board.settings_updated`).
 
 - Handoff: Kaneo publishes `task.status_changed` after each status change commits (task controllers, bulk
-  updates, the GitHub, GitLab and Gitea webhooks). `jobs/worker.ts` subscribes. A task that is now in a final
+  updates, the GitHub, GitLab and Gitea webhooks) and `task.moved` after a move to another project.
+  `jobs/worker.ts` subscribes to both. Two paths do not sync: a column that becomes final
+  (`column.finality_changed`) and imports that publish only `task.updated`. A task that is now in a final
   column and has a `post_tasks` link gets one `quills.workflow` job `{ taskId }` in its workspace
   (`task-sync-job.ts`). A process that stops between the Kaneo commit and the enqueue loses that sync.
 - Job: checks that the task is still done and in the job's workspace (`framework/platform-reads.ts`), then
   reads the stored links under the workspace scope. Each live post on a board with the setting, whose status
-  differs, gets the status. One transaction holds the `hook_deliveries` row (`task-sync:{task}:{post}:{status}`),
+  differs, gets the status. One transaction holds the `hook_deliveries` row (`task-sync:{job}:{post}`, so a replay changes nothing and a later completion applies again),
   the change, `post.status_changed` (actor `system`, payload `source: task`) and the job outcome. The existing
   fan-out then tells voters and followers. No upstream file changes: the subscription needs no seam.
 

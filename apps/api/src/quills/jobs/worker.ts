@@ -68,9 +68,11 @@ const handlers: Record<
   "quills.ai": runAiJob,
 };
 
-// Task sync (RFC 0003, D12): every Kaneo path that changes a task's status publishes this event
-// after its commit (task controllers, bulk updates and the GitHub, GitLab and Gitea webhooks).
+// Task sync (RFC 0003, D12): the Kaneo paths that change a task's status publish this event after
+// their commit (task controllers, bulk updates and the GitHub, GitLab and Gitea webhooks).
 void subscribeToEvent("task.status_changed", handOffTaskStatus);
+// A move to another project can put the task in a done column without a status change event.
+void subscribeToEvent("task.moved", handOffTaskStatus);
 
 export async function deliverQuillsChange(
   workspaceId: string,

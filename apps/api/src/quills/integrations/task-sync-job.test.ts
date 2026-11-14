@@ -260,7 +260,16 @@ describe.skipIf(!url)("Quills task sync", () => {
     expect(notice).toEqual({ status: "succeeded" });
   });
 
-  it("changes nothing twice: a retry, a second completion and a moved-back post", async () => {
+  it("syncs a task that moved into a done column of another project", async () => {
+    const projectId = await project(h.a);
+    const taskId = await task(projectId, "done");
+    const postId = await post(h.a, { sync: complete, taskId });
+    await publishEvent("task.moved", { taskId }, { waitForHandlers: true });
+    await h.drain(h.a);
+    expect(await statusOf(h.a, postId)).toBe(complete);
+  });
+
+  it("changes nothing on a replay, and applies again when the task is done again", async () => {
     const projectId = await project(h.a);
     const taskId = await task(projectId, "done");
     const postId = await post(h.a, { sync: complete, taskId });
@@ -268,7 +277,13 @@ describe.skipIf(!url)("Quills task sync", () => {
     await h.drain(h.a);
     expect(await statusOf(h.a, postId)).toBe(complete);
 
-    // A replayed job finds the ledger row.
+    // A teammate moves the post back. A replay of the finished job finds its ledger row.
+    await h.system(h.a, (db) =>
+      db
+        .update(posts)
+        .set({ statusId: open })
+        .where(eq(posts.id, postId as never)),
+    );
     const [job] = await syncJobs(h.a, taskId);
     await h.system(h.a, (db) =>
       db
@@ -276,19 +291,17 @@ describe.skipIf(!url)("Quills task sync", () => {
         .set({ status: "pending", attempts: 0, runAt: new Date(0) })
         .where(eq(jobQueue.id, job!.id)),
     );
-    // A teammate moves the post back; the task is done again.
-    await h.system(h.a, (db) =>
-      db
-        .update(posts)
-        .set({ statusId: open })
-        .where(eq(posts.id, postId as never)),
-    );
+    await h.drain(h.a);
+    expect(await statusOf(h.a, postId)).toBe(open);
+    expect(await statusEvents(h.a, postId)).toHaveLength(1);
+
+    // The task is reopened and done again: a new completion sets the status again.
     await setStatus(taskId, "to-do");
     await setStatus(taskId, "done");
     await changed(taskId);
     await h.drain(h.a);
-    expect(await statusOf(h.a, postId)).toBe(open);
-    expect(await statusEvents(h.a, postId)).toHaveLength(1);
+    expect(await statusOf(h.a, postId)).toBe(complete);
+    expect(await statusEvents(h.a, postId)).toHaveLength(2);
   });
 
   it("does nothing for a board without the setting, a deleted status or an unlinked post", async () => {
@@ -385,7 +398,7 @@ describe.skipIf(!url)("Quills task sync", () => {
         db
           .select()
           .from(hookDeliveries)
-          .where(like(hookDeliveries.jobId, `task-sync:${taskId}:%`)),
+          .where(like(hookDeliveries.jobId, `task-sync:${job!.id}:%`)),
       ),
     ).toEqual([]);
 

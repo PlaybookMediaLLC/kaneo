@@ -67,7 +67,6 @@ export async function runTaskSyncJob(workspaceId: string, job: JobQueueRow) {
       ? await db
           .select({
             postId: posts.id,
-            statusId: posts.statusId,
             settings: boards.settings,
           })
           .from(postTasks)
@@ -85,7 +84,14 @@ export async function runTaskSyncJob(workspaceId: string, job: JobQueueRow) {
       : [];
     for (const post of linked) {
       const target = statusOnTaskDone(post.settings);
-      if (!target || target === post.statusId) continue;
+      if (!target) continue;
+      // Two jobs for one task change each post once: the second waits here, then finds the status set.
+      const [current] = await db
+        .select({ statusId: posts.statusId })
+        .from(posts)
+        .where(eq(posts.id, post.postId))
+        .for("update");
+      if (!current || target === current.statusId) continue;
       const [status] = await db
         .select({ id: postStatuses.id })
         .from(postStatuses)
@@ -96,7 +102,9 @@ export async function runTaskSyncJob(workspaceId: string, job: JobQueueRow) {
       const [first] = await db
         .insert(hookDeliveries)
         .values({
-          jobId: `task-sync:${taskId}:${post.postId}:${target}`,
+          // One row per handoff and post: a replayed job changes nothing, and a later completion
+          // of the task (a new job) applies again.
+          jobId: `task-sync:${job.id}:${post.postId}`,
           hookType: "task_sync",
         })
         .onConflictDoNothing()
