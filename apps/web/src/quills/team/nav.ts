@@ -36,7 +36,14 @@ export const teamSections: readonly TeamNavSection[] = [
     id: "support",
     labelKey: "team.sections.support",
     icon: Headset,
-    items: [],
+    items: [
+      {
+        path: "/tickets",
+        labelKey: "team-tickets.title",
+        countKey: "openTickets",
+      },
+      { path: "/my-tickets", labelKey: "team-tickets.mine" },
+    ],
     browse: [],
   },
   {
