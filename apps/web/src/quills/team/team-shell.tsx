@@ -2,13 +2,8 @@ import { Menu } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useGetTeamCounts } from "../hooks/team/use-get-team-counts";
-import {
-  Button,
-  Sheet,
-  SheetContent,
-  SheetTitle,
-  SheetTrigger,
-} from "../ui/upstream";
+import { IconButton } from "../ui/inbox/icon-button";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "../ui/upstream";
 import { useTeamRuntime } from "./runtime";
 import { TeamSidebar, type TeamSidebarProps } from "./team-sidebar";
 
@@ -33,10 +28,7 @@ export function TeamShell({ children, ...sidebar }: TeamShellProps) {
     <div className="flex h-svh min-h-0 w-full flex-col bg-sidebar md:flex-row">
       <div className="flex items-center gap-2 border-b border-border px-2 py-1.5 md:hidden">
         <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-          <SheetTrigger
-            render={<Button variant="ghost" size="icon-sm" />}
-            aria-label={t("team.menu")}
-          >
+          <SheetTrigger render={<IconButton label={t("team.menu")} />}>
             <Menu aria-hidden="true" />
           </SheetTrigger>
           <SheetContent

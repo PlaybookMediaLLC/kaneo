@@ -4,7 +4,7 @@ import { useAddConversationTag } from "../../../hooks/team/use-add-conversation-
 import { useListConversationTags } from "../../../hooks/team/use-list-conversation-tags";
 import { useRemoveConversationTag } from "../../../hooks/team/use-remove-conversation-tag";
 import { useTeamRuntime } from "../../../team/runtime";
-import { Button } from "../../../ui/upstream";
+import { IconButton } from "../../../ui/inbox/icon-button";
 import { ActionProblem } from "./action-problem";
 import { PropertySelect } from "./property-select";
 
@@ -44,17 +44,16 @@ export function TagEditor({
             className="flex items-center gap-0.5 rounded-md border border-border ps-1.5 text-xs"
           >
             {tag.name}
-            <Button
-              variant="ghost"
+            <IconButton
               size="icon-xs"
-              aria-label={t("team-conversations.removeTag", { name: tag.name })}
+              label={t("team-conversations.removeTag", { name: tag.name })}
               disabled={locked}
               onClick={() =>
                 remove.mutate({ param: { ...param, tagId: tag.id } })
               }
             >
               <X aria-hidden="true" />
-            </Button>
+            </IconButton>
           </li>
         ))}
       </ul>

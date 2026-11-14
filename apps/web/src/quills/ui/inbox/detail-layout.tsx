@@ -2,7 +2,6 @@ import { PanelLeftOpen } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  Button,
   cn,
   Sheet,
   SheetContent,
@@ -11,6 +10,7 @@ import {
   SheetTitle,
 } from "../upstream";
 import { DetailPaneContext } from "./detail-pane-context";
+import { IconButton } from "./icon-button";
 
 export interface DetailLayoutProps {
   /** The list pane (ListPane), about 360 px wide. Hidden below md while an item is open. */
@@ -68,14 +68,12 @@ export function DetailLayout({
           </section>
         ) : (
           <div className="hidden shrink-0 border-e border-border p-2 md:block">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label={t("inbox.showList")}
+            <IconButton
+              label={t("inbox.showList")}
               onClick={() => setListOpen(true)}
             >
               <PanelLeftOpen aria-hidden="true" />
-            </Button>
+            </IconButton>
           </div>
         )}
         <div

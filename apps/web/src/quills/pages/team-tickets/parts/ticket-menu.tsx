@@ -6,13 +6,8 @@ import { useUnmuteTicket } from "../../../hooks/team/use-unmute-ticket";
 import { useUnwatchTicket } from "../../../hooks/team/use-unwatch-ticket";
 import { useWatchTicket } from "../../../hooks/team/use-watch-ticket";
 import { useTeamRuntime } from "../../../team/runtime";
-import {
-  Button,
-  Menu,
-  MenuItem,
-  MenuPopup,
-  MenuTrigger,
-} from "../../../ui/upstream";
+import { IconButton } from "../../../ui/inbox/icon-button";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../../../ui/upstream";
 
 export interface TicketMenuProps {
   ticketId: string;
@@ -42,15 +37,7 @@ export function TicketMenu({ ticketId }: TicketMenuProps) {
   return (
     <>
       <Menu>
-        <MenuTrigger
-          render={
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label={t("team-tickets.more")}
-            />
-          }
-        >
+        <MenuTrigger render={<IconButton label={t("team-tickets.more")} />}>
           <MoreVertical aria-hidden="true" />
         </MenuTrigger>
         <MenuPopup align="end">

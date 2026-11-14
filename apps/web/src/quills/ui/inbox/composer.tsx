@@ -10,6 +10,7 @@ import {
   MenuRadioItem,
   MenuTrigger,
 } from "../upstream";
+import { IconButton } from "./icon-button";
 import type { ComposerMode } from "./inbox-types";
 
 export interface ComposerProps {
@@ -100,16 +101,16 @@ export function Composer(props: ComposerProps) {
             </MenuPopup>
           </Menu>
         ) : null}
-        <Button
-          size="icon-sm"
+        <IconButton
+          variant="default"
           className="ms-auto rounded-full"
-          aria-label={t("inbox.send")}
+          label={t("inbox.send")}
           loading={props.sending}
           disabled={!ready}
           onClick={send}
         >
           <ArrowUp aria-hidden="true" />
-        </Button>
+        </IconButton>
       </div>
     </div>
   );

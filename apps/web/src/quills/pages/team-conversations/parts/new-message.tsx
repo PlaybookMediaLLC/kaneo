@@ -8,7 +8,8 @@ import { useTeamRuntime } from "../../../team/runtime";
 import { Composer } from "../../../ui/inbox/composer";
 import { DetailHeader } from "../../../ui/inbox/detail-header";
 import { PersonAvatar } from "../../../ui/person-avatar";
-import { Button, useDebouncedValue } from "../../../ui/upstream";
+import { IconButton } from "../../../ui/inbox/icon-button";
+import { useDebouncedValue } from "../../../ui/upstream";
 
 type Customer = ListUsersResponse["items"][number];
 
@@ -71,17 +72,16 @@ export function NewMessage(props: NewMessageProps) {
               <span className="flex min-w-0 items-center gap-1.5 rounded-full bg-muted py-0.5 ps-1 pe-0.5">
                 <PersonAvatar colored name={to.name} avatarUrl={to.image} />
                 <span className="truncate">{to.name}</span>
-                <Button
-                  variant="ghost"
+                <IconButton
                   size="icon-xs"
                   className="rounded-full"
-                  aria-label={t("team-conversations.newMessage.remove", {
+                  label={t("team-conversations.newMessage.remove", {
                     name: to.name,
                   })}
                   onClick={() => setTo(null)}
                 >
                   <X aria-hidden="true" />
-                </Button>
+                </IconButton>
               </span>
             ) : (
               <input

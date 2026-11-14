@@ -4,7 +4,8 @@ import { LifeBuoy, SquarePen } from "lucide-react";
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
 import type { GetTeamCountsResponse } from "../api/team/get-team-counts";
-import { Button, UserAvatar } from "../ui/upstream";
+import { IconButton } from "../ui/inbox/icon-button";
+import { UserAvatar } from "../ui/upstream";
 import { DesktopNotifications } from "./desktop-notifications";
 import { teamSections } from "./nav";
 import { NotificationsButton } from "./notifications-button";
@@ -41,10 +42,8 @@ export function TeamSidebar({
     <div className="flex h-full min-h-0 w-full flex-col gap-3 px-3 py-3">
       <div className="flex items-center gap-0.5">
         <WorkspaceSwitcher workspaceId={workspaceId} {...workspace} />
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={t("team.newRequest")}
+        <IconButton
+          label={t("team.newRequest")}
           render={
             <Link
               to={teamHref(workspaceId, "/posts")}
@@ -54,7 +53,7 @@ export function TeamSidebar({
           }
         >
           <SquarePen aria-hidden="true" />
-        </Button>
+        </IconButton>
         <NotificationsButton
           workspaceId={workspaceId}
           onNavigate={onNavigate}
