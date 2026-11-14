@@ -1181,7 +1181,7 @@ const isMainModule =
   import.meta.url === pathToFileURL(entrypoint).href;
 
 if (isMainModule) {
-  void startServer(injectWebSocket);
+  void startServer(injectWebSocket, Number(process.env.KANEO_API_PORT) || 1337);
 }
 
 export type AppType =
