@@ -4,15 +4,13 @@ export interface TeamNavEntry {
   labelKey: string;
 }
 
-// The team shell navigation. A Wave 1 lane appends one entry for each teammate page.
+// The team shell navigation, in work order: review new feedback first, then plan and announce.
 export const teamNavigation: readonly TeamNavEntry[] = [
   { path: "", labelKey: "team.nav.home" },
+  { path: "/triage", labelKey: "team-triage.nav" },
+  { path: "/autopilot", labelKey: "autopilot.nav" },
   { path: "/duplicates", labelKey: "duplicates.nav" },
   { path: "/insights", labelKey: "insights.nav" },
   { path: "/surveys", labelKey: "surveys.title" },
-  { path: "/autopilot", labelKey: "autopilot.nav" },
-  // RFC 0003 lane L5.
   { path: "/changelog", labelKey: "team-changelog.nav" },
-  // RFC 0003, lane L3.
-  { path: "/triage", labelKey: "team-triage.nav" },
 ];
