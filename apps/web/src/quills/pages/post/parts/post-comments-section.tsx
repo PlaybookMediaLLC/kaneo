@@ -31,6 +31,8 @@ export interface PostCommentsSectionProps {
   /** Loads the next page; the control is hidden without it. */
   onLoadMore?: () => void;
   loadingMore?: boolean;
+  /** False when the instance has no AI provider; then comments offer no translation. */
+  translatable?: boolean;
 }
 
 /** The comment count, the composer and the threaded comments with likes and replies. */
@@ -87,6 +89,7 @@ export function PostCommentsSection(props: PostCommentsSectionProps) {
       body={
         translatable ? (
           <TranslatedText
+            translatable={props.translatable}
             workspaceId={props.workspaceId}
             viewer={props.viewer}
             target={{ commentId: comment.id }}

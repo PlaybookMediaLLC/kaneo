@@ -123,6 +123,7 @@ export function PostPage(props: PostPageProps) {
                   </a>
                 ) : null}
                 <TranslatedText
+                  translatable={portal.config.features.ai}
                   workspaceId={props.workspaceId}
                   viewer={viewer}
                   target={{ postId }}
@@ -162,6 +163,7 @@ export function PostPage(props: PostPageProps) {
                   title={data.title}
                 />
                 <PostCommentsSection
+                  translatable={portal.config.features.ai}
                   workspaceId={props.workspaceId}
                   postId={postId}
                   viewer={viewer}

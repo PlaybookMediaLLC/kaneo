@@ -1,3 +1,4 @@
+import { aiConfig } from "../assistant/provider";
 import { apiRouter, z } from "../../openapi";
 import { settings } from "../../database/quills/schema/auth";
 import { defineQuillsRoute } from "../framework/define-route";
@@ -97,6 +98,10 @@ const portalConfig = defineQuillsRoute({
       allowEditAfterEngagement: z.boolean(),
       allowDeleteAfterEngagement: z.boolean(),
       showPublicEditHistory: z.boolean(),
+      ai: z.boolean().openapi({
+        description:
+          "The instance has an AI provider, so the portal can offer AI help and translation",
+      }),
     }),
     portalAccess: z.object({ isPrivate: z.boolean() }),
     branding: z.object({
@@ -138,6 +143,7 @@ const portalConfig = defineQuillsRoute({
           false,
         ),
         showPublicEditHistory: bool(features.showPublicEditHistory, false),
+        ai: aiConfig() !== null,
       },
       portalAccess: {
         isPrivate: record(config.access).visibility === "private",

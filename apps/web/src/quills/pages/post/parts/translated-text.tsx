@@ -11,6 +11,8 @@ export interface TranslatedTextProps {
   target: { postId: string } | { commentId: string };
   content: string;
   className?: string;
+  /** False when the instance has no AI provider; then no text offers a translation. */
+  translatable?: boolean;
 }
 
 // ponytail: the content language is taken to be English, the only portal language today.
@@ -27,7 +29,7 @@ export function TranslatedText(props: TranslatedTextProps) {
   // The toggle belongs to one text: after an edit the new original shows.
   const [translatedFor, setTranslatedFor] = useState<string | null>(null);
   const on = translatedFor === props.content;
-  const locale = browserLocale();
+  const locale = props.translatable === false ? null : browserLocale();
   const translation = useTranslatePortalContent(
     {
       param: { workspace: on && locale ? props.workspaceId : "" },

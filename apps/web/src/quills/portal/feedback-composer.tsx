@@ -36,15 +36,20 @@ export function FeedbackComposer({
           onRemoveFile={files.removeFile}
         />
       )}
-      assist={(draft, apply) => (
-        <ImproveDraft
-          workspaceId={workspaceId}
-          viewer={portal.viewer}
-          boards={props.boards}
-          draft={draft}
-          onApply={apply}
-        />
-      )}
+      // AI help shows only when the instance has an AI provider.
+      assist={
+        portal.config.features.ai
+          ? (draft, apply) => (
+              <ImproveDraft
+                workspaceId={workspaceId}
+                viewer={portal.viewer}
+                boards={props.boards}
+                draft={draft}
+                onApply={apply}
+              />
+            )
+          : undefined
+      }
       onSubmit={async (values) => {
         // A failed upload throws, so PortalForm offers a retry.
         const attachmentIds = await files.upload();

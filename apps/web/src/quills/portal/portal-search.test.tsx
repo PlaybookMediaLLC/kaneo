@@ -17,6 +17,7 @@ const runtime = (granted: boolean): PortalRuntimeValue => ({
       allowEditAfterEngagement: false,
       allowDeleteAfterEngagement: false,
       showPublicEditHistory: false,
+      ai: true,
     },
     portalAccess: { isPrivate: !granted },
     branding: {

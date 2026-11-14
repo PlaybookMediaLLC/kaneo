@@ -18,6 +18,7 @@ const runtime: PortalRuntimeValue = {
       allowEditAfterEngagement: false,
       allowDeleteAfterEngagement: false,
       showPublicEditHistory: false,
+      ai: true,
     },
     portalAccess: { isPrivate: false },
     branding: {
@@ -87,6 +88,30 @@ describe("FeedbackComposer", () => {
       attachmentIds: [],
       idempotencyKey: expect.any(String),
     });
+  });
+
+  it("offers no AI help when the instance has no AI provider", () => {
+    const view = renderComponent(
+      <PortalRuntimeProvider
+        value={{
+          ...runtime,
+          config: {
+            ...runtime.config,
+            features: { ...runtime.config.features, ai: false },
+          },
+        }}
+      >
+        <FeedbackComposer
+          workspaceId="workspace_test_1"
+          boards={[{ id: "board_test_1", name: "Ideas" }]}
+          autoFocus
+          onTitleChange={vi.fn()}
+        />
+      </PortalRuntimeProvider>,
+    );
+    expect(
+      view.queryByRole("button", { name: "Improve with AI" }),
+    ).not.toBeInTheDocument();
   });
 
   it("replaces the title, details and board with an accepted AI suggestion", async () => {

@@ -11726,13 +11726,18 @@
                         },
                         "showPublicEditHistory": {
                           "type": "boolean"
+                        },
+                        "ai": {
+                          "type": "boolean",
+                          "description": "The instance has an AI provider, so the portal can offer AI help and translation"
                         }
                       },
                       "required": [
                         "allowAnonymous",
                         "allowEditAfterEngagement",
                         "allowDeleteAfterEngagement",
-                        "showPublicEditHistory"
+                        "showPublicEditHistory",
+                        "ai"
                       ]
                     },
                     "portalAccess": {

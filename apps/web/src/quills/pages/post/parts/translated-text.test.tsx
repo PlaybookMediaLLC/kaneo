@@ -29,6 +29,22 @@ describe("TranslatedText", () => {
     expect(api.calls()).toHaveLength(0);
   });
 
+  it("offers no translation when the instance has no AI provider", () => {
+    browser("de-DE");
+    const api = mockApi();
+    const view = renderComponent(
+      <TranslatedText
+        translatable={false}
+        workspaceId="workspace_test_1"
+        viewer={{ kind: "anonymous" }}
+        target={{ postId: "post_test_1" }}
+        content="Please add dark mode."
+      />,
+    );
+    expect(view.queryByRole("button")).not.toBeInTheDocument();
+    expect(api.calls()).toHaveLength(0);
+  });
+
   it("translates on request and shows the original again", async () => {
     browser("de-DE");
     const api = mockApi();

@@ -242,6 +242,19 @@ describe.skipIf(!url)("Quills customer feedback", () => {
     expect(response.body.branding.theme.light.background).toBeUndefined();
     expect(response.body.branding.logoUrl).toMatch(/^http:/);
     expect(JSON.stringify(response.body)).not.toContain("customCss");
+    // The AI flag follows the instance provider setting. Only the AI variables are
+    // restored, because the S3 stubs of this file must stay.
+    const ai = {
+      base: process.env.QUILLS_AI_BASE_URL ?? "",
+      model: process.env.QUILLS_AI_MODEL ?? "",
+    };
+    vi.stubEnv("QUILLS_AI_BASE_URL", "");
+    expect((await call("GET", "/portal/config")).body.features.ai).toBe(false);
+    vi.stubEnv("QUILLS_AI_BASE_URL", "http://ai.example.test/v1");
+    vi.stubEnv("QUILLS_AI_MODEL", "test-model");
+    expect((await call("GET", "/portal/config")).body.features.ai).toBe(true);
+    vi.stubEnv("QUILLS_AI_BASE_URL", ai.base);
+    vi.stubEnv("QUILLS_AI_MODEL", ai.model);
     expect(JSON.stringify(response.body)).not.toContain("tracker.example.test");
   });
 
