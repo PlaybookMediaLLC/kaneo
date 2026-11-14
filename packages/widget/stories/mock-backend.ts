@@ -401,7 +401,7 @@ export function createMockBackend(
       if (!post) throw new Error("Request not found");
       const votes = visitor(id).votes;
       if (votes.has(postId) !== voted) {
-        post.votes += voted ? 1 : -1;
+        post.votes = (post.votes ?? 0) + (voted ? 1 : -1);
         if (voted) votes.add(postId);
         else votes.delete(postId);
       }
