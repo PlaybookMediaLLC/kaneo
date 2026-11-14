@@ -163,3 +163,36 @@ Rules of the public profile:
   (people, blocking, segments) and made the portal segment grant impossible.
 - `jobs/retention.ts`: deletes expired `kv_store` rows (widget sessions, install codes) and
   expired `rate_bucket` windows, 1,000 per statement and workspace.
+
+## AI help and translations (RFC 0003, lane L4)
+
+Boundary map:
+
+- Tables: `boards`, `board_projects`, `posts`, `post_comments` (read), `content_translations`
+  (the cache, RFC 0003 D10), `ai_usage_log` (one row for each provider call), `rate_bucket`.
+- Actor: the portal caller from `framework/audience.ts`. A teammate on these routes is a customer.
+- Authorization: `viewer.ts` (portal on, private-portal gate, board view tier). A hidden, held,
+  deleted, private or foreign post or comment is 404 with the same message as a missing one.
+- Transactions: `prepare` reads in one transaction. The provider call runs with no transaction.
+  The handler checks the caller and the visibility again, then writes the cache row and the usage
+  row in a second transaction. A failure after the provider call writes nothing.
+- Events: none. A suggestion and a cached translation change no domain data.
+- External effect: the AI provider (`assistant/provider.ts`). It is off without `QUILLS_AI_*` (409).
+  There is no workspace AI budget yet; the per-account rate limit bounds the calls.
+
+| operationId | Route | Audience | Action | Tables | Event | Tests |
+|---|---|---|---|---|---|---|
+| `improveQuillsPortalPostDraft` | `POST /portal/post-draft/improve` (title ≤ 200, details ≤ 4000, optional `boardId`; 10 per 10 min per account) | portal | create | `boards`, `ai_usage_log`, `rate_bucket` | none | contract, `feedback/ai.test.ts` |
+| `translateQuillsPortalContent` | `POST /portal/translations` (`postId` or `commentId`, `locale` as a BCP 47 tag; 60 per 10 min per account, or per client without a session) | portal, sign-in optional | read | `posts`, `post_comments`, `content_translations`, `ai_usage_log`, `rate_bucket` | none | contract, `translations.test.ts` |
+
+Rules:
+
+1. The composer route returns a suggestion only. The model gets the customer's text as data and
+   must not add facts. The answer is cut to 200 and 1,000 characters. The suggested board is a
+   board that takes the caller's posts; another value becomes the given board or null.
+2. The translation key is the post or comment, the locale in lower case and the SHA-256 of the
+   source title and text. An edit changes the hash, so an old translation is never served. A cached
+   translation needs no AI, so it is served when AI is off. Two requests that miss at the same time
+   store one row: the insert does nothing on a conflict with the unique key.
+3. `rateLimit.per: "caller"` (`framework/define-route.ts`) counts these routes per signed-in Kaneo
+   account in the workspace, after the session read. Without a session it counts per client IP.
