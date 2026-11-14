@@ -30,7 +30,7 @@ export function HelpSuggestions({ workspaceId, title }: HelpSuggestionsProps) {
   useEffect(() => {
     if (search.error?.kind === "notFound") setNoHelpCenter(true);
   }, [search.error]);
-  const articles = noHelpCenter ? [] : (search.data?.articles ?? []);
+  const articles = search.data?.articles ?? [];
   if (!articles.length) return null;
   return (
     <section aria-labelledby={headingId}>
@@ -41,7 +41,7 @@ export function HelpSuggestions({ workspaceId, title }: HelpSuggestionsProps) {
         {t("assist.articles")}
       </h2>
       <ul className="-mx-3">
-        {articles.slice(0, 3).map((article) => (
+        {articles.map((article) => (
           <li key={article.id}>
             <a
               className="flex items-center gap-4 rounded-xl px-3 py-2.5 transition-colors hover:bg-muted/60"

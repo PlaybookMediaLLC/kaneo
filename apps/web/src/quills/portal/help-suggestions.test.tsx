@@ -23,11 +23,11 @@ const show = (title: string) => (
 );
 
 describe("HelpSuggestions", () => {
-  it("lists up to three matching articles under a heading", async () => {
+  it("lists the matching articles under a heading", async () => {
     const api = mockApi();
     api.reply(
       searchPublicHelpCenterFixture.ok({
-        articles: [1, 2, 3, 4].map(article),
+        articles: [1, 2, 3].map(article),
       } as never),
     );
     const view = renderComponent(show("refund"));
