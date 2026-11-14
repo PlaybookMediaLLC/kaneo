@@ -34,6 +34,7 @@ import { Route as LayoutAuthenticatedProfileSetupRouteImport } from './routes/_l
 import { Route as InvitationAcceptInviteIdRouteImport } from './routes/invitation/accept.$inviteId'
 import { Route as PortalWorkspaceIdIndexRouteImport } from './routes/portal/$workspaceId/index'
 import { Route as PortalWorkspaceIdCsatRouteImport } from './routes/portal/$workspaceId/csat'
+import { Route as PortalWorkspaceIdMyFeedbackRouteImport } from './routes/portal/$workspaceId/my-feedback'
 import { Route as PortalWorkspaceIdPreferencesRouteImport } from './routes/portal/$workspaceId/preferences'
 import { Route as PortalWorkspaceIdProfileRouteImport } from './routes/portal/$workspaceId/profile'
 import { Route as PortalWorkspaceIdRoadmapRouteImport } from './routes/portal/$workspaceId/roadmap'
@@ -103,6 +104,7 @@ import { Route as LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectProject
 import { Route as LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectProjectIdBoardRouteImport } from './routes/_layout/_authenticated/dashboard/workspace/$workspaceId/project/$projectId/board'
 import { Route as LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectProjectIdCalendarRouteImport } from './routes/_layout/_authenticated/dashboard/workspace/$workspaceId/project/$projectId/calendar'
 import { Route as LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectProjectIdGanttRouteImport } from './routes/_layout/_authenticated/dashboard/workspace/$workspaceId/project/$projectId/gantt'
+import { Route as LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsChangelogIndexRouteImport } from './routes/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/changelog/index'
 import { Route as LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectProjectIdTaskTaskIdRouteImport } from './routes/_layout/_authenticated/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId_'
 
 const IndexRoute = IndexRouteImport.update({
@@ -233,6 +235,12 @@ const PortalWorkspaceIdCsatRoute = PortalWorkspaceIdCsatRouteImport.update({
   path: '/csat',
   getParentRoute: () => PortalWorkspaceIdRoute,
 } as any)
+const PortalWorkspaceIdMyFeedbackRoute =
+  PortalWorkspaceIdMyFeedbackRouteImport.update({
+    id: '/my-feedback',
+    path: '/my-feedback',
+    getParentRoute: () => PortalWorkspaceIdRoute,
+  } as any)
 const PortalWorkspaceIdPreferencesRoute =
   PortalWorkspaceIdPreferencesRouteImport.update({
     id: '/preferences',
@@ -681,6 +689,15 @@ const LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectProjectIdGanttRoute
         LayoutAuthenticatedDashboardWorkspaceWorkspaceIdRoute,
     } as any,
   )
+const LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsChangelogIndexRoute =
+  LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsChangelogIndexRouteImport.update(
+    {
+      id: '/changelog/',
+      path: '/changelog/',
+      getParentRoute: () =>
+        LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsRouteRoute,
+    } as any,
+  )
 const LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectProjectIdTaskTaskIdRoute =
   LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectProjectIdTaskTaskIdRouteImport.update(
     {
@@ -714,6 +731,7 @@ export interface FileRoutesByFullPath {
   '/profile-setup': typeof LayoutAuthenticatedProfileSetupRoute
   '/invitation/accept/$inviteId': typeof InvitationAcceptInviteIdRoute
   '/portal/$workspaceId/csat': typeof PortalWorkspaceIdCsatRoute
+  '/portal/$workspaceId/my-feedback': typeof PortalWorkspaceIdMyFeedbackRoute
   '/portal/$workspaceId/preferences': typeof PortalWorkspaceIdPreferencesRoute
   '/portal/$workspaceId/profile': typeof PortalWorkspaceIdProfileRoute
   '/portal/$workspaceId/roadmap': typeof PortalWorkspaceIdRoadmapRoute
@@ -784,6 +802,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/workspace/$workspaceId/project/$projectId/calendar': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectProjectIdCalendarRoute
   '/dashboard/workspace/$workspaceId/project/$projectId/gantt': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectProjectIdGanttRoute
   '/dashboard/workspace/$workspaceId/project/$projectId/': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectProjectIdIndexRoute
+  '/dashboard/workspace/$workspaceId/quills/changelog/': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsChangelogIndexRoute
   '/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectProjectIdTaskTaskIdRoute
 }
 export interface FileRoutesByTo {
@@ -806,6 +825,7 @@ export interface FileRoutesByTo {
   '/profile-setup': typeof LayoutAuthenticatedProfileSetupRoute
   '/invitation/accept/$inviteId': typeof InvitationAcceptInviteIdRoute
   '/portal/$workspaceId/csat': typeof PortalWorkspaceIdCsatRoute
+  '/portal/$workspaceId/my-feedback': typeof PortalWorkspaceIdMyFeedbackRoute
   '/portal/$workspaceId/preferences': typeof PortalWorkspaceIdPreferencesRoute
   '/portal/$workspaceId/profile': typeof PortalWorkspaceIdProfileRoute
   '/portal/$workspaceId/roadmap': typeof PortalWorkspaceIdRoadmapRoute
@@ -873,6 +893,7 @@ export interface FileRoutesByTo {
   '/dashboard/workspace/$workspaceId/project/$projectId/calendar': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectProjectIdCalendarRoute
   '/dashboard/workspace/$workspaceId/project/$projectId/gantt': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectProjectIdGanttRoute
   '/dashboard/workspace/$workspaceId/project/$projectId': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectProjectIdIndexRoute
+  '/dashboard/workspace/$workspaceId/quills/changelog': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsChangelogIndexRoute
   '/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectProjectIdTaskTaskIdRoute
 }
 export interface FileRoutesById {
@@ -901,6 +922,7 @@ export interface FileRoutesById {
   '/_layout/_authenticated/profile-setup': typeof LayoutAuthenticatedProfileSetupRoute
   '/invitation/accept/$inviteId': typeof InvitationAcceptInviteIdRoute
   '/portal/$workspaceId/csat': typeof PortalWorkspaceIdCsatRoute
+  '/portal/$workspaceId/my-feedback': typeof PortalWorkspaceIdMyFeedbackRoute
   '/portal/$workspaceId/preferences': typeof PortalWorkspaceIdPreferencesRoute
   '/portal/$workspaceId/profile': typeof PortalWorkspaceIdProfileRoute
   '/portal/$workspaceId/roadmap': typeof PortalWorkspaceIdRoadmapRoute
@@ -971,6 +993,7 @@ export interface FileRoutesById {
   '/_layout/_authenticated/dashboard/workspace/$workspaceId/project/$projectId/calendar': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectProjectIdCalendarRoute
   '/_layout/_authenticated/dashboard/workspace/$workspaceId/project/$projectId/gantt': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectProjectIdGanttRoute
   '/_layout/_authenticated/dashboard/workspace/$workspaceId/project/$projectId/': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectProjectIdIndexRoute
+  '/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/changelog/': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsChangelogIndexRoute
   '/_layout/_authenticated/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId_': typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectProjectIdTaskTaskIdRoute
 }
 export interface FileRouteTypes {
@@ -998,6 +1021,7 @@ export interface FileRouteTypes {
     | '/profile-setup'
     | '/invitation/accept/$inviteId'
     | '/portal/$workspaceId/csat'
+    | '/portal/$workspaceId/my-feedback'
     | '/portal/$workspaceId/preferences'
     | '/portal/$workspaceId/profile'
     | '/portal/$workspaceId/roadmap'
@@ -1068,6 +1092,7 @@ export interface FileRouteTypes {
     | '/dashboard/workspace/$workspaceId/project/$projectId/calendar'
     | '/dashboard/workspace/$workspaceId/project/$projectId/gantt'
     | '/dashboard/workspace/$workspaceId/project/$projectId/'
+    | '/dashboard/workspace/$workspaceId/quills/changelog/'
     | '/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -1090,6 +1115,7 @@ export interface FileRouteTypes {
     | '/profile-setup'
     | '/invitation/accept/$inviteId'
     | '/portal/$workspaceId/csat'
+    | '/portal/$workspaceId/my-feedback'
     | '/portal/$workspaceId/preferences'
     | '/portal/$workspaceId/profile'
     | '/portal/$workspaceId/roadmap'
@@ -1157,6 +1183,7 @@ export interface FileRouteTypes {
     | '/dashboard/workspace/$workspaceId/project/$projectId/calendar'
     | '/dashboard/workspace/$workspaceId/project/$projectId/gantt'
     | '/dashboard/workspace/$workspaceId/project/$projectId'
+    | '/dashboard/workspace/$workspaceId/quills/changelog'
     | '/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId'
   id:
     | '__root__'
@@ -1184,6 +1211,7 @@ export interface FileRouteTypes {
     | '/_layout/_authenticated/profile-setup'
     | '/invitation/accept/$inviteId'
     | '/portal/$workspaceId/csat'
+    | '/portal/$workspaceId/my-feedback'
     | '/portal/$workspaceId/preferences'
     | '/portal/$workspaceId/profile'
     | '/portal/$workspaceId/roadmap'
@@ -1254,6 +1282,7 @@ export interface FileRouteTypes {
     | '/_layout/_authenticated/dashboard/workspace/$workspaceId/project/$projectId/calendar'
     | '/_layout/_authenticated/dashboard/workspace/$workspaceId/project/$projectId/gantt'
     | '/_layout/_authenticated/dashboard/workspace/$workspaceId/project/$projectId/'
+    | '/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/changelog/'
     | '/_layout/_authenticated/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId_'
   fileRoutesById: FileRoutesById
 }
@@ -1446,6 +1475,13 @@ declare module '@tanstack/react-router' {
       path: '/csat'
       fullPath: '/portal/$workspaceId/csat'
       preLoaderRoute: typeof PortalWorkspaceIdCsatRouteImport
+      parentRoute: typeof PortalWorkspaceIdRoute
+    }
+    '/portal/$workspaceId/my-feedback': {
+      id: '/portal/$workspaceId/my-feedback'
+      path: '/my-feedback'
+      fullPath: '/portal/$workspaceId/my-feedback'
+      preLoaderRoute: typeof PortalWorkspaceIdMyFeedbackRouteImport
       parentRoute: typeof PortalWorkspaceIdRoute
     }
     '/portal/$workspaceId/preferences': {
@@ -1931,6 +1967,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdProjectProjectIdGanttRouteImport
       parentRoute: typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdRoute
     }
+    '/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/changelog/': {
+      id: '/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/changelog/'
+      path: '/changelog'
+      fullPath: '/dashboard/workspace/$workspaceId/quills/changelog/'
+      preLoaderRoute: typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsChangelogIndexRouteImport
+      parentRoute: typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsRouteRoute
+    }
     '/_layout/_authenticated/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId_': {
       id: '/_layout/_authenticated/dashboard/workspace/$workspaceId/project/$projectId/task/$taskId_'
       path: '/project/$projectId/task/$taskId'
@@ -2090,12 +2133,15 @@ const LayoutAuthenticatedDashboardSettingsRouteWithChildren =
 
 interface LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsRouteRouteChildren {
   LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsIndexRoute: typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsIndexRoute
+  LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsChangelogIndexRoute: typeof LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsChangelogIndexRoute
 }
 
 const LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsRouteRouteChildren: LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsRouteRouteChildren =
   {
     LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsIndexRoute:
       LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsIndexRoute,
+    LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsChangelogIndexRoute:
+      LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsChangelogIndexRoute,
   }
 
 const LayoutAuthenticatedDashboardWorkspaceWorkspaceIdQuillsRouteRouteWithChildren =
@@ -2248,6 +2294,7 @@ const DeviceRouteWithChildren =
 
 interface PortalWorkspaceIdRouteChildren {
   PortalWorkspaceIdCsatRoute: typeof PortalWorkspaceIdCsatRoute
+  PortalWorkspaceIdMyFeedbackRoute: typeof PortalWorkspaceIdMyFeedbackRoute
   PortalWorkspaceIdPreferencesRoute: typeof PortalWorkspaceIdPreferencesRoute
   PortalWorkspaceIdProfileRoute: typeof PortalWorkspaceIdProfileRoute
   PortalWorkspaceIdRoadmapRoute: typeof PortalWorkspaceIdRoadmapRoute
@@ -2273,6 +2320,7 @@ interface PortalWorkspaceIdRouteChildren {
 
 const PortalWorkspaceIdRouteChildren: PortalWorkspaceIdRouteChildren = {
   PortalWorkspaceIdCsatRoute: PortalWorkspaceIdCsatRoute,
+  PortalWorkspaceIdMyFeedbackRoute: PortalWorkspaceIdMyFeedbackRoute,
   PortalWorkspaceIdPreferencesRoute: PortalWorkspaceIdPreferencesRoute,
   PortalWorkspaceIdProfileRoute: PortalWorkspaceIdProfileRoute,
   PortalWorkspaceIdRoadmapRoute: PortalWorkspaceIdRoadmapRoute,
