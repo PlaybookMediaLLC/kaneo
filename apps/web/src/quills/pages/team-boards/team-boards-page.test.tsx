@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { fireEvent, waitFor } from "@testing-library/react";
-import { fill, press } from "../../test/actions";
+import { choose, press } from "../../test/actions";
 import { renderPage } from "../../test/render";
 import { getBoardSettingsFixture } from "../../api/team/get-board-settings.fixture";
 import { listStatusesFixture } from "../../api/team/list-statuses.fixture";
@@ -94,7 +94,7 @@ describe("TeamBoardsPage", () => {
       },
       act: async (view) => {
         await view.findByLabelText("Vote counts");
-        fill("Vote counts", "hidden");
+        await choose("Vote counts", "Hide counts");
         press("Save voting settings");
       },
       assert: async () => {
@@ -117,7 +117,9 @@ describe("TeamBoardsPage", () => {
       }),
     );
     const view = renderPage(TeamBoardsPage, meta);
-    expect(await view.findByLabelText("Board")).toHaveValue(board.id);
+    expect(
+      await view.findByRole("combobox", { name: "Board" }),
+    ).toHaveTextContent("Ideas");
     fireEvent.click(await view.findByRole("checkbox", { name: "Enterprise" }));
     press("Save visibility");
     await waitFor(() => expect(api.calls("updateQuillsBoard")).toHaveLength(1));
@@ -131,8 +133,9 @@ describe("TeamBoardsPage", () => {
     api.reply(updateBoardSettingsFixture.ok({ boardId: board.id }));
     api.reply(getBoardSettingsFixture.ok({ boardId: board.id }));
     const view = renderPage(TeamBoardsPage, meta);
-    await view.findByRole("option", { name: "Complete" });
-    fill("When a linked task is done, set the status to", complete.id);
+    const sync = "When a linked task is done, set the status to";
+    await view.findByRole("combobox", { name: sync });
+    await choose(sync, "Complete");
     press("Save task sync");
     await waitFor(() =>
       expect(api.calls("updateQuillsBoardSettings")).toHaveLength(1),

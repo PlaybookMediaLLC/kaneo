@@ -15,7 +15,8 @@ describe("BoardVotingForm", () => {
     fieldName: "Vote counts",
     issuePath: "voteDisplay",
     submitName: "Save voting settings",
-    validValue: "hidden",
+    select: true,
+    validValue: "Hide counts",
     expectedValues: { voteDisplay: "hidden", defaultSort: null },
   });
 });
