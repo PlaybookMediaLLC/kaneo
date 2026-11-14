@@ -85,3 +85,6 @@ export { default as useWorkspaceArchived } from "@/hooks/queries/workspace/use-w
 export { shortcutRegistry } from "@/lib/shortcuts/registry";
 export { parseBinding } from "@/lib/shortcuts/key-combo";
 export { ShortcutListener } from "@/lib/shortcuts/shortcut-listener";
+
+// RFC 0004 lane P: the title and project of a task that a post links to.
+export { default as useGetTask } from "@/hooks/queries/task/use-get-task";

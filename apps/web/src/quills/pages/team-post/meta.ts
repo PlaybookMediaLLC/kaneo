@@ -1,0 +1,35 @@
+import type { PageMeta } from "../../core/types";
+export const meta = {
+  id: "team-post",
+  feature: "team-post",
+  route: "/feedback/$workspaceId/posts/$postId",
+  audience: "teammate",
+  mailLinked: false,
+  token: "none",
+  // The request order: the page queries (the posts wait for the statuses), then the
+  // properties panel from top to bottom. listQuillsUsers waits for a typed search.
+  operations: [
+    "getQuillsPost",
+    "listQuillsPostComments",
+    "listQuillsStatuses",
+    "listQuillsBoards",
+    "listQuillsPosts",
+    "listQuillsTags",
+    "listQuillsPostVoters",
+    "getQuillsPostDemand",
+    "listQuillsLinks",
+    "getQuillsLinkedConversationsForPost",
+    "listQuillsMergedPosts",
+    "listQuillsUsers",
+    "createQuillsComment",
+    "setQuillsPostStatus",
+    "setQuillsPostBoard",
+    "setQuillsPostTags",
+    "addQuillsPostProxyVote",
+    "removeQuillsPostVote",
+    "setQuillsPostScore",
+    "mergeQuillsPost",
+    "unmergeQuillsPost",
+  ],
+  states: ["loading", "failed", "ready", "done"],
+} satisfies PageMeta;

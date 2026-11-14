@@ -52,6 +52,7 @@ export const teamSections: readonly TeamNavSection[] = [
     icon: Lightbulb,
     items: [
       { path: "", labelKey: "team.nav.home" },
+      { path: "/posts", labelKey: "team-posts.nav" },
       { path: "/triage", labelKey: "team-triage.nav" },
       {
         path: "/duplicates",
