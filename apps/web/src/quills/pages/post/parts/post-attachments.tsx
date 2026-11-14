@@ -14,7 +14,8 @@ import {
 export interface PostAttachmentsProps {
   workspaceId: string;
   viewer: Viewer;
-  attachments: Array<{
+  /** Missing when the API predates attachments. */
+  attachments?: Array<{
     id: string;
     name: string;
     contentType: string;
@@ -32,7 +33,7 @@ export function PostAttachments({
     { param: { workspace: workspaceId, fileId: selected ?? "" } },
     viewer,
   );
-  if (!attachments.length) return null;
+  if (!attachments?.length) return null;
   return (
     <div className="flex flex-col gap-3">
       <p className="text-sm font-medium">{t("feedback.attachments")}</p>

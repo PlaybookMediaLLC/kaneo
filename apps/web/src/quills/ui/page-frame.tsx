@@ -10,6 +10,16 @@ export interface PageFrameProps {
   token?: "none" | "query" | "fragment";
   tokenScope?: string;
   persistToken?: boolean;
+  /** A rail beside the title and content, such as board or help navigation. */
+  aside?: ReactNode;
+  /** Context above the title, such as a breadcrumb. */
+  eyebrow?: ReactNode;
+  /** A short line under the title. */
+  description?: ReactNode;
+  /** Controls at the end of the title row. */
+  actions?: ReactNode;
+  /** Use the full portal width for boards, lists and grids. */
+  wide?: boolean;
 }
 
 export function PageFrame({
@@ -19,6 +29,11 @@ export function PageFrame({
   token = "none",
   tokenScope,
   persistToken = false,
+  aside,
+  eyebrow,
+  description,
+  actions,
+  wide = false,
 }: PageFrameProps) {
   const { t } = useTranslation("quills");
   const heading = useRef<HTMLHeadingElement>(null);
@@ -38,42 +53,55 @@ export function PageFrame({
     if (value) stashToken(tokenScope, value, persistToken);
   }, [persistToken, token, tokenScope]);
 
+  const header = (
+    <div className="portal-page-header mb-8 flex flex-wrap items-end justify-between gap-x-6 gap-y-4 md:col-start-2">
+      <div className="min-w-0">
+        {eyebrow}
+        <h1
+          ref={heading}
+          tabIndex={-1}
+          className="portal-page-title text-3xl font-semibold leading-tight tracking-tight outline-none md:text-4xl"
+        >
+          {title}
+        </h1>
+        {description ? (
+          <p className="mt-3 text-muted-foreground">{description}</p>
+        ) : null}
+      </div>
+      {actions ? (
+        <div className="flex items-center gap-2">{actions}</div>
+      ) : null}
+    </div>
+  );
+  const content = (
+    <div className="portal-page-content min-w-0 md:col-start-2 [&>*+*]:mt-6">
+      {children}
+    </div>
+  );
+
   return (
     <main
       className={cn(
-        "portal-page mx-auto w-full flex-1 px-5 pb-16 pt-8 md:px-8 md:pt-12 [&_h2]:tracking-tight [&_h3]:font-semibold [&_time]:text-xs [&_time]:text-muted-foreground",
-        [
-          "feedback.title",
-          "feedback.roadmapTitle",
-          "help-center.title",
-          "help-center.categoryTitle",
-          "help-center.articleTitle",
-          "changelog.title",
-        ].includes(titleKey)
-          ? "max-w-6xl"
-          : "max-w-3xl",
+        "portal-page mx-auto w-full flex-1 px-5 pb-16 pt-8 md:pt-12 [&_h2]:tracking-tight [&_h3]:font-semibold [&_time]:text-xs [&_time]:text-muted-foreground",
+        wide || aside ? "max-w-5xl" : "max-w-3xl",
       )}
       data-page={titleKey}
     >
       {token !== "none" ? <meta name="referrer" content="no-referrer" /> : null}
-      <h1
-        ref={heading}
-        tabIndex={-1}
-        className={cn(
-          "portal-page-title mb-8 text-3xl font-semibold leading-tight tracking-tight outline-none md:text-4xl",
-          titleKey === "feedback.title" ? "md:ml-[228px]" : "",
-          [
-            "help-center.title",
-            "help-center.categoryTitle",
-            "help-center.articleTitle",
-          ].includes(titleKey)
-            ? "md:ml-[252px]"
-            : "",
-        )}
-      >
-        {title}
-      </h1>
-      <div className="portal-page-content min-w-0 [&>*+*]:mt-6">{children}</div>
+      {aside ? (
+        <div className="grid items-start gap-x-16 md:grid-cols-[13rem_minmax(0,1fr)] md:grid-rows-[auto_1fr]">
+          {header}
+          <div className="mb-8 min-w-0 md:col-start-1 md:row-span-2 md:row-start-1 md:mb-0 md:self-stretch">
+            {aside}
+          </div>
+          {content}
+        </div>
+      ) : (
+        <>
+          {header}
+          {content}
+        </>
+      )}
     </main>
   );
 }

@@ -1,5 +1,8 @@
+import { AttachmentPicker } from "../ui/attachment-picker";
+import { BoardSelect } from "../ui/post/board-select";
+import { CommentReactions } from "../ui/post/comment-reactions";
+import { ComposerDetails } from "../ui/post/composer-details";
 import { FeedbackEditor } from "../ui/feedback-editor";
-import { HelpNavigation } from "../ui/help-navigation";
 import { BoardNavigation } from "../ui/board-navigation";
 import { PortalSheetContent } from "../ui/portal-sheet-content";
 import { PortalSelectContent } from "../ui/portal-select-content";
@@ -8,10 +11,20 @@ import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import { portalHref } from "../core/portal-href";
 import type { PortalProblemKind } from "../core/types";
-import { PostFilters } from "../ui/post/post-filters";
+import { PostSort } from "../ui/post/post-sort";
+import { PostComposer } from "../ui/post/post-composer";
+import { SimilarPosts } from "../ui/post/similar-posts";
+import { StatusIcon } from "../ui/post/status-icon";
+import { ArrowUpIcon } from "../ui/arrow-up-icon";
+import { PersonAvatar } from "../ui/person-avatar";
+import { ShareActions } from "../ui/share-actions";
+import { PortalDialogContent } from "../ui/portal-dialog-content";
+import { ChangelogEntry } from "../ui/changelog-entry";
+import { HelpBreadcrumb } from "../ui/help-breadcrumb";
+import { HelpCenterHome } from "../ui/help-center-home";
 import { PostList } from "../ui/post/post-list";
-import { PostDetail } from "../ui/post/post-detail";
-import { PostComments } from "../ui/post/post-comments";
+import { PostSidebar } from "../ui/post/post-sidebar";
+import { PostComment } from "../ui/post/post-comment";
 import { PostVoteButton } from "../ui/post/post-vote-button";
 import { ConversationDetail } from "../ui/conversation/conversation-detail";
 import { ConversationMessages } from "../ui/conversation/conversation-messages";
@@ -26,6 +39,9 @@ import { PortalShell } from "../ui/portal-shell";
 import { ResultCard } from "../ui/result-card";
 import { StateView } from "../ui/state-view";
 import {
+  Dialog,
+  DialogTitle,
+  DialogTrigger,
   Sheet,
   SheetTrigger,
   SheetHeader,
@@ -244,6 +260,28 @@ export function KitGallery() {
               {t("core.gallery.pending")}
             </Label>
             <MarkdownContent content={t("core.gallery.markdown")} />
+            <BoardNavigation
+              boards={
+                empty ? [] : [{ id: "board_test_1", name: demo, postCount: 3 }]
+              }
+              workspaceId="gallery"
+              stages={[{ value: "planned", label: demo, color: null }]}
+              stage={pending ? "planned" : ""}
+              onStageChange={() => setPending(!pending)}
+            />
+            <BoardSelect
+              name="gallery-board"
+              boards={[{ id: "board_test_1", name: demo }]}
+              value={empty ? undefined : "board_test_1"}
+              onChange={() => {}}
+            />
+            <AttachmentPicker
+              attachments={empty ? [] : [{ id: "file_1", name: demo }]}
+              files={[]}
+              onFilesChange={() => {}}
+              onRemove={() => {}}
+              onRemoveFile={() => {}}
+            />
             <FeedbackEditor
               id="gallery-editor"
               value={demo}
@@ -255,8 +293,6 @@ export function KitGallery() {
               onRemove={() => {}}
               onRemoveFile={() => {}}
             />
-            <HelpNavigation workspaceId="gallery" categories={[]} />
-            <BoardNavigation boards={[]} workspaceId="gallery" />
             <Sheet>
               <SheetTrigger render={<Button />}>{demo}</SheetTrigger>
               <PortalSheetContent>
@@ -266,14 +302,96 @@ export function KitGallery() {
                 <SheetPanel>{demo}</SheetPanel>
               </PortalSheetContent>
             </Sheet>
-            <PostFilters
-              search=""
-              stage=""
-              sort="newest"
-              stages={[]}
-              onSearchChange={() => {}}
-              onStageChange={() => {}}
-              onSortChange={() => {}}
+            <Dialog>
+              <DialogTrigger render={<Button variant="outline" />}>
+                {demo}
+              </DialogTrigger>
+              <PortalDialogContent>
+                <DialogTitle>{demo}</DialogTitle>
+              </PortalDialogContent>
+            </Dialog>
+            <PostSort sort="votes" onSortChange={() => {}} />
+            <PostComposer
+              workspaceName={demo}
+              boards={[{ id: "board_test_1", name: demo }]}
+              signInHref={pending ? portalHref("gallery") : undefined}
+              onTitleChange={() => {}}
+              onSubmit={async () => setConfirmed(true)}
+            />
+            <SimilarPosts
+              workspaceId="gallery"
+              posts={
+                empty
+                  ? []
+                  : [
+                      {
+                        id: "post_test_1",
+                        title: demo,
+                        voteCount: 3,
+                        stage: "planned",
+                      },
+                    ]
+              }
+            />
+            <p className="flex items-center gap-3">
+              {["open", "planned", "in_progress", "shipped", null].map(
+                (stage) => (
+                  <StatusIcon key={String(stage)} stage={stage} />
+                ),
+              )}
+              <ArrowUpIcon />
+              <PersonAvatar name={empty ? null : demo} />
+            </p>
+            <ShareActions />
+            <ShareActions compact />
+            <HelpBreadcrumb
+              items={[{ label: demo, href: portalHref("gallery", "hc") }]}
+            />
+            <HelpCenterHome
+              workspaceId="gallery"
+              locales={["en", "fr"]}
+              categories={
+                empty
+                  ? []
+                  : [
+                      {
+                        id: "kb_category_test_1",
+                        name: demo,
+                        description: pending ? demo : null,
+                        icon: null,
+                        articleCount: 3,
+                        path: "hc",
+                        parentId: null,
+                      },
+                    ]
+              }
+              popular={[{ id: "article_test_1", title: demo, path: "hc" }]}
+              searchQuery=""
+            />
+            <ChangelogEntry
+              workspaceId="gallery"
+              entry={{
+                id: "changelog_test_1",
+                title: demo,
+                content: t("core.gallery.markdown"),
+                publishedAt: "2026-01-01T00:00:00.000Z",
+                author: empty ? null : { name: demo, avatarUrl: null },
+                categories: empty
+                  ? []
+                  : [{ id: "category_test_1", name: demo }],
+                linkedPosts: empty
+                  ? []
+                  : [
+                      {
+                        id: "post_test_1",
+                        title: demo,
+                        voteCount: 3,
+                        stage: "shipped",
+                      },
+                    ],
+                requesterCount: empty ? 0 : 3,
+              }}
+              linkTitle={!pending}
             />
             <PostList
               posts={[]}
@@ -284,51 +402,49 @@ export function KitGallery() {
               onLoadMore={() => {}}
               onVote={async () => {}}
             />
-            <PostDetail
-              post={{
-                title: demo,
-                content: demo,
-                author: { name: empty ? null : demo },
-                board: { name: demo },
-                status: empty ? null : { name: demo },
-                pending,
-                mergedInto: pending ? { title: demo } : null,
-              }}
-            />
-            <PostComments
-              comments={
-                empty
-                  ? []
-                  : [
-                      {
-                        id: "comment_test_1",
-                        content: demo,
-                        author: { name: demo },
-                        createdAt: "2026-01-01T00:00:00.000Z",
-                        deleted: false,
-                        isAuthor: true,
-                        canEdit: !pending,
-                        canDelete: !pending,
-                        pending,
-                        updatedAt: pending ? "2026-01-02T00:00:00.000Z" : null,
-                      },
-                      {
-                        id: "comment_test_2",
-                        content: demo,
-                        author: { name: null },
-                        createdAt: "2026-01-01T00:00:00.000Z",
-                        deleted: true,
-                        isAuthor: false,
-                        canEdit: false,
-                        canDelete: false,
-                        pending: false,
-                        updatedAt: null,
-                      },
-                    ]
-              }
+            <PostSidebar
+              author={{ name: empty ? null : demo, avatarUrl: null }}
+              createdAt="2026-01-01T00:00:00.000Z"
+              status={empty ? null : { name: demo, color: "currentColor" }}
+              stage={empty ? null : "planned"}
+              board={{ name: demo, href: portalHref("gallery") }}
+              following={pending}
+              signInHref={empty ? portalHref("gallery") : undefined}
+              onFollowChange={async (next) => setPending(next)}
               onEdit={() => setConfirmed(true)}
               onDelete={() => setEmpty(true)}
             />
+            <ComposerDetails defaultValue={empty ? "" : demo} />
+            <div className="flex items-center gap-3">
+              <CommentReactions
+                reactions={
+                  empty ? [] : [{ emoji: "🚀", count: 1, reacted: voted }]
+                }
+                onReact={async (_emoji, reacted) => setVoted(reacted)}
+              />
+            </div>
+            <ul>
+              <PostComment
+                comment={{
+                  id: "comment_test_1",
+                  parentId: null,
+                  content: demo,
+                  author: { name: demo, avatarUrl: null, isTeamMember: true },
+                  createdAt: "2026-01-01T00:00:00.000Z",
+                  updatedAt: pending ? "2026-01-02T00:00:00.000Z" : null,
+                  deleted: empty,
+                  isAuthor: true,
+                  canEdit: !pending,
+                  canDelete: !pending,
+                  pending,
+                  reactions: [{ emoji: "❤️", count: 2, reacted: voted }],
+                }}
+                onEdit={() => setConfirmed(true)}
+                onDelete={() => setEmpty(true)}
+                onReact={async (_id, _emoji, liked) => setVoted(liked)}
+                replyForm={() => <p>{demo}</p>}
+              />
+            </ul>
             <PostVoteButton
               voted={voted}
               voteCount={voted ? 1 : 0}

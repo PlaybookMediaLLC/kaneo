@@ -1,3 +1,7 @@
+import {
+  IconChevronLeftOutline18,
+  IconChevronRightOutline18,
+} from "nucleo-ui-essential-outline-18";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button, useDebouncedValue } from "../../../ui/upstream";
@@ -12,6 +16,13 @@ export interface RoadmapBoardProps {
   roadmap: ListPortalRoadmapsResponse["roadmaps"][number];
   search: string;
   sort: "votes" | "newest" | "oldest";
+  /** Workspace statuses by ID, for the column icons and descriptions. */
+  statuses?: ReadonlyMap<
+    string,
+    { stage: string | null; color: string | null }
+  >;
+  votedIds?: ReadonlySet<string>;
+  canVote?: (boardId: string) => boolean;
 }
 export function RoadmapBoard(props: RoadmapBoardProps) {
   const { workspaceId, viewer, roadmap, sort } = props;
@@ -59,24 +70,28 @@ export function RoadmapBoard(props: RoadmapBoardProps) {
     >
       <div className="flex flex-col gap-4">
         {roadmap.type === "date" && columns.length > 3 ? (
-          <div className="flex justify-between gap-2">
+          <div className="flex justify-end gap-1">
             <Button
-              variant="outline"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t("feedback.previousPeriods")}
               disabled={start === 0}
               onClick={() => setOffset(start - 3)}
             >
-              {t("feedback.previousPeriods")}
+              <IconChevronLeftOutline18 aria-hidden="true" />
             </Button>
             <Button
-              variant="outline"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t("feedback.nextPeriods")}
               disabled={start + 3 >= columns.length}
               onClick={() => setOffset(start + 3)}
             >
-              {t("feedback.nextPeriods")}
+              <IconChevronRightOutline18 aria-hidden="true" />
             </Button>
           </div>
         ) : null}
-        <div className="grid items-start gap-5 lg:grid-cols-3">
+        <div className="portal-roadmap grid items-start gap-6 md:grid-cols-3 md:gap-4">
           {visibleColumns.map((column) => (
             <RoadmapColumn
               key={`${column.id}:${search}:${sort}`}
@@ -88,6 +103,13 @@ export function RoadmapBoard(props: RoadmapBoardProps) {
               bucketId={column.bucketId}
               search={search}
               sort={sort}
+              status={
+                column.statusId
+                  ? props.statuses?.get(column.statusId)
+                  : undefined
+              }
+              votedIds={props.votedIds}
+              canVote={props.canVote}
             />
           ))}
         </div>

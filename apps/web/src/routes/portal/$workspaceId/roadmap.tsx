@@ -9,9 +9,8 @@ const searchSchema = z.object({
 });
 export const Route = createFileRoute("/portal/$workspaceId/roadmap")({
   validateSearch: searchSchema,
-  beforeLoad: async ({ context, params, search }) => {
-    void search;
-    if (!context.quillsPortal.accessGranted) return;
+  beforeLoad: async ({ context, params, cause }) => {
+    if (!context.quillsPortal.accessGranted || cause === "stay") return;
     await context.queryClient.prefetchQuery(
       listPortalRoadmapsQuery(
         { param: { workspace: params.workspaceId } },

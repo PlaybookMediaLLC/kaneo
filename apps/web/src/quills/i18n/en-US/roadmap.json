@@ -1,0 +1,10 @@
+{
+	"description": "What we’re planning, building and have shipped.",
+	"empty": "Nothing here yet.",
+	"in_progress": "Actively being built",
+	"planned": "Committed and queued",
+	"roadmaps": "Roadmaps",
+	"shipped": "Recently shipped",
+	"suggest": "Suggest a feature",
+	"title": "Roadmap"
+}

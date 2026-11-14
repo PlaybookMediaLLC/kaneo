@@ -12,6 +12,8 @@ export function isFramed(): boolean {
 
 export interface ConfirmActionProps {
   labelKey: string;
+  /** Values for the label, such as the emoji of a reaction. */
+  labelValues?: Record<string, string | number>;
   children?: ReactNode;
   onConfirm: () => Promise<void>;
   disabled?: boolean;
@@ -19,10 +21,12 @@ export interface ConfirmActionProps {
   checked?: boolean;
   "aria-checked"?: boolean;
   pressed?: boolean;
+  className?: string;
 }
 
 export function ConfirmAction({
   labelKey,
+  labelValues,
   children,
   onConfirm,
   disabled,
@@ -30,6 +34,7 @@ export function ConfirmAction({
   checked,
   "aria-checked": ariaChecked,
   pressed,
+  className,
 }: ConfirmActionProps) {
   const id = useId();
   const { t } = useTranslation("quills");
@@ -79,8 +84,9 @@ export function ConfirmAction({
                 ? "secondary"
                 : "outline"
           }
-          aria-label={children ? t(labelKey) : undefined}
+          aria-label={children ? t(labelKey, labelValues) : undefined}
           aria-pressed={pressed}
+          className={className}
           disabled={disabled || pending}
           loading={pending}
           onClick={() => void confirm()}

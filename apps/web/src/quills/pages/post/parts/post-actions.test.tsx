@@ -1,26 +1,39 @@
-import { describe, expect, it } from "vite-plus/test";
-import { getPortalPostFixture } from "../../../api/feedback/get-portal-post.fixture";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { renderComponent } from "../../../test/render";
 import { PostActions } from "./post-actions";
 
+const props = {
+  post: {
+    title: "Export history",
+    content: "Please add exports",
+    attachments: [],
+  },
+  postId: "post_test_1",
+  workspaceId: "workspace_test_1",
+  viewer: { kind: "user" as const, id: "account_test_1" },
+  onEditOpenChange: vi.fn(),
+  onDeleteOpenChange: vi.fn(),
+};
+
 describe("PostActions", () => {
-  it("shows only server-approved post actions", () => {
+  it("opens the edit sheet with the current post", async () => {
     const view = renderComponent(
-      <PostActions
-        post={getPortalPostFixture.ok({
-          canEdit: true,
-          canDelete: false,
-          canComment: false,
-        })}
-        comments={[]}
-        postId="post_test_1"
-        workspaceId="workspace_test_1"
-        viewer={{ kind: "user", id: "account_test_1" }}
-      />,
+      <PostActions {...props} editOpen deleteOpen={false} />,
     );
-    expect(view.getByRole("button", { name: "Edit post" })).toBeInTheDocument();
     expect(
-      view.queryByRole("button", { name: "Delete post" }),
-    ).not.toBeInTheDocument();
+      await view.findByRole("dialog", { name: "Edit post" }),
+    ).toBeInTheDocument();
+    expect(view.getByDisplayValue("Export history")).toBeInTheDocument();
+  });
+
+  it("asks to confirm a delete", async () => {
+    const view = renderComponent(
+      <PostActions {...props} editOpen={false} deleteOpen />,
+    );
+    expect(
+      await view.findByRole("button", {
+        name: "Delete this post permanently?",
+      }),
+    ).toBeInTheDocument();
   });
 });

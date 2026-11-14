@@ -1,24 +1,23 @@
-import { PortalSheetContent } from "../../ui/portal-sheet-content";
-import { useState } from "react";
-import { useTranslation } from "react-i18next";
+import { useEffect, useState } from "react";
+import { feedbackStages, type FeedbackStage } from "../../core/feedback-stages";
 import { portalHref } from "../../core/portal-href";
-import { useCreatePortalPost } from "../../hooks/feedback/use-create-portal-post";
+import { useSearchPatch } from "../../core/use-search-patch";
+import { useFindPortalSimilarPosts } from "../../hooks/feedback/use-find-portal-similar-posts";
+import { useGetPortalUserStats } from "../../hooks/feedback/use-get-portal-user-stats";
 import { useListPortalBoards } from "../../hooks/feedback/use-list-portal-boards";
+import { useListPortalPosts } from "../../hooks/feedback/use-list-portal-posts";
+import { useListPortalStatuses } from "../../hooks/feedback/use-list-portal-statuses";
+import { useSetPortalVote } from "../../hooks/feedback/use-set-portal-vote";
+import { FeedbackComposer } from "../../portal/feedback-composer";
 import { usePortalRuntime } from "../../portal/runtime";
+import { BoardNavigation } from "../../ui/board-navigation";
 import { PageFrame } from "../../ui/page-frame";
 import { PortalGate } from "../../ui/portal-gate";
+import { PostList } from "../../ui/post/post-list";
+import { PostSort } from "../../ui/post/post-sort";
+import { SimilarPosts } from "../../ui/post/similar-posts";
 import { StateView } from "../../ui/state-view";
-import {
-  Button,
-  Sheet,
-  SheetHeader,
-  SheetTitle,
-  SheetPanel,
-} from "../../ui/upstream";
 import { meta } from "./meta";
-import { BoardNavigation } from "../../ui/board-navigation";
-import { HomeFeed } from "./parts/home-feed";
-import { SubmitPostForm } from "./parts/submit-post-form";
 
 export interface FeedbackHomePageProps {
   workspaceId: string;
@@ -27,25 +26,76 @@ export interface FeedbackHomePageProps {
 }
 
 export function FeedbackHomePage(props: FeedbackHomePageProps) {
-  const { t } = useTranslation("quills");
   const portal = usePortalRuntime();
-  const [submitting, setSubmitting] = useState(false);
-  const canLoad = !portal.accessLoading && portal.access?.granted === true;
-  const boards = useListPortalBoards(
-    {
-      param: { workspace: canLoad ? props.workspaceId : "" },
-      query: { counts: "true" },
-    },
-    portal.viewer,
+  const { viewer } = portal;
+  const [stage, setStage] = useState(
+    typeof props.search.stage === "string" ? props.search.stage : "",
   );
-  const create = useCreatePortalPost(portal.viewer);
+  const [sort, setSort] = useState(
+    typeof props.search.sort === "string" ? props.search.sort : "votes",
+  );
+  const [title, setTitle] = useState("");
+  const urlTitle =
+    typeof props.search.title === "string" ? props.search.title : undefined;
+  const [votePostId, setVotePostId] = useState<string | null>(null);
+  const canLoad = !portal.accessLoading && portal.access?.granted === true;
+  const workspace = canLoad ? props.workspaceId : "";
+  const boards = useListPortalBoards(
+    { param: { workspace }, query: { counts: "true" } },
+    viewer,
+  );
+  const statuses = useListPortalStatuses({ param: { workspace } }, viewer);
+  const stats = useGetPortalUserStats(
+    { param: { workspace: viewer.kind === "user" ? workspace : "" } },
+    viewer,
+  );
+  const posts = useListPortalPosts(
+    {
+      param: { workspace },
+      query: {
+        stage: (stage || undefined) as FeedbackStage | undefined,
+        sort: sort as "newest" | "oldest" | "votes",
+        limit: "20",
+      },
+    },
+    viewer,
+  );
+  const similar = useFindPortalSimilarPosts(
+    {
+      param: { workspace: title.trim().length >= 3 ? workspace : "" },
+      query: { title: title.trim(), limit: "5" },
+    },
+    viewer,
+  );
+  const vote = useSetPortalVote(viewer);
+  const remember = useSearchPatch();
+  // The given title is a one-time start. After the composer has read it, the
+  // address drops it, so a reload does not bring back a sent post or undo an edit.
+  useEffect(() => {
+    if (urlTitle && viewer.kind === "user" && boards.data)
+      remember({ title: undefined });
+  });
+  const submittable =
+    boards.data?.items.filter((board) => board.canSubmit) ?? [];
 
   return (
     <PageFrame
       titleKey="feedback.title"
-      token="none"
-      tokenScope={undefined}
-      persistToken={false}
+      aside={
+        boards.data ? (
+          <BoardNavigation
+            boards={boards.data.items}
+            workspaceId={props.workspaceId}
+            stages={feedbackStages(statuses.data?.items ?? [])}
+            stage={stage}
+            stats={stats.data}
+            onStageChange={(value) => {
+              setStage(value);
+              remember({ stage: value });
+            }}
+          />
+        ) : null
+      }
     >
       <StateView
         loading={portal.accessLoading}
@@ -58,80 +108,76 @@ export function FeedbackHomePage(props: FeedbackHomePageProps) {
           audience={meta.audience}
           portalEnabled
           accessGranted={portal.access?.granted ?? false}
-          signedIn={portal.viewer.kind === "user"}
+          signedIn={viewer.kind === "user"}
         >
           <StateView
-            loading={boards.isLoading}
-            problem={boards.error ?? null}
+            loading={boards.isLoading || statuses.isLoading}
+            problem={boards.error ?? statuses.error ?? null}
             onRetry={() => {
               void boards.refetch();
+              void statuses.refetch();
             }}
           >
-            {boards.data ? (
-              <div className="portal-feedback-layout grid items-start gap-6 md:grid-cols-[180px_minmax(0,1fr)] md:gap-12">
-                <BoardNavigation
-                  boards={boards.data.items}
-                  workspaceId={props.workspaceId}
-                />
-                <div className="portal-feedback-main flex min-w-0 flex-col gap-7">
-                  <div className="portal-feedback-composer flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-card p-5 shadow-xs [&>p]:text-muted-foreground [&_a]:inline-flex [&_a]:rounded-full [&_a]:bg-primary [&_a]:px-4 [&_a]:py-2 [&_a]:text-primary-foreground">
-                    <p>{t("feedback.prompt")}</p>
-                    {portal.viewer.kind === "user" ? (
-                      <Button
-                        type="button"
-                        onClick={() => setSubmitting(true)}
-                        disabled={
-                          !boards.data.items.some((board) => board.canSubmit)
-                        }
-                      >
-                        {t("feedback.submit")}
-                      </Button>
-                    ) : (
-                      <div>
-                        <a
-                          href={`/auth/sign-in?redirect=${encodeURIComponent(portalHref(props.workspaceId))}`}
-                        >
-                          {t("feedback.signIn")}
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                  <HomeFeed
-                    filters={props.search}
-                    viewer={portal.viewer}
-                    boards={boards.data.items}
-                    workspaceId={props.workspaceId}
-                  />
-                  <Sheet open={submitting} onOpenChange={setSubmitting}>
-                    <PortalSheetContent>
-                      <SheetHeader>
-                        <SheetTitle>{t("feedback.submitTitle")}</SheetTitle>
-                      </SheetHeader>
-                      <SheetPanel>
-                        <SubmitPostForm
-                          workspaceId={props.workspaceId}
-                          viewer={portal.viewer}
-                          boards={boards.data.items.filter(
-                            (board) => board.canSubmit,
-                          )}
-                          onSubmit={async (values) => {
-                            try {
-                              await create.mutateAsync({
-                                param: { workspace: props.workspaceId },
-                                json: values,
-                              });
-                              setSubmitting(false);
-                            } catch (problem) {
-                              return problem as never;
-                            }
-                          }}
-                        />
-                      </SheetPanel>
-                    </PortalSheetContent>
-                  </Sheet>
-                </div>
-              </div>
+            {boards.data && (viewer.kind !== "user" || submittable.length) ? (
+              <FeedbackComposer
+                workspaceId={props.workspaceId}
+                boards={submittable}
+                autoFocus={"openFeedback" in props.search}
+                initialTitle={urlTitle}
+                signInHref={
+                  viewer.kind === "user"
+                    ? undefined
+                    : `/auth/sign-in?redirect=${encodeURIComponent(portalHref(props.workspaceId, "", urlTitle ? { openFeedback: "1", title: urlTitle } : undefined))}`
+                }
+                onTitleChange={setTitle}
+              />
             ) : null}
+            <SimilarPosts
+              workspaceId={props.workspaceId}
+              posts={similar.data?.items ?? []}
+            />
+            <PostSort
+              sort={sort}
+              onSortChange={(value) => {
+                setSort(value);
+                remember({ sort: value === "votes" ? "" : value });
+              }}
+            />
+            <StateView
+              loading={posts.isLoading}
+              problem={posts.error ?? null}
+              onRetry={() => void posts.refetch()}
+            >
+              <PostList
+                posts={posts.data?.pages.flatMap((page) => page.items) ?? []}
+                workspaceId={props.workspaceId}
+                canVote={(post) =>
+                  votePostId === null &&
+                  Boolean(
+                    boards.data?.items.some(
+                      (board) => board.id === post.board.id && board.canVote,
+                    ),
+                  )
+                }
+                canLoadMore={Boolean(posts.hasNextPage)}
+                loadingMore={posts.isFetchingNextPage}
+                votePostId={votePostId}
+                voteProblem={vote.error}
+                onLoadMore={() => void posts.fetchNextPage()}
+                onRetryVote={() => {
+                  vote.reset();
+                  setVotePostId(null);
+                }}
+                onVote={async (post, voted) => {
+                  setVotePostId(post.id);
+                  await vote.mutateAsync({
+                    param: { workspace: props.workspaceId, postId: post.id },
+                    json: { voted },
+                  });
+                  setVotePostId(null);
+                }}
+              />
+            </StateView>
           </StateView>
         </PortalGate>
       </StateView>

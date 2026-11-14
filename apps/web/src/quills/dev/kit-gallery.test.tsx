@@ -17,7 +17,7 @@ describe("KitGallery", () => {
   it("switches content states and exercises vote callbacks", async () => {
     const view = renderComponent(<KitGallery />);
     fireEvent.click(view.getByRole("checkbox", { name: "Show empty content" }));
-    expect(view.getByText("No comments yet.")).toBeVisible();
+    expect(view.getByText("This comment was deleted.")).toBeVisible();
     press("Vote");
     expect(
       await view.findByRole("button", { name: "Remove vote" }),

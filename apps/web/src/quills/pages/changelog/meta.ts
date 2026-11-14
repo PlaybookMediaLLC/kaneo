@@ -6,6 +6,6 @@ export const meta = {
   audience: "portal",
   mailLinked: true,
   token: "none",
-  operations: ["listQuillsPortalChangelog"],
+  operations: ["listQuillsPortalChangelog", "listQuillsPortalVotedPosts"],
   states: ["loading", "failed", "ready"],
 } satisfies PageMeta;

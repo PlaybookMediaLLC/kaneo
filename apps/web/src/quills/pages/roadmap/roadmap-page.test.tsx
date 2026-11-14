@@ -4,6 +4,8 @@ import { mockApi } from "../../test/mock-api";
 import { renderPage } from "../../test/render";
 import { listPortalRoadmapsFixture } from "../../api/feedback/list-portal-roadmaps.fixture";
 import { listPortalRoadmapPostsFixture } from "../../api/feedback/list-portal-roadmap-posts.fixture";
+import { listPortalStatusesFixture } from "../../api/feedback/list-portal-statuses.fixture";
+import { listPortalBoardsFixture } from "../../api/feedback/list-portal-boards.fixture";
 import { meta } from "./meta";
 import { RoadmapPage } from "./roadmap-page";
 const roadmap = {
@@ -49,6 +51,8 @@ describe("RoadmapPage", () => {
   it("selects the shared roadmap and renders linked cards with search and sort", async () => {
     const api = mockApi();
     api.reply(listPortalRoadmapsFixture.ok({ roadmaps: [roadmap] }));
+    api.reply(listPortalStatusesFixture.ok());
+    api.reply(listPortalBoardsFixture.ok());
     api.reply(
       listPortalRoadmapPostsFixture.ok({
         items: [
@@ -75,5 +79,8 @@ describe("RoadmapPage", () => {
     const url = new URL(api.calls("listQuillsPortalRoadmapPosts")[0].url);
     expect(url.searchParams.get("statusId")).toBe("status_1");
     expect(url.searchParams.get("search")).toBe("exports");
+    expect(
+      view.getByRole("link", { name: "Suggest a feature" }),
+    ).toHaveAttribute("href", "/portal/workspace_test_1?openFeedback=1");
   });
 });

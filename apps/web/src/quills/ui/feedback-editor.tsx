@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
+import { AttachmentPicker } from "./attachment-picker";
 import { useTranslation } from "react-i18next";
 import { MarkdownContent } from "./markdown-content";
-import { Button, Input, Field, FieldLabel, Textarea } from "./upstream";
+import { Button, Textarea } from "./upstream";
 export interface FeedbackEditorProps {
   id: string;
   value: string;
@@ -19,7 +20,6 @@ export function FeedbackEditor(props: FeedbackEditorProps) {
   const { t } = useTranslation("quills");
   const ref = useRef<HTMLTextAreaElement>(null);
   const [preview, setPreview] = useState(false);
-  const [error, setError] = useState(false);
   const insert = (prefix: string, suffix = "") => {
     const input = ref.current;
     if (!input) return;
@@ -105,81 +105,14 @@ export function FeedbackEditor(props: FeedbackEditorProps) {
           <MarkdownContent content={props.value} />
         </div>
       ) : null}
-      <Field>
-        <FieldLabel htmlFor={`${props.id}-files`}>
-          {t("feedback.attachFiles")}
-        </FieldLabel>
-        <Input
-          id={`${props.id}-files`}
-          type="file"
-          multiple
-          accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,text/plain,text/csv"
-          disabled={props.disabled}
-          onChange={(event) => {
-            const chosen = Array.from(event.target.files ?? []);
-            event.target.value = "";
-            if (
-              chosen.length + props.files.length + props.attachments.length >
-              10
-            ) {
-              setError(true);
-              return;
-            }
-            setError(false);
-            props.onFilesChange([
-              ...props.files,
-              ...chosen.filter(
-                (file) =>
-                  !props.files.some(
-                    (existing) =>
-                      existing.name === file.name &&
-                      existing.size === file.size &&
-                      existing.lastModified === file.lastModified,
-                  ),
-              ),
-            ]);
-          }}
-        />
-      </Field>
-      <p className="text-xs text-muted-foreground">
-        {t("feedback.attachHint")}
-      </p>
-      {error ? <p role="alert">{t("feedback.attachLimit")}</p> : null}
-      <ul className="flex flex-col gap-2">
-        {props.attachments.map((file) => (
-          <li key={file.id} className="flex items-center justify-between gap-2">
-            <span className="min-w-0 break-all text-sm">{file.name}</span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={props.disabled}
-              aria-label={t("feedback.removeFile", { name: file.name })}
-              onClick={() => props.onRemove(file.id)}
-            >
-              {t("feedback.remove")}
-            </Button>
-          </li>
-        ))}
-        {props.files.map((file) => (
-          <li
-            key={`${file.name}:${file.size}:${file.lastModified}`}
-            className="flex items-center justify-between gap-2"
-          >
-            <span className="min-w-0 break-all text-sm">{file.name}</span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={props.disabled}
-              aria-label={t("feedback.removeFile", { name: file.name })}
-              onClick={() => props.onRemoveFile(file)}
-            >
-              {t("feedback.remove")}
-            </Button>
-          </li>
-        ))}
-      </ul>
+      <AttachmentPicker
+        attachments={props.attachments}
+        files={props.files}
+        disabled={props.disabled}
+        onFilesChange={props.onFilesChange}
+        onRemove={props.onRemove}
+        onRemoveFile={props.onRemoveFile}
+      />
     </div>
   );
 }

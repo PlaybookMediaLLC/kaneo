@@ -183,6 +183,17 @@ before(async () => {
     JSON.stringify({ unused: "Unused" }),
   );
   await write(
+    "apps/web/src/quills/i18n/en-US/plural.json",
+    JSON.stringify({
+      count_one: "{{count}} item",
+      count_other: "{{count}} items",
+    }),
+  );
+  await write(
+    "apps/web/src/quills/ui/plural-count.tsx",
+    'export function PluralCount() { return <p>{t("quills:plural.count", { count })}</p>; }',
+  );
+  await write(
     "apps/web/src/quills/core/comment.ts",
     `// export default and fetch() are harmless in a comment.\nexport type Safe = string;`,
   );
@@ -343,6 +354,13 @@ describe("conformance negative cases", () => {
       assert.equal(selected.length, 1);
       assert.deepEqual(await inspectDocuments(root, selected, rule), []);
     });
+  it("accepts i18next plural forms of a used key", async () => {
+    const selected = documents.filter((d) =>
+      /\/(plural\.json|plural-count\.tsx)$/.test(d.file),
+    );
+    assert.equal(selected.length, 2);
+    assert.deepEqual(await inspectDocuments(root, selected, "C4"), []);
+  });
   it("rejects portal path templates outside the link helper", async () => {
     const selected = documents.filter((d) =>
       d.file.endsWith("/dynamic-link.tsx"),

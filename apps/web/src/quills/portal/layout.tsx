@@ -10,6 +10,7 @@ import { useEvaluateMyPortalAccess } from "../hooks/portal/use-evaluate-my-porta
 import { useGetPublicPortalConfig } from "../hooks/portal/use-get-public-portal-config";
 import { PortalShell } from "../ui/portal-shell";
 import { StateView } from "../ui/state-view";
+import { PortalSearch } from "./portal-search";
 import { PortalRuntimeProvider } from "./runtime";
 
 export interface PortalLayoutProps {
@@ -76,26 +77,38 @@ export function PortalRoute() {
               />
             }
             actions={
-              viewer.kind === "user" ? (
-                <>
-                  <a href={portalHref(workspaceId, "preferences")}>
-                    {t("core.navPreferences")}
-                  </a>
+              <>
+                <PortalSearch workspaceId={workspaceId} />
+                {viewer.kind === "user" ? (
+                  <>
+                    <a
+                      className="text-muted-foreground hover:text-foreground"
+                      href={portalHref(workspaceId, "preferences")}
+                    >
+                      {t("core.navPreferences")}
+                    </a>
+                    <a
+                      className="bg-muted text-foreground hover:bg-muted/70"
+                      href={portalHref(workspaceId, "profile")}
+                    >
+                      {t("core.navProfile")}
+                    </a>
+                  </>
+                ) : (
                   <a
-                    className="portal-account-button bg-muted !text-foreground"
-                    href={portalHref(workspaceId, "profile")}
+                    className="bg-muted text-foreground hover:bg-muted/70"
+                    href={`/auth/sign-in?redirect=${encodeURIComponent(portalReturnPath(currentPath))}`}
                   >
-                    {t("core.navProfile")}
+                    {t("core.signIn")}
                   </a>
-                </>
-              ) : (
+                )}
                 <a
-                  className="portal-account-button bg-muted !text-foreground"
-                  href={`/auth/sign-in?redirect=${encodeURIComponent(portalReturnPath(currentPath))}`}
+                  className="hidden bg-primary text-primary-foreground hover:bg-primary/90 sm:inline-flex"
+                  href={portalHref(workspaceId, "", { openFeedback: "1" })}
                 >
-                  {t("core.signIn")}
+                  {t("feedback.submit")}
                 </a>
-              )
+              </>
             }
           >
             <Outlet />

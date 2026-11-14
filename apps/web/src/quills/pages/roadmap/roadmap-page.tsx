@@ -1,22 +1,19 @@
-import { portalHref } from "../../core/portal-href";
-import { useTranslation } from "react-i18next";
+import { IconMagnifierOutline18 } from "nucleo-ui-essential-outline-18";
 import { useNavigate } from "@tanstack/react-router";
+import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { portalHref } from "../../core/portal-href";
+import { useListPortalBoards } from "../../hooks/feedback/use-list-portal-boards";
 import { useListPortalRoadmaps } from "../../hooks/feedback/use-list-portal-roadmaps";
+import { useListPortalStatuses } from "../../hooks/feedback/use-list-portal-statuses";
+import { useListPortalVotedPosts } from "../../hooks/feedback/use-list-portal-voted-posts";
 import { usePortalRuntime } from "../../portal/runtime";
 import { PageFrame } from "../../ui/page-frame";
-import { StateView } from "../../ui/state-view";
 import { PortalGate } from "../../ui/portal-gate";
-import { PortalSelectContent } from "../../ui/portal-select-content";
-import {
-  Field,
-  FieldLabel,
-  Input,
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectGroup,
-  SelectItem,
-} from "../../ui/upstream";
+import { PostSort } from "../../ui/post/post-sort";
+import { StateView } from "../../ui/state-view";
+import { Input } from "../../ui/upstream";
+import { meta } from "./meta";
 import { RoadmapBoard } from "./parts/roadmap-board";
 
 export interface RoadmapPageProps {
@@ -24,34 +21,45 @@ export interface RoadmapPageProps {
   params: Record<string, string>;
   search: Record<string, unknown>;
 }
+
+const tab =
+  "rounded-full px-3 py-1 text-sm text-muted-foreground transition-colors hover:text-foreground aria-pressed:bg-muted aria-pressed:font-medium aria-pressed:text-foreground";
+
 export function RoadmapPage(props: RoadmapPageProps) {
   const { t } = useTranslation("quills");
   const portal = usePortalRuntime();
+  const { viewer } = portal;
   const navigate = useNavigate();
-  const roadmaps = useListPortalRoadmaps(
-    {
-      param: {
-        workspace:
-          portal.access?.granted && !portal.accessLoading
-            ? props.workspaceId
-            : "",
-      },
-    },
-    portal.viewer,
+  const canLoad = !portal.accessLoading && portal.access?.granted === true;
+  const workspace = canLoad ? props.workspaceId : "";
+  const roadmaps = useListPortalRoadmaps({ param: { workspace } }, viewer);
+  const statuses = useListPortalStatuses({ param: { workspace } }, viewer);
+  const boards = useListPortalBoards(
+    { param: { workspace }, query: { counts: "false" } },
+    viewer,
   );
+  // A visitor has no votes, so only a signed-in viewer asks.
+  const voted = useListPortalVotedPosts(
+    { param: { workspace: viewer.kind === "user" ? workspace : "" } },
+    viewer,
+  );
+  const list = roadmaps.data?.roadmaps ?? [];
   const selected =
-    roadmaps.data?.roadmaps.find(
-      (item) => item.slug === props.search.roadmap,
-    ) ?? (props.search.roadmap ? undefined : roadmaps.data?.roadmaps[0]);
-  const search =
+    list.find((item) => item.slug === props.search.roadmap) ??
+    (props.search.roadmap ? undefined : list[0]);
+  const [search, setSearch] = useState(
     typeof props.search.search === "string"
       ? props.search.search.slice(0, 200)
-      : "";
+      : "",
+  );
+  // The address follows the search box after typing pauses, so typing stays fast.
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
   const sort =
     props.search.sort === "newest" || props.search.sort === "oldest"
       ? props.search.sort
       : "votes";
-  const change = (patch: Record<string, string>) => {
+  const change = (patch: Record<string, string | undefined>) =>
     void navigate({
       to: ".",
       search: (previous: Record<string, unknown>) => ({
@@ -61,9 +69,20 @@ export function RoadmapPage(props: RoadmapPageProps) {
       replace: true,
       resetScroll: false,
     });
-  };
   return (
-    <PageFrame titleKey="feedback.roadmapTitle">
+    <PageFrame
+      titleKey="roadmap.title"
+      description={selected?.description || t("roadmap.description")}
+      actions={
+        <a
+          className="rounded-full bg-muted px-3 py-1 text-xs font-medium transition-colors hover:bg-muted/70"
+          href={portalHref(props.workspaceId, "", { openFeedback: "1" })}
+        >
+          {t("roadmap.suggest")}
+        </a>
+      }
+      wide
+    >
       <StateView
         loading={portal.accessLoading}
         problem={portal.accessProblem}
@@ -72,109 +91,99 @@ export function RoadmapPage(props: RoadmapPageProps) {
         <PortalGate
           workspaceId={props.workspaceId}
           currentPath={portalHref(props.workspaceId, "roadmap")}
-          audience="portal"
+          audience={meta.audience}
           portalEnabled
           accessGranted={portal.access?.granted ?? false}
-          signedIn={portal.viewer.kind === "user"}
+          signedIn={viewer.kind === "user"}
         >
           <StateView
             loading={roadmaps.isLoading}
             problem={roadmaps.error}
             empty={roadmaps.data?.roadmaps.length === 0}
-            onRetry={() => {
-              void roadmaps.refetch();
-            }}
+            onRetry={() => void roadmaps.refetch()}
           >
-            <div className="flex flex-col gap-6">
-              <div className="grid gap-4 sm:grid-cols-3">
-                <Field>
-                  <FieldLabel htmlFor="roadmap-select">
-                    {t("feedback.roadmapTitle")}
-                  </FieldLabel>
-                  <Select
-                    items={
-                      roadmaps.data?.roadmaps.map((item) => ({
-                        value: item.slug,
-                        label: item.name,
-                      })) ?? []
-                    }
-                    value={selected?.slug ?? ""}
-                    onValueChange={(value) => {
-                      if (value) change({ roadmap: value });
-                    }}
-                  >
-                    <SelectTrigger id="roadmap-select">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <PortalSelectContent>
-                      <SelectGroup>
-                        {roadmaps.data?.roadmaps.map((item) => (
-                          <SelectItem key={item.id} value={item.slug}>
-                            {item.name}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </PortalSelectContent>
-                  </Select>
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="roadmap-search">
-                    {t("feedback.search")}
-                  </FieldLabel>
+            <div className="flex flex-wrap items-center gap-3">
+              {list.length > 1 ? (
+                <div
+                  role="group"
+                  aria-label={t("roadmap.roadmaps")}
+                  className="flex flex-wrap gap-1"
+                >
+                  {list.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={tab}
+                      aria-pressed={item.id === selected?.id}
+                      onClick={() => change({ roadmap: item.slug })}
+                    >
+                      {item.name}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <div className="ml-auto flex items-center gap-1">
+                <div className="relative">
+                  <IconMagnifierOutline18
+                    aria-hidden="true"
+                    className="pointer-events-none absolute start-2.5 top-1/2 z-10 size-3.5 -translate-y-1/2 text-muted-foreground"
+                  />
                   <Input
-                    id="roadmap-search"
-                    value={search}
+                    type="search"
+                    size="sm"
+                    className="w-44 rounded-full ps-6"
+                    aria-label={t("feedback.search")}
+                    placeholder={t("feedback.search")}
                     maxLength={200}
-                    onChange={(event) => change({ search: event.target.value })}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="roadmap-sort">
-                    {t("feedback.sort")}
-                  </FieldLabel>
-                  <Select
-                    items={["votes", "newest", "oldest"].map((value) => ({
-                      value,
-                      label: t(`feedback.${value}`),
-                    }))}
-                    value={sort}
-                    onValueChange={(value) => {
-                      if (value) change({ sort: value });
+                    value={search}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setSearch(value);
+                      clearTimeout(timer.current);
+                      timer.current = setTimeout(
+                        () => change({ search: value || undefined }),
+                        400,
+                      );
                     }}
-                  >
-                    <SelectTrigger id="roadmap-sort">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <PortalSelectContent>
-                      <SelectGroup>
-                        {["votes", "newest", "oldest"].map((value) => (
-                          <SelectItem key={value} value={value}>
-                            {t(`feedback.${value}`)}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </PortalSelectContent>
-                  </Select>
-                </Field>
-              </div>
-              {selected ? (
-                <>
-                  <p className="text-muted-foreground">
-                    {selected.description}
-                  </p>
-                  <RoadmapBoard
-                    key={selected.id}
-                    workspaceId={props.workspaceId}
-                    viewer={portal.viewer}
-                    roadmap={selected}
-                    search={search}
-                    sort={sort}
                   />
-                </>
-              ) : (
-                <StateView problem={{ kind: "notFound" }}>{null}</StateView>
-              )}
+                </div>
+                <PostSort
+                  hideLabel
+                  sort={sort}
+                  onSortChange={(value) =>
+                    change({ sort: value === "votes" ? undefined : value })
+                  }
+                />
+              </div>
             </div>
+            {selected ? (
+              <RoadmapBoard
+                key={selected.id}
+                workspaceId={props.workspaceId}
+                viewer={viewer}
+                roadmap={selected}
+                search={search}
+                sort={sort}
+                statuses={
+                  new Map(
+                    statuses.data?.items.map((status) => [
+                      status.id,
+                      { stage: status.stage, color: status.color },
+                    ]),
+                  )
+                }
+                votedIds={new Set(voted.data?.postIds)}
+                canVote={(boardId) =>
+                  Boolean(
+                    boards.data?.items.some(
+                      (board) => board.id === boardId && board.canVote,
+                    ),
+                  )
+                }
+              />
+            ) : (
+              <StateView problem={{ kind: "notFound" }}>{null}</StateView>
+            )}
           </StateView>
         </PortalGate>
       </StateView>

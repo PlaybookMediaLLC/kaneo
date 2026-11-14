@@ -42,7 +42,7 @@ export const Route = createFileRoute("/portal/$workspaceId/boards/$boardId")({
               boardId: params.boardId,
               search: search.search,
               stage: search.stage,
-              sort: search.sort ?? "newest",
+              sort: search.sort ?? "votes",
               limit: "20",
             },
           },

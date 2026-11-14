@@ -1,13 +1,13 @@
-import { HelpNavigation } from "../../ui/help-navigation";
 import { portalHref } from "../../core/portal-href";
 import { useGetPublicHelpCenter } from "../../hooks/help-center/use-get-public-help-center";
 import { useSearchPublicHelpCenter } from "../../hooks/help-center/use-search-public-help-center";
 import { usePortalRuntime } from "../../portal/runtime";
+import { HelpSidebar } from "../../portal/help-sidebar";
+import { HelpCenterHome } from "../../ui/help-center-home";
 import { PageFrame } from "../../ui/page-frame";
 import { PortalGate } from "../../ui/portal-gate";
 import { StateView } from "../../ui/state-view";
 import { meta } from "./meta";
-import { HelpCenterContent } from "./parts/help-center-content";
 
 export interface HelpCenterPageProps {
   workspaceId: string;
@@ -38,6 +38,15 @@ export function HelpCenterPage(props: HelpCenterPageProps) {
     <PageFrame
       titleKey="help-center.title"
       displayTitle={home.data?.homepageTitle}
+      description={home.data?.homepageDescription}
+      aside={
+        home.data ? (
+          <HelpSidebar
+            workspaceId={props.workspaceId}
+            categories={home.data.categories}
+          />
+        ) : null
+      }
     >
       <StateView
         loading={gated && portal.accessLoading}
@@ -63,21 +72,14 @@ export function HelpCenterPage(props: HelpCenterPageProps) {
             }}
           >
             {home.data ? (
-              <div className="grid items-start gap-8 md:grid-cols-[220px_minmax(0,1fr)]">
-                <HelpNavigation
-                  workspaceId={props.workspaceId}
-                  categories={home.data.categories}
-                  locale={props.params.locale ?? "en"}
-                />
-                <div className="min-w-0">
-                  <HelpCenterContent
-                    workspaceId={props.workspaceId}
-                    home={home.data}
-                    results={results.data}
-                    searchQuery={searchQuery}
-                  />
-                </div>
-              </div>
+              <HelpCenterHome
+                workspaceId={props.workspaceId}
+                locales={home.data.locales}
+                categories={home.data.categories}
+                popular={home.data.popular}
+                results={results.data?.articles}
+                searchQuery={searchQuery}
+              />
             ) : null}
           </StateView>
         </PortalGate>

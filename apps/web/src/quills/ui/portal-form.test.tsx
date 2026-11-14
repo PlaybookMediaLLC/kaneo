@@ -95,3 +95,26 @@ describe("PortalForm", () => {
     await act(async () => complete());
   });
 });
+
+it("names an icon-only submit button and keeps footer controls in its row", async () => {
+  const submit = vi.fn(async () => undefined);
+  const view = renderComponent(
+    <PortalForm
+      schema={z.object({ message: z.string() })}
+      defaultValues={{ message: "" }}
+      submitKey="core.gallery.confirm"
+      submitIcon={<svg aria-hidden="true" />}
+      footer={() => <span>Footer control</span>}
+      onSubmit={submit}
+    >
+      {() => null}
+    </PortalForm>,
+  );
+  const button = view.getByRole("button", { name: "Confirm action" });
+  expect(button).not.toHaveTextContent("Confirm action");
+  expect(view.getByText("Footer control").parentElement).toContainElement(
+    button,
+  );
+  press("Confirm action");
+  await waitFor(() => expect(submit).toHaveBeenCalledWith({ message: "" }));
+});

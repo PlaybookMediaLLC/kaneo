@@ -28,3 +28,24 @@ it("updates the title without interrupting an active draft", () => {
   expect(document.title).toBe("Renamed");
   expect(input).toHaveFocus();
 });
+
+it("puts the rail after the title and shows the description and actions", () => {
+  const view = renderComponent(
+    <PageFrame
+      titleKey="core.gallery.title"
+      description="Short summary"
+      actions={<button type="button">Subscribe</button>}
+      aside={<nav aria-label="Boards" />}
+    >
+      content
+    </PageFrame>,
+  );
+  const heading = view.getByRole("heading", { level: 1 });
+  const rail = view.getByRole("navigation", { name: "Boards" });
+  expect(
+    heading.compareDocumentPosition(rail) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(view.getByText("Short summary")).toBeInTheDocument();
+  expect(view.getByRole("button", { name: "Subscribe" })).toBeInTheDocument();
+  expect(view.getByRole("main")).toHaveClass("max-w-5xl");
+});

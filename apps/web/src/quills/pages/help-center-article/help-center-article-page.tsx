@@ -1,13 +1,17 @@
-import { HelpNavigation } from "../../ui/help-navigation";
 import { useTranslation } from "react-i18next";
 import { portalHref } from "../../core/portal-href";
 import { useGetPublicHelpCenterArticle } from "../../hooks/help-center/use-get-public-help-center-article";
+import { HelpSidebar } from "../../portal/help-sidebar";
 import { usePortalRuntime } from "../../portal/runtime";
+import { HelpBreadcrumb } from "../../ui/help-breadcrumb";
 import { MarkdownContent } from "../../ui/markdown-content";
 import { PageFrame } from "../../ui/page-frame";
+import { PersonAvatar } from "../../ui/person-avatar";
 import { PortalGate } from "../../ui/portal-gate";
 import { StateView } from "../../ui/state-view";
 import { meta } from "./meta";
+import { ArticleFeedback } from "./parts/article-feedback";
+import { ArticleNextSteps } from "./parts/article-next-steps";
 
 export interface HelpCenterArticlePageProps {
   workspaceId: string;
@@ -15,27 +19,27 @@ export interface HelpCenterArticlePageProps {
   search: Record<string, unknown>;
 }
 
+const locales = [
+  "en",
+  "de",
+  "fr",
+  "es",
+  "ar",
+  "ru",
+  "pt-br",
+  "zh-cn",
+  "zh-tw",
+  "nl",
+  "pl",
+  "th",
+  "uk",
+] as const;
+
 export function HelpCenterArticlePage(props: HelpCenterArticlePageProps) {
   const { t, i18n } = useTranslation("quills");
   const portal = usePortalRuntime();
   const { viewer } = portal;
-  const locale = (
-    [
-      "en",
-      "de",
-      "fr",
-      "es",
-      "ar",
-      "ru",
-      "pt-br",
-      "zh-cn",
-      "zh-tw",
-      "nl",
-      "pl",
-      "th",
-      "uk",
-    ] as const
-  ).find((item) => item === props.params.locale);
+  const locale = locales.find((item) => item === props.params.locale);
   const article = useGetPublicHelpCenterArticle(
     {
       param: {
@@ -47,11 +51,47 @@ export function HelpCenterArticlePage(props: HelpCenterArticlePageProps) {
     viewer,
   );
   const gated = (meta.audience as string) !== "public";
+  const data = article.data;
+  const category = data?.categories.find(
+    (item) => item.id === data.article.category.id,
+  );
+  const home = portalHref(
+    props.workspaceId,
+    !locale || locale === "en" ? "hc" : `hc/${locale}`,
+  );
 
   return (
     <PageFrame
       titleKey="help-center.articleTitle"
-      displayTitle={article.data?.article.title}
+      displayTitle={data?.article.title}
+      eyebrow={
+        data ? (
+          <HelpBreadcrumb
+            items={[
+              { label: t("help-center.title"), href: home },
+              ...(category
+                ? [
+                    {
+                      label: category.name,
+                      href: portalHref(props.workspaceId, category.path),
+                    },
+                  ]
+                : []),
+            ]}
+          />
+        ) : null
+      }
+      aside={
+        data ? (
+          <HelpSidebar
+            workspaceId={props.workspaceId}
+            locale={locale}
+            categories={data.categories}
+            categoryId={data.article.category.id}
+            articleId={data.article.id}
+          />
+        ) : null
+      }
     >
       <StateView
         loading={gated && portal.accessLoading}
@@ -76,79 +116,41 @@ export function HelpCenterArticlePage(props: HelpCenterArticlePageProps) {
               void article.refetch();
             }}
           >
-            {article.data ? (
-              <div className="grid items-start gap-8 md:grid-cols-[220px_minmax(0,1fr)]">
-                <HelpNavigation
+            {data ? (
+              <article>
+                <p className="-mt-4 mb-8 flex items-center gap-2.5 text-sm">
+                  {data.article.author ? (
+                    <>
+                      <PersonAvatar
+                        name={data.article.author.name}
+                        className="size-7"
+                      />
+                      <span className="font-medium">
+                        {data.article.author.name}
+                      </span>
+                    </>
+                  ) : null}
+                  <span className="text-muted-foreground">
+                    {t("help-center.updated", {
+                      date: new Intl.DateTimeFormat(i18n.language, {
+                        dateStyle: "medium",
+                      }).format(new Date(data.article.updatedAt)),
+                    })}
+                  </span>
+                </p>
+                <MarkdownContent content={data.article.content} />
+                <ArticleFeedback
                   workspaceId={props.workspaceId}
-                  categories={article.data.categories}
-                  locale={props.params.locale ?? "en"}
-                  categoryId={article.data.article.category.id}
-                  articleId={article.data.article.id}
-                  articles={article.data.articles}
+                  articleId={data.article.id}
+                  articleTitle={data.article.title}
+                  viewer={viewer}
                 />
-                <div className="min-w-0">
-                  <article className="space-y-8">
-                    <header className="space-y-2">
-                      {article.data.article.description ? (
-                        <p>{article.data.article.description}</p>
-                      ) : null}
-                      <p className="text-sm text-muted-foreground">
-                        {t("help-center.published", {
-                          date: new Intl.DateTimeFormat(i18n.language, {
-                            dateStyle: "long",
-                          }).format(new Date(article.data.article.publishedAt)),
-                        })}
-                      </p>
-                    </header>
-                    <MarkdownContent content={article.data.article.content} />
-                    {article.data.articles.filter(
-                      (item) => item.id !== article.data.article.id,
-                    ).length ? (
-                      <section
-                        aria-labelledby="related-articles"
-                        className="space-y-3"
-                      >
-                        <h3
-                          id="related-articles"
-                          className="text-lg font-semibold"
-                        >
-                          {t("help-center.related")}
-                        </h3>
-                        <ul>
-                          {article.data.articles
-                            .filter(
-                              (item) => item.id !== article.data.article.id,
-                            )
-                            .map((item) => (
-                              <li key={item.id}>
-                                <a
-                                  className="underline-offset-4 hover:underline"
-                                  href={portalHref(
-                                    props.workspaceId,
-                                    item.path,
-                                  )}
-                                >
-                                  {item.title}
-                                </a>
-                              </li>
-                            ))}
-                        </ul>
-                      </section>
-                    ) : null}
-                    <a
-                      className="underline-offset-4 hover:underline"
-                      href={portalHref(
-                        props.workspaceId,
-                        props.params.locale === "en"
-                          ? "hc"
-                          : `hc/${props.params.locale}`,
-                      )}
-                    >
-                      {t("help-center.back")}
-                    </a>
-                  </article>
-                </div>
-              </div>
+                <ArticleNextSteps
+                  workspaceId={props.workspaceId}
+                  articleId={data.article.id}
+                  articles={data.articles}
+                />
+              </article>
             ) : null}
           </StateView>
         </PortalGate>

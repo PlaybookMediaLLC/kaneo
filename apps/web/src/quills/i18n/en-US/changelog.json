@@ -1,9 +1,14 @@
 {
-	"author": "By {{name}}",
-	"entryTitle": "Changelog entry",
-	"linkedPost": "Related request: {{title}}",
-	"loadMore": "Load more entries",
-	"published": "Published {{date}}",
-	"requesters": "Requested by {{count}} people",
-	"title": "Changelog"
+	"back": "All updates",
+	"categories": "Tags",
+	"caughtUp": "You’re all caught up",
+	"description": "What shipped, and the feedback that got it there.",
+	"entryTitle": "Update",
+	"linkedPosts": "The feedback behind this update",
+	"loadMore": "Load more updates",
+	"rss": "RSS feed",
+	"title": "Updates",
+	"requesters_one": "Requested by {{count}} person",
+	"requesters_other": "Requested by {{count}} people",
+	"emailUpdates": "Get email updates"
 }
