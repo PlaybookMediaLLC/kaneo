@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { portalHref } from "../core/portal-href";
 import { MarkdownContent } from "./markdown-content";
@@ -25,6 +26,8 @@ export interface ChangelogEntryProps {
   };
   /** The list links each title; an entry page already shows it as the page title. */
   linkTitle?: boolean;
+  /** Shown under the update, such as its reactions. */
+  children?: ReactNode;
 }
 
 /** One update on the changelog timeline: date and tags, then the release notes. */
@@ -33,6 +36,7 @@ export function ChangelogEntry({
   entry,
   linkTitle = true,
   votedIds,
+  children,
 }: ChangelogEntryProps) {
   const { t, i18n } = useTranslation("quills");
   return (
@@ -105,6 +109,7 @@ export function ChangelogEntry({
             {entry.author.name}
           </p>
         ) : null}
+        {children}
       </div>
     </article>
   );

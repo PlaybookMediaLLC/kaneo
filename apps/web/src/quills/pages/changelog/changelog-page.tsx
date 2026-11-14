@@ -2,15 +2,20 @@ import { useTranslation } from "react-i18next";
 import { changelogFeedUrl } from "../../core/changelog-feed-url";
 import { portalHref } from "../../core/portal-href";
 import { useListPortalChangelog } from "../../hooks/changelog/use-list-portal-changelog";
+import type { SetPortalChangelogReactionRequest } from "../../api/changelog/set-portal-changelog-reaction";
+import { useSetPortalChangelogReaction } from "../../hooks/changelog/use-set-portal-changelog-reaction";
 import { useListPortalVotedPosts } from "../../hooks/feedback/use-list-portal-voted-posts";
 import { usePortalRuntime } from "../../portal/runtime";
 import { ChangelogEntry } from "../../ui/changelog-entry";
 import { PageFrame } from "../../ui/page-frame";
 import { PortalGate } from "../../ui/portal-gate";
+import { ReactionBar } from "../../ui/reaction-bar";
 import { ShareActions } from "../../ui/share-actions";
 import { StateView } from "../../ui/state-view";
 import { Button } from "../../ui/upstream";
 import { meta } from "./meta";
+
+type Emoji = SetPortalChangelogReactionRequest["json"]["emoji"];
 
 export interface ChangelogPageProps {
   workspaceId: string;
@@ -46,6 +51,17 @@ export function ChangelogPage(props: ChangelogPageProps) {
     viewer,
   );
   const votedIds = new Set(voted.data?.postIds);
+  const reaction = useSetPortalChangelogReaction(viewer);
+  // Only a signed-in customer reacts; a visitor sees the counts.
+  const react =
+    viewer.kind === "user"
+      ? (entryId: string) => async (emoji: string, reacted: boolean) => {
+          await reaction.mutateAsync({
+            param: { workspace: props.workspaceId, entryId },
+            json: { emoji: emoji as Emoji, reacted },
+          });
+        }
+      : undefined;
 
   return (
     <PageFrame
@@ -98,7 +114,12 @@ export function ChangelogPage(props: ChangelogPageProps) {
                   workspaceId={props.workspaceId}
                   entry={entry}
                   votedIds={votedIds}
-                />
+                >
+                  <ReactionBar
+                    reactions={entry.reactions}
+                    onReact={react?.(entry.id)}
+                  />
+                </ChangelogEntry>
               ))}
               {changelog.hasNextPage ? (
                 <Button

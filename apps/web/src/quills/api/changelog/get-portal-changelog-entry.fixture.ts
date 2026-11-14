@@ -11,6 +11,8 @@ export const getPortalChangelogEntryFixture = {
         categories: [],
         linkedPosts: [],
         requesterCount: 0,
+        reactions: [],
+        unread: false,
       },
       ...overrides,
     }) satisfies GetPortalChangelogEntryResponse,
