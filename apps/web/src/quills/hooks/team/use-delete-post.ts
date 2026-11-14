@@ -24,14 +24,6 @@ export function useDeletePost(viewer: Viewer) {
           input.param.workspaceId,
           viewer,
           "team",
-          "getPost",
-        ),
-      });
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspaceId,
-          viewer,
-          "team",
           "getTeamCounts",
         ),
       });

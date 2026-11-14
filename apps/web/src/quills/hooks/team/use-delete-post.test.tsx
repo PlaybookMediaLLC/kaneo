@@ -25,12 +25,6 @@ describe("useDeletePost", () => {
         "workspace_test_1",
         { kind: "anonymous" },
         "team",
-        "getPost",
-      ),
-      quillsOperationKey(
-        "workspace_test_1",
-        { kind: "anonymous" },
-        "team",
         "getTeamCounts",
       ),
       quillsOperationKey(
