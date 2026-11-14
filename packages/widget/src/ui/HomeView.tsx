@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Icon } from "./Icon.js";
 import { UpdateCard } from "./UpdateCard.js";
 import type { UpdateEntry, WidgetTab, Conversation } from "./types.js";
@@ -10,6 +11,7 @@ export function HomeView({
   conversations,
   openConversation,
   teamAvailability,
+  survey,
 }: {
   latest?: UpdateEntry;
   navigate: (tab: WidgetTab) => void;
@@ -18,6 +20,8 @@ export function HomeView({
   conversations: readonly Conversation[];
   openConversation: (id: string) => void;
   teamAvailability?: string;
+  /** A waiting survey, shown under the greeting. */
+  survey?: ReactNode;
 }) {
   const recent =
     conversations.find((item) => (item.unreadCount ?? 0) > 0) ??
@@ -28,6 +32,7 @@ export function HomeView({
         Hi there <span className="qb-wave">👋</span>
         <span>How can we help?</span>
       </h1>
+      {survey}
       {recent && (
         <button
           type="button"

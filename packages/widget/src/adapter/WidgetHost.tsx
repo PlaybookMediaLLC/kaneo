@@ -7,6 +7,7 @@ import {
   type ParentMessage,
 } from "./bridge.js";
 import { loadArticle, type Surfaces } from "./load.js";
+import { useWidgetSurvey } from "./surveys.js";
 import { Unavailable } from "./Unavailable.js";
 import { useWidgetData } from "./useWidgetData.js";
 import { useWidgetSession } from "./useWidgetSession.js";
@@ -150,6 +151,8 @@ export function WidgetHost({
     },
   });
 
+  const survey = useWidgetSurvey(api, ready ? visitor.session : null, active);
+
   // Apply a deep link once the data it points at has loaded.
   useEffect(() => {
     if (!pending || data.loadState !== "ready") return;
@@ -172,6 +175,7 @@ export function WidgetHost({
         bridge.current?.post({ type: "quackback:expand", expanded })
       }
       navigation={navigation}
+      {...survey}
       {...data}
       {...(config === "error" || visitor.failed
         ? {

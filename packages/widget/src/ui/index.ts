@@ -13,4 +13,6 @@ export type {
   SubmissionOptions,
   ArticleBlock,
   RequestActivity,
+  WidgetSurvey,
+  SurveyAnswer,
 } from "./types.js";
