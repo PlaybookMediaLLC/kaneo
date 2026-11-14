@@ -92,7 +92,9 @@ export function PostThread(props: PostThreadProps) {
         {t("team-post.thread", { count: props.post.commentCount })}
       </h2>
       {props.comments.length ? (
-        <ol className="grid gap-5">{childrenOf(null).map(render)}</ol>
+        <ol className="grid grid-cols-1 gap-5">
+          {childrenOf(null).map(render)}
+        </ol>
       ) : (
         <p className="text-sm text-muted-foreground">
           {t("team-post.noReplies")}

@@ -38,7 +38,7 @@ export function CommentBox(props: CommentBoxProps) {
     allowed && !props.parentId,
   );
   return (
-    <div className="grid gap-1">
+    <div className="grid grid-cols-1 gap-1">
       <Composer
         label={props.label ?? t("team-post.writeComment")}
         value={text}

@@ -84,7 +84,7 @@ export function AuthorPicker({
           value={text}
           onChange={(event) => setText(event.target.value)}
         />
-        <ul className="mt-2 grid gap-0.5">
+        <ul className="mt-2 grid grid-cols-1 gap-0.5">
           <li>
             <Button
               type="button"

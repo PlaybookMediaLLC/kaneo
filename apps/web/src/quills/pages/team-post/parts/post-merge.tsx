@@ -57,7 +57,7 @@ export function PostMerge({ workspaceId, post }: PostMergeProps) {
       <h3 id={heading} className="font-medium">
         {t("team-post.duplicates", { count: duplicates.length })}
       </h3>
-      <ul className="grid gap-1">
+      <ul className="grid grid-cols-1 gap-1">
         {duplicates.map((item) => (
           <li key={item.id} className="flex items-center gap-2">
             <Link

@@ -137,7 +137,7 @@ export function TeamPostPage({
           onDeleted={back}
         />
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-          <article className="mx-auto grid w-full max-w-200 gap-6 px-6 py-8">
+          <article className="mx-auto grid w-full max-w-200 grid-cols-1 gap-6 px-6 py-8">
             <h1
               tabIndex={-1}
               className="text-2xl font-semibold tracking-tight outline-none"

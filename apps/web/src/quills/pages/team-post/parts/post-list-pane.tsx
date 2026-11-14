@@ -63,7 +63,7 @@ export function PostListPane({
       loading={props.loading}
       empty={!props.posts.length}
     >
-      <ul className="grid gap-0.5">
+      <ul className="grid grid-cols-1 gap-0.5">
         {props.posts.map((post) => (
           <li key={post.id}>
             <RequestRow
