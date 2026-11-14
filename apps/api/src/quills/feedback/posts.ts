@@ -49,6 +49,7 @@ import {
 } from "./post-filters";
 import { loadPost, postSchema, selectPosts, withTags } from "./post-view";
 import { lockMergeTarget, recount } from "./thread-counts";
+import { findVoter } from "./votes";
 import {
   findBoard,
   findPost,
@@ -377,14 +378,16 @@ const createPost = defineQuillsRoute({
   operationId: "createQuillsPost",
   summary: "Create a feedback post",
   description:
-    "The caller is the author and its first voter. Without a status, the post gets the default status.",
+    "The author is the caller, or `authorPrincipalId` to post on behalf of a person of this workspace (that also needs the update action). The author is the first voter. Without a status, the post gets the default status.",
   action: "create",
+  callerActions: true,
   body: z.object({
     boardId: flexibleToTypeIdSchema("board"),
     title: z.string().trim().min(1).max(200),
     content: z.string().trim().max(10000).default(""),
     statusId: flexibleToTypeIdSchema("post_status").optional(),
     tagIds: z.array(flexibleToTypeIdSchema("post_tag")).max(50).default([]),
+    authorPrincipalId: flexibleToTypeIdSchema("principal").optional(),
   }),
   response: postSchema,
   responseDescription: "Created post",
@@ -396,8 +399,23 @@ const createPost = defineQuillsRoute({
     payload: { boardId: result.boardId },
   }),
   load: loadProjects,
-  handler: async ({ db, actor, body, loaded: projects }) =>
-    loadPost(db, await insertPost(db, actor, projects, body)),
+  handler: async ({ db, actor, body, loaded: projects, actions }) => {
+    const { authorPrincipalId, ...input } = body;
+    const behalf =
+      authorPrincipalId !== undefined &&
+      authorPrincipalId !== actor.principalId;
+    if (behalf && !actions.has("update"))
+      throw new HTTPException(403, {
+        message: "Posting on behalf of a person needs the update action",
+      });
+    const author = behalf
+      ? (await findVoter(db, authorPrincipalId)).id
+      : undefined;
+    return loadPost(
+      db,
+      await insertPost(db, actor, projects, { ...input, author }),
+    );
+  },
 });
 
 const updatePost = defineQuillsRoute({

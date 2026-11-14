@@ -67807,7 +67807,7 @@
           "Quills"
         ],
         "summary": "Create a feedback post",
-        "description": "The caller is the author and its first voter. Without a status, the post gets the default status.",
+        "description": "The author is the caller, or `authorPrincipalId` to post on behalf of a person of this workspace (that also needs the update action). The author is the first voter. Without a status, the post gets the default status.",
         "parameters": [
           {
             "schema": {
@@ -67849,6 +67849,9 @@
                     },
                     "maxItems": 50,
                     "default": []
+                  },
+                  "authorPrincipalId": {
+                    "type": "string"
                   }
                 },
                 "required": [
