@@ -15,5 +15,3 @@ export * from "./oauth.fixture";
 export * from "./status-sync.fixture";
 export * from "./contacts.fixture";
 export * from "./customer-context.fixture";
-// RFC 0003, lane L6.
-export * from "./task-sync.fixture";

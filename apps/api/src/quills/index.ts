@@ -36,8 +36,6 @@ import changelogEngagement from "./feedback/changelog-engagement";
 import boardSettings from "./feedback/board-settings";
 import demand from "./feedback/demand";
 import scores from "./feedback/scores";
-// RFC 0003, lane L6.
-import taskSync from "./integrations/task-sync";
 import { brandText } from "@kaneo/branding";
 import { apiRouter, z, type BaseVariables } from "../openapi";
 import { settings } from "../database/quills/schema/auth";
@@ -120,6 +118,4 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", boardSettings)
   .route("/", demand)
   .route("/", scores)
-  // RFC 0003, lane L6.
-  .route("/", taskSync)
   .openapi(...context);
