@@ -14,6 +14,8 @@ import { z } from "../../../openapi";
 import { files } from "../../../database/quills/schema/files";
 import type { Database } from "../../framework/define-route";
 
+/** Customer uploads that feedback can attach: the portal's, and the widget's (RFC 0003 feature 6). */
+export const CUSTOMER_SOURCES = ["portal", "visitor"];
 export const attachmentIds = z
   .array(flexibleToTypeIdSchema("file"))
   .max(10)
@@ -68,7 +70,7 @@ export async function saveAttachments(
     rows.some(
       (row) =>
         row.uploadedById !== owner ||
-        row.source !== "portal" ||
+        !CUSTOMER_SOURCES.includes(row.source) ||
         row.deletedAt ||
         row.messageId ||
         (row.postId && row.postId !== target.postId) ||

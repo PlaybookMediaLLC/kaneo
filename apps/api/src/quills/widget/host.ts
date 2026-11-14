@@ -17,8 +17,11 @@ const PAGE_POLICY = [
   "script-src 'self'",
   "style-src 'self'",
   "font-src data:",
-  "img-src 'self' https: http:",
-  "connect-src 'self'",
+  // blob: shows a screenshot that the visitor is about to attach (RFC 0003 feature 6).
+  "img-src 'self' https: http: blob:",
+  // A screenshot goes to the storage provider's presigned URL, whose origin depends on the
+  // deployment. img-src already allows any HTTP(S) origin, so this adds no new way out.
+  "connect-src 'self' https: http:",
   // The widget config has no allowed-origin list. A framing page gets an anonymous session
   // only: identify needs a token that the host app's backend signs with the widget secret.
   "frame-ancestors http: https:",

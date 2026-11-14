@@ -261,7 +261,11 @@ const getPost = defineQuillsRoute({
   summary: "Get a feedback post",
   action: "read",
   params: postParams,
-  response: postSchema.extend({ hasVoted: z.boolean() }),
+  response: postSchema.extend({
+    hasVoted: z.boolean(),
+    /** Host-page context that the widget sent with the post, such as pageUrl and browser. */
+    widgetMetadata: z.record(z.string(), z.string()).nullable(),
+  }),
   responseDescription: "Post",
   errors,
   load: loadProjects,
@@ -281,9 +285,22 @@ const getPost = defineQuillsRoute({
         ),
       )
       .limit(1);
+    const [context] = await db
+      .select({ widgetMetadata: posts.widgetMetadata })
+      .from(posts)
+      .where(eq(posts.id, post.id));
     return {
       ...(await loadPost(db, params.postId)),
       hasVoted: voted.length > 0,
+      // An imported row may hold other JSON: only string values are returned.
+      widgetMetadata: context?.widgetMetadata
+        ? Object.fromEntries(
+            Object.entries(context.widgetMetadata).filter(
+              (entry): entry is [string, string] =>
+                typeof entry[1] === "string",
+            ),
+          )
+        : null,
     };
   },
 });

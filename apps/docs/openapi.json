@@ -19881,6 +19881,14 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 128
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string",
+                      "maxLength": 500
+                    },
+                    "description": "Context from the host page, such as pageUrl and browser, and keys that the host app set with Quackback.metadata. Teammates read it; customers never do."
                   }
                 },
                 "required": [
@@ -32416,7 +32424,7 @@
           "Quills"
         ],
         "summary": "Request an upload URL for a widget attachment",
-        "description": "Returns a presigned PUT for a key in the visitor's own namespace. Register it with POST /widget/files. Needs the messenger or tickets tab and a visitor that the host app identified.",
+        "description": "Returns a presigned PUT for a key in the visitor's own namespace. Register it with POST /widget/files, then attach it to a feedback post. Needs the feedback, messenger or tickets tab and a visitor that the host app identified.",
         "security": [],
         "parameters": [
           {
@@ -66948,6 +66956,15 @@
                     },
                     "hasVoted": {
                       "type": "boolean"
+                    },
+                    "widgetMetadata": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "additionalProperties": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -66970,7 +66987,8 @@
                     "updatedAt",
                     "deletedAt",
                     "tags",
-                    "hasVoted"
+                    "hasVoted",
+                    "widgetMetadata"
                   ]
                 }
               }

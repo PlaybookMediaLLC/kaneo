@@ -6,7 +6,7 @@ import { files } from "../../../database/quills/schema/files";
 import { postComments } from "../../../database/quills/schema/posts";
 import { defineQuillsRoute } from "../../framework/define-route";
 import { createDownload } from "../../framework/files";
-import { attachment } from "./attachments";
+import { attachment, CUSTOMER_SOURCES } from "./attachments";
 import {
   commentVisible,
   findPost,
@@ -52,7 +52,8 @@ const getAttachment = defineQuillsRoute({
       .from(files)
       .where(and(eq(files.id, params.fileId), isNull(files.deletedAt)))
       .limit(1);
-    if (!file || file.source !== "portal" || file.messageId) throw missing();
+    if (!file || !CUSTOMER_SOURCES.includes(file.source) || file.messageId)
+      throw missing();
     let postId = file.postId;
     if (file.commentId) {
       const [comment] = await db
