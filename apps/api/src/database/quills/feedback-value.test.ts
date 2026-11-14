@@ -7,6 +7,7 @@ import * as kaneo from "../schema";
 import { repoint } from "../../quills/directory/lead-merge";
 import { harness } from "../../quills/jobs/handlers/harness.fixture";
 import { WIPED_TABLES } from "../../quills/jobs/handlers/wipe";
+import { pruneQuillsWorkspace } from "../../quills/jobs/retention";
 import { OMITTED_TABLES, portableTables } from "../../quills/transfer/archive";
 import type { Database } from "./client";
 import { principal } from "./schema/auth";
@@ -680,6 +681,32 @@ describe.skipIf(!url)("RFC 0003 schema seams", () => {
         .where(eq(feedbackSignals.sourceMessageId, fa.message));
       expect(kept).toEqual({ matchedPostId: null });
     });
+  });
+
+  it("removes cached translations after the log retention", async () => {
+    const ids = await inA(async (db) =>
+      db
+        .insert(contentTranslations)
+        .values(
+          [91, 89].map((days) => ({
+            postId: fa.post,
+            locale: `it-${days}`,
+            content: "Per favore",
+            sourceHash: hash("Dark mode"),
+            createdAt: new Date(Date.now() - days * 86400000),
+          })),
+        )
+        .returning({ locale: contentTranslations.locale }),
+    );
+    expect(ids).toHaveLength(2);
+    await h.system(h.a, (db) => pruneQuillsWorkspace(db));
+    const left = await inA((db) =>
+      db
+        .select({ locale: contentTranslations.locale })
+        .from(contentTranslations)
+        .where(sql`${contentTranslations.locale} LIKE 'it-%'`),
+    );
+    expect(left).toEqual([{ locale: "it-89" }]);
   });
 
   it("moves a lead's rows to the customer in a lead merge", async () => {
