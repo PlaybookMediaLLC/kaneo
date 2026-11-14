@@ -70634,7 +70634,19 @@
                         "branding.offer_declined",
                         "branding.auto_undone",
                         "settings.undone",
-                        "conversation.test_deleted"
+                        "conversation.test_deleted",
+                        "signal.created",
+                        "signal.accepted",
+                        "signal.dismissed",
+                        "survey.created",
+                        "survey.updated",
+                        "survey.closed",
+                        "survey.responded",
+                        "post.scored",
+                        "post.vote_importance_set",
+                        "changelog.reacted",
+                        "changelog.unreacted",
+                        "board.settings_updated"
                       ]
                     },
                     "minItems": 1,
@@ -71187,7 +71199,19 @@
                         "branding.offer_declined",
                         "branding.auto_undone",
                         "settings.undone",
-                        "conversation.test_deleted"
+                        "conversation.test_deleted",
+                        "signal.created",
+                        "signal.accepted",
+                        "signal.dismissed",
+                        "survey.created",
+                        "survey.updated",
+                        "survey.closed",
+                        "survey.responded",
+                        "post.scored",
+                        "post.vote_importance_set",
+                        "changelog.reacted",
+                        "changelog.unreacted",
+                        "board.settings_updated"
                       ]
                     },
                     "minItems": 1,
@@ -137666,7 +137690,19 @@
                             "branding.offer_declined",
                             "branding.auto_undone",
                             "settings.undone",
-                            "conversation.test_deleted"
+                            "conversation.test_deleted",
+                            "signal.created",
+                            "signal.accepted",
+                            "signal.dismissed",
+                            "survey.created",
+                            "survey.updated",
+                            "survey.closed",
+                            "survey.responded",
+                            "post.scored",
+                            "post.vote_importance_set",
+                            "changelog.reacted",
+                            "changelog.unreacted",
+                            "board.settings_updated"
                           ]
                         },
                         "entityType": {
