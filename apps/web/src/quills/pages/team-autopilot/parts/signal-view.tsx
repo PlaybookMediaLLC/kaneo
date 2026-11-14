@@ -63,7 +63,21 @@ export function SignalView({ signal, signals, ...props }: SignalViewProps) {
         onBack={props.onBack}
         onPrevious={nav.previous}
         onNext={nav.next}
-      />
+      >
+        <div className="min-w-0">
+          <h1
+            tabIndex={-1}
+            className="line-clamp-2 text-lg font-semibold leading-tight outline-none"
+          >
+            {signal.suggestedTitle}
+          </h1>
+          <p className="truncate text-xs text-muted-foreground">
+            {signal.customer.displayName
+              ? t("autopilot.from", { name: signal.customer.displayName })
+              : t("autopilot.anonymous")}
+          </p>
+        </div>
+      </DetailHeader>
       <SignalDetail signal={signal} />
       <p
         role="status"

@@ -10,7 +10,8 @@ export interface SignalPropertiesProps {
   signal: Signal;
 }
 
-const statusKeys = {
+/** The label of each signal status. */
+export const signalStatusKeys = {
   pending: "autopilot.pending",
   accepted: "autopilot.accepted",
   dismissed: "autopilot.dismissed",
@@ -37,7 +38,7 @@ export function SignalProperties({
   return (
     <div>
       <PropertyRow label={t("autopilot.status")}>
-        {t(statusKeys[signal.status])}
+        {t(signalStatusKeys[signal.status])}
       </PropertyRow>
       <PropertyRow label={t("autopilot.source")}>
         {/* The conversation and ticket pages of the teammate app (RFC 0004). */}

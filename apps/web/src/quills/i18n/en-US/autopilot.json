@@ -33,6 +33,8 @@
 	"ticket": "Ticket #{{number}}",
 	"ticketTitle": "Ticket #{{number}}: {{title}}",
 	"title": "Autopilot",
+	"titleAccepted": "Accepted signals",
+	"titleDismissed": "Dismissed signals",
 	"vote": "Add vote",
 	"voted": "Added the customer's vote to “{{post}}”."
 }

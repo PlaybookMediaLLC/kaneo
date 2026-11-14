@@ -1,11 +1,14 @@
+import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { portalHref } from "../../core/portal-href";
 import { useFetchAdminOverview } from "../../hooks/team/use-fetch-admin-overview";
 import { useGetTeamCounts } from "../../hooks/team/use-get-team-counts";
 import { useListBoards } from "../../hooks/team/use-list-boards";
 import { useTeamRuntime } from "../../team/runtime";
+import { teamHref } from "../../team/team-href";
 import { TeamStateView } from "../../team/team-state-view";
 import { ListHeader } from "../../ui/inbox/list-header";
+import { RequestRow } from "../../ui/inbox/request-row";
 import { PageFrame } from "../../ui/page-frame";
 import { ViewLinks } from "./parts/view-links";
 
@@ -16,15 +19,13 @@ export interface TeamHomePageProps {
 }
 
 const heading = "text-sm font-semibold";
-const list = "mt-2 divide-y divide-border rounded-lg border border-border";
-const row =
-  "flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 py-2.5 text-sm";
-const muted = "text-sm text-muted-foreground";
 
 // The overview: the count of each view with a link to it, then what waits on the feedback boards.
+// A post row opens the post in the teammate app; a board row opens the board on the portal.
 export function TeamHomePage({ workspaceId }: TeamHomePageProps) {
   const { t } = useTranslation("quills");
   const team = useTeamRuntime();
+  const navigate = useNavigate();
   const overview = useFetchAdminOverview(
     { param: { workspaceId } },
     team.viewer,
@@ -40,38 +41,55 @@ export function TeamHomePage({ workspaceId }: TeamHomePageProps) {
   // The counts are only labels, as in the section nav: a failed request shows none.
   const counts = useGetTeamCounts({ param: { workspaceId } }, team.viewer);
   const feedback = overview.data?.feedback;
+  const post = (id: string) =>
+    teamHref(workspaceId, `/posts/${encodeURIComponent(id)}`);
   const sections = [
     {
       id: "team-home-review",
       title: t("team.home.review", { count: feedback?.reviewCount ?? 0 }),
-      items: (feedback?.review ?? []).map((post) => ({
-        id: post.id,
-        title: post.title,
+      items: (feedback?.review ?? []).map((item) => ({
+        id: item.id,
+        href: post(item.id),
+        title: item.title,
         detail: t("team.home.place", {
-          board: post.boardName,
-          status: post.statusName,
+          board: item.boardName,
+          status: item.statusName,
         }),
+        time: item.at,
       })),
     },
     {
       id: "team-home-announce",
       title: t("team.home.announce", { count: feedback?.completeCount ?? 0 }),
-      items: (feedback?.announce ?? []).map((post) => ({
-        id: post.id,
-        title: post.title,
+      items: (feedback?.announce ?? []).map((item) => ({
+        id: item.id,
+        href: post(item.id),
+        title: item.title,
         detail: t("team.home.place", {
-          board: post.boardName,
-          status: post.statusName,
+          board: item.boardName,
+          status: item.statusName,
         }),
+        time: item.at,
       })),
     },
     {
       id: "team-home-momentum",
       title: t("team.home.momentum"),
-      items: (overview.data?.momentum ?? []).map((post) => ({
-        id: post.postId,
-        title: post.title,
-        detail: t("team.home.votes", { count: post.votesLast7d }),
+      items: (overview.data?.momentum ?? []).map((item) => ({
+        id: item.postId,
+        href: post(item.postId),
+        title: item.title,
+        detail: t("team.home.votes", { count: item.votesLast7d }),
+      })),
+    },
+    {
+      id: "team-home-boards",
+      title: t("team.home.boards"),
+      items: (boards.data?.items ?? []).map((board) => ({
+        id: board.id,
+        href: portalHref(workspaceId, `boards/${board.id}`),
+        title: board.name,
+        detail: t("team.home.posts", { count: board.postCount ?? 0 }),
       })),
     },
   ];
@@ -96,43 +114,23 @@ export function TeamHomePage({ workspaceId }: TeamHomePageProps) {
                   {section.title}
                 </h2>
                 {section.items.length ? (
-                  <ul className={list}>
-                    {section.items.map((item) => (
-                      <li key={item.id} className={row}>
-                        <span className="font-medium">{item.title}</span>
-                        <span className={muted}>{item.detail}</span>
+                  <ul className="-mx-3 mt-2 grid gap-0.5">
+                    {section.items.map(({ id, ...item }) => (
+                      <li key={id}>
+                        <RequestRow
+                          {...item}
+                          onOpen={() => void navigate({ to: item.href })}
+                        />
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <p className={`mt-2 ${muted}`}>{t("team.home.none")}</p>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {t("team.home.none")}
+                  </p>
                 )}
               </section>
             ))}
-            <section aria-labelledby="team-home-boards">
-              <h2 id="team-home-boards" className={heading}>
-                {t("team.home.boards")}
-              </h2>
-              {boards.data?.items.length ? (
-                <ul className={list}>
-                  {boards.data.items.map((board) => (
-                    <li key={board.id} className={row}>
-                      <a
-                        className="font-medium underline-offset-4 hover:underline"
-                        href={portalHref(workspaceId, `boards/${board.id}`)}
-                      >
-                        {board.name}
-                      </a>
-                      <span className={muted}>
-                        {t("team.home.posts", { count: board.postCount ?? 0 })}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className={`mt-2 ${muted}`}>{t("team.home.none")}</p>
-              )}
-            </section>
           </TeamStateView>
         </div>
       </div>

@@ -101,15 +101,15 @@ export function TeamSurveyPage({ workspaceId, params }: TeamSurveyPageProps) {
         }
         propertiesLabel={t("surveys.properties.title")}
       >
-        <DetailHeader
-          onBack={back}
-          onPrevious={nav.previous}
-          onNext={nav.next}
-        />
-        <div className="grid gap-6 px-6 py-5">
-          <h1 tabIndex={-1} className="text-lg font-semibold outline-none">
+        <DetailHeader onBack={back} onPrevious={nav.previous} onNext={nav.next}>
+          <h1
+            tabIndex={-1}
+            className="line-clamp-2 min-w-0 text-lg font-semibold leading-tight outline-none"
+          >
             {survey?.question ?? t("surveys.properties.survey")}
           </h1>
+        </DetailHeader>
+        <div className="mx-auto grid w-full max-w-3xl gap-6 px-6 py-5">
           {remove.isSuccess ? (
             <ResultCard titleKey="surveys.actions.deleted">
               <Link

@@ -83,11 +83,14 @@ describe("TeamTriagePage", () => {
         await view.findByRole("rowheader", { name: "Export history" }),
       ).toBeVisible();
       expect(view.getByText(/1,500 MRR from 2 companies/)).toBeVisible();
-      expect(view.getByRole("tab", { name: "Votes" })).toHaveAttribute(
-        "aria-selected",
-        "true",
-      );
-      fireEvent.click(view.getByRole("tab", { name: "MRR" }));
+      press("Filters");
+      expect(
+        await view.findByRole("menuitemradio", { name: "Votes" }),
+      ).toHaveAttribute("aria-checked", "true");
+      expect(
+        view.getByRole("group", { name: "Sort requests" }),
+      ).toBeInTheDocument();
+      fireEvent.click(view.getByRole("menuitemradio", { name: "MRR" }));
       await waitFor(() => expect(api.calls("listQuillsPosts")).toHaveLength(2));
       expect(
         new URL(api.calls("listQuillsPosts")[1]!.url).searchParams.get("sort"),

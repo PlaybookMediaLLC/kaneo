@@ -1,11 +1,18 @@
+import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useGetFeedbackInsights } from "../../hooks/team/use-get-feedback-insights";
 import { useTeamRuntime } from "../../team/runtime";
+import { teamHref } from "../../team/team-href";
 import { TeamStateView } from "../../team/team-state-view";
 import { ListHeader } from "../../ui/inbox/list-header";
-import { StatusTabs } from "../../ui/inbox/status-tabs";
+import { RequestRow } from "../../ui/inbox/request-row";
 import { PageFrame } from "../../ui/page-frame";
+import {
+  MenuGroupLabel,
+  MenuRadioGroup,
+  MenuRadioItem,
+} from "../../ui/upstream";
 import { MeterList } from "./parts/meter-list";
 import { WeeklyTrend } from "./parts/weekly-trend";
 
@@ -28,6 +35,7 @@ const muted = "text-sm text-muted-foreground";
 export function TeamInsightsPage({ workspaceId }: TeamInsightsPageProps) {
   const { t } = useTranslation("quills");
   const team = useTeamRuntime();
+  const navigate = useNavigate();
   const [days, setDays] = useState(30);
   // Whole UTC days up to today, as the API counts them.
   const from = new Date(Date.now() - (days - 1) * DAY)
@@ -38,18 +46,26 @@ export function TeamInsightsPage({ workspaceId }: TeamInsightsPageProps) {
     team.viewer,
   );
   const data = insights.data;
+  const post = (id: string) =>
+    teamHref(workspaceId, `/posts/${encodeURIComponent(id)}`);
 
   return (
     <PageFrame titleKey="insights.title" variant="app" landmark={false}>
-      <ListHeader title={t("insights.title")} />
-      <StatusTabs
-        label={t("insights.range")}
-        tabs={ranges.map((count) => ({
-          value: String(count),
-          label: t("insights.lastDays", { count }),
-        }))}
-        value={String(days)}
-        onChange={(value) => setDays(Number(value))}
+      <ListHeader
+        title={t("insights.title")}
+        filters={
+          <MenuRadioGroup
+            value={days}
+            onValueChange={(value) => setDays(Number(value))}
+          >
+            <MenuGroupLabel>{t("insights.range")}</MenuGroupLabel>
+            {ranges.map((count) => (
+              <MenuRadioItem key={count} value={count}>
+                {t("insights.lastDays", { count })}
+              </MenuRadioItem>
+            ))}
+          </MenuRadioGroup>
+        }
       />
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
         <TeamStateView
@@ -90,19 +106,18 @@ export function TeamInsightsPage({ workspaceId }: TeamInsightsPageProps) {
                   {t("insights.topPosts")}
                 </h2>
                 {data.topPosts.length ? (
-                  <ol className="mt-3 divide-y divide-border rounded-lg border border-border">
-                    {data.topPosts.map((post) => (
-                      <li
-                        key={post.id}
-                        className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 py-3"
-                      >
-                        <span className="font-medium">{post.title}</span>
-                        <span className={muted}>
-                          {t("insights.newVotes", {
-                            board: post.boardName,
-                            count: post.newVotes,
+                  <ol className="-mx-3 mt-2 grid gap-0.5">
+                    {data.topPosts.map((item) => (
+                      <li key={item.id}>
+                        <RequestRow
+                          href={post(item.id)}
+                          onOpen={() => void navigate({ to: post(item.id) })}
+                          title={item.title}
+                          detail={t("insights.newVotes", {
+                            board: item.boardName,
+                            count: item.newVotes,
                           })}
-                        </span>
+                        />
                       </li>
                     ))}
                   </ol>

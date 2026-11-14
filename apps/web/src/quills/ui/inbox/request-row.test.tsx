@@ -34,19 +34,19 @@ describe("RequestRow", () => {
       expect(link).toHaveTextContent(text);
   });
 
-  it("shows a plain detail line and leaves out the counts it has not got", () => {
+  it("shows a plain detail line and leaves out the counts and the date it has not got", () => {
     const view = renderComponent(
       <RequestRow
         href="/feedback/workspace_1/surveys/survey_1"
         onOpen={() => undefined}
         title="How likely are you to recommend us?"
         detail="4 responses"
-        time="2026-10-31T12:00:00.000Z"
       />,
     );
     const link = view.getByRole("link");
     expect(link).toHaveTextContent("4 responses");
     expect(link).not.toHaveTextContent(/votes|comments/);
+    expect(link.querySelector("time")).toBeNull();
   });
 
   it("stacks the card in the list pane and opens on a plain click", () => {

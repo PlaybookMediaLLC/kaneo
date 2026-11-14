@@ -129,7 +129,13 @@ describe("TeamDuplicatesPage", () => {
       api.reply(listMergeSuggestionsFixture.ok());
       const view = renderPage(TeamDuplicatesPage, meta);
       await view.findByText("Nothing is here yet.");
-      fireEvent.click(view.getByRole("tab", { name: "Dismissed" }));
+      press("Filters");
+      fireEvent.click(
+        await view.findByRole("menuitemradio", { name: "Dismissed" }),
+      );
+      expect(
+        await view.findByRole("heading", { level: 1, name: "Dismissed pairs" }),
+      ).toBeInTheDocument();
       fireEvent.click(await view.findByRole("link", { name: /Dark theme/ }));
       const dismissed = new URL(
         api.calls("listQuillsMergeSuggestions")[1]!.url,

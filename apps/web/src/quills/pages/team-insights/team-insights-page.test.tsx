@@ -1,6 +1,7 @@
 import { fireEvent } from "@testing-library/react";
 import { describe, expect, it } from "vite-plus/test";
 import { getFeedbackInsightsFixture } from "../../api/team/get-feedback-insights.fixture";
+import { press } from "../../test/actions";
 import { describePageContract } from "../../test/contracts";
 import { mockApi } from "../../test/mock-api";
 import { renderPage } from "../../test/render";
@@ -63,7 +64,10 @@ describe("TeamInsightsPage", () => {
       expect(
         view.getByRole("row", { name: "2026-11-09 4 6" }),
       ).toBeInTheDocument();
-      expect(view.getByText("Dark mode")).toBeInTheDocument();
+      expect(view.getByRole("link", { name: /Dark mode/ })).toHaveAttribute(
+        "href",
+        "/feedback/workspace_test_1/posts/post_test_1",
+      );
       expect(view.getByText("Ideas · +5 votes")).toBeInTheDocument();
       expect(
         view.getByText("2026-10-15 to 2026-11-13 (UTC)"),
@@ -76,12 +80,14 @@ describe("TeamInsightsPage", () => {
       api.reply(getFeedbackInsightsFixture.ok());
       const view = renderPage(TeamInsightsPage, meta);
       await view.findByText("No new post has a tag in this range.");
-      expect(view.getByRole("tablist", { name: "Range" })).toBeInTheDocument();
-      expect(view.getByRole("tab", { name: "Last 30 days" })).toHaveAttribute(
-        "aria-selected",
-        "true",
+      press("Filters");
+      expect(
+        await view.findByRole("menuitemradio", { name: "Last 30 days" }),
+      ).toHaveAttribute("aria-checked", "true");
+      expect(view.getByRole("group", { name: "Range" })).toBeInTheDocument();
+      fireEvent.click(
+        view.getByRole("menuitemradio", { name: "Last 180 days" }),
       );
-      fireEvent.click(view.getByRole("tab", { name: "Last 180 days" }));
       await view.findByText("No new post has a tag in this range.");
       const [first, second] = api
         .calls("getQuillsFeedbackInsights")
