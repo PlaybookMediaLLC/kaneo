@@ -87,3 +87,23 @@ It counts only the boards that you can see. Sentiment counts only the posts that
 
 The API is `GET /quills/{workspaceId}/feedback/insights`. `from` and `to` are UTC days, at most
 180 days apart. The default is the last 30 days.
+
+## Review the feedback autopilot
+
+When a conversation closes or a ticket is resolved, the assistant reads the customer's messages and
+finds feature requests and bug reports. Each one becomes a pending signal with a short excerpt,
+a suggested title and, when the instance has an embedding model, the most similar post.
+The assistant reads only what the customer wrote: never team notes or replies.
+Without an AI provider, the autopilot does nothing.
+
+Open **Feedback > Autopilot** (`/dashboard/workspace/{workspaceId}/quills/autopilot`).
+You need `quills:read` to see the queue, `quills:create` to accept and `quills:update` to dismiss or restore.
+
+- **Accept as new post** creates a post on a board that you choose, with the title that you can edit.
+  The customer is the author and the first voter.
+- **Add vote** adds the customer's vote to the matched post.
+- **Dismiss** removes the signal from the pending queue. **Restore** puts a dismissed signal back.
+
+The queue leaves out signals of deleted tickets and test customers. A matched post shows only when its
+board is visible to you. The API is `GET /quills/{workspaceId}/feedback-signals?status=pending`
+(or `accepted`, `dismissed`), with an optional `source` of `conversation` or `ticket`.
