@@ -7,7 +7,8 @@ import { StateView } from "../state-view";
 
 export interface PostVoteButtonProps {
   voted: boolean;
-  voteCount: number;
+  /** Left out when the board hides vote counts; the button still votes. */
+  voteCount?: number;
   disabled?: boolean;
   loading?: boolean;
   problem?: PortalProblem | null;
@@ -32,12 +33,16 @@ export function PostVoteButton(props: PostVoteButtonProps) {
           onConfirm={() => props.onVote(!props.voted)}
         >
           <ArrowUpIcon className="size-[11px]" />
-          <span aria-hidden="true">{props.voteCount}</span>
+          {props.voteCount === undefined ? null : (
+            <span aria-hidden="true">{props.voteCount}</span>
+          )}
         </ConfirmAction>
       </StateView>
-      <span className="sr-only" aria-live="polite">
-        {t("post.votes", { count: props.voteCount })}
-      </span>
+      {props.voteCount === undefined ? null : (
+        <span className="sr-only" aria-live="polite">
+          {t("post.votes", { count: props.voteCount })}
+        </span>
+      )}
     </div>
   );
 }

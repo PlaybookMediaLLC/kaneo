@@ -1,0 +1,7 @@
+{
+	"critical": "Blocker",
+	"important": "Important",
+	"nice": "Nice to have",
+	"question": "How important is this to you?",
+	"random": "Shuffled"
+}

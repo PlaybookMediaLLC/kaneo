@@ -11,7 +11,8 @@ export interface SimilarPostsProps {
   posts: Array<{
     id: string;
     title: string;
-    voteCount: number;
+    /** Left out when the board hides vote counts. */
+    voteCount?: number;
     stage: string | null;
   }>;
   /** Posts the viewer voted for get a mark. */
@@ -45,10 +46,14 @@ export function SimilarPosts({
             >
               <span className="inline-flex h-7 min-w-13 items-center justify-center gap-1.5 rounded-full border border-border px-2.5 text-xs tabular-nums">
                 <ArrowUpIcon className="size-[11px]" />
-                <span className="sr-only">
-                  {t("post.votes", { count: post.voteCount })}
-                </span>
-                <span aria-hidden="true">{post.voteCount}</span>
+                {post.voteCount === undefined ? null : (
+                  <>
+                    <span className="sr-only">
+                      {t("post.votes", { count: post.voteCount })}
+                    </span>
+                    <span aria-hidden="true">{post.voteCount}</span>
+                  </>
+                )}
               </span>
               <span className="min-w-0 flex-1 truncate font-medium tracking-tight">
                 {post.title}

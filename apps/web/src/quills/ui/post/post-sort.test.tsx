@@ -13,4 +13,13 @@ describe("PostSort", () => {
     await choose("Sort", "Newest");
     expect(onSortChange).toHaveBeenCalledWith("newest");
   });
+
+  it("offers the shuffled order only for a board that uses it", () => {
+    const view = renderComponent(
+      <PostSort sort="random" random onSortChange={vi.fn()} />,
+    );
+    expect(view.getByRole("combobox", { name: "Sort" })).toHaveTextContent(
+      "Shuffled",
+    );
+  });
 });

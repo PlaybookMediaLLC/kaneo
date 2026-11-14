@@ -10,12 +10,12 @@ import { MarkdownContent } from "../../ui/markdown-content";
 import { PageFrame } from "../../ui/page-frame";
 import { PortalGate } from "../../ui/portal-gate";
 import { PostSidebar } from "../../ui/post/post-sidebar";
-import { PostVoteButton } from "../../ui/post/post-vote-button";
 import { StateView } from "../../ui/state-view";
 import { meta } from "./meta";
 import { PostActions } from "./parts/post-actions";
 import { PostAttachments } from "./parts/post-attachments";
 import { PostCommentsSection } from "./parts/post-comments-section";
+import { PostVote } from "./parts/post-vote";
 import { RelatedRequests } from "./parts/related-requests";
 
 export interface PostPageProps {
@@ -128,27 +128,28 @@ export function PostPage(props: PostPageProps) {
                   viewer={viewer}
                   attachments={data.attachments}
                 />
-                <PostVoteButton
+                <PostVote
                   voted={currentVote?.voted ?? data.voted}
-                  voteCount={currentVote?.voteCount ?? data.voteCount}
-                  disabled={!data.canVote}
+                  voteCount={
+                    currentVote ? currentVote.voteCount : data.voteCount
+                  }
+                  importance={currentVote?.importance ?? data.importance}
+                  canVote={data.canVote}
                   loading={vote.isPending}
                   problem={vote.error}
+                  thanks={Boolean(
+                    currentVote?.voted &&
+                    data.canComment &&
+                    !data.isCommentsLocked,
+                  )}
                   onRetry={() => vote.reset()}
-                  onVote={async (voted) => {
+                  onVote={async (voted, importance) => {
                     await vote.mutateAsync({
                       param: { workspace: props.workspaceId, postId },
-                      json: { voted },
+                      json: { voted, importance },
                     });
                   }}
                 />
-                {currentVote?.voted &&
-                data.canComment &&
-                !data.isCommentsLocked ? (
-                  <p role="status" className="text-sm text-muted-foreground">
-                    {t("post.voteThanks")}
-                  </p>
-                ) : null}
                 <RelatedRequests
                   workspaceId={props.workspaceId}
                   viewer={viewer}

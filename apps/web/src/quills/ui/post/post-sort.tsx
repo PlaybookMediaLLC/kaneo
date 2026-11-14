@@ -13,6 +13,8 @@ export interface PostSortProps {
   onSortChange: (value: string) => void;
   /** Hides the "Posts" label when the menu sits in a toolbar. */
   hideLabel?: boolean;
+  /** Offers the shuffled order, for a board that uses it by default. */
+  random?: boolean;
 }
 
 export function PostSort(props: PostSortProps) {
@@ -21,6 +23,7 @@ export function PostSort(props: PostSortProps) {
     { value: "votes", label: t("feedback.votes") },
     { value: "newest", label: t("feedback.newest") },
     { value: "oldest", label: t("feedback.oldest") },
+    ...(props.random ? [{ value: "random", label: t("voting.random") }] : []),
   ];
   return (
     <div className="portal-post-sort flex items-center justify-between gap-4">

@@ -32,8 +32,9 @@ export function FeedbackBoardPage(props: FeedbackBoardPageProps) {
   const [stage, setStage] = useState(
     typeof props.search.stage === "string" ? props.search.stage : "",
   );
+  // Null follows the board's default sort, which the portal knows once the board loads.
   const [sort, setSort] = useState(
-    typeof props.search.sort === "string" ? props.search.sort : "votes",
+    typeof props.search.sort === "string" ? props.search.sort : null,
   );
   const [title, setTitle] = useState("");
   const [votePostId, setVotePostId] = useState<string | null>(null);
@@ -48,14 +49,17 @@ export function FeedbackBoardPage(props: FeedbackBoardPageProps) {
     { param: { workspace: viewer.kind === "user" ? workspace : "" } },
     viewer,
   );
+  const board = boards.data?.items.find((item) => item.id === boardId);
+  const defaultSort = board?.defaultSort ?? "votes";
+  const activeSort = sort ?? defaultSort;
   const posts = useListPortalPosts(
     {
-      param: { workspace },
+      param: { workspace: sort || board ? workspace : "" },
       query: {
         boardId,
         search,
         stage: (stage || undefined) as FeedbackStage | undefined,
-        sort: sort as "newest" | "oldest" | "votes",
+        sort: activeSort as "newest" | "oldest" | "votes" | "random",
         limit: "20",
       },
     },
@@ -69,7 +73,6 @@ export function FeedbackBoardPage(props: FeedbackBoardPageProps) {
     viewer,
   );
   const vote = useSetPortalVote(viewer);
-  const board = boards.data?.items.find((item) => item.id === boardId);
   const remember = useSearchPatch();
   return (
     <PageFrame
@@ -136,10 +139,11 @@ export function FeedbackBoardPage(props: FeedbackBoardPageProps) {
               posts={similar.data?.items ?? []}
             />
             <PostSort
-              sort={sort}
+              sort={activeSort}
+              random={defaultSort === "random"}
               onSortChange={(value) => {
                 setSort(value);
-                remember({ sort: value === "votes" ? "" : value });
+                remember({ sort: value === defaultSort ? "" : value });
               }}
             />
             <StateView

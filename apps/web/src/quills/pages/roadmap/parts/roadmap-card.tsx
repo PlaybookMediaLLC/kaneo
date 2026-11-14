@@ -8,7 +8,7 @@ export interface RoadmapCardProps {
   post: {
     id: string;
     title: string;
-    voteCount: number;
+    voteCount?: number;
     commentCount: number;
     eta: string | null;
     board: { name: string };
