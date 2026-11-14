@@ -1,45 +1,58 @@
 {
-	"actions": "Conversation actions",
-	"addNote": "Add note",
 	"addTag": "Add a tag",
-	"assignToMe": "Assign to me",
+	"assign": "Assign",
+	"assignee": "Assignee: {{name}}",
 	"attachment": "Attachment: {{name}}",
+	"block": "Block sender",
 	"cancel": "Cancel",
-	"channel": {
-		"email": "Email",
-		"github": "GitHub",
-		"messenger": "Chat"
-	},
-	"close": "Close",
 	"conversation": "Conversation",
 	"customer": {
 		"company": "Company",
 		"country": "Country",
-		"email": "Email",
 		"mrr": "MRR",
-		"name": "Name",
 		"plan": "Plan",
-		"segments": "Segments",
-		"title": "Customer"
+		"segments": "Segments"
+	},
+	"empty": {
+		"text": "Pick a thread from the list to read it and reply.",
+		"title": "Select a conversation"
+	},
+	"filters": {
+		"resolved": "Resolved",
+		"snoozed": "Snoozed",
+		"spam": "Spam"
 	},
 	"links": {
 		"board": "Board",
-		"create": "Create post",
-		"created": "Created the post “{{title}}”.",
+		"create": "Create request",
+		"created": "Created the request “{{title}}”.",
 		"none": "None",
 		"postContent": "Details (optional)",
-		"postTitle": "Post title",
-		"posts": "Feedback",
-		"ticket": "Ticket",
+		"postTitle": "Request title",
+		"posts": "Requests",
+		"ticket": "Linked ticket",
 		"ticketName": "{{reference}} {{title}} · {{status}}",
 		"title": "Links"
 	},
 	"loadMore": "Load more conversations",
+	"markSpam": "Mark as spam",
+	"more": "More actions",
+	"newMessage": {
+		"compose": "Write a message…",
+		"none": "No customer matches this search.",
+		"refused": "This customer cannot get mail. They can be a lead, have no email address or be blocked.",
+		"remove": "Remove {{name}}",
+		"results": "Customers",
+		"title": "New message",
+		"to": "To",
+		"toHint": "Name or email address"
+	},
 	"no": "No",
 	"noMessages": "No messages yet.",
 	"noTeam": "No team",
-	"note": "Internal note",
-	"noteLabel": "Note for the team",
+	"notSpam": "Not spam",
+	"note": "Note",
+	"noteLabel": "Write a note for the team…",
 	"priority": {
 		"high": "High",
 		"low": "Low",
@@ -54,25 +67,27 @@
 		"rateLimited": "There were too many changes. Wait a moment and try again."
 	},
 	"properties": {
-		"assignee": "Assignee",
+		"panel": "Customer and details",
 		"priority": "Priority",
-		"status": "Status",
 		"tags": "Tags",
 		"team": "Team",
 		"title": "Details"
 	},
 	"removeTag": "Remove the tag {{name}}",
-	"reopen": "Reopen",
+	"reopenResolved": "Resolved, reopen",
 	"reply": "Reply",
-	"replyLabel": "Reply to the customer",
-	"saveNote": "Save note",
-	"send": "Send reply",
+	"replyTo": "Reply to {{name}}…",
+	"resolve": "Resolve",
+	"saveView": {
+		"name": "View name",
+		"open": "Save as view…",
+		"submit": "Save view",
+		"title": "Save as view"
+	},
+	"search": "Search conversations…",
 	"snooze": "Snooze",
 	"status": {
-		"any": "All",
-		"closed": "Closed",
-		"open": "Open",
-		"snoozed": "Snoozed"
+		"closed": "Resolved"
 	},
 	"summary": {
 		"create": "Summarize",
@@ -81,20 +96,21 @@
 		"requested": "The summary is on its way. It shows here when it is ready.",
 		"title": "AI summary"
 	},
-	"tabs": "Conversation status and pinned views",
 	"teammate": "Teammate",
 	"thread": "Messages",
 	"title": "Conversations",
 	"typing": "{{name}} is typing…",
-	"unassign": "Unassign",
 	"unassigned": "Unassigned",
+	"unblock": "Unblock sender",
 	"unknown": "Unknown",
 	"views": {
 		"all": "All",
-		"mine": "My conversations",
+		"mine": "Mine",
 		"open": "Open",
 		"queue": "Queue",
 		"unassigned": "Unassigned"
 	},
-	"yes": "Yes"
+	"yes": "Yes",
+	"you": "You",
+	"youName": "{{name}} (you)"
 }

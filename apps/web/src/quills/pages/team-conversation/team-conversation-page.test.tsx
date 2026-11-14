@@ -16,7 +16,7 @@ import { markConversationReadFixture } from "../../api/team/mark-conversation-re
 import { replyConversationFixture } from "../../api/team/reply-conversation.fixture";
 import { sendConversationTypingFixture } from "../../api/team/send-conversation-typing.fixture";
 import { describePageContract } from "../../test/contracts";
-import { fill, press } from "../../test/actions";
+import { press } from "../../test/actions";
 import { mockApi } from "../../test/mock-api";
 import { renderPage } from "../../test/render";
 import { ShortcutListener } from "../../ui/upstream";
@@ -106,7 +106,7 @@ describe("TeamConversationPage", () => {
   });
 
   describe("behavior", () => {
-    it("shows the thread and the properties, and reads an unread conversation once", async () => {
+    it("shows the customer, the thread and the right panel, and reads an unread conversation once", async () => {
       const api = mockApi();
       answer(
         api,
@@ -136,14 +136,17 @@ describe("TeamConversationPage", () => {
       );
       const view = renderPage(TeamConversationPage, meta, options);
       expect(
-        await view.findByRole("heading", { level: 1, name: "Export fails" }),
+        await view.findByRole("heading", { level: 1, name: "Grace" }),
       ).toBeInTheDocument();
       expect(
         await view.findByText("The export button does nothing."),
       ).toBeInTheDocument();
       expect(
-        view.getByRole("complementary", { name: "Details" }),
-      ).toHaveTextContent("Customer");
+        view.getByRole("complementary", { name: "Customer and details" }),
+      ).toHaveTextContent("Details");
+      expect(
+        view.getByRole("heading", { level: 2, name: "Mine" }),
+      ).toBeInTheDocument();
       await waitFor(() =>
         expect(api.calls("markQuillsConversationRead")).toHaveLength(1),
       );
@@ -171,20 +174,16 @@ describe("TeamConversationPage", () => {
       );
     });
 
-    it("replies from the composer that R opens", async () => {
+    it("replies from the composer that R focuses", async () => {
       const api = mockApi();
       answer(api);
       const view = renderPage(WithKeys, meta, options);
-      await view.findByRole("button", { name: "Reply" });
+      const box = await view.findByLabelText("Reply to Grace…");
       fireEvent.keyDown(document.body, { key: "r", code: "KeyR" });
-      await view.findByLabelText("Reply to the customer");
-      fill("Reply to the customer", "Fixed now");
-      press("Send reply");
-      await waitFor(() =>
-        expect(
-          view.queryByLabelText("Reply to the customer"),
-        ).not.toBeInTheDocument(),
-      );
+      expect(box).toHaveFocus();
+      fireEvent.change(box, { target: { value: "Fixed now" } });
+      fireEvent.keyDown(box, { key: "Enter" });
+      await waitFor(() => expect(box).toHaveValue(""));
       expect(await api.calls("replyQuillsConversation")[0]!.json()).toEqual({
         content: "Fixed now",
       });

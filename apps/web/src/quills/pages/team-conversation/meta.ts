@@ -34,6 +34,10 @@ export const meta = {
     "listQuillsBoards",
     "createQuillsPostFromConversation",
     "requestQuillsConversationSummary",
+    "endQuillsConversation",
+    "restoreQuillsConversationFromSpam",
+    "blockQuillsUser",
+    "unblockQuillsUser",
   ],
   states: ["loading", "failed", "ready", "done"],
 } satisfies PageMeta;

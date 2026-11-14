@@ -9,9 +9,7 @@ import { PropertyRow } from "../../../ui/inbox/property-row";
 import {
   priorities,
   priorityKeys,
-  statusKeys,
   type Priority,
-  type Teammate,
 } from "../../team-conversations/conversation-list";
 import { ActionProblem } from "./action-problem";
 import { CustomerSection } from "./customer-section";
@@ -23,17 +21,19 @@ import { TagEditor } from "./tag-editor";
 export interface ConversationPropertiesProps {
   workspaceId: string;
   conversation: GetConversationResponse;
-  people: readonly Teammate[];
 }
 
 const NONE = "none";
 type Value = GetConversationResponse["attributes"][number]["value"];
 
-/** The properties panel: state, team, priority, tags, attributes, the customer, links and the AI summary. */
+/**
+ * The right panel (design section 2): the customer, then team, priority, tags and attributes,
+ * the links and the AI summary. The header holds the status and the assignee. The API has no
+ * email security checks (SPF, DKIM, DMARC), so the panel has no such section.
+ */
 export function ConversationProperties({
   workspaceId,
   conversation,
-  people,
 }: ConversationPropertiesProps) {
   const { t } = useTranslation("quills");
   const team = useTeamRuntime();
@@ -46,11 +46,6 @@ export function ConversationProperties({
   const assignTeam = useAssignConversationTeam(team.viewer);
   const priority = useSetConversationPriority(team.viewer);
   const locked = !team.permissions.update;
-  const assignee = conversation.assignedAgentPrincipalId
-    ? people.find(
-        (person) => person.id === conversation.assignedAgentPrincipalId,
-      )
-    : undefined;
   const show = (value: Value) =>
     Array.isArray(value)
       ? value.join(", ")
@@ -59,15 +54,16 @@ export function ConversationProperties({
         : String(value);
   return (
     <div className="grid gap-5">
-      <section>
-        <PropertyRow label={t("team-conversations.properties.status")}>
-          {t(statusKeys[conversation.status])}
-        </PropertyRow>
-        <PropertyRow label={t("team-conversations.properties.assignee")}>
-          {conversation.assignedAgentPrincipalId
-            ? (assignee?.name ?? t("team-conversations.unknown"))
-            : t("team-conversations.unassigned")}
-        </PropertyRow>
+      <CustomerSection
+        workspaceId={workspaceId}
+        principalId={conversation.visitorPrincipalId}
+        name={conversation.visitorName}
+        email={conversation.visitorEmail}
+      />
+      <section aria-labelledby="conversation-details">
+        <h2 id="conversation-details" className="mb-1 text-sm font-semibold">
+          {t("team-conversations.properties.title")}
+        </h2>
         <PropertyRow label={t("team-conversations.properties.team")}>
           <PropertySelect
             label={t("team-conversations.properties.team")}
@@ -125,12 +121,6 @@ export function ConversationProperties({
           ))}
         <ActionProblem problem={assignTeam.error ?? priority.error ?? null} />
       </section>
-      <CustomerSection
-        workspaceId={workspaceId}
-        principalId={conversation.visitorPrincipalId}
-        name={conversation.visitorName}
-        email={conversation.visitorEmail}
-      />
       <LinksSection
         workspaceId={workspaceId}
         conversationId={conversation.id}

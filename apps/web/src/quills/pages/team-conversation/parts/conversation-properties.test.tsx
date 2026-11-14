@@ -58,14 +58,15 @@ const attribute = {
   updatedAt: "2026-01-01T00:00:00.000Z",
 };
 
-/** The panel's parts ask first (tags, customer, links), then the panel (teams, attributes). */
+/** Answers each read by its operation: the panel and its parts load in parallel. */
 function answerReads(api: ReturnType<typeof mockApi>) {
-  api.reply(listConversationTagsFixture.ok());
-  api.reply(getUserFixture.ok({ name: "Grace Customer" }));
-  api.reply(getConversationTicketLinkFixture.ok());
-  api.reply(getLinkedPostsForConversationFixture.ok());
-  api.reply(
-    listTeamsFixture.ok({
+  const answers: Record<string, unknown> = {
+    listQuillsConversationTags: listConversationTagsFixture.ok(),
+    getQuillsUser: getUserFixture.ok({ name: "Grace Customer" }),
+    getQuillsConversationTicketLink: getConversationTicketLinkFixture.ok(),
+    getQuillsLinkedPostsForConversation:
+      getLinkedPostsForConversationFixture.ok(),
+    listQuillsTeams: listTeamsFixture.ok({
       teams: [
         {
           id: "team_test_1",
@@ -79,8 +80,18 @@ function answerReads(api: ReturnType<typeof mockApi>) {
         },
       ],
     }),
-  );
-  api.reply(listConversationAttributesFixture.ok({ items: [attribute] }));
+    listQuillsConversationAttributes: listConversationAttributesFixture.ok({
+      items: [attribute],
+    }),
+  };
+  for (const _read of Object.keys(answers))
+    api.defer(({ resolve }) => {
+      const request = api.calls().at(-1)!;
+      const id = Object.keys(answers).find((operation) =>
+        api.calls(operation).includes(request),
+      );
+      resolve(id ? answers[id] : { message: "Unexpected" }, id ? 200 : 500);
+    });
 }
 
 const render = () =>
@@ -95,23 +106,13 @@ const render = () =>
         <ConversationProperties
           workspaceId="workspace_test_1"
           conversation={conversation}
-          people={[
-            {
-              id: "principal_test_2",
-              userId: "user_test_2",
-              name: "Ada Teammate",
-              avatarUrl: null,
-              role: "member",
-              createdAt: "2026-01-01T00:00:00.000Z",
-            },
-          ]}
         />
       </TeamRuntimeProvider>
     </RouterContextProvider>,
   );
 
 describe("ConversationProperties", () => {
-  it("shows the state, the assignee, the attributes with their labels and the customer", async () => {
+  it("shows the customer, then the attributes with their labels", async () => {
     const api = mockApi();
     answerReads(api);
     const view = render();
@@ -119,9 +120,12 @@ describe("ConversationProperties", () => {
     expect(view.getByText("pro")).toBeInTheDocument();
     expect(view.getByText("a, b")).toBeInTheDocument();
     expect(view.queryByText("empty")).not.toBeInTheDocument();
-    expect(view.getByText("Snoozed")).toBeInTheDocument();
-    expect(view.getByText("Ada Teammate")).toBeInTheDocument();
-    expect(await view.findByText("Grace Customer")).toBeInTheDocument();
+    expect(
+      await view.findByRole("heading", { level: 2, name: "Grace Customer" }),
+    ).toBeInTheDocument();
+    expect(
+      view.getByRole("heading", { level: 2, name: "Details" }),
+    ).toBeVisible();
     expect(view.getByRole("combobox", { name: "Priority" })).toHaveTextContent(
       "High",
     );

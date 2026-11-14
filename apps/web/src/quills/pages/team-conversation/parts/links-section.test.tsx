@@ -113,12 +113,12 @@ describe("LinksSection", () => {
     api.reply(getLinkedPostsForConversationFixture.ok());
     const view = render();
     await vi.waitFor(() => expect(view.getAllByText("None")).toHaveLength(2));
-    press("Create post");
-    await view.findByLabelText("Post title");
-    fill("Post title", "Faster export");
-    press("Create post");
+    press("Create request");
+    await view.findByLabelText("Request title");
+    fill("Request title", "Faster export");
+    press("Create request");
     expect(
-      await view.findByText("Created the post “Faster export”."),
+      await view.findByText("Created the request “Faster export”."),
     ).toBeInTheDocument();
     expect(
       await api.calls("createQuillsPostFromConversation")[0]!.json(),
@@ -130,7 +130,7 @@ describe("LinksSection", () => {
     api.reply(getConversationTicketLinkFixture.ok());
     api.reply(getLinkedPostsForConversationFixture.ok());
     const view = render(false);
-    expect(view.getByRole("button", { name: "Create post" })).toBeDisabled();
+    expect(view.getByRole("button", { name: "Create request" })).toBeDisabled();
     await vi.waitFor(() => expect(api.calls()).toHaveLength(2));
   });
 });
