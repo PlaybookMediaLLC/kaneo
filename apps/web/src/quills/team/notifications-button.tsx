@@ -53,12 +53,17 @@ export function NotificationsButton({
     const before = seen.current;
     seen.current = count;
     if (
-      before !== null &&
-      count > before &&
-      document.hidden &&
-      desktopAllowed()
+      before === null ||
+      count <= before ||
+      !document.hidden ||
+      !desktopAllowed()
     )
+      return;
+    try {
       new Notification(t("team.notifications.new", { count: count - before }));
+    } catch {
+      // ponytail: some mobile browsers allow notifications only from a service worker.
+    }
   }, [count, unread.data, t]);
 
   return (

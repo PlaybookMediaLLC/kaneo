@@ -48,7 +48,10 @@ export function SidebarItem({ item, onNavigate }: SidebarItemProps) {
         className={row}
         onClick={() => {
           const link = new URL(item.to, window.location.origin).href;
-          void Promise.resolve(navigator.clipboard?.writeText(link)).then(
+          const copy = navigator.clipboard
+            ? navigator.clipboard.writeText(link)
+            : Promise.reject(new Error("No clipboard"));
+          void copy.then(
             () => toast.success(t("team.shareCopied")),
             () => toast.error(t("core.problem.failed")),
           );
