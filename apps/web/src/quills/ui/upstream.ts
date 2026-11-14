@@ -88,3 +88,26 @@ export { ShortcutListener } from "@/lib/shortcuts/shortcut-listener";
 
 // RFC 0004 lane P: the title and project of a task that a post links to.
 export { default as useGetTask } from "@/hooks/queries/task/use-get-task";
+
+// RFC 0004 revision 2: the sidebar shell and the shared thread parts.
+export {
+  Menu,
+  MenuCheckboxItem,
+  MenuGroupLabel,
+  MenuItem,
+  MenuPopup,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuSeparator,
+  MenuTrigger,
+} from "@/components/ui/menu";
+export { CommandDialog, CommandDialogPopup } from "@/components/ui/command";
+export { Badge } from "@/components/ui/badge";
+export {
+  Popover,
+  PopoverPopup,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+export { getInitials } from "@/lib/get-initials";
+export { default as useGetWorkspaces } from "@/hooks/queries/workspace/use-get-workspaces";

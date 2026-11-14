@@ -13,12 +13,15 @@ export function StatusTabs({ label, tabs, value, onChange }: StatusTabsProps) {
   return (
     <Tabs value={value} onValueChange={(next) => onChange(String(next))}>
       <TabsList
-        variant="underline"
         aria-label={label}
-        className="w-full justify-start border-b border-border px-3"
+        className="mx-4 mb-2 max-w-full justify-start overflow-x-auto rounded-full"
       >
         {tabs.map((tab) => (
-          <TabsTab key={tab.value} value={tab.value} className="grow-0">
+          <TabsTab
+            key={tab.value}
+            value={tab.value}
+            className="grow-0 rounded-full"
+          >
             {tab.label}{" "}
             {tab.count === undefined ? null : (
               <span className="tabular-nums text-muted-foreground">

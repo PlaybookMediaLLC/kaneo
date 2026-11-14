@@ -9,6 +9,8 @@ export const postSearch = z.object({
     .optional()
     .catch(undefined),
   board: z.string().max(100).optional().catch(undefined),
+  /** One status, as the sidebar opens it. It replaces the status tab. */
+  statusId: z.string().max(100).optional().catch(undefined),
   q: z.string().max(200).optional().catch(undefined),
   sort: z.enum(["newest", "votes", "rice"]).optional().catch(undefined),
 });
@@ -24,7 +26,7 @@ export const postFilterQuery = (search: PostSearch) => ({
 });
 
 /**
- * The listQuillsPosts input of the inbox. A status tab is a status category, so the
+ * The listQuillsPosts input of the inbox. A status ID filters one status. A status tab is a status category, so the
  * request waits for the statuses. `none` is true when the tab has no status: the list is
  * then empty, because an empty statusIds filter matches every post.
  */
@@ -34,8 +36,9 @@ export function postListInput(
   statuses: readonly Status[] | undefined,
 ) {
   const tab = search.status ?? "active";
-  const ids =
-    tab === "all"
+  const ids = search.statusId
+    ? [search.statusId]
+    : tab === "all"
       ? []
       : (statuses ?? [])
           .filter((status) => status.category === tab)

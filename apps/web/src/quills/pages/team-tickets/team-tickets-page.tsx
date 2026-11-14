@@ -7,7 +7,7 @@ import { useTeamRuntime } from "../../team/runtime";
 import { TeamStateView } from "../../team/team-state-view";
 import { GroupedList } from "../../ui/inbox/grouped-list";
 import { ListHeader } from "../../ui/inbox/list-header";
-import { ListRow } from "../../ui/inbox/list-row";
+import { ConversationRow } from "../../ui/inbox/conversation-row";
 import { StatusTabs } from "../../ui/inbox/status-tabs";
 import { useListNavigation } from "../../ui/inbox/use-list-navigation";
 import { PageFrame } from "../../ui/page-frame";
@@ -82,7 +82,7 @@ export function TeamTicketsPage({ workspaceId, search }: TeamTicketsPageProps) {
           })
         }
       />
-      <div className="min-h-0 flex-1 overflow-y-auto [&>[role=alert]]:m-4 [&>[role=status]]:px-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 [&>[role=alert]]:m-4 [&>[role=status]]:px-4">
         <TeamStateView
           loading={list.isLoading}
           problem={list.error ?? null}
@@ -94,7 +94,7 @@ export function TeamTicketsPage({ workspaceId, search }: TeamTicketsPageProps) {
             groups={groups}
             getKey={(ticket) => ticket.id}
             renderItem={(ticket) => (
-              <ListRow
+              <ConversationRow
                 {...ticketRow(ticket, t("team-tickets.noRequester"))}
                 href={ticketHref(workspaceId, ticket.id, scope)}
                 onOpen={() => open(ticket.id)}

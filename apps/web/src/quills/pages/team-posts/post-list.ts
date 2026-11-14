@@ -1,6 +1,7 @@
 import type { GetPostFilterCountsResponse } from "../../api/team/get-post-filter-counts";
 import type { ListPostsResponse } from "../../api/team/list-posts";
 import type { ListStatusesResponse } from "../../api/team/list-statuses";
+import { statusProgress } from "../../core/status-progress";
 import type { ListGroup } from "../../ui/inbox/grouped-list";
 import type { PostTab } from "./post-search";
 
@@ -32,24 +33,27 @@ export function groupPosts(
   ];
 }
 
-/** The ListRow content of a post: author, title, text, then chips for votes, board and tags. */
+/** The RequestRow content of a post: title, votes, comments, board, date and author. */
 export function postRow(
   post: ListedPost,
   boardName: string | undefined,
-  labels: { votes: string; anonymous: string },
+  anonymous: string,
 ) {
   return {
-    person: { name: post.authorName ?? labels.anonymous },
     title: post.title,
-    preview: post.content,
+    votes: post.voteCount,
+    comments: post.commentCount,
+    board: boardName ?? null,
     time: post.createdAt,
-    chips: [
-      { id: "votes", label: labels.votes },
-      ...(boardName ? [{ id: "board", label: boardName }] : []),
-      ...post.tags.map((tag) => ({ id: tag.id, label: tag.name })),
-    ],
+    person: { name: post.authorName ?? anonymous },
   };
 }
+
+/** The PostStatusIcon values of a post: its status color and how far the status is along. */
+export const statusIcon = (post: ListedPost, statuses: readonly Status[]) => ({
+  color: statuses.find((status) => status.id === post.statusId)?.color ?? null,
+  progress: statusProgress(statuses, post.statusId),
+});
 
 /** The post count of each status tab. "All" leaves out the rare post without a status. */
 export function tabCounts(

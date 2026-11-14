@@ -10,13 +10,14 @@ import { teamHref } from "../../team/team-href";
 import { TeamStateView } from "../../team/team-state-view";
 import { GroupedList } from "../../ui/inbox/grouped-list";
 import { ListHeader } from "../../ui/inbox/list-header";
-import { ListRow } from "../../ui/inbox/list-row";
+import { PostStatusIcon } from "../../ui/inbox/post-status-icon";
+import { RequestRow } from "../../ui/inbox/request-row";
 import { StatusTabs } from "../../ui/inbox/status-tabs";
 import { useListNavigation } from "../../ui/inbox/use-list-navigation";
 import { PageFrame } from "../../ui/page-frame";
 import { Button } from "../../ui/upstream";
 import { PostFilters, postFilterIds } from "./parts/post-filters";
-import { groupPosts, postRow, tabCounts } from "./post-list";
+import { groupPosts, postRow, statusIcon, tabCounts } from "./post-list";
 import {
   postFilterQuery,
   postListInput,
@@ -97,9 +98,11 @@ export function TeamPostsPage({
   return (
     <PageFrame titleKey="team-posts.title" landmark={false} variant="app">
       <ListHeader
-        title={t("team-posts.title")}
+        title={
+          statuses.data?.statuses.find((s) => s.id === search.statusId)?.name ??
+          t("team-posts.title")
+        }
         onFilters={() => document.getElementById(postFilterIds.board)?.focus()}
-        onDisplay={() => document.getElementById(postFilterIds.sort)?.focus()}
       />
       <StatusTabs
         label={t("team-posts.statusTabs")}
@@ -109,14 +112,16 @@ export function TeamPostsPage({
           count: total?.[tab.value],
         }))}
         value={search.status ?? "active"}
-        onChange={(status) => setSearch({ status: status as PostTab })}
+        onChange={(status) =>
+          setSearch({ status: status as PostTab, statusId: undefined })
+        }
       />
       <PostFilters
         boards={boards.data?.items ?? []}
         search={search}
         onChange={setSearch}
       />
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto px-2">
         <TeamStateView
           loading={
             statuses.isLoading ||
@@ -139,11 +144,17 @@ export function TeamPostsPage({
             groups={groups}
             getKey={(post) => post.id}
             renderItem={(post) => (
-              <ListRow
-                {...postRow(post, boardName.get(post.boardId), {
-                  votes: t("team-posts.votes", { count: post.voteCount }),
-                  anonymous: t("team-posts.anonymous"),
-                })}
+              <RequestRow
+                {...postRow(
+                  post,
+                  boardName.get(post.boardId),
+                  t("team-posts.anonymous"),
+                )}
+                icon={
+                  <PostStatusIcon
+                    {...statusIcon(post, statuses.data?.statuses ?? [])}
+                  />
+                }
                 href={router.buildLocation({ to: to(post.id), search }).href}
                 onOpen={() => open(post.id)}
                 selected={post.id === active}

@@ -9,21 +9,21 @@ import { useListPrincipals } from "../../hooks/team/use-list-principals";
 import { useMarkConversationRead } from "../../hooks/team/use-mark-conversation-read";
 import { useTeamRuntime } from "../../team/runtime";
 import { TeamStateView } from "../../team/team-state-view";
+import { DetailHeader } from "../../ui/inbox/detail-header";
 import { DetailLayout } from "../../ui/inbox/detail-layout";
-import { ListRow } from "../../ui/inbox/list-row";
+import { useListNavigation } from "../../ui/inbox/use-list-navigation";
 import { PageFrame } from "../../ui/page-frame";
 import {
   conversationHref,
   listHref,
   listQuery,
-  peopleById,
   readContext,
-  rowData,
   viewTitleKeys,
 } from "../team-conversations/conversation-list";
 import { ConversationActions } from "./parts/conversation-actions";
 import { ConversationComposer } from "./parts/conversation-composer";
 import { ConversationHeader } from "./parts/conversation-header";
+import { ConversationListPane } from "./parts/conversation-list-pane";
 import { ConversationProperties } from "./parts/conversation-properties";
 import { MessageList } from "./parts/message-list";
 
@@ -73,7 +73,6 @@ export function TeamConversationPage(props: TeamConversationPageProps) {
   }>();
   const mode = composer?.id === conversationId ? composer.mode : null;
   const people = principals.data?.items ?? [];
-  const byId = peopleById(people);
   const items = list.data?.pages.flatMap((page) => page.items) ?? [];
   const data = conversation.data;
 
@@ -89,6 +88,13 @@ export function TeamConversationPage(props: TeamConversationPageProps) {
 
   const go = (id: string) =>
     void navigate({ href: conversationHref(workspaceId, id, context) });
+  const back = () => void navigate({ href: listHref(workspaceId, context) });
+  const nav = useListNavigation({
+    ids: items.map((item) => item.id),
+    activeId: conversationId,
+    onMove: go,
+    onBack: back,
+  });
   const customer =
     data?.visitorName ?? data?.visitorEmail ?? t("team-conversations.unknown");
 
@@ -102,24 +108,16 @@ export function TeamConversationPage(props: TeamConversationPageProps) {
       <DetailLayout
         listLabel={t(viewTitleKeys[context.view])}
         list={
-          <ul className="divide-y divide-border">
-            {items.map((item) => (
-              <li key={item.id}>
-                <ListRow
-                  compact
-                  href={conversationHref(workspaceId, item.id, context)}
-                  onOpen={() => go(item.id)}
-                  selected={item.id === conversationId}
-                  {...rowData(item, byId, t("team-conversations.unknown"))}
-                />
-              </li>
-            ))}
-          </ul>
+          <ConversationListPane
+            workspaceId={workspaceId}
+            context={context}
+            items={items}
+            people={people}
+            activeId={conversationId}
+            onOpen={go}
+            loading={list.isLoading}
+          />
         }
-        ids={items.map((item) => item.id)}
-        activeId={conversationId}
-        onMove={go}
-        onBack={() => void navigate({ href: listHref(workspaceId, context) })}
         propertiesLabel={t("team-conversations.properties.title")}
         properties={
           data ? (
@@ -131,6 +129,11 @@ export function TeamConversationPage(props: TeamConversationPageProps) {
           ) : null
         }
       >
+        <DetailHeader
+          onBack={back}
+          onPrevious={nav.previous}
+          onNext={nav.next}
+        />
         <ConversationHeader
           workspaceId={workspaceId}
           conversation={data}

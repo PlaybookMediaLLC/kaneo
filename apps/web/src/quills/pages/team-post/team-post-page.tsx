@@ -9,13 +9,14 @@ import { useListStatuses } from "../../hooks/team/use-list-statuses";
 import { useTeamRuntime } from "../../team/runtime";
 import { teamHref } from "../../team/team-href";
 import { TeamStateView } from "../../team/team-state-view";
+import { DetailHeader } from "../../ui/inbox/detail-header";
 import { DetailLayout } from "../../ui/inbox/detail-layout";
-import { GroupedList } from "../../ui/inbox/grouped-list";
-import { ListRow } from "../../ui/inbox/list-row";
+import { useListNavigation } from "../../ui/inbox/use-list-navigation";
 import { PageFrame } from "../../ui/page-frame";
-import { groupPosts, postRow } from "../team-posts/post-list";
+import { groupPosts } from "../team-posts/post-list";
 import { postListInput, postSearch } from "../team-posts/post-search";
 import { PostComposer } from "./parts/post-composer";
+import { PostListPane } from "./parts/post-list-pane";
 import { PostProperties } from "./parts/post-properties";
 import { PostThread } from "./parts/post-thread";
 
@@ -59,12 +60,20 @@ export function TeamPostPage({
     statuses.data?.statuses ?? [],
     t("team-posts.noStatus"),
   );
-  const ids = groups.flatMap((group) => group.items.map((item) => item.id));
+  const items = groups.flatMap((group) => group.items);
   const boardName = new Map(
     boards.data?.items.map((board) => [board.id, board.name]),
   );
   const to = (id: string) => teamHref(workspaceId, `/posts/${id}`);
   const open = (id: string) => void navigate({ to: to(id), search });
+  const back = () =>
+    void navigate({ to: teamHref(workspaceId, "/posts"), search });
+  const nav = useListNavigation({
+    ids: items.map((item) => item.id),
+    activeId: postId,
+    onMove: open,
+    onBack: back,
+  });
   const loading =
     post.isLoading ||
     comments.isLoading ||
@@ -82,31 +91,20 @@ export function TeamPostPage({
     >
       <DetailLayout
         list={
-          <GroupedList
-            label={t("team-posts.list")}
-            groups={groups}
-            getKey={(item) => item.id}
-            renderItem={(item) => (
-              <ListRow
-                {...postRow(item, boardName.get(item.boardId), {
-                  votes: t("team-posts.votes", { count: item.voteCount }),
-                  anonymous: t("team-posts.anonymous"),
-                })}
-                compact
-                href={router.buildLocation({ to: to(item.id), search }).href}
-                onOpen={() => open(item.id)}
-                selected={item.id === postId}
-              />
-            )}
+          <PostListPane
+            posts={items}
+            statuses={statuses.data?.statuses ?? []}
+            boardName={boardName}
+            activeId={postId}
+            href={(id) => router.buildLocation({ to: to(id), search }).href}
+            onOpen={open}
+            loading={
+              statuses.isLoading ||
+              (Boolean(statuses.data) && !list.none && posts.isPending)
+            }
           />
         }
         listLabel={t("team-post.list")}
-        ids={ids}
-        activeId={postId}
-        onMove={open}
-        onBack={() =>
-          void navigate({ to: teamHref(workspaceId, "/posts"), search })
-        }
         propertiesLabel={t("team-post.properties")}
         properties={
           !loading && data && statuses.data && boards.data ? (
@@ -120,6 +118,12 @@ export function TeamPostPage({
           ) : null
         }
       >
+        <DetailHeader
+          onBack={back}
+          backLabel={data ? boardName.get(data.boardId) : undefined}
+          onPrevious={nav.previous}
+          onNext={nav.next}
+        />
         <header className="border-b border-border px-6 py-4">
           <h1 tabIndex={-1} className="text-lg font-semibold outline-none">
             {data?.title ?? t("team-post.title")}

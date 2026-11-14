@@ -16,7 +16,5 @@
 	"sortRice": "RICE score",
 	"sortVotes": "Most votes",
 	"statusTabs": "Post status",
-	"title": "Feedback inbox",
-	"votes_one": "{{count}} vote",
-	"votes_other": "{{count}} votes"
+	"title": "Feedback inbox"
 }

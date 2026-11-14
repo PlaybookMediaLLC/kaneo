@@ -41,13 +41,25 @@ import { PortalShell } from "../ui/portal-shell";
 import { ResultCard } from "../ui/result-card";
 import { StateView } from "../ui/state-view";
 import { SurveyCard } from "../ui/survey-card";
-import { ActionBar } from "../ui/inbox/action-bar";
+import { CommandPalette } from "../ui/inbox/command-palette";
+import { Composer } from "../ui/inbox/composer";
+import { ConversationRow } from "../ui/inbox/conversation-row";
+import { DateSeparator } from "../ui/inbox/date-separator";
+import { DetailHeader } from "../ui/inbox/detail-header";
 import { DetailLayout } from "../ui/inbox/detail-layout";
+import { EmptySelection } from "../ui/inbox/empty-selection";
+import { FloatingActionBar } from "../ui/inbox/floating-action-bar";
 import { GroupedList } from "../ui/inbox/grouped-list";
 import { ListHeader } from "../ui/inbox/list-header";
-import { ListRow } from "../ui/inbox/list-row";
+import { ListPane } from "../ui/inbox/list-pane";
+import { MessageBubble } from "../ui/inbox/message-bubble";
+import { PostStatusIcon } from "../ui/inbox/post-status-icon";
 import { PropertyRow } from "../ui/inbox/property-row";
+import { RequestRow } from "../ui/inbox/request-row";
+import { RowBadge } from "../ui/inbox/row-badge";
+import { SearchField } from "../ui/inbox/search-field";
 import { StatusTabs } from "../ui/inbox/status-tabs";
+import { SystemEvent } from "../ui/inbox/system-event";
 import {
   Dialog,
   DialogTitle,
@@ -58,6 +70,7 @@ import {
   SheetTitle,
   SheetPanel,
   Button,
+  MenuItem,
   Input,
   Label,
   Field,
@@ -94,6 +107,9 @@ export function KitGallery() {
   const [voted, setVoted] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [outcome, setOutcome] = useState<keyof typeof outcomes>("success");
+  const [text, setText] = useState("");
+  const [palette, setPalette] = useState(false);
+  const [mode, setMode] = useState("reply");
   const demo = t("core.gallery.demo");
   const schema = z.object({
     message: z.string().min(1, t("core.gallery.required")),
@@ -531,12 +547,26 @@ export function KitGallery() {
               }}
               onDismiss={() => setEmpty(true)}
             />
-            {/* RFC 0004 lane S: the inbox list and detail primitives. */}
+            {/* RFC 0004 revision 2: the inbox, request and thread parts. */}
             <ListHeader
               title={t("inbox.title")}
               headingLevel={2}
-              onFilters={() => setEmpty(!empty)}
-              onDisplay={() => setPending(!pending)}
+              filters={
+                <MenuItem onClick={() => setEmpty(!empty)}>{demo}</MenuItem>
+              }
+              actions={
+                <>
+                  <SearchField
+                    label={demo}
+                    value={text}
+                    onChange={setText}
+                    shortcut={false}
+                  />
+                  <Button size="sm" onClick={() => setPalette(true)}>
+                    {demo}
+                  </Button>
+                </>
+              }
             />
             <StatusTabs
               label={demo}
@@ -547,13 +577,43 @@ export function KitGallery() {
               value={pending ? "all" : "open"}
               onChange={(value) => setPending(value === "all")}
             />
-            <div className="h-96 overflow-hidden rounded-lg border border-border">
+            <GroupedList
+              label={demo}
+              groups={[{ id: "requests", label: demo, items: [0, 0.5, 1] }]}
+              getKey={(progress) => String(progress)}
+              renderItem={(progress) => (
+                <RequestRow
+                  href={`#request_${progress}`}
+                  onOpen={() => setVoted(!voted)}
+                  title={demo}
+                  icon={<PostStatusIcon progress={progress} />}
+                  badges={[{ id: "stale", label: demo, tone: "error" }]}
+                  votes={3}
+                  comments={1}
+                  board={demo}
+                  time="2026-01-01T00:00:00.000Z"
+                  person={{ name: demo }}
+                />
+              )}
+            />
+            <RowBadge badge={{ id: "badge", label: demo, tone: "success" }} />
+            <CommandPalette
+              open={palette}
+              onOpenChange={setPalette}
+              label={demo}
+              chip={demo}
+              placeholder={demo}
+              query={text}
+              onQueryChange={setText}
+              items={[demo]}
+              getKey={(item) => item}
+              renderItem={(item) => item}
+              onSelect={() => setPalette(false)}
+            />
+            <div className="h-[36rem] overflow-hidden rounded-lg border border-border">
               <DetailLayout
                 listLabel={t("inbox.title")}
-                ids={["row_1", "row_2"]}
-                activeId={voted ? "row_2" : "row_1"}
-                onMove={(id) => setVoted(id === "row_2")}
-                onBack={() => setConfirmed(false)}
+                itemOpen={!empty}
                 propertiesLabel={demo}
                 properties={
                   <PropertyRow label={demo}>
@@ -561,47 +621,104 @@ export function KitGallery() {
                   </PropertyRow>
                 }
                 list={
-                  <GroupedList
-                    label={t("inbox.title")}
-                    groups={[
-                      {
-                        id: "open",
-                        label: demo,
-                        items: empty ? [] : ["row_1", "row_2"],
-                      },
-                    ]}
-                    getKey={(id) => id}
-                    renderItem={(id) => (
-                      <ListRow
-                        compact
-                        href={`#${id}`}
-                        onOpen={() => setVoted(id === "row_2")}
-                        selected={(id === "row_2") === voted}
-                        person={{ name: demo }}
-                        shortId={id}
-                        title={demo}
-                        preview={demo}
-                        chips={[{ id: "chip", label: demo }]}
-                        time="2026-01-01T00:00:00.000Z"
-                        assignee={pending ? { name: demo } : null}
-                        unread={!confirmed}
-                      />
-                    )}
-                  />
+                  <ListPane
+                    title={t("inbox.title")}
+                    headingLevel={2}
+                    empty={empty}
+                    search={{ label: demo, value: text, onChange: setText }}
+                  >
+                    <ConversationRow
+                      href="#row_1"
+                      onOpen={() => setVoted(!voted)}
+                      selected={voted}
+                      person={{ name: demo }}
+                      title={demo}
+                      preview={demo}
+                      time="2026-01-01T00:00:00.000Z"
+                      assignee={pending ? { name: demo } : null}
+                      badge={{ id: "resolved", label: demo, tone: "success" }}
+                      unread={!confirmed}
+                    />
+                  </ListPane>
                 }
               >
-                <p className="flex-1 p-4">{demo}</p>
-                <ActionBar
-                  label={demo}
-                  actions={[
-                    {
-                      id: "reply",
-                      label: demo,
-                      shortcut: "r",
-                      onSelect: () => setConfirmed(true),
-                    },
-                  ]}
-                />
+                {empty ? (
+                  <EmptySelection title={demo} text={demo} />
+                ) : (
+                  <>
+                    <DetailHeader
+                      onBack={() => setEmpty(true)}
+                      onPrevious={() => setVoted(false)}
+                      onNext={() => setVoted(true)}
+                    >
+                      <h3 className="truncate font-semibold">{demo}</h3>
+                    </DetailHeader>
+                    <div className="grid flex-1 content-start gap-3 overflow-y-auto p-4">
+                      <DateSeparator date="2026-01-01T00:00:00.000Z" />
+                      <MessageBubble
+                        kind="customer"
+                        author={{ name: demo }}
+                        time="2026-01-01T00:00:00.000Z"
+                      >
+                        {demo}
+                      </MessageBubble>
+                      <MessageBubble
+                        kind="team"
+                        author={{ name: demo }}
+                        time="2026-01-01T00:00:00.000Z"
+                        failure={pending ? demo : null}
+                      >
+                        {demo}
+                      </MessageBubble>
+                      <MessageBubble
+                        kind="note"
+                        author={{ name: demo }}
+                        time="2026-01-01T00:00:00.000Z"
+                      >
+                        {demo}
+                      </MessageBubble>
+                      <SystemEvent time="2026-01-01T00:00:00.000Z">
+                        {demo}
+                      </SystemEvent>
+                    </div>
+                    <div className="p-4">
+                      <Composer
+                        label={demo}
+                        value={text}
+                        onChange={setText}
+                        onSend={() => setConfirmed(true)}
+                        modes={[
+                          { value: "reply", label: demo },
+                          {
+                            value: "note",
+                            label: t("inbox.note"),
+                            private: true,
+                          },
+                        ]}
+                        mode={mode}
+                        onModeChange={setMode}
+                      />
+                    </div>
+                    <FloatingActionBar
+                      label={demo}
+                      actions={[
+                        {
+                          id: "reply",
+                          label: demo,
+                          shortcut: "r",
+                          onSelect: () => setConfirmed(true),
+                        },
+                      ]}
+                      primary={{
+                        id: "accept",
+                        label: demo,
+                        onSelect: () => setPending(!pending),
+                      }}
+                      onPrevious={() => setVoted(false)}
+                      onNext={() => setVoted(true)}
+                    />
+                  </>
+                )}
               </DetailLayout>
             </div>
           </section>

@@ -2,7 +2,10 @@ import { useTranslation } from "react-i18next";
 import type { PortalProblem } from "../../../core/types";
 import { teamHref } from "../../../team/team-href";
 import { TeamStateView } from "../../../team/team-state-view";
+import { DetailHeader } from "../../../ui/inbox/detail-header";
 import { DetailLayout } from "../../../ui/inbox/detail-layout";
+import { ListPane } from "../../../ui/inbox/list-pane";
+import { useListNavigation } from "../../../ui/inbox/use-list-navigation";
 import {
   SuggestionActions,
   type SuggestionActionsProps,
@@ -32,31 +35,40 @@ export function SuggestionView({
   ...props
 }: SuggestionViewProps) {
   const { t } = useTranslation("quills");
+  const nav = useListNavigation({
+    ids: suggestions.map((item) => item.id),
+    activeId: suggestion.id,
+    onMove: props.onMove,
+    onBack: props.onBack,
+  });
   return (
     <DetailLayout
       list={
-        <ul className="divide-y divide-border">
-          {suggestions.map((item) => (
-            <li key={item.id}>
-              <SuggestionListRow
-                suggestion={item}
-                href={teamHref(props.workspaceId, "/duplicates")}
-                compact
-                selected={item.id === suggestion.id}
-                onOpen={() => props.onMove(item.id)}
-              />
-            </li>
-          ))}
-        </ul>
+        <ListPane title={t("duplicates.title")} headingLevel={2}>
+          <ul className="grid gap-0.5">
+            {suggestions.map((item) => (
+              <li key={item.id}>
+                <SuggestionListRow
+                  suggestion={item}
+                  href={teamHref(props.workspaceId, "/duplicates")}
+                  compact
+                  selected={item.id === suggestion.id}
+                  onOpen={() => props.onMove(item.id)}
+                />
+              </li>
+            ))}
+          </ul>
+        </ListPane>
       }
       listLabel={t("duplicates.title")}
-      ids={suggestions.map((item) => item.id)}
-      activeId={suggestion.id}
-      onMove={props.onMove}
-      onBack={props.onBack}
       properties={<SuggestionProperties suggestion={suggestion} />}
       propertiesLabel={t("duplicates.properties")}
     >
+      <DetailHeader
+        onBack={props.onBack}
+        onPrevious={nav.previous}
+        onNext={nav.next}
+      />
       <SuggestionDetail suggestion={suggestion} />
       <p
         role="status"

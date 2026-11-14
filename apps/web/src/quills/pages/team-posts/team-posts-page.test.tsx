@@ -55,7 +55,6 @@ describe("TeamPostsPage", () => {
     expect(open).toHaveTextContent("Export to CSV");
     expect(open).toHaveTextContent("3 votes");
     expect(open).toHaveTextContent("Ideas");
-    expect(open).toHaveTextContent("API");
     expect(within(list).getByRole("group", { name: /^Planned/ })).toBeVisible();
     expect(view.getByRole("tab", { name: "Open 2" })).toBeVisible();
     expect(view.getByRole("tab", { name: "All 6" })).toBeVisible();

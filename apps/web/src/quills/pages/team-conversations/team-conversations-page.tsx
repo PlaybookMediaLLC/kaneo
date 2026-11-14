@@ -9,15 +9,15 @@ import { useTeamRuntime } from "../../team/runtime";
 import { TeamStateView } from "../../team/team-state-view";
 import { GroupedList } from "../../ui/inbox/grouped-list";
 import { ListHeader } from "../../ui/inbox/list-header";
-import { ListRow } from "../../ui/inbox/list-row";
+import { ConversationRow } from "../../ui/inbox/conversation-row";
 import { StatusTabs } from "../../ui/inbox/status-tabs";
 import { useListNavigation } from "../../ui/inbox/use-list-navigation";
 import { PageFrame } from "../../ui/page-frame";
 import { Button } from "../../ui/upstream";
 import {
   conversationHref,
-  conversationStatuses,
   listQuery,
+  listStatuses,
   peopleById,
   priorityGroups,
   readContext,
@@ -85,6 +85,10 @@ export function TeamConversationsPage(props: TeamConversationsPageProps) {
     remember({ status: next.status, savedView: next.savedView });
   };
   const title = t(viewTitleKeys[context.view]);
+  const labels = {
+    unknown: t("team-conversations.unknown"),
+    closed: t(statusKeys.closed),
+  };
 
   return (
     <PageFrame
@@ -93,22 +97,24 @@ export function TeamConversationsPage(props: TeamConversationsPageProps) {
       landmark={false}
     >
       <ListHeader title={title} />
-      <StatusTabs
-        label={t("team-conversations.tabs")}
-        tabs={[
-          ...conversationStatuses.map((status) => ({
-            value: status,
-            label: t(statusKeys[status]),
-          })),
-          ...pinned.map((view) => ({
-            value: `${SAVED}${view.id}`,
-            label: view.name,
-          })),
-        ]}
-        value={saved ? `${SAVED}${saved.id}` : context.status}
-        onChange={choose}
-      />
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      {context.view === "queue" ? null : (
+        <StatusTabs
+          label={t("team-conversations.tabs")}
+          tabs={[
+            ...listStatuses.map((status) => ({
+              value: status,
+              label: t(statusKeys[status]),
+            })),
+            ...pinned.map((view) => ({
+              value: `${SAVED}${view.id}`,
+              label: view.name,
+            })),
+          ]}
+          value={saved ? `${SAVED}${saved.id}` : context.status}
+          onChange={choose}
+        />
+      )}
+      <div className="min-h-0 flex-1 overflow-y-auto px-2">
         <TeamStateView
           loading={waiting || list.isLoading}
           problem={list.error ?? null}
@@ -120,11 +126,11 @@ export function TeamConversationsPage(props: TeamConversationsPageProps) {
             groups={priorityGroups(items, t)}
             getKey={(item) => item.id}
             renderItem={(item) => (
-              <ListRow
+              <ConversationRow
                 href={conversationHref(props.workspaceId, item.id, context)}
                 onOpen={() => open(item.id)}
                 selected={item.id === active}
-                {...rowData(item, people, t("team-conversations.unknown"))}
+                {...rowData(item, people, labels)}
               />
             )}
           />

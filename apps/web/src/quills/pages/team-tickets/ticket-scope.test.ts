@@ -70,7 +70,7 @@ describe("ticket scope", () => {
     ]);
   });
 
-  it("shows the requester, the chips and a team or unassigned assignee", () => {
+  it("shows the requester, the reference, the status and a team or unassigned assignee", () => {
     const row = ticketRow(
       getTicketFixture.ok({
         reference: "T-7",
@@ -93,8 +93,13 @@ describe("ticket scope", () => {
       "Nobody",
     );
     expect(row.person?.name).toBe("Nobody");
-    expect(row.shortId).toBe("T-7");
-    expect(row.chips?.map((chip) => chip.label)).toEqual(["value", "Bug"]);
+    expect(row.title).toBe("Login fails");
+    expect(row.preview).toBe("T-7 · Bug");
+    expect(row.badge).toEqual({
+      id: "status",
+      label: "value",
+      tone: "neutral",
+    });
     expect(row.assignee).toEqual({ name: "Billing" });
     expect(ticketRow(getTicketFixture.ok(), "Nobody").assignee).toBeNull();
   });

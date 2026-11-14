@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { getPostFilterCountsFixture } from "../../api/team/get-post-filter-counts.fixture";
 import { listPostsFixture } from "../../api/team/list-posts.fixture";
 import { setPostScoreFixture } from "../../api/team/set-post-score.fixture";
-import { groupPosts, postRow, tabCounts } from "./post-list";
+import { groupPosts, postRow, statusIcon, tabCounts } from "./post-list";
 
 const status = (
   id: string,
@@ -53,21 +53,29 @@ describe("groupPosts", () => {
 });
 
 describe("postRow", () => {
-  it("shows the author or the anonymous label, then votes, board and tags", () => {
-    const row = postRow(
-      {
-        ...post("1", "a"),
-        tags: [{ id: "t1", name: "API", color: "gray" }],
-      },
-      "Ideas",
-      { votes: "3 votes", anonymous: "Anonymous" },
-    );
-    expect(row.person).toEqual({ name: "Anonymous" });
-    expect(row.chips.map((chip) => chip.label)).toEqual([
-      "3 votes",
-      "Ideas",
-      "API",
-    ]);
+  it("shows the title, the counts, the board and the author or the anonymous label", () => {
+    const row = postRow(post("1", "a"), "Ideas", "Anonymous");
+    expect(row).toMatchObject({
+      title: "Post 1",
+      board: "Ideas",
+      person: { name: "Anonymous" },
+    });
+    expect(typeof row.votes).toBe("number");
+    expect(postRow(post("2", "a"), undefined, "Anonymous").board).toBeNull();
+  });
+});
+
+describe("statusIcon", () => {
+  it("takes the status color and fills a later status more", () => {
+    const open = [status("o", "active", 0), status("p", "active", 1)];
+    expect(statusIcon(post("1", "p"), open)).toEqual({
+      color: "gray",
+      progress: 0.5,
+    });
+    expect(statusIcon(post("2", "gone"), open)).toEqual({
+      color: null,
+      progress: 0,
+    });
   });
 });
 

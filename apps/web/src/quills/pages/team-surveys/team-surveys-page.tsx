@@ -10,7 +10,7 @@ import { teamHref } from "../../team/team-href";
 import { TeamStateView } from "../../team/team-state-view";
 import { GroupedList } from "../../ui/inbox/grouped-list";
 import { ListHeader } from "../../ui/inbox/list-header";
-import { ListRow } from "../../ui/inbox/list-row";
+import { RequestRow } from "../../ui/inbox/request-row";
 import { useListNavigation } from "../../ui/inbox/use-list-navigation";
 import { PageFrame } from "../../ui/page-frame";
 import { PortalSheetContent } from "../../ui/portal-sheet-content";
@@ -99,7 +99,7 @@ export function TeamSurveysPage({ workspaceId }: TeamSurveysPageProps) {
         }
       />
       {/* The loading, empty and error states get a margin. */}
-      <div className="min-h-0 flex-1 overflow-y-auto [&>[role=alert]]:m-4 [&>[role=status]]:px-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 [&>[role=alert]]:m-4 [&>[role=status]]:px-4">
         <TeamStateView
           loading={surveys.isLoading}
           problem={surveys.error ?? null}
@@ -111,15 +111,15 @@ export function TeamSurveysPage({ workspaceId }: TeamSurveysPageProps) {
               groups={groups}
               getKey={(survey) => survey.id}
               renderItem={(survey) => (
-                <ListRow
+                <RequestRow
                   href={href(survey.id)}
                   onOpen={() => open(survey.id)}
                   selected={survey.id === cursor}
                   title={survey.question}
-                  preview={t("surveys.responses", {
+                  detail={t("surveys.responses", {
                     count: survey.responseCount,
                   })}
-                  chips={[
+                  badges={[
                     { id: "type", label: t(SURVEY_TYPE_KEYS[survey.type]) },
                   ]}
                   time={survey.updatedAt}

@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useCreateComment } from "../../../hooks/team/use-create-comment";
 import { useTeamRuntime } from "../../../team/runtime";
-import { ActionBar } from "../../../ui/inbox/action-bar";
+import { FloatingActionBar } from "../../../ui/inbox/floating-action-bar";
 import { CommentForm, type CommentFormProps } from "./comment-form";
 
 export interface PostComposerProps {
@@ -35,7 +35,7 @@ export function PostComposer({ workspaceId, postId }: PostComposerProps) {
       </div>
     );
   return (
-    <ActionBar
+    <FloatingActionBar
       label={t("team-post.actions")}
       actions={[
         {
