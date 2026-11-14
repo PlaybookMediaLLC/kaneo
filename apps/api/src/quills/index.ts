@@ -29,6 +29,7 @@ import supportLinkPreview from "./support/link-preview";
 import supportReadBatch from "./support/read-batch";
 import testConversations from "./support/test-conversations";
 // RFC 0003 lane L5.
+import changelogAi from "./feedback/changelog-ai";
 import changelogEngagement from "./feedback/changelog-engagement";
 import { brandText } from "@kaneo/branding";
 import { apiRouter, z, type BaseVariables } from "../openapi";
@@ -105,5 +106,6 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", apps)
   .route("/", agentChannels)
   // RFC 0003 lane L5.
+  .route("/", changelogAi)
   .route("/", changelogEngagement)
   .openapi(...context);
