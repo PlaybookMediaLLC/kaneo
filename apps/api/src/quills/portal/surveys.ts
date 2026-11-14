@@ -127,25 +127,21 @@ export const surveyRoutes = (audience: Customer) =>
         handler: async ({ db, caller, params, body }) => {
           const viewer = await viewerFor(db, audience, caller);
           if (!viewer.signedIn) throw notFound();
+          // The share lock waits for a close or an edit in progress, then reads the status again.
           const [found] = await db
             .select({ type: surveys.type, options: surveys.options })
             .from(surveys)
-            .where(and(eq(surveys.id, params.surveyId), aimedAt(viewer)));
+            .where(and(eq(surveys.id, params.surveyId), aimedAt(viewer)))
+            .for("share");
           if (!found) throw notFound();
-          const answer = checkAnswer(found, {
-            score: body.score,
-            choice: body.choice,
-            comment: body.comment,
-          });
+          const answer = checkAnswer(found, body);
           // The unique (survey, principal) index decides between two parallel answers.
           const [row] = await db
             .insert(surveyResponses)
             .values({
               surveyId: params.surveyId,
               principalId: principalOf(viewer),
-              score: answer.score,
-              choice: answer.choice,
-              comment: answer.comment,
+              ...answer,
             })
             .onConflictDoNothing()
             .returning({ id: surveyResponses.id });

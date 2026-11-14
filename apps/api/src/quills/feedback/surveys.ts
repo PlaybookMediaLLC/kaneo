@@ -29,14 +29,14 @@ import {
   type AnyQuillsRoute,
 } from "../framework/define-route";
 import { idList, page, pageQuery, someField } from "./schemas";
-import { PMF_OPTIONS, summarize } from "./surveys-rules";
+import { PMF_OPTIONS, summarize, type SurveyType } from "./surveys-rules";
 
 // Teammate routes for in-app surveys (RFC 0003, D8). A survey starts as a draft, goes active
 // once, and closes once. Only a draft can be deleted; responses stay with a closed survey.
 
 type Db = Parameters<AnyQuillsRoute["handler"]>[0]["db"];
 
-const STATUSES = ["draft", "active", "closed"] as const;
+const STATUSES = surveys.status.enumValues;
 const survey = z
   .object({
     id: z.string(),
@@ -50,17 +50,22 @@ const survey = z
     updatedAt: responseTimestamp,
   })
   .openapi("QuillsSurvey");
-const columns = {
+const fields = {
   id: surveys.id,
   type: surveys.type,
   question: surveys.question,
   options: surveys.options,
   targetSegmentIds: surveys.targetSegmentIds,
   status: surveys.status,
-  // Qualified by hand: a single-table select names its own columns without the table.
-  responseCount: sql<number>`(select count(*)::int from ${surveyResponses} where ${surveyResponses.surveyId} = ${surveys}.${sql.identifier("id")})`,
   createdAt: surveys.createdAt,
   updatedAt: surveys.updatedAt,
+};
+// ponytail: each read counts the responses of every listed survey (the unique index serves it);
+// store a counter with a migration if surveys collect very many answers.
+const columns = {
+  ...fields,
+  // Qualified by hand: a single-table select names its own columns without the table.
+  responseCount: sql<number>`(select count(*)::int from ${surveyResponses} where ${surveyResponses.surveyId} = ${surveys}.${sql.identifier("id")})`,
 };
 const params = z.object({ surveyId: flexibleToTypeIdSchema("survey") });
 const question = z.string().trim().min(1).max(500);
@@ -83,7 +88,7 @@ const notFound = () => new HTTPException(404, { message: "Survey not found" });
 const conflict = (message: string) => new HTTPException(409, { message });
 
 /** Only a poll takes answers from the teammate; a PMF survey has fixed answers. */
-function optionsFor(type: (typeof SURVEY_TYPES)[number], given?: string[]) {
+function optionsFor(type: SurveyType, given?: string[]) {
   if (given !== undefined && type !== "poll")
     throw new HTTPException(400, {
       message: "Only a poll takes answer options",
@@ -332,8 +337,9 @@ const getSurveyResults = defineQuillsRoute({
   responseDescription: "The survey and its results",
   errors: { 404: "Survey not found" },
   handler: async ({ db, params }) => {
+    // The response count comes from the totals below, not from a second count.
     const [found] = await db
-      .select(columns)
+      .select(fields)
       .from(surveys)
       .where(eq(surveys.id, params.surveyId));
     if (!found) throw notFound();
@@ -350,21 +356,39 @@ const getSurveyResults = defineQuillsRoute({
       .from(surveyResponses)
       .where(mine)
       .groupBy(sql`1`, sql`2`);
-    const comments = await db
+    // The latest comments first, then their people: the join reads at most 20 rows.
+    const latest = db
       .select({
         id: surveyResponses.id,
-        comment: sql<string>`${surveyResponses.comment}`,
+        comment: surveyResponses.comment,
         score: surveyResponses.score,
         choice: surveyResponses.choice,
-        respondent: principal.displayName,
+        principalId: surveyResponses.principalId,
         createdAt: surveyResponses.createdAt,
       })
       .from(surveyResponses)
-      .leftJoin(principal, eq(principal.id, surveyResponses.principalId))
       .where(and(mine, isNotNull(surveyResponses.comment)))
       .orderBy(desc(surveyResponses.createdAt), desc(surveyResponses.id))
-      .limit(COMMENTS);
-    return { survey: found, ...summarize(found, counts), comments };
+      .limit(COMMENTS)
+      .as("latest");
+    const comments = await db
+      .select({
+        id: latest.id,
+        comment: sql<string>`${latest.comment}`,
+        score: latest.score,
+        choice: latest.choice,
+        respondent: principal.displayName,
+        createdAt: latest.createdAt,
+      })
+      .from(latest)
+      .leftJoin(principal, eq(principal.id, latest.principalId))
+      .orderBy(desc(latest.createdAt), desc(latest.id));
+    const results = summarize(found, counts);
+    return {
+      survey: { ...found, responseCount: results.total },
+      ...results,
+      comments,
+    };
   },
 });
 

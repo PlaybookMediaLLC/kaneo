@@ -95,7 +95,11 @@ export function summarize(
     : [];
   const between = (low: number, high: number) =>
     sum(scores.filter((row) => row.value >= low && row.value <= high));
-  const percent = (part: number) => Math.round((100 * part) / total) || 0;
+  // Rounds half away from zero, so -12.5 and 12.5 round the same way.
+  const percent = (part: number) => {
+    const value = (100 * part) / total;
+    return Math.sign(value) * Math.round(Math.abs(value)) || 0;
+  };
   let score: number | null = null;
   if (total && survey.type === "nps")
     score = percent(between(9, 10) - between(0, 6));
