@@ -3,7 +3,13 @@ import { HTTPException } from "hono/http-exception";
 import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
 import { apiRouter, z } from "../../openapi";
 import { contentTranslations } from "../../database/quills/schema/content-translations";
-import { chatJson, requireAi, toHttp, untrusted } from "../assistant/provider";
+import {
+  AiError,
+  chatJson,
+  requireAi,
+  toHttp,
+  untrusted,
+} from "../assistant/provider";
 import { logUsage } from "../assistant/runs";
 import { hashToken, type QuillsCaller } from "../framework/audience";
 import { defineQuillsRoute, type Database } from "../framework/define-route";
@@ -14,6 +20,17 @@ import { findPost, viewerFor, visibleBoards } from "./feedback/viewer";
 // The cache row is keyed by the entity, the locale and the SHA-256 of the source text, so an
 // edited text never gets an old translation. The provider call holds no database connection.
 
+/**
+ * The language that the cache keys on: `de-AT` and `de-DE` are `de`, so a region never causes a
+ * second AI call. Chinese keeps its script, as in the help-center locales (`zh-cn`, `zh-tw`).
+ */
+export function language(tag: string) {
+  const lower = tag.toLowerCase();
+  const primary = lower.split("-")[0]!;
+  if (primary !== "zh") return primary;
+  return /-(hant|tw|hk|mo)(-|$)/.test(lower) ? "zh-tw" : "zh-cn";
+}
+
 const body = z
   .object({
     postId: flexibleToTypeIdSchema("post").optional(),
@@ -23,8 +40,8 @@ const body = z
       .trim()
       .min(2)
       .max(35)
-      .regex(/^[a-z]{2,3}(-[a-z0-9]{2,8})*$/i, "Use a BCP 47 language tag")
-      .transform((value) => value.toLowerCase()),
+      .regex(/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/, "Use a BCP 47 language tag")
+      .transform(language),
   })
   .refine((value) => Boolean(value.postId) !== Boolean(value.commentId), {
     message: "Provide a post ID or a comment ID",
@@ -110,6 +127,9 @@ const translate = defineQuillsRoute({
     ).catch((error) => {
       throw toHttp(error);
     });
+    // An empty answer for a text is no translation: never cache it for every viewer.
+    if (source.content.trim() && !value.content.trim())
+      throw toHttp(new AiError("bad_response"));
     const title =
       source.title === null ? null : value.title?.trim() || source.title;
     return {
@@ -136,6 +156,8 @@ const translate = defineQuillsRoute({
     none: "A cached translation is derived data; the usage log row records the AI call",
   },
   handler: async ({ db, caller, body, called }) => {
+    // A cache hit made no provider call: `prepare` checked the text in this request.
+    if (!called.usage) return called.translation;
     // The text may have changed or left the caller's sight while the provider answered.
     const source = await sourceOf(db, caller, body);
     if (hashOf(source) !== called.hash)

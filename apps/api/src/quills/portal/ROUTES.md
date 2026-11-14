@@ -182,17 +182,20 @@ Boundary map:
 
 | operationId | Route | Audience | Action | Tables | Event | Tests |
 |---|---|---|---|---|---|---|
-| `improveQuillsPortalPostDraft` | `POST /portal/post-draft/improve` (title ≤ 200, details ≤ 4000, optional `boardId`; 10 per 10 min per account) | portal | create | `boards`, `ai_usage_log`, `rate_bucket` | none | contract, `feedback/ai.test.ts` |
-| `translateQuillsPortalContent` | `POST /portal/translations` (`postId` or `commentId`, `locale` as a BCP 47 tag; 60 per 10 min per account, or per client without a session) | portal, sign-in optional | read | `posts`, `post_comments`, `content_translations`, `ai_usage_log`, `rate_bucket` | none | contract, `translations.test.ts` |
+| `improveQuillsPortalPostDraft` | `POST /portal/post-draft/improve` (title ≤ 200, details ≤ 4000, optional `boardId`; 10 per 10 min per account and per client) | portal | create | `boards`, `ai_usage_log`, `rate_bucket` | none | contract, `feedback/ai.test.ts` |
+| `translateQuillsPortalContent` | `POST /portal/translations` (`postId` or `commentId`, `locale` as a BCP 47 tag; 60 per 10 min per client, and per account with a session) | portal, sign-in optional | read | `posts`, `post_comments`, `content_translations`, `ai_usage_log`, `rate_bucket` | none | contract, `translations.test.ts` |
 
 Rules:
 
 1. The composer route returns a suggestion only. The model gets the customer's text as data and
    must not add facts. The answer is cut to 200 and 1,000 characters. The suggested board is a
    board that takes the caller's posts; another value becomes the given board or null.
-2. The translation key is the post or comment, the locale in lower case and the SHA-256 of the
-   source title and text. An edit changes the hash, so an old translation is never served. A cached
-   translation needs no AI, so it is served when AI is off. Two requests that miss at the same time
-   store one row: the insert does nothing on a conflict with the unique key.
-3. `rateLimit.per: "caller"` (`framework/define-route.ts`) counts these routes per signed-in Kaneo
-   account in the workspace, after the session read. Without a session it counts per client IP.
+2. The translation key is the post or comment, the language and the SHA-256 of the source title
+   and text. The language is the primary subtag of the locale (`de-AT` is `de`); Chinese keeps its
+   script as `zh-cn` or `zh-tw`. An edit changes the hash, so an old translation is never served.
+   A cached translation needs no AI, so it is served when AI is off. An empty answer for a text is
+   a 502 and is not cached. Two requests that miss at the same time store one row: the insert does
+   nothing on a conflict with the unique key.
+3. `rateLimit.per: "caller"` (`framework/define-route.ts`) counts these routes per client IP, like
+   every rate-limited route, and also per signed-in Kaneo account after the session read. One
+   account cannot spend the limit from many addresses, and many accounts cannot spend it from one.

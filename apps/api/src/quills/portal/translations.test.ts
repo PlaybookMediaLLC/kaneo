@@ -30,6 +30,7 @@ import {
 import quillsRouter from "../index";
 import publicRouter from "../public";
 import { portalAiReply } from "./feedback/ai.fixture";
+import { language } from "./translations";
 import { scene, type Scene } from "./feedback/seed.fixture";
 
 // Feature checks for translateQuillsPortalContent: the cache miss and hit paths, a concurrent
@@ -95,6 +96,16 @@ const cacheRows = async (where = "") =>
     )
   ).rows;
 
+describe("the translation cache language", () => {
+  it("keeps the language and drops the region, except the Chinese script", () => {
+    expect(
+      ["de-AT", "DE", "pt-BR", "zh-TW", "zh-Hant-HK", "zh-Hans-CN", "zh"].map(
+        language,
+      ),
+    ).toEqual(["de", "de", "pt", "zh-tw", "zh-tw", "zh-cn", "zh-cn"]);
+  });
+});
+
 describe.skipIf(!url)("Quills portal translations", () => {
   let s: Scene;
   beforeAll(async () => {
@@ -136,14 +147,14 @@ describe.skipIf(!url)("Quills portal translations", () => {
     const [row] = await cacheRows();
     expect(row).toMatchObject({
       comment_id: null,
-      locale: "de-de",
+      locale: "de",
       title: "Titel",
       content: "Inhalt",
     });
     expect(row.source_hash).toMatch(/^[0-9a-f]{64}$/);
 
-    // A tag in another case is the same locale: a hit, with no AI call.
-    const hit = await translate({ postId: s.a.postId, locale: "DE-de" });
+    // Another region or case of the same language is a hit, with no AI call.
+    const hit = await translate({ postId: s.a.postId, locale: "DE-at" });
     expect(hit.body).toEqual(first.body);
     expect(translateCalls()).toHaveLength(1);
 
@@ -299,10 +310,13 @@ describe.skipIf(!url)("Quills portal translations", () => {
   });
 
   it("serves the cache when AI is off and refuses a miss with 409", async () => {
+    expect((await translate({ postId: s.a.postId, locale: "it" })).status).toBe(
+      200,
+    );
     vi.stubEnv("QUILLS_AI_BASE_URL", "");
     try {
       expect(
-        (await translate({ postId: s.a.postId, locale: "fr" })).status,
+        (await translate({ postId: s.a.postId, locale: "it" })).status,
       ).toBe(200);
       const miss = await translate({ postId: s.a.postId, locale: "es" });
       expect(miss.status).toBe(409);
@@ -310,12 +324,67 @@ describe.skipIf(!url)("Quills portal translations", () => {
     } finally {
       vi.stubEnv("QUILLS_AI_BASE_URL", providerUrl);
     }
-    expect(translateCalls()).toHaveLength(0);
+    expect(translateCalls()).toHaveLength(1);
     provider.reply(() => ({ status: 503, json: { error: "provider secret" } }));
     const failed = await translate({ postId: s.a.postId, locale: "es" });
     expect(failed.status).toBe(502);
     expect(JSON.stringify(failed.body)).not.toContain("provider secret");
+    // An empty answer for a text is refused, so no viewer gets a blank translation.
+    provider.reply(() => chatReply({ title: "Título", content: " " }));
+    expect((await translate({ postId: s.a.postId, locale: "es" })).status).toBe(
+      502,
+    );
     expect(await cacheRows("AND locale='es'")).toHaveLength(0);
+  });
+
+  it("stores nothing when the text changes or leaves the caller's sight during the AI call", async () => {
+    const fresh = await contractEnv().scoped(
+      contractEnv().a,
+      async (db, actor) =>
+        (
+          await db
+            .insert(posts)
+            .values({
+              boardId: s.a.boardId as never,
+              title: "Fresh",
+              content: "Fresh body",
+              principalId: actor.principalId,
+            })
+            .returning({ id: posts.id })
+        )[0]!.id,
+    );
+    const change = async (values: Partial<typeof posts.$inferInsert>) => {
+      let arrived!: () => void;
+      const reached = new Promise<void>((resolve) => (arrived = resolve));
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      provider.reply(async (request) => {
+        arrived();
+        await gate;
+        return portalAiReply(request);
+      });
+      const pending = translate({ postId: fresh, locale: "nl" });
+      await reached;
+      await contractEnv().scoped(contractEnv().a, (db) =>
+        db.update(posts).set(values).where(eq(posts.id, fresh)),
+      );
+      release();
+      return pending;
+    };
+    const usage = async () =>
+      (
+        await pool.query(
+          "SELECT count(*)::int AS n FROM quills.ai_usage_log WHERE workspace_id=$1",
+          [contractEnv().a],
+        )
+      ).rows[0].n;
+    const before = await usage();
+    const edited = await change({ content: "Edited while translating" });
+    expect(edited.status).toBe(409);
+    const removed = await change({ deletedAt: new Date() });
+    expect(removed.status).toBe(404);
+    expect(await cacheRows("AND locale='nl'")).toHaveLength(0);
+    expect(await usage()).toBe(before);
   });
 
   it("bounds the input", async () => {
@@ -349,5 +418,6 @@ describe.skipIf(!url)("Quills portal translations", () => {
       (await translate({ postId: s.a.postId, locale: "fr" }, { user: "" }))
         .status,
     ).toBe(200);
-  });
+    // 62 requests of three transactions each need more than the 5-second default on a busy machine.
+  }, 30000);
 });
