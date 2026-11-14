@@ -1,0 +1,22 @@
+{
+	"description": "How customers react to your published updates. Draft the next update from shipped requests.",
+	"draft": {
+		"choose": "Shipped requests",
+		"none": "No request has shipped yet.",
+		"open": "Draft from shipped requests",
+		"post_one": "{{title}} · {{count}} vote",
+		"post_other": "{{title}} · {{count}} votes",
+		"requesters_one": "{{count}} person asked for this.",
+		"requesters_other": "{{count}} people asked for this.",
+		"result": "Draft for review",
+		"review": "Review the draft. It is not saved or published.",
+		"submit": "Draft with AI"
+	},
+	"loadMore": "Load more updates",
+	"nav": "Changelog",
+	"noReactions": "No reactions",
+	"published": "Published {{date}} · {{reactions}}",
+	"reads_one": "{{count}} reader",
+	"reads_other": "{{count}} readers",
+	"title": "Changelog"
+}
