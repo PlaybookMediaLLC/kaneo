@@ -1,3 +1,4 @@
+import { fireEvent } from "@testing-library/react";
 import { describe, expect, it } from "vite-plus/test";
 import { acceptFeedbackSignalAsPostFixture } from "../../api/team/accept-feedback-signal-as-post.fixture";
 import { acceptFeedbackSignalAsVoteFixture } from "../../api/team/accept-feedback-signal-as-vote.fixture";
@@ -8,33 +9,13 @@ import { restoreFeedbackSignalFixture } from "../../api/team/restore-feedback-si
 import { fill, press } from "../../test/actions";
 import { describePageContract } from "../../test/contracts";
 import { mockApi } from "../../test/mock-api";
-import { renderPage } from "../../test/render";
+import { renderComponent, renderPage } from "../../test/render";
+import { ShortcutListener } from "../../ui/upstream";
 import { meta } from "./meta";
+import { signalsFixture } from "./signals.fixture";
 import { TeamAutopilotPage } from "./team-autopilot-page";
 
-const signal = (status: "pending" | "dismissed" = "pending") => ({
-  id: "feedback_signal_test_1",
-  status,
-  source: {
-    type: "conversation" as const,
-    id: "conversation_test_1",
-    title: "Night use",
-    number: null,
-  },
-  customer: { principalId: "principal_test_1", displayName: "Ada" },
-  excerpt: "Please add a dark mode.",
-  suggestedTitle: "Dark theme",
-  matchedPost: {
-    id: "post_test_1",
-    title: "Dark mode",
-    voteCount: 4,
-    boardName: "Ideas",
-    statusName: null,
-  },
-  resultingPost: null,
-  createdAt: "2026-11-01T00:00:00.000Z",
-  decidedAt: null,
-});
+const signal = signalsFixture.signal;
 const tier = "authenticated" as const;
 const board = {
   id: "board_test_1",
@@ -57,12 +38,19 @@ const board = {
   createdAt: "2026-11-01T00:00:00.000Z",
   updatedAt: "2026-11-01T00:00:00.000Z",
 };
-/** The two page queries: one pending signal and one board. */
-const queue = (status?: "dismissed") => {
+/** The two page queries: the given signals and one board. */
+const queue = (items = [signal()]) => {
   const api = mockApi();
-  api.reply(listFeedbackSignalsFixture.ok({ items: [signal(status)] }));
+  api.reply(signalsFixture.list(items));
   api.reply(listBoardsFixture.ok({ items: [board] }));
   return api;
+};
+/** Renders the page and opens the signal with this title. */
+const openSignal = async (title = "Dark theme", permissions = {}) => {
+  const view = renderPage(TeamAutopilotPage, meta, { permissions });
+  fireEvent.click(await view.findByRole("link", { name: new RegExp(title) }));
+  await view.findByRole("heading", { level: 1, name: title });
+  return view;
 };
 
 describe("TeamAutopilotPage", () => {
@@ -98,16 +86,40 @@ describe("TeamAutopilotPage", () => {
   });
 
   describe("behavior", () => {
-    it("lists pending signals and adds the customer's vote to the matched post", async () => {
-      const api = queue();
+    it("groups the pending signals, opens one and adds the customer's vote", async () => {
+      const api = queue([
+        signal(),
+        signal({
+          id: "feedback_signal_test_2",
+          suggestedTitle: "CSV export",
+          matchedPost: null,
+        }),
+      ]);
       api.reply(acceptFeedbackSignalAsVoteFixture.ok());
-      api.reply(listFeedbackSignalsFixture.ok());
+      api.reply(
+        signalsFixture.list([
+          signal({
+            id: "feedback_signal_test_2",
+            suggestedTitle: "CSV export",
+            matchedPost: null,
+          }),
+        ]),
+      );
       const view = renderPage(TeamAutopilotPage, meta);
-      expect(await view.findByText("Dark theme")).toBeInTheDocument();
-      expect(view.getByText("Conversation: Night use")).toBeInTheDocument();
+      expect(
+        await view.findByRole("group", { name: "Matches a post 1" }),
+      ).toHaveTextContent("Dark theme");
+      expect(
+        view.getByRole("group", { name: "New requests 1" }),
+      ).toHaveTextContent("CSV export");
       const list = new URL(api.calls("listQuillsFeedbackSignals")[0]!.url);
       expect(list.searchParams.get("status")).toBe("pending");
-      press("Add the customer's vote to “Dark mode”");
+      fireEvent.click(view.getByRole("link", { name: /Dark theme/ }));
+      expect(
+        await view.findByRole("heading", { level: 1, name: "Dark theme" }),
+      ).toHaveFocus();
+      expect(view.getByText("Conversation: Night use")).toBeInTheDocument();
+      press("Add vote");
       expect(
         await view.findByText("Added the customer's vote to “Dark mode”."),
       ).toHaveAttribute("role", "status");
@@ -116,16 +128,18 @@ describe("TeamAutopilotPage", () => {
         "/feedback-signals/feedback_signal_test_1/vote",
       );
       expect(await vote!.clone().json()).toEqual({ postId: "post_test_1" });
-      expect(await view.findByText("Nothing is here yet.")).toBeInTheDocument();
+      // The next signal opens, because the decided one left the list.
+      expect(
+        await view.findByRole("heading", { level: 1, name: "CSV export" }),
+      ).toBeInTheDocument();
     });
 
     it("accepts a signal as a new post with a board and an edited title", async () => {
       const api = queue();
       api.reply(acceptFeedbackSignalAsPostFixture.ok());
       api.reply(listFeedbackSignalsFixture.ok());
-      const view = renderPage(TeamAutopilotPage, meta);
-      await view.findByText("Dark theme");
-      press("Accept as a new post: “Dark theme”");
+      const view = await openSignal();
+      press("Accept as new post");
       expect(await view.findByLabelText("Post title")).toHaveValue(
         "Dark theme",
       );
@@ -140,57 +154,84 @@ describe("TeamAutopilotPage", () => {
         title: "Night theme",
       });
       expect(view.queryByLabelText("Post title")).toBeNull();
+      expect(
+        await view.findByRole("heading", { level: 1, name: "Autopilot" }),
+      ).toBeInTheDocument();
+      expect(view.getByText("Nothing is here yet.")).toBeInTheDocument();
     });
 
-    it("dismisses a pending signal", async () => {
+    it("dismisses a pending signal and shows a failed decision", async () => {
       const api = queue();
+      api.fail();
       api.reply(dismissFeedbackSignalFixture.ok());
       api.reply(listFeedbackSignalsFixture.ok());
-      const view = renderPage(TeamAutopilotPage, meta);
-      await view.findByText("Dark theme");
-      press("Dismiss: “Dark theme”");
+      const view = await openSignal();
+      press("Dismiss");
+      expect(await view.findByRole("alert")).toBeInTheDocument();
+      press("Dismiss");
       expect(
         await view.findByText("Dismissed: “Dark theme”."),
       ).toBeInTheDocument();
-      expect(api.calls("dismissQuillsFeedbackSignal")).toHaveLength(1);
+      expect(api.calls("dismissQuillsFeedbackSignal")).toHaveLength(2);
+      expect(view.queryByRole("alert")).toBeNull();
     });
 
     it("lists the dismissed signals and restores one", async () => {
       const api = mockApi();
       api.reply(listFeedbackSignalsFixture.ok());
       api.reply(listBoardsFixture.ok({ items: [board] }));
-      api.reply(
-        listFeedbackSignalsFixture.ok({ items: [signal("dismissed")] }),
-      );
+      api.reply(signalsFixture.list([signal({ status: "dismissed" })]));
       api.reply(restoreFeedbackSignalFixture.ok());
       api.reply(listFeedbackSignalsFixture.ok());
       const view = renderPage(TeamAutopilotPage, meta);
       await view.findByText("Nothing is here yet.");
-      press("Dismissed");
-      expect(view.getByRole("button", { name: "Dismissed" })).toHaveAttribute(
-        "aria-pressed",
-        "true",
-      );
-      await view.findByText("Dark theme");
+      fireEvent.click(view.getByRole("tab", { name: "Dismissed" }));
+      fireEvent.click(await view.findByRole("link", { name: /Dark theme/ }));
       const dismissed = new URL(api.calls("listQuillsFeedbackSignals")[1]!.url);
       expect(dismissed.searchParams.get("status")).toBe("dismissed");
-      expect(view.queryByRole("button", { name: /^Dismiss:/ })).toBeNull();
-      press("Restore: “Dark theme”");
+      expect(view.queryByRole("button", { name: "Dismiss" })).toBeNull();
+      press("Restore");
       expect(
         await view.findByText("Restored: “Dark theme”."),
       ).toBeInTheDocument();
       expect(api.calls("restoreQuillsFeedbackSignal")).toHaveLength(1);
     });
 
+    it("moves through the list by key, opens a signal with Enter and goes back with Escape", async () => {
+      queue([
+        signal(),
+        signal({ id: "feedback_signal_test_2", suggestedTitle: "CSV export" }),
+      ]);
+      renderComponent(<ShortcutListener />);
+      const view = renderPage(TeamAutopilotPage, meta);
+      await view.findByRole("link", { name: /CSV export/ });
+      fireEvent.keyDown(document.body, { key: "j" });
+      fireEvent.keyDown(document.body, { key: "j" });
+      expect(view.getByRole("link", { name: /CSV export/ })).toHaveAttribute(
+        "aria-current",
+        "true",
+      );
+      fireEvent.keyDown(document.body, { key: "Enter" });
+      expect(
+        await view.findByRole("heading", { level: 1, name: "CSV export" }),
+      ).toBeInTheDocument();
+      fireEvent.keyDown(document.body, { key: "k" });
+      expect(
+        await view.findByRole("heading", { level: 1, name: "Dark theme" }),
+      ).toBeInTheDocument();
+      fireEvent.keyDown(document.body, { key: "Escape" });
+      expect(
+        await view.findByRole("heading", { level: 1, name: "Autopilot" }),
+      ).toHaveFocus();
+    });
+
     it("hides the decisions from a teammate without create and update", async () => {
       queue();
-      const view = renderPage(TeamAutopilotPage, meta, {
-        permissions: { create: false, update: false },
+      const view = await openSignal("Dark theme", {
+        create: false,
+        update: false,
       });
-      await view.findByText("Dark theme");
-      expect(view.queryByRole("button", { name: /^Accept as/ })).toBeNull();
-      expect(view.queryByRole("button", { name: /vote/ })).toBeNull();
-      expect(view.queryByRole("button", { name: /^Dismiss:/ })).toBeNull();
+      expect(view.queryByRole("group", { name: "Signal actions" })).toBeNull();
     });
   });
 });

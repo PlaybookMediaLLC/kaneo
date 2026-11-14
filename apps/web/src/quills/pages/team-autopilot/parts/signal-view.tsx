@@ -1,0 +1,69 @@
+import { useTranslation } from "react-i18next";
+import type { PortalProblem } from "../../../core/types";
+import { teamHref } from "../../../team/team-href";
+import { TeamStateView } from "../../../team/team-state-view";
+import { DetailLayout } from "../../../ui/inbox/detail-layout";
+import { SignalActions, type SignalActionsProps } from "./signal-actions";
+import { SignalDetail, type Signal } from "./signal-detail";
+import { SignalListRow } from "./signal-list-row";
+import { SignalProperties } from "./signal-properties";
+
+export interface SignalViewProps {
+  workspaceId: string;
+  signal: Signal;
+  /** The signals of the list in display order, for the compact list. */
+  signals: readonly Signal[];
+  /** The result of the last decision. */
+  message: string;
+  /** The problem of the last decision. */
+  problem: PortalProblem | null;
+  onMove: (id: string) => void;
+  onBack: () => void;
+  actions: Omit<SignalActionsProps, "signal">;
+}
+
+/** The open signal in three panes: the compact list, the signal with its decisions, and its properties. */
+export function SignalView({ signal, signals, ...props }: SignalViewProps) {
+  const { t } = useTranslation("quills");
+  return (
+    <DetailLayout
+      list={
+        <ul className="divide-y divide-border">
+          {signals.map((item) => (
+            <li key={item.id}>
+              <SignalListRow
+                signal={item}
+                href={teamHref(props.workspaceId, "/autopilot")}
+                compact
+                selected={item.id === signal.id}
+                onOpen={() => props.onMove(item.id)}
+              />
+            </li>
+          ))}
+        </ul>
+      }
+      listLabel={t("autopilot.title")}
+      ids={signals.map((item) => item.id)}
+      activeId={signal.id}
+      onMove={props.onMove}
+      onBack={props.onBack}
+      properties={
+        <SignalProperties workspaceId={props.workspaceId} signal={signal} />
+      }
+      propertiesLabel={t("autopilot.properties")}
+    >
+      <SignalDetail signal={signal} />
+      <p
+        role="status"
+        className="px-6 text-sm text-muted-foreground [&:not(:empty)]:pb-2"
+      >
+        {props.message}
+      </p>
+      <div className="px-6">
+        <TeamStateView problem={props.problem}>{null}</TeamStateView>
+      </div>
+      <div className="grow" />
+      <SignalActions signal={signal} {...props.actions} />
+    </DetailLayout>
+  );
+}

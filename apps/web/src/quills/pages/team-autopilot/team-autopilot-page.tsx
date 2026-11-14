@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { PortalProblem } from "../../core/types";
 import { useAcceptFeedbackSignalAsPost } from "../../hooks/team/use-accept-feedback-signal-as-post";
 import { useAcceptFeedbackSignalAsVote } from "../../hooks/team/use-accept-feedback-signal-as-vote";
 import { useDismissFeedbackSignal } from "../../hooks/team/use-dismiss-feedback-signal";
@@ -8,17 +9,13 @@ import { useListFeedbackSignals } from "../../hooks/team/use-list-feedback-signa
 import { useRestoreFeedbackSignal } from "../../hooks/team/use-restore-feedback-signal";
 import { useTeamRuntime } from "../../team/runtime";
 import { TeamStateView } from "../../team/team-state-view";
+import { useListNavigation } from "../../ui/inbox/use-list-navigation";
 import { PageFrame } from "../../ui/page-frame";
-import { PortalSheetContent } from "../../ui/portal-sheet-content";
-import {
-  Button,
-  Sheet,
-  SheetHeader,
-  SheetPanel,
-  SheetTitle,
-} from "../../ui/upstream";
-import { AcceptPostForm } from "./parts/accept-post-form";
-import { SignalRow, type Signal } from "./parts/signal-row";
+import { AcceptPostSheet } from "./parts/accept-post-sheet";
+import type { Signal } from "./parts/signal-detail";
+import { SignalGroups } from "./parts/signal-groups";
+import { SignalList } from "./parts/signal-list";
+import { SignalView } from "./parts/signal-view";
 
 export interface TeamAutopilotPageProps {
   workspaceId: string;
@@ -26,19 +23,15 @@ export interface TeamAutopilotPageProps {
   search: Record<string, unknown>;
 }
 
-const filters = {
-  pending: "autopilot.pending",
-  accepted: "autopilot.accepted",
-  dismissed: "autopilot.dismissed",
-} as const;
-type Filter = keyof typeof filters;
-
-/** The autopilot review queue: accept a signal as a post or a vote, dismiss it or restore it. */
+/** The autopilot review queue: the signals by status, and the open signal with its decisions. */
 export function TeamAutopilotPage({ workspaceId }: TeamAutopilotPageProps) {
   const { t } = useTranslation("quills");
   const team = useTeamRuntime();
-  const [status, setStatus] = useState<Filter>("pending");
-  const [notice, setNotice] = useState("");
+  const [status, setStatus] = useState<Signal["status"]>("pending");
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [message, setMessage] = useState("");
+  const [problem, setProblem] = useState<PortalProblem | null>(null);
   const [accepting, setAccepting] = useState<Signal | null>(null);
   const list = useListFeedbackSignals(
     { param: { workspaceId }, query: { status, limit: "50" } },
@@ -57,112 +50,136 @@ export function TeamAutopilotPage({ workspaceId }: TeamAutopilotPageProps) {
   const dismiss = useDismissFeedbackSignal(team.viewer);
   const restore = useRestoreFeedbackSignal(team.viewer);
   const items = list.data?.pages.flatMap((page) => page.items) ?? [];
+  // A signal that matches a post needs only a vote, so those come first.
+  const groups = [
+    {
+      id: "match",
+      label: t("autopilot.groupMatch"),
+      items: items.filter((signal) => signal.matchedPost),
+    },
+    {
+      id: "new",
+      label: t("autopilot.groupNew"),
+      items: items.filter((signal) => !signal.matchedPost),
+    },
+  ];
+  const ordered = groups.flatMap((group) => group.items);
+  const ids = ordered.map((signal) => signal.id);
+  const open = items.find((signal) => signal.id === openId);
+  useListNavigation({
+    ids,
+    activeId: cursor,
+    onMove: setCursor,
+    onOpen: setOpenId,
+    enabled: !open,
+  });
+  /** The signal to open after a decision: the decided one leaves this list. */
+  const after = (id: string) =>
+    ids[ids.indexOf(id) + 1] ?? ids[ids.indexOf(id) - 1] ?? null;
+  const decide = (id: string, run: () => Promise<unknown>, done: string) => {
+    setProblem(null);
+    run().then(
+      () => {
+        setMessage(done);
+        setOpenId(after(id));
+      },
+      (error: PortalProblem) => setProblem(error),
+    );
+  };
+  const param = { workspaceId, signalId: open?.id ?? "" };
+  const named = { title: open?.suggestedTitle ?? "" };
 
   return (
     <PageFrame
-      titleKey="autopilot.title"
-      description={t("autopilot.description")}
+      titleKey={open ? "autopilot.signal" : "autopilot.title"}
+      displayTitle={open?.suggestedTitle}
+      variant="app"
       landmark={false}
-      wide
-      actions={
-        <div
-          role="group"
-          aria-label={t("autopilot.filter")}
-          className="flex gap-2"
-        >
-          {(Object.keys(filters) as Filter[]).map((value) => (
-            <Button
-              key={value}
-              type="button"
-              variant={status === value ? "secondary" : "outline"}
-              aria-pressed={status === value}
-              onClick={() => setStatus(value)}
-            >
-              {t(filters[value])}
-            </Button>
-          ))}
-        </div>
-      }
     >
-      <p role="status" className="mb-3 text-sm text-muted-foreground">
-        {notice}
-      </p>
-      <TeamStateView
-        loading={list.isLoading}
-        problem={list.error ?? null}
-        empty={!items.length}
-        onRetry={() => void list.refetch()}
-      >
-        <ul className="divide-y divide-border rounded-lg border border-border">
-          {items.map((signal) => {
-            const param = { workspaceId, signalId: signal.id };
-            const title = { title: signal.suggestedTitle };
-            return (
-              <SignalRow
-                key={signal.id}
-                signal={signal}
-                canAccept={team.permissions.create}
-                canReview={team.permissions.update}
-                onAcceptAsPost={() => setAccepting(signal)}
-                onVote={async () => {
-                  const post = signal.matchedPost!;
-                  await acceptVote.mutateAsync({
-                    param,
-                    json: { postId: post.id },
-                  });
-                  setNotice(t("autopilot.voted", { post: post.title }));
-                }}
-                onDismiss={async () => {
-                  await dismiss.mutateAsync({ param });
-                  setNotice(t("autopilot.dismissedSignal", title));
-                }}
-                onRestore={async () => {
-                  await restore.mutateAsync({ param });
-                  setNotice(t("autopilot.restored", title));
-                }}
-              />
-            );
-          })}
-        </ul>
-        {list.hasNextPage ? (
-          <Button
-            type="button"
-            variant="outline"
-            className="mt-3"
-            loading={list.isFetchingNextPage}
-            onClick={() => void list.fetchNextPage()}
+      {open ? (
+        <SignalView
+          workspaceId={workspaceId}
+          signal={open}
+          signals={ordered}
+          message={message}
+          problem={problem}
+          onMove={setOpenId}
+          onBack={() => {
+            setCursor(open.id);
+            setOpenId(null);
+          }}
+          actions={{
+            canAccept: team.permissions.create,
+            canReview: team.permissions.update,
+            busy:
+              acceptVote.isPending || dismiss.isPending || restore.isPending,
+            onAcceptAsPost: () => setAccepting(open),
+            onVote: () => {
+              const post = open.matchedPost!;
+              decide(
+                open.id,
+                () =>
+                  acceptVote.mutateAsync({ param, json: { postId: post.id } }),
+                t("autopilot.voted", { post: post.title }),
+              );
+            },
+            onDismiss: () =>
+              decide(
+                open.id,
+                () => dismiss.mutateAsync({ param }),
+                t("autopilot.dismissedSignal", named),
+              ),
+            onRestore: () =>
+              decide(
+                open.id,
+                () => restore.mutateAsync({ param }),
+                t("autopilot.restored", named),
+              ),
+          }}
+        />
+      ) : (
+        <SignalList
+          status={status}
+          onStatusChange={(value) => {
+            setStatus(value);
+            setCursor(null);
+          }}
+          message={message}
+        >
+          <TeamStateView
+            loading={list.isLoading}
+            problem={list.error ?? null}
+            empty={!items.length}
+            onRetry={() => void list.refetch()}
           >
-            {t("autopilot.loadMore")}
-          </Button>
-        ) : null}
-      </TeamStateView>
-      <Sheet
-        open={Boolean(accepting)}
-        onOpenChange={(open) => !open && setAccepting(null)}
-      >
-        <PortalSheetContent>
-          <SheetHeader>
-            <SheetTitle>{t("autopilot.sheetTitle")}</SheetTitle>
-          </SheetHeader>
-          <SheetPanel>
-            {accepting ? (
-              <AcceptPostForm
-                key={accepting.id}
-                boards={boards.data?.items ?? []}
-                title={accepting.suggestedTitle}
-                onSubmit={async (values) => {
-                  await acceptPost.mutateAsync({
-                    param: { workspaceId, signalId: accepting.id },
-                    json: values,
-                  });
-                  setAccepting(null);
-                  setNotice(t("autopilot.created", { title: values.title }));
-                }}
-              />
-            ) : null}
-          </SheetPanel>
-        </PortalSheetContent>
-      </Sheet>
+            <SignalGroups
+              workspaceId={workspaceId}
+              groups={groups}
+              cursor={cursor}
+              onOpen={setOpenId}
+              onLoadMore={
+                list.hasNextPage ? () => void list.fetchNextPage() : undefined
+              }
+              loadingMore={list.isFetchingNextPage}
+            />
+          </TeamStateView>
+        </SignalList>
+      )}
+      <AcceptPostSheet
+        signal={accepting}
+        boards={boards.data?.items ?? []}
+        onClose={() => setAccepting(null)}
+        onSubmit={async (values) => {
+          const signalId = accepting?.id ?? "";
+          await acceptPost.mutateAsync({
+            param: { workspaceId, signalId },
+            json: values,
+          });
+          setAccepting(null);
+          setMessage(t("autopilot.created", { title: values.title }));
+          setOpenId(after(signalId));
+        }}
+      />
     </PageFrame>
   );
 }
