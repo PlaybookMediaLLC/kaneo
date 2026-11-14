@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import type { PortalProblem } from "../../../core/types";
@@ -21,6 +21,8 @@ export function BoardSegments({
 }: BoardSegmentsProps) {
   const { t } = useTranslation("quills");
   const legend = useId();
+  /** The choice that the API saved last; a change clears it. */
+  const [saved, setSaved] = useState(false);
   const schema = z.object({ segmentIds: z.array(z.string()).max(50) });
   /** The checkboxes; without `change` they only show the stored choice. */
   const fields = (
@@ -64,13 +66,23 @@ export function BoardSegments({
       schema={schema}
       defaultValues={{ segmentIds: board.visibleSegmentIds ?? [] }}
       submitKey="boards.segments.save"
-      onSubmit={(values) => onSubmit(values.segmentIds)}
+      onSubmit={async (values) => {
+        const problem = await onSubmit(values.segmentIds);
+        setSaved(!problem);
+        return problem;
+      }}
     >
-      {(form) =>
-        fields(form.watch("segmentIds"), (segmentIds) =>
-          form.setValue("segmentIds", segmentIds),
-        )
-      }
+      {(form) => (
+        <>
+          {fields(form.watch("segmentIds"), (segmentIds) => {
+            setSaved(false);
+            form.setValue("segmentIds", segmentIds);
+          })}
+          <p role="status" className="text-sm text-muted-foreground">
+            {saved ? t("boards.segments.saved") : null}
+          </p>
+        </>
+      )}
     </PortalForm>
   );
 }

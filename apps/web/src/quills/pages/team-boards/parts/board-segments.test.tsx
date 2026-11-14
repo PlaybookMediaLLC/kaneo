@@ -31,6 +31,9 @@ describe("BoardSegments", () => {
         "segment_test_1",
       ]),
     );
+    expect(await view.findByRole("status")).toHaveTextContent(
+      "The visibility is saved.",
+    );
     fireEvent.click(view.getByRole("checkbox", { name: "Enterprise" }));
     fireEvent.click(view.getByRole("checkbox", { name: "Beta" }));
     expect(
