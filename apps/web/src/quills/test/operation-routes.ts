@@ -1096,6 +1096,11 @@ export const quillsOperationRoutes = [
     path: "/api/quills/{workspaceId}/settings/labs",
   },
   {
+    operationId: "getQuillsFeedbackInsights",
+    method: "GET",
+    path: "/api/quills/{workspaceId}/feedback/insights",
+  },
+  {
     operationId: "getQuillsFile",
     method: "GET",
     path: "/api/quills/{workspaceId}/files/{fileId}",
@@ -1894,6 +1899,11 @@ export const quillsOperationRoutes = [
     operationId: "listQuillsMergedPosts",
     method: "GET",
     path: "/api/quills/{workspaceId}/posts/{postId}/merged",
+  },
+  {
+    operationId: "listQuillsMergeSuggestions",
+    method: "GET",
+    path: "/api/quills/{workspaceId}/merge-suggestions",
   },
   {
     operationId: "listQuillsMyConversationMessages",

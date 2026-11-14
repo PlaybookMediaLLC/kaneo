@@ -10,12 +10,12 @@ import { useListPortalStatuses } from "../../hooks/feedback/use-list-portal-stat
 import { useSetPortalVote } from "../../hooks/feedback/use-set-portal-vote";
 import { FeedbackComposer } from "../../portal/feedback-composer";
 import { usePortalRuntime } from "../../portal/runtime";
+import { SimilarRequests } from "../../portal/similar-requests";
 import { BoardNavigation } from "../../ui/board-navigation";
 import { PageFrame } from "../../ui/page-frame";
 import { PortalGate } from "../../ui/portal-gate";
 import { PostList } from "../../ui/post/post-list";
 import { PostSort } from "../../ui/post/post-sort";
-import { SimilarPosts } from "../../ui/post/similar-posts";
 import { StateView } from "../../ui/state-view";
 import { meta } from "./meta";
 
@@ -132,9 +132,17 @@ export function FeedbackHomePage(props: FeedbackHomePageProps) {
                 onTitleChange={setTitle}
               />
             ) : null}
-            <SimilarPosts
+            <SimilarRequests
               workspaceId={props.workspaceId}
+              title={title}
               posts={similar.data?.items ?? []}
+              canVote={(id) =>
+                Boolean(
+                  boards.data?.items.some(
+                    (item) => item.id === id && item.canVote,
+                  ),
+                )
+              }
             />
             <PostSort
               sort={sort}

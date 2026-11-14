@@ -46,6 +46,12 @@ describe("useSetPortalVote", () => {
         "feedback",
         "getPortalUserStats",
       ),
+      quillsOperationKey(
+        "workspace_test_1",
+        { kind: "anonymous" },
+        "feedback",
+        "findPortalSimilarPosts",
+      ),
     ],
   });
 });

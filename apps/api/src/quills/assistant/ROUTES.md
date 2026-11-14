@@ -338,6 +338,7 @@ job was lost or ran out of attempts). The copilot is not streamed.
 | operationId | Route | Action | Event |
 |---|---|---|---|
 | `getQuillsMergeSuggestionsForPost` | `GET /posts/{postId}/merge-suggestions` | read | - |
+| `listQuillsMergeSuggestions` | `GET /merge-suggestions?status=pending\|dismissed` (offset paging, ≤ 100) | read | - |
 | `fetchQuillsMergeSuggestionSummary` | `GET /merge-suggestions/summary` | read | - |
 | `fetchQuillsMergeSuggestionCountsForPosts` | `GET /merge-suggestions/counts?postIds=` (≤ 100) | read | - |
 | `acceptQuillsSuggestion` | `POST /suggestions/{suggestionId}/accept` (`mergePosts`, shared with `mergeQuillsPost`) | update | `post.merged` |
