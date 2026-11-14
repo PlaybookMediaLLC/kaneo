@@ -13,8 +13,6 @@ import {
   useWorkspacePermission,
 } from "../ui/upstream";
 
-export type QuillsSidebarEntryProps = Record<string, never>;
-
 // The one seam in the upstream sidebar (app-sidebar.tsx). The entry is only a
 // shortcut; the teammate API still decides access to every Quills page.
 export function QuillsSidebarEntry() {
