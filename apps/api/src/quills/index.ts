@@ -29,6 +29,8 @@ import supportPresence from "./support/presence";
 import supportLinkPreview from "./support/link-preview";
 import supportReadBatch from "./support/read-batch";
 import testConversations from "./support/test-conversations";
+// RFC 0003, lane L6.
+import taskSync from "./integrations/task-sync";
 import { brandText } from "@kaneo/branding";
 import { apiRouter, z, type BaseVariables } from "../openapi";
 import { settings } from "../database/quills/schema/auth";
@@ -104,4 +106,6 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", apps)
   .route("/", agentChannels)
   .route("/", surveys)
+  // RFC 0003, lane L6.
+  .route("/", taskSync)
   .openapi(...context);
