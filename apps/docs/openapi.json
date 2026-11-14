@@ -64529,6 +64529,15 @@
                               "moderation"
                             ]
                           },
+                          "visibleSegmentIds": {
+                            "type": [
+                              "array",
+                              "null"
+                            ],
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -64547,6 +64556,7 @@
                           "slug",
                           "description",
                           "access",
+                          "visibleSegmentIds",
                           "createdAt",
                           "updatedAt"
                         ]
@@ -64936,6 +64946,15 @@
                         "moderation"
                       ]
                     },
+                    "visibleSegmentIds": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -64954,6 +64973,7 @@
                     "slug",
                     "description",
                     "access",
+                    "visibleSegmentIds",
                     "createdAt",
                     "updatedAt"
                   ]
@@ -65182,6 +65202,15 @@
                         "moderation"
                       ]
                     },
+                    "visibleSegmentIds": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -65200,6 +65229,7 @@
                     "slug",
                     "description",
                     "access",
+                    "visibleSegmentIds",
                     "createdAt",
                     "updatedAt"
                   ]
@@ -65430,6 +65460,17 @@
                       "segments",
                       "moderation"
                     ]
+                  },
+                  "visibleSegmentIds": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 50,
+                    "description": "Show the board only to signed-in customers in one of these segments. Null or an empty list shows it to every customer that the view tier admits."
                   }
                 }
               }
@@ -65584,6 +65625,15 @@
                         "moderation"
                       ]
                     },
+                    "visibleSegmentIds": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -65602,6 +65652,7 @@
                     "slug",
                     "description",
                     "access",
+                    "visibleSegmentIds",
                     "createdAt",
                     "updatedAt"
                   ]

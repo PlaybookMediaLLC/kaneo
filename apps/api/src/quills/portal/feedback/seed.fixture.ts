@@ -18,6 +18,7 @@ import {
   posts,
   postVotes,
 } from "../../../database/quills/schema/posts";
+import { segments } from "../../../database/quills/schema/segments";
 import { postStatuses } from "../../../database/quills/schema/statuses";
 import { DEFAULT_BOARD_ACCESS } from "../../../database/quills/types";
 import { projectTable } from "../../../database/schema";
@@ -80,6 +81,19 @@ export async function world(
       ])
       .returning({ id: boards.id });
     await db.insert(boardProjects).values({ boardId: linked!.id, projectId });
+    // RFC 0003 D11: an open board shown only to a segment that no caller of this world is in.
+    const [segment] = await db
+      .insert(segments)
+      .values({ name: "Enterprise", slug: env.id("segment") })
+      .returning({ id: segments.id });
+    const [segmentBoard] = await db
+      .insert(boards)
+      .values({
+        name: label(hidden, "segment-board"),
+        slug: env.id("seg"),
+        visibleSegmentIds: [segment!.id],
+      })
+      .returning({ id: boards.id });
     // A teammate owns at most one test customer.
     const [tester] = await db
       .select({ id: principal.id })
@@ -127,6 +141,10 @@ export async function world(
     const postId = await post({ title: visible("post") });
     await post({ title: label(hidden, "private-post"), boardId: priv!.id });
     await post({ title: label(hidden, "linked-post"), boardId: linked!.id });
+    const segmentPost = await post({
+      title: label(hidden, "segment-post"),
+      boardId: segmentBoard!.id,
+    });
     await post({ title: label(hidden, "deleted-post"), deletedAt: new Date() });
     await post({ title: label(hidden, "test-post"), principalId: testerId });
     await post({
@@ -153,6 +171,10 @@ export async function world(
           .returning({ id: postComments.id })
       )[0]!.id;
     const commentId = await comment({ content: visible("comment") });
+    await comment({
+      content: label(hidden, "segment-comment"),
+      postId: segmentPost,
+    });
     await comment({
       content: label(hidden, "private-comment"),
       principalId: actor.principalId,
@@ -215,6 +237,9 @@ export async function world(
     });
     return {
       boardId: pub!.id,
+      segmentId: segment!.id,
+      segmentBoardId: segmentBoard!.id,
+      segmentPostId: segmentPost,
       statusId: status!.id,
       postId,
       postTitle: (

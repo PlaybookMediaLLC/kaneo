@@ -199,7 +199,18 @@ export function capabilities(viewer: Viewer, access: Access) {
 
 export type Board = Awaited<ReturnType<typeof visibleBoards>>[number];
 
-/** Live boards without project links whose view tier admits the caller, by name. */
+/**
+ * RFC 0003 D11: a board with segment IDs shows only to a signed-in member of one of them. Null
+ * shows to all; an empty list shows to nobody (fail closed). Anonymous callers are in no segment.
+ */
+export const inBoardSegments = (
+  viewer: Pick<Viewer, "signedIn" | "segmentIds">,
+  ids: readonly string[] | null,
+) =>
+  ids === null ||
+  (viewer.signedIn && ids.some((id) => viewer.segmentIds.includes(id)));
+
+/** Live boards without project links whose view tier and segments admit the caller, by name. */
 export async function visibleBoards(db: Database, viewer: Viewer) {
   // ponytail: reads every live board per request; add a SQL tier filter if workspaces grow past hundreds of boards.
   const rows = await db
@@ -209,6 +220,7 @@ export async function visibleBoards(db: Database, viewer: Viewer) {
       slug: boards.slug,
       description: boards.description,
       access: boards.access,
+      visibleSegmentIds: boards.visibleSegmentIds,
     })
     .from(boards)
     .where(
@@ -218,8 +230,13 @@ export async function visibleBoards(db: Database, viewer: Viewer) {
       ),
     )
     .orderBy(asc(boards.name), asc(boards.id));
+  // The segment IDs stay server-side: no board row a caller reads carries them.
   return rows
-    .map((row) => ({ ...row, access: accessOf(row.access) }))
+    .filter((row) => inBoardSegments(viewer, row.visibleSegmentIds))
+    .map(({ visibleSegmentIds: _, ...row }) => ({
+      ...row,
+      access: accessOf(row.access),
+    }))
     .filter((board) => allows(viewer, board.access, "view"));
 }
 

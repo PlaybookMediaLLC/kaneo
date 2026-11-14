@@ -1,15 +1,14 @@
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
-import { isValidTypeId, type PostId, type SegmentId } from "@kaneo/ids";
+import type { PostId } from "@kaneo/ids";
 import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
 import { apiRouter, z } from "../../openapi";
-import { boards } from "../../database/quills/schema/boards";
 import { changelogSubscriptions } from "../../database/quills/schema/changelog-subscriptions";
 import { postSubscriptions } from "../../database/quills/schema/notifications";
 import { posts } from "../../database/quills/schema/posts";
-import { segments, userSegments } from "../../database/quills/schema/segments";
 import type { QuillsCaller } from "../framework/audience";
 import { defineQuillsRoute, type Database } from "../framework/define-route";
+import { postVisible, viewerFor, visibleBoards } from "./feedback/viewer";
 import { requirePortalAccess } from "./gate";
 
 // A portal customer's own subscriptions: posts, the changelog and the status page. Each route
@@ -23,52 +22,29 @@ const notFound = (what: string) =>
   new HTTPException(404, { message: `${what} not found` });
 
 /**
- * 404 unless the caller may see the post on the portal: a live, published post that was not
- * merged, on a live board whose view tier lets customers in.
- *
- * ponytail: the public-feedback slice owns the full portal visibility rule; this is its
- * conservative core (a segment tier needs the caller in one of the board's view segments).
+ * 404 unless the caller may see the post on the portal: a published post that was not merged,
+ * by the shared customer rule (board tier, board segments, project links, test customers).
  */
 async function customerPost(
   db: Database,
   caller: QuillsCaller,
   postId: PostId,
 ) {
+  const viewer = await viewerFor(db, "portal", caller);
+  const boardIds = (await visibleBoards(db, viewer)).map((board) => board.id);
   const [row] = await db
-    .select({ access: boards.access })
+    .select({ id: posts.id })
     .from(posts)
-    .innerJoin(boards, eq(boards.id, posts.boardId))
     .where(
       and(
         eq(posts.id, postId),
-        isNull(posts.deletedAt),
         isNull(posts.canonicalPostId),
         eq(posts.moderationState, "published"),
-        isNull(boards.deletedAt),
+        postVisible(viewer, boardIds),
       ),
     )
     .limit(1);
-  const view = row?.access?.view;
-  if (view === "anonymous" || view === "authenticated") return;
-  const allowed = (row?.access?.segments?.view ?? [])
-    .filter((id): id is SegmentId => isValidTypeId(id, "segment"))
-    .slice(0, 100);
-  if (view === "segments" && caller.principalId && allowed.length) {
-    const [member] = await db
-      .select({ id: userSegments.segmentId })
-      .from(userSegments)
-      .innerJoin(segments, eq(segments.id, userSegments.segmentId))
-      .where(
-        and(
-          eq(userSegments.principalId, caller.principalId),
-          inArray(userSegments.segmentId, allowed),
-          isNull(segments.deletedAt),
-        ),
-      )
-      .limit(1);
-    if (member) return;
-  }
-  throw notFound("Post");
+  if (!row) throw notFound("Post");
 }
 
 const postParams = z.object({ postId: flexibleToTypeIdSchema("post") });
