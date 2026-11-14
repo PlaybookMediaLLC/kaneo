@@ -1010,6 +1010,63 @@
           "updates"
         ]
       },
+      "QuillsCustomerSurvey": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "nps",
+              "csat",
+              "ces",
+              "pmf",
+              "poll",
+              "open"
+            ]
+          },
+          "question": {
+            "type": "string"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scale": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "min",
+              "max"
+            ],
+            "description": "The score scale; null for pmf, poll and open"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "question",
+          "options",
+          "scale"
+        ]
+      },
       "Config": {
         "type": "object",
         "properties": {
@@ -7333,6 +7390,178 @@
           "reopenedCount",
           "createdAt",
           "updatedAt"
+        ]
+      },
+      "QuillsSurvey": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "nps",
+              "csat",
+              "ces",
+              "pmf",
+              "poll",
+              "open"
+            ]
+          },
+          "question": {
+            "type": "string"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "targetSegmentIds": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "active",
+              "closed"
+            ]
+          },
+          "responseCount": {
+            "type": "number"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "question",
+          "options",
+          "targetSegmentIds",
+          "status",
+          "responseCount",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "QuillsSurveyResults": {
+        "type": "object",
+        "properties": {
+          "survey": {
+            "$ref": "#/components/schemas/QuillsSurvey"
+          },
+          "total": {
+            "type": "number"
+          },
+          "score": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "scores": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "number"
+                },
+                "count": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "value",
+                "count"
+              ]
+            }
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "label",
+                "count"
+              ]
+            }
+          },
+          "comments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "comment": {
+                  "type": "string"
+                },
+                "score": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "choice": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "respondent": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              },
+              "required": [
+                "id",
+                "comment",
+                "score",
+                "choice",
+                "respondent",
+                "createdAt"
+              ]
+            }
+          }
+        },
+        "required": [
+          "survey",
+          "total",
+          "score",
+          "scores",
+          "choices",
+          "comments"
         ]
       },
       "QuillsWorkspaceContext": {
@@ -32828,6 +33057,432 @@
           },
           "413": {
             "description": "Request body is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/portal/surveys/active": {
+      "get": {
+        "operationId": "getQuillsPortalActiveSurvey",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get the survey that waits for the caller",
+        "description": "The most recently activated survey that aims at the caller and that the caller did not answer, or null. An anonymous widget visitor gets null.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The survey, or null",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "survey": {
+                      "$ref": "#/components/schemas/QuillsCustomerSurvey"
+                    }
+                  },
+                  "required": [
+                    "survey"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/portal/surveys/{surveyId}/responses": {
+      "post": {
+        "operationId": "submitQuillsPortalSurveyResponse",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Answer a survey",
+        "description": "One answer per person and survey. NPS takes a score of 0-10, CSAT 1-5 and CES 1-7; PMF and poll take one of the survey's options; open takes a comment. The comment is optional for the other types.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "surveyId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "score": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10
+                  },
+                  "choice": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "comment": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answered survey",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "surveyId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "surveyId"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The answer does not fit the survey type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Survey not found; Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The caller already answered this survey",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/widget/surveys/active": {
+      "get": {
+        "operationId": "getQuillsWidgetActiveSurvey",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get the survey that waits for the caller",
+        "description": "The most recently activated survey that aims at the caller and that the caller did not answer, or null. An anonymous widget visitor gets null.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The survey, or null",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "survey": {
+                      "$ref": "#/components/schemas/QuillsCustomerSurvey"
+                    }
+                  },
+                  "required": [
+                    "survey"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Valid widget session required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/widget/surveys/{surveyId}/responses": {
+      "post": {
+        "operationId": "submitQuillsWidgetSurveyResponse",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Answer a survey",
+        "description": "One answer per person and survey. NPS takes a score of 0-10, CSAT 1-5 and CES 1-7; PMF and poll take one of the survey's options; open takes a comment. The comment is optional for the other types.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "surveyId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "score": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10
+                  },
+                  "choice": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "comment": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answered survey",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "surveyId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "surveyId"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The answer does not fit the survey type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Valid widget session required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Survey not found; Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The caller already answered this survey",
             "content": {
               "application/json": {
                 "schema": {
@@ -70646,7 +71301,8 @@
                         "post.vote_importance_set",
                         "changelog.reacted",
                         "changelog.unreacted",
-                        "board.settings_updated"
+                        "board.settings_updated",
+                        "survey.deleted"
                       ]
                     },
                     "minItems": 1,
@@ -71211,7 +71867,8 @@
                         "post.vote_importance_set",
                         "changelog.reacted",
                         "changelog.unreacted",
-                        "board.settings_updated"
+                        "board.settings_updated",
+                        "survey.deleted"
                       ]
                     },
                     "minItems": 1,
@@ -137702,7 +138359,8 @@
                             "post.vote_importance_set",
                             "changelog.reacted",
                             "changelog.unreacted",
-                            "board.settings_updated"
+                            "board.settings_updated",
+                            "survey.deleted"
                           ]
                         },
                         "entityType": {
@@ -143066,6 +143724,648 @@
           },
           "409": {
             "description": "Set NOTIFICATION_SECRET_ENCRYPTION_KEY first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/surveys": {
+      "get": {
+        "operationId": "listQuillsSurveys",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "List surveys",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 10000000,
+              "default": 0
+            },
+            "required": false,
+            "name": "offset",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "active",
+                "closed"
+              ]
+            },
+            "required": false,
+            "name": "status",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Surveys, newest first, with their response counts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "surveys": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/QuillsSurvey"
+                      }
+                    },
+                    "nextOffset": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "surveys",
+                    "nextOffset"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createQuillsSurvey",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Create a draft survey",
+        "description": "A poll needs 2 to 20 answer options. A PMF survey gets its fixed answers. Other types take no options. targetSegmentIds null aims the survey at every customer.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "nps",
+                      "csat",
+                      "ces",
+                      "pmf",
+                      "poll",
+                      "open"
+                    ]
+                  },
+                  "question": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "options": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "minItems": 2,
+                    "maxItems": 20
+                  },
+                  "targetSegmentIds": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "maxItems": 50
+                  }
+                },
+                "required": [
+                  "type",
+                  "question"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The created draft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuillsSurvey"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The options do not fit the survey type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Segment not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/surveys/{surveyId}": {
+      "patch": {
+        "operationId": "updateQuillsSurvey",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Update a draft or active survey",
+        "description": "Changes the question, the poll options or the target segments. A closed survey does not change.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "surveyId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "question": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "options": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "minItems": 2,
+                    "maxItems": 20
+                  },
+                  "targetSegmentIds": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "maxItems": 50
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated survey",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuillsSurvey"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The options do not fit the survey type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Survey or segment not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The survey is closed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteQuillsSurvey",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Delete a draft survey",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "surveyId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The deleted draft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Survey not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Only a draft can be deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/surveys/{surveyId}/status": {
+      "put": {
+        "operationId": "setQuillsSurveyStatus",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Activate or close a survey",
+        "description": "A draft becomes active, and an active survey closes. Other changes are refused.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "surveyId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "closed"
+                    ]
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The survey with its new status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuillsSurvey"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Survey not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The survey cannot move to this status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/surveys/{surveyId}/results": {
+      "get": {
+        "operationId": "getQuillsSurveyResults",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get the results of a survey",
+        "description": "Counts each score or choice and computes the type's score: NPS is % promoters (9-10) minus % detractors (0-6), CSAT is % of 4-5, CES is the average, PMF is % very disappointed. Also returns the latest 20 comments with the respondent's display name, which quills:read already shows in the people directory.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "surveyId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The survey and its results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuillsSurveyResults"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Survey not found",
             "content": {
               "application/json": {
                 "schema": {
