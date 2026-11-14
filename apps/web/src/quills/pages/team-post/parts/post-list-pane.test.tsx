@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { setPostScoreFixture } from "../../../api/team/set-post-score.fixture";
 import { listStatusesFixture } from "../../../api/team/list-statuses.fixture";
 import { renderComponent } from "../../../test/render";
+import { inboxBoards } from "../../team-posts/inbox.fixture";
 import { PostListPane } from "./post-list-pane";
 
 const post = {
@@ -16,7 +17,7 @@ const post = {
 };
 
 describe("PostListPane", () => {
-  it("shows compact cards with the open post selected", () => {
+  it("shows compact cards with the open post selected, and the search", () => {
     const onOpen = vi.fn();
     const pair = [
       { ...post, id: "post_1" },
@@ -26,7 +27,9 @@ describe("PostListPane", () => {
       <PostListPane
         posts={pair}
         statuses={listStatusesFixture.ok().statuses}
-        boardName={new Map()}
+        boards={inboxBoards.items}
+        search={{ q: "csv" }}
+        onSearch={vi.fn()}
         activeId="post_2"
         href={(id) => `/feedback/workspace_test_1/posts/${id}`}
         onOpen={onOpen}
@@ -34,8 +37,11 @@ describe("PostListPane", () => {
       />,
     );
     expect(
-      view.getByRole("heading", { level: 2, name: "Feedback inbox" }),
+      view.getByRole("heading", { level: 2, name: "Requests" }),
     ).toBeVisible();
+    expect(
+      view.getByRole("searchbox", { name: "Search requests…" }),
+    ).toHaveValue("csv");
     const open = view.getByRole("link", { name: /Request 2/ });
     expect(open).toHaveAttribute("aria-current", "true");
     expect(open).toHaveAttribute(

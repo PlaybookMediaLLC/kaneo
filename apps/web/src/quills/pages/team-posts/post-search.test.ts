@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { listStatusesFixture } from "../../api/team/list-statuses.fixture";
-import { postListInput, postSearch } from "./post-search";
+import { filterPatch, postListInput, postSearch } from "./post-search";
 
 const status = (id: string, category: "active" | "complete" | "closed") => ({
   id,
@@ -74,5 +74,21 @@ describe("postListInput", () => {
     const { input, none } = postListInput("ws", { status: "closed" }, statuses);
     expect(none).toBe(true);
     expect(input.param.workspaceId).toBe("");
+  });
+});
+
+describe("filterPatch", () => {
+  it("turns a filter menu choice into an address change", () => {
+    expect(filterPatch("status", "closed")).toEqual({
+      status: "closed",
+      statusId: undefined,
+    });
+    expect(filterPatch("board", "")).toEqual({ board: undefined });
+    expect(filterPatch("board", "board_ideas")).toEqual({
+      board: "board_ideas",
+    });
+    expect(filterPatch("sort", "rice")).toEqual({ sort: "rice" });
+    // A value that the address does not accept removes the key.
+    expect(filterPatch("sort", "loudest")).toEqual({ sort: undefined });
   });
 });

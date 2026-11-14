@@ -39,7 +39,7 @@ export function PostLinks({ workspaceId, postId }: PostLinksProps) {
       ) : null}
       <PropertyRow label={t("team-post.tasks")}>
         {tasks.length ? (
-          <ul className="grid gap-1">
+          <ul className="grid grid-cols-1 gap-1">
             {tasks.map((link) => (
               <li key={link.taskId}>
                 <LinkedTask workspaceId={workspaceId} taskId={link.taskId} />
@@ -52,7 +52,7 @@ export function PostLinks({ workspaceId, postId }: PostLinksProps) {
       </PropertyRow>
       <PropertyRow label={t("team-post.conversations")}>
         {conversations.data?.items.length ? (
-          <ul className="grid gap-1">
+          <ul className="grid grid-cols-1 gap-1">
             {conversations.data.items.map((item) => (
               <li key={item.conversationId}>
                 <Link

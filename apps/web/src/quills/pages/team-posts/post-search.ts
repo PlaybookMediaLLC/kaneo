@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ListPostsRequest } from "../../api/team/list-posts";
 import type { ListStatusesResponse } from "../../api/team/list-statuses";
+import type { RequestFilterKey } from "../../ui/inbox/request-filters";
 
 /** The inbox filters in the address. The post view keeps them, so Back and J/K use the same list. */
 export const postSearch = z.object({
@@ -13,11 +14,25 @@ export const postSearch = z.object({
   statusId: z.string().max(100).optional().catch(undefined),
   q: z.string().max(200).optional().catch(undefined),
   sort: z.enum(["newest", "votes", "rice"]).optional().catch(undefined),
+  /** Opens the New request modal, as the sidebar's New request button does. */
+  new: z.boolean().optional().catch(undefined),
 });
 export type PostSearch = z.infer<typeof postSearch>;
 export type PostTab = NonNullable<PostSearch["status"]>;
 
 type Status = ListStatusesResponse["statuses"][number];
+
+/** The address change of a filter menu choice. A status group replaces a sidebar status. */
+export function filterPatch(
+  key: RequestFilterKey,
+  value: string,
+): Partial<PostSearch> {
+  // An empty or unknown value becomes undefined, which removes the key.
+  const parsed = postSearch.shape[key].parse(value || undefined);
+  return key === "status"
+    ? { status: parsed as PostTab | undefined, statusId: undefined }
+    : ({ [key]: parsed } as Partial<PostSearch>);
+}
 
 /** The board and search filters, which the list and the tab counts share. */
 export const postFilterQuery = (search: PostSearch) => ({

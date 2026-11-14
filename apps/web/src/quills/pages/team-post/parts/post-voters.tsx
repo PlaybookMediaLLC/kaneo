@@ -56,7 +56,7 @@ export function PostVoters({ workspaceId, post }: PostVotersProps) {
           {t("core.problem.failed")}
         </p>
       ) : null}
-      <ul className="grid gap-1 text-sm">
+      <ul className="grid grid-cols-1 gap-1 text-sm">
         {items.map((voter) => {
           const name = voter.displayName ?? t("team-post.anonymous");
           return (
@@ -112,7 +112,7 @@ export function PostVoters({ workspaceId, post }: PostVotersProps) {
         </label>
       )}
       {!locked && search && users.data ? (
-        <ul className="grid gap-1">
+        <ul className="grid grid-cols-1 gap-1">
           {users.data.items
             .filter((user) => !voted.has(user.principalId))
             .map((user) => (

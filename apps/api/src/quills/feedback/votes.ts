@@ -119,7 +119,8 @@ export async function addVote(
 }
 
 /** A principal of this workspace that is not a service account. 404 otherwise. */
-async function findVoter(db: Database, id: TypeId<"principal">) {
+/** A person who can vote or author a post: not a service principal. 404 when missing. */
+export async function findVoter(db: Database, id: TypeId<"principal">) {
   const [voter] = await db
     .select({ id: principal.id, name: principal.displayName })
     .from(principal)

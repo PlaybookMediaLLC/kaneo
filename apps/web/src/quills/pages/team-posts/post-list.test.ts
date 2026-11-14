@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
-import { getPostFilterCountsFixture } from "../../api/team/get-post-filter-counts.fixture";
 import { listPostsFixture } from "../../api/team/list-posts.fixture";
 import { setPostScoreFixture } from "../../api/team/set-post-score.fixture";
-import { groupPosts, postRow, statusIcon, tabCounts } from "./post-list";
+import { groupPosts, postRow, staleMonths, statusIcon } from "./post-list";
 
 const status = (
   id: string,
@@ -52,16 +51,65 @@ describe("groupPosts", () => {
   });
 });
 
+const context = {
+  statuses,
+  boardName: new Map([["board_id_test_1", "Ideas"]]),
+  anonymous: "Anonymous",
+  stale: (months: number) => `Stale ${months}mo`,
+};
+const now = Date.parse("2026-01-01T00:00:00.000Z");
+const month = 30 * 86_400_000;
+
 describe("postRow", () => {
-  it("shows the title, the counts, the board and the author or the anonymous label", () => {
-    const row = postRow(post("1", "a"), "Ideas", "Anonymous");
+  it("shows the plain-text title, the counts, the board and the author or the anonymous label", () => {
+    const row = postRow(
+      {
+        ...post("1", "a"),
+        title: "**Bold** `export`",
+        boardId: "board_id_test_1",
+      },
+      context,
+      now,
+    );
     expect(row).toMatchObject({
-      title: "Post 1",
+      title: "Bold export",
       board: "Ideas",
       person: { name: "Anonymous" },
+      badges: [],
     });
     expect(typeof row.votes).toBe("number");
-    expect(postRow(post("2", "a"), undefined, "Anonymous").board).toBeNull();
+    expect(
+      postRow({ ...post("2", "a"), boardId: "gone" }, context, now).board,
+    ).toBeNull();
+  });
+
+  it("adds the red stale badge to an open post without change for six months", () => {
+    const old = {
+      ...post("1", "b"),
+      updatedAt: new Date(now - 7 * month).toISOString(),
+    };
+    expect(postRow(old, context, now).badges).toEqual([
+      { id: "stale", label: "Stale 7mo", tone: "error" },
+    ]);
+  });
+});
+
+describe("staleMonths", () => {
+  it("counts only an open post that has not changed for six months or more", () => {
+    const at = (months: number) => new Date(now - months * month).toISOString();
+    expect(
+      staleMonths({ statusId: "b", updatedAt: at(6) }, statuses, now),
+    ).toBe(6);
+    expect(
+      staleMonths({ statusId: "b", updatedAt: at(5.9) }, statuses, now),
+    ).toBe(0);
+    // A complete or unknown status is never stale.
+    expect(
+      staleMonths({ statusId: "a", updatedAt: at(12) }, statuses, now),
+    ).toBe(0);
+    expect(
+      staleMonths({ statusId: null, updatedAt: at(12) }, statuses, now),
+    ).toBe(0);
   });
 });
 
@@ -76,22 +124,5 @@ describe("statusIcon", () => {
       color: null,
       progress: 0,
     });
-  });
-});
-
-describe("tabCounts", () => {
-  it("sums the status counts per category and for All", () => {
-    expect(
-      tabCounts(
-        statuses,
-        getPostFilterCountsFixture.ok({
-          statuses: [
-            { id: "a", count: 2 },
-            { id: "b", count: 5 },
-            { id: "gone", count: 1 },
-          ],
-        }),
-      ),
-    ).toEqual({ active: 5, complete: 2, closed: 0, all: 8 });
   });
 });

@@ -55,6 +55,7 @@ import { ListPane } from "../ui/inbox/list-pane";
 import { MessageBubble } from "../ui/inbox/message-bubble";
 import { PostStatusIcon } from "../ui/inbox/post-status-icon";
 import { PropertyRow } from "../ui/inbox/property-row";
+import { RequestFilters } from "../ui/inbox/request-filters";
 import { RequestRow } from "../ui/inbox/request-row";
 import { RowBadge } from "../ui/inbox/row-badge";
 import { SearchField } from "../ui/inbox/search-field";
@@ -595,6 +596,19 @@ export function KitGallery() {
                   person={{ name: demo }}
                 />
               )}
+            />
+            <ListHeader
+              title={demo}
+              headingLevel={2}
+              filters={
+                <RequestFilters
+                  status="active"
+                  board=""
+                  sort="newest"
+                  boards={[{ id: "board_demo", name: demo }]}
+                  onChange={() => setEmpty(!empty)}
+                />
+              }
             />
             <RowBadge badge={{ id: "badge", label: demo, tone: "success" }} />
             <CommandPalette

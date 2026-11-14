@@ -6,12 +6,15 @@ export const meta = {
   audience: "teammate",
   mailLinked: false,
   token: "none",
-  // The order of the requests: listQuillsPosts waits for the statuses.
+  // The order of the requests: listQuillsPosts waits for the statuses. The New request
+  // modal (`new=true`) loads the tags, and the customers for a typed author search.
   operations: [
     "listQuillsStatuses",
     "listQuillsBoards",
-    "getQuillsPostFilterCounts",
     "listQuillsPosts",
+    "listQuillsTags",
+    "listQuillsUsers",
+    "createQuillsPost",
   ],
-  states: ["loading", "failed", "empty", "ready"],
+  states: ["loading", "failed", "empty", "ready", "done"],
 } satisfies PageMeta;

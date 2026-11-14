@@ -1,30 +1,45 @@
 import { fireEvent, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vite-plus/test";
-import { getPostFilterCountsFixture } from "../../api/team/get-post-filter-counts.fixture";
+import { createPostFixture } from "../../api/team/create-post.fixture";
 import type { ListPostsResponse } from "../../api/team/list-posts";
 import { listPostsFixture } from "../../api/team/list-posts.fixture";
+import { listUsersFixture } from "../../api/team/list-users.fixture";
+import { fill, press } from "../../test/actions";
 import { describePageContract } from "../../test/contracts";
 import { mockApi } from "../../test/mock-api";
 import { renderPage } from "../../test/render";
-import { inboxBoards, inboxPosts, inboxStatuses } from "./inbox.fixture";
+import {
+  inboxBoards,
+  inboxCustomer,
+  inboxPosts,
+  inboxStatuses,
+  inboxTags,
+} from "./inbox.fixture";
 import { meta } from "./meta";
 import { TeamPostsPage } from "./team-posts-page";
 
-const counts = getPostFilterCountsFixture.ok({
-  statuses: [
-    { id: "status_open", count: 1 },
-    { id: "status_planned", count: 1 },
-    { id: "status_done", count: 4 },
-  ],
-});
-// The statuses, boards and counts load first; the posts wait for the statuses.
+// The statuses and boards load first; the posts wait for the statuses.
 const prepare = (posts: ListPostsResponse = inboxPosts) => {
   const api = mockApi();
   api.reply(inboxStatuses);
   api.reply(inboxBoards);
-  api.reply(counts);
   api.reply(posts);
   return api;
+};
+// The New request modal opens with the statuses and boards, so its tags load before the posts.
+const creating = () => {
+  const api = mockApi();
+  api.reply(inboxStatuses);
+  api.reply(inboxBoards);
+  api.reply(inboxTags);
+  api.reply(inboxPosts);
+  return api;
+};
+const createFlow = async (view: ReturnType<typeof renderPage>) => {
+  await view.findByRole("dialog");
+  fill("Submission title", "Dark mode");
+  fill("Add details", "For the **night** shift.");
+  press("Create");
 };
 
 describe("TeamPostsPage", () => {
@@ -32,7 +47,7 @@ describe("TeamPostsPage", () => {
     loading: {
       prepare: () => {
         const api = mockApi();
-        for (let index = 0; index < 3; index++) api.defer(() => undefined);
+        for (let index = 0; index < 2; index++) api.defer(() => undefined);
       },
     },
     failed: {
@@ -40,24 +55,47 @@ describe("TeamPostsPage", () => {
         const api = mockApi();
         api.fail();
         api.reply(inboxBoards);
-        api.reply(counts);
       },
     },
     empty: { prepare: () => void prepare(listPostsFixture.ok()) },
     ready: { prepare: () => void prepare() },
+    done: {
+      prepare: () => {
+        const api = creating();
+        api.reply(createPostFixture.ok({ id: "post_dark" }));
+        return { search: { new: true } };
+      },
+      act: async (view) => {
+        await createFlow(view);
+        await waitFor(() =>
+          expect(view.router.state.location.pathname).toBe(
+            "/feedback/workspace_test_1/posts/post_dark",
+          ),
+        );
+      },
+    },
   });
 
-  it("groups the open posts by status with tab counts and post details", async () => {
-    const api = prepare();
+  it("groups the open posts by status with the row details", async () => {
+    const api = prepare({
+      ...inboxPosts,
+      items: [
+        { ...inboxPosts.items[0]!, updatedAt: "2020-01-01T00:00:00.000Z" },
+        inboxPosts.items[1]!,
+      ],
+    });
     const view = renderPage(TeamPostsPage, meta);
-    const list = await view.findByRole("region", { name: "Posts" });
+    const list = await view.findByRole("region", { name: "Requests" });
     const open = within(list).getByRole("group", { name: /^Open/ });
-    expect(open).toHaveTextContent("Export to CSV");
-    expect(open).toHaveTextContent("3 votes");
-    expect(open).toHaveTextContent("Ideas");
+    const row = within(open).getByRole("link", { name: /Export to CSV/ });
+    expect(row).toHaveTextContent("3 votes");
+    expect(row).toHaveTextContent("Ideas");
+    expect(row).toHaveTextContent(/Stale \d+mo/);
+    expect(row).not.toHaveTextContent("Export to CSV details");
     expect(within(list).getByRole("group", { name: /^Planned/ })).toBeVisible();
-    expect(view.getByRole("tab", { name: "Open 2" })).toBeVisible();
-    expect(view.getByRole("tab", { name: "All 6" })).toBeVisible();
+    expect(
+      view.getByRole("heading", { level: 1, name: "Requests" }),
+    ).toBeVisible();
     const query = new URL(api.calls("listQuillsPosts")[0]!.url).searchParams;
     expect(query.get("statusIds")).toBe("status_open,status_planned");
     expect(query.get("sort")).toBe("newest");
@@ -84,15 +122,84 @@ describe("TeamPostsPage", () => {
     });
   });
 
-  it("changes the status tab in the address", async () => {
+  it("shows one sidebar status by name and changes the status group from the filter menu", async () => {
+    prepare();
+    const view = renderPage(TeamPostsPage, meta, {
+      search: { statusId: "status_planned" },
+    });
+    expect(
+      await view.findByRole("heading", { level: 1, name: "Planned" }),
+    ).toBeVisible();
+    press("Filters");
+    fireEvent.click(await view.findByRole("menuitemradio", { name: "Closed" }));
+    await waitFor(() =>
+      expect(view.router.state.location.search).toEqual({ status: "closed" }),
+    );
+  });
+
+  it("puts the typed search in the address", async () => {
     prepare();
     const view = renderPage(TeamPostsPage, meta);
-    await view.findByRole("region", { name: "Posts" });
-    fireEvent.click(view.getByRole("tab", { name: /^Complete/ }));
+    await view.findByRole("region", { name: "Requests" });
+    fill("Search requests…", " export ");
     await waitFor(() =>
-      expect(view.router.state.location.search).toEqual({
-        status: "complete",
-      }),
+      expect(view.router.state.location.search).toEqual({ q: "export" }),
+    );
+  });
+
+  it("creates a request with the default status", async () => {
+    const api = creating();
+    api.reply(createPostFixture.ok({ id: "post_dark" }));
+    const view = renderPage(TeamPostsPage, meta, { search: { new: true } });
+    await createFlow(view);
+    await waitFor(() => expect(api.calls("createQuillsPost")).toHaveLength(1));
+    await expect(
+      api.calls("createQuillsPost")[0]!.clone().json(),
+    ).resolves.toEqual({
+      boardId: "board_ideas",
+      title: "Dark mode",
+      content: "For the **night** shift.",
+      statusId: "status_open",
+      tagIds: [],
+    });
+  });
+
+  it("posts for a customer with a status and a tag", async () => {
+    const api = creating();
+    api.reply(listUsersFixture.ok({ items: [inboxCustomer] }));
+    api.reply(createPostFixture.ok({ id: "post_dark" }));
+    const view = renderPage(TeamPostsPage, meta, { search: { new: true } });
+    await view.findByRole("dialog");
+    press("Author: You");
+    fill("Find a customer", "barb");
+    fireEvent.click(await view.findByRole("button", { name: "Barbara" }));
+    expect(view.getByRole("button", { name: "Author: Barbara" })).toBeVisible();
+    fireEvent.change(view.getByRole("combobox", { name: "Status" }), {
+      target: { value: "status_planned" },
+    });
+    press("Tags");
+    fireEvent.click(await view.findByRole("menuitemcheckbox", { name: "UX" }));
+    await createFlow(view);
+    await waitFor(() => expect(api.calls("createQuillsPost")).toHaveLength(1));
+    await expect(
+      api.calls("createQuillsPost")[0]!.clone().json(),
+    ).resolves.toMatchObject({
+      statusId: "status_planned",
+      tagIds: ["tag_ux"],
+      authorPrincipalId: "principal_new",
+    });
+  });
+
+  it("hides New request without the create permission", async () => {
+    prepare();
+    const view = renderPage(TeamPostsPage, meta, {
+      permissions: { create: false },
+    });
+    await view.findByRole("region", { name: "Requests" });
+    expect(view.queryByRole("button", { name: /New request/ })).toBeNull();
+    expect(view.getByRole("link", { name: /Triage/ })).toHaveAttribute(
+      "href",
+      "/feedback/workspace_test_1/triage",
     );
   });
 });
