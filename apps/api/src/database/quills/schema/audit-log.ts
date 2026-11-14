@@ -1,5 +1,6 @@
 import { quillsSchema, workspaceColumn, workspacePolicy } from "../tenancy";
 import { primaryKey } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 /**
  * Audit log of security-sensitive admin actions.
  *
@@ -100,6 +101,13 @@ export const auditLog = quillsSchema
         table.occurredAt.desc().nullsFirst(),
       ),
       index("audit_log_request_id_idx").on(table.requestId),
+      // A workspace's post status changes in one week: the weekly digest and its predicate in
+      // quills.runnable_workspaces. Built CONCURRENTLY after migrations (CONCURRENT_INDEX_SPECS).
+      index("audit_log_post_status_changed_idx")
+        .on(table.workspaceId, table.occurredAt, table.targetId)
+        .where(
+          sql`"event_type" = 'post.status_changed' AND "target_type" = 'post'`,
+        ),
       primaryKey({ columns: [table.workspaceId, table.id] }),
       workspacePolicy(table.workspaceId),
     ],

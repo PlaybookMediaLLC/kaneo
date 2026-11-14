@@ -9,6 +9,11 @@ export interface ConcurrentIndexSpec {
 }
 export const CONCURRENT_INDEX_SPECS: readonly ConcurrentIndexSpec[] = [
   {
+    name: "audit_log_post_status_changed_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS audit_log_post_status_changed_idx ON quills.audit_log (workspace_id, occurred_at, target_id) WHERE event_type = 'post.status_changed' AND target_type = 'post'",
+  },
+  {
     name: "principal_kaneo_user_id_lookup_idx",
     concurrent: true,
     ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS principal_kaneo_user_id_lookup_idx ON quills.principal (kaneo_user_id) WHERE kaneo_user_id IS NOT NULL",
