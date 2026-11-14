@@ -195,23 +195,41 @@ each feature is kept in section 9.
 
 | # | Feature | Lane | Status |
 |---|---|---|---|
-| 1 | Feedback autopilot | L1 | planned |
-| 2 | In-app surveys | L2 | planned |
-| 3 | Vote importance | L3 | planned |
-| 4 | AI composer help | L4 | planned |
-| 5 | Help-article suggestions | L4 | planned |
-| 6 | Widget screenshot and annotation | L8 | planned |
-| 7 | Revenue and segment demand | L3 | planned |
-| 8 | Scoring frameworks | L3 | planned |
-| 9 | Voting-bias controls | L3 | planned |
-| 10 | Duplicate review | L7 | planned |
-| 11 | Topic and sentiment insights | L7 | planned |
-| 12 | Task sync | L6 | planned |
-| 13 | Shipped notifications | L5 | planned |
-| 14 | AI changelog drafts | L5 | planned |
-| 15 | Changelog engagement | L5 | planned |
-| 16 | My feedback and weekly digest | L5 | planned |
-| 17 | Segment boards | L8 | planned |
-| 18 | Auto-translation | L4 | planned |
-| 19 | CRM sync | L6 | planned |
-| 20 | Agent access (MCP) | L8 | planned |
+| 1 | Feedback autopilot | L1 | built |
+| 2 | In-app surveys | L2 | built |
+| 3 | Vote importance | L3 | built |
+| 4 | AI composer help | L4 | built |
+| 5 | Help-article suggestions | L4 | built |
+| 6 | Widget screenshot and annotation | L8 | built |
+| 7 | Revenue and segment demand | L3 | built |
+| 8 | Scoring frameworks | L3 | built |
+| 9 | Voting-bias controls | L3 | built |
+| 10 | Duplicate review | L7 | built |
+| 11 | Topic and sentiment insights | L7 | built |
+| 12 | Task sync | L6 | built |
+| 13 | Shipped notifications | L5 | built |
+| 14 | AI changelog drafts | L5 | built |
+| 15 | Changelog engagement | L5 | built |
+| 16 | My feedback and weekly digest | L5 | built |
+| 17 | Segment boards | L8 | built |
+| 18 | Auto-translation | L4 | built |
+| 19 | CRM sync | L6 | built |
+| 20 | Agent access (MCP) | L8 | built |
+
+"Built" means that the API, jobs, web and docs parts are merged and the tests pass under a real
+database. A feature becomes "done" after the review team (section 8) finds no blocking issue.
+
+Known limits after the merge:
+
+1. HubSpot notes (feature 19) need a write scope. The HubSpot connect URL asks for read scopes
+   only, so a HubSpot note fails with `write_access_required` until an operator adds the scope.
+2. CRM notes (feature 19) take the company from `companies.externalId`. A workspace that keeps
+   the IDs of another system there can send a note to the wrong company.
+3. Task sync (feature 12) starts from the in-process `task.status_changed` event. If the process
+   stops between the task update and the enqueue, that one sync is lost.
+4. The widget screenshot (feature 6) shows sticky elements and inner scroll areas at their
+   unscrolled position, and images from other origins without CORS stay blank.
+5. A survey (feature 2) uses `updated_at` as its activation time, so an edit to an active survey
+   moves it to the front.
+6. AI features (1, 4, 14 and 18) log their usage but have no workspace budget, because Kaneo has
+   no AI budget yet.
