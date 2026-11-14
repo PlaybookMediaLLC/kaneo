@@ -30,7 +30,7 @@ const params = z.object({
 const postParams = z.object({ postId: flexibleToTypeIdSchema("post") });
 const visibleIds = (db: Database, projects: string[]) =>
   db.select({ id: posts.id }).from(posts).where(visiblePost(projects));
-const bothVisible = (db: Database, projects: string[]) =>
+export const bothVisible = (db: Database, projects: string[]) =>
   and(
     inArray(mergeSuggestions.sourcePostId, visibleIds(db, projects)),
     inArray(mergeSuggestions.targetPostId, visibleIds(db, projects)),
