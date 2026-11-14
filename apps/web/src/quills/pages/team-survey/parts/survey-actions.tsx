@@ -2,6 +2,7 @@ import { Play, Square, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { GetSurveyResultsResponse } from "../../../api/team/get-survey-results";
 import { FloatingActionBar } from "../../../ui/inbox/floating-action-bar";
+import { SURVEY_STATUS_KEYS } from "../../../ui/survey-labels";
 
 export interface SurveyActionsProps {
   status: GetSurveyResultsResponse["survey"]["status"];
@@ -15,11 +16,21 @@ export interface SurveyActionsProps {
   onDelete: () => void;
 }
 
-/** The next status of a survey, or the deletion of a draft, in the floating action bar. */
+/**
+ * The status of a survey in the floating action bar, the deletion of a draft, and the next
+ * status as the black main button.
+ */
 export function SurveyActions({ status, busy, ...props }: SurveyActionsProps) {
   const { t } = useTranslation("quills");
   // The delete action has no key: one key press must not delete a draft.
-  const actions = [
+  const shown = [
+    {
+      id: "delete",
+      show: status === "draft" && props.canDelete,
+      label: t("surveys.actions.delete"),
+      icon: Trash2,
+      onSelect: props.onDelete,
+    },
     {
       id: "activate",
       show: status === "draft" && props.canUpdate,
@@ -36,17 +47,20 @@ export function SurveyActions({ status, busy, ...props }: SurveyActionsProps) {
       icon: Square,
       onSelect: props.onClose,
     },
-    {
-      id: "delete",
-      show: status === "draft" && props.canDelete,
-      label: t("surveys.actions.delete"),
-      icon: Trash2,
-      onSelect: props.onDelete,
-    },
   ]
     .filter((action) => action.show)
     .map((action) => ({ ...action, disabled: busy }));
-  return actions.length ? (
-    <FloatingActionBar label={t("surveys.actions.label")} actions={actions} />
+  const primary = shown.find((action) => action.id !== "delete");
+  return shown.length ? (
+    <FloatingActionBar
+      label={t("surveys.actions.label")}
+      status={
+        <span className="px-3 text-sm font-medium">
+          {t(SURVEY_STATUS_KEYS[status])}
+        </span>
+      }
+      actions={shown.filter((action) => action !== primary)}
+      primary={primary}
+    />
   ) : null;
 }

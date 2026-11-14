@@ -26,6 +26,13 @@ const render = (overrides: Partial<SurveyActionsProps> = {}) => {
 describe("SurveyActions", () => {
   it("activates or deletes a draft, and deletes only by button", () => {
     const { view, calls } = render();
+    expect(
+      view.getByRole("group", { name: "Survey actions" }),
+    ).toHaveTextContent(/^Draft/);
+    // The next status is the main button at the end of the bar.
+    expect(view.getAllByRole("button").at(-1)).toHaveAccessibleName(
+      /^Activate survey/,
+    );
     fireEvent.keyDown(document.body, { key: "a", code: "KeyA" });
     press("Delete draft");
     expect(calls.onActivate).toHaveBeenCalledOnce();
