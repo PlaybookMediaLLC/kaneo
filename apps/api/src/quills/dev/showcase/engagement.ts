@@ -16,7 +16,7 @@ type PrincipalId = QuillsActor["principalId"];
 type Survey = Pick<
   typeof surveys.$inferInsert,
   "type" | "question" | "status" | "options" | "targetSegmentIds"
-> & { responses: number; score?: number[] };
+> & { responses: number; score?: number[]; from?: PrincipalId[] };
 
 const DAY = 86_400_000;
 const comments = ["Clear and quick.", "", "Very helpful team.", ""];
@@ -26,7 +26,7 @@ export async function seedShowcaseEngagement(
   db: Database,
   actor: QuillsActor,
   customers: PrincipalId[],
-  betaSegmentId: string,
+  beta: { id: string; members: PrincipalId[] },
 ) {
   const scripts: Survey[] = [
     {
@@ -49,7 +49,9 @@ export async function seedShowcaseEngagement(
       status: "active",
       responses: 24,
       options: ["Roadmaps", "Integrations", "Mobile", "Help center"],
-      targetSegmentIds: [betaSegmentId],
+      // Only the segment's members see a targeted survey, so they answer it.
+      targetSegmentIds: [beta.id],
+      from: beta.members,
     },
     {
       type: "pmf",
@@ -59,7 +61,7 @@ export async function seedShowcaseEngagement(
       options: PMF_OPTIONS,
     },
   ];
-  for (const { responses, score, ...script } of scripts) {
+  for (const { responses, score, from = customers, ...script } of scripts) {
     const [survey] = await db
       .insert(surveys)
       .values({
@@ -71,7 +73,7 @@ export async function seedShowcaseEngagement(
     const options = script.options ?? [];
     if (responses)
       await db.insert(surveyResponses).values(
-        customers.slice(0, responses).map((principalId, n) => ({
+        from.slice(0, responses).map((principalId, n) => ({
           surveyId: survey!.id,
           principalId,
           score: score ? score[n % score.length] : null,

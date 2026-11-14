@@ -48,6 +48,7 @@ export async function seedShowcaseSegments(
     );
   const id = (slug: string) => rows.find((row) => row.slug === slug)!.id;
   const enterprise = customers.slice(0, 24);
+  const beta = customers.slice(24, 48);
   await db
     .insert(userSegments)
     .values([
@@ -55,7 +56,7 @@ export async function seedShowcaseSegments(
         principalId,
         segmentId: id("enterprise"),
       })),
-      ...customers.slice(24, 48).map((principalId) => ({
+      ...beta.map((principalId) => ({
         principalId,
         segmentId: id("beta-program"),
       })),
@@ -103,8 +104,7 @@ export async function seedShowcaseSegments(
     );
   }
   return {
-    segments: rows.length,
-    segmentPosts: boardPosts.length,
-    betaSegmentId: id("beta-program"),
+    counts: { segments: rows.length, segmentPosts: boardPosts.length },
+    beta: { id: id("beta-program"), members: beta },
   };
 }

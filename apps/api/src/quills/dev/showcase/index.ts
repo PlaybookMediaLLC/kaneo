@@ -35,13 +35,8 @@ async function seedShowcaseTeam(db: Database, actor: QuillsActor) {
   return {
     ...support.counts,
     ...(await seedShowcaseTriage(db, actor, support.requests)),
-    ...segments,
-    ...(await seedShowcaseEngagement(
-      db,
-      actor,
-      customers,
-      segments.betaSegmentId,
-    )),
+    ...segments.counts,
+    ...(await seedShowcaseEngagement(db, actor, customers, segments.beta)),
   };
 }
 

@@ -1,4 +1,4 @@
-import { desc, eq, isNull, sql } from "drizzle-orm";
+import { desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { Database, QuillsActor } from "../../../database/quills/client";
 import { postTags } from "../../../database/quills/schema/boards";
 import { feedbackSignals } from "../../../database/quills/schema/feedback-signals";
@@ -91,27 +91,38 @@ export async function seedShowcaseTriage(
       sql`${isNull(postVotes.importance)} and abs(hashtext(${postVotes.principalId}::text)) % 3 <> 0 and ${postVotes.postId} in (select ${posts.id} from ${posts} where ${showcasePost})`,
     );
 
-  const tags = await db
+  // A workspace seeded before this stage may already have a tag or a sentiment row.
+  await db
     .insert(postTags)
     .values(tagNames.map((name) => ({ name })))
-    .returning({ id: postTags.id });
-  await db.insert(postTagAssignments).values(
-    showcase
-      .filter((_, index) => index % 2 === 0)
-      .map((row, index) => ({
-        postId: row.id,
-        tagId: tags[index % tags.length]!.id,
-      })),
-  );
+    .onConflictDoNothing();
+  const tags = await db
+    .select({ id: postTags.id })
+    .from(postTags)
+    .where(inArray(postTags.name, tagNames));
+  await db
+    .insert(postTagAssignments)
+    .values(
+      showcase
+        .filter((_, index) => index % 2 === 0)
+        .map((row, index) => ({
+          postId: row.id,
+          tagId: tags[index % tags.length]!.id,
+        })),
+    )
+    .onConflictDoNothing();
   const moods = ["positive", "neutral", "negative", "positive"] as const;
-  await db.insert(postSentiment).values(
-    showcase.map((row, index) => ({
-      postId: row.id,
-      sentiment: moods[index % moods.length]!,
-      confidence: 0.8,
-      model: MODEL,
-    })),
-  );
+  await db
+    .insert(postSentiment)
+    .values(
+      showcase.map((row, index) => ({
+        postId: row.id,
+        sentiment: moods[index % moods.length]!,
+        confidence: 0.8,
+        model: MODEL,
+      })),
+    )
+    .onConflictDoNothing();
   return {
     signals: requests.length,
     mergeSuggestions: duplicatePairs.length,

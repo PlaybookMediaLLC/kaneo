@@ -284,10 +284,10 @@ describe.skipIf(!url)("portal demo seed integration", () => {
           (select count(*)::int from quills.conversation_messages) as messages,
           (select count(distinct status_id)::int from quills.tickets) as "ticketStatuses",
           (select count(distinct priority)::int from quills.tickets) as "ticketPriorities",
-          (select string_agg(distinct status, ',') from quills.feedback_signals) as signals,
+          (select string_agg(distinct status, ',' order by status) from quills.feedback_signals) as signals,
           (select count(*)::int from quills.post_merge_suggestions where status = 'pending') as duplicates,
           (select count(*)::int from quills.posts where score_reach is not null) as scored,
-          (select count(*) > 0 from quills.post_votes where importance is not null) as importance,
+          (select count(*) > 0 from quills.post_votes v join quills.posts p on p.id = v.post_id where v.importance is not null and p.widget_metadata->>'fixture' = 'portal-showcase-v1') as importance,
           (select count(*)::int from quills.survey_responses) as responses,
           (select count(*)::int from quills.boards where visible_segment_ids is not null) as "segmentBoards",
           (select count(*)::int from quills.user_segments) as members,
@@ -332,16 +332,46 @@ describe.skipIf(!url)("portal demo seed integration", () => {
       ).toBe(true);
     }
 
+    const edited = "An edit that only a reset removes.";
+    const featured = () =>
+      withQuillsWorkspace(identity, async (db) => {
+        const [row] = await db
+          .select({ content: posts.content })
+          .from(posts)
+          .where(eq(posts.title, "Linear integration"));
+        return row!.content;
+      });
+    await withQuillsWorkspace(identity, (db) =>
+      db
+        .update(posts)
+        .set({ content: edited })
+        .where(eq(posts.title, "Linear integration")),
+    );
+    await seedPortal();
+    expect(await featured()).toBe(edited);
     await seedPortal(true);
     expect(await summary()).toEqual(seeded);
-    await withQuillsWorkspace(identity, async (db) => {
-      const [featured] = await db
-        .select({ content: posts.content })
-        .from(posts)
-        .where(eq(posts.title, "Linear integration"));
-      expect(featured!.content).not.toBe(
-        "An edit made while exploring the demo.",
-      );
-    });
+    expect(await featured()).not.toBe(edited);
   }, 120000);
+
+  it("refuses demo sign-ins when another account has the customer email", async () => {
+    const db = drizzle(pool, { schema });
+    await db
+      .delete(schema.userTable)
+      .where(eq(schema.userTable.id, DEMO_CUSTOMER.id));
+    await db.insert(schema.userTable).values({
+      id: "quills_portal_demo_other",
+      name: "Another account",
+      email: DEMO_CUSTOMER.email,
+    });
+    try {
+      await expect(
+        seedDemoLogins("quills_portal_demo_user", "local-demo-password"),
+      ).rejects.toThrow("belongs to another account");
+    } finally {
+      await db
+        .delete(schema.userTable)
+        .where(eq(schema.userTable.id, "quills_portal_demo_other"));
+    }
+  });
 });
