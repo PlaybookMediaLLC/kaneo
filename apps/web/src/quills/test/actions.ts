@@ -21,7 +21,7 @@ export async function advanceClock(milliseconds: number) {
   });
 }
 
-export async function choose(label: string, option: string) {
+export async function choose(label: string | RegExp, option: string) {
   fireEvent.click(screen.getByRole("combobox", { name: label }));
   const item = await screen.findByRole("option", { name: option });
   fireEvent.pointerDown(item);
