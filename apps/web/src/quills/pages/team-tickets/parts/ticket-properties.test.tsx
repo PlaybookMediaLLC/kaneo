@@ -14,6 +14,7 @@ import { listTicketConversationsFixture } from "../../../api/team/list-ticket-co
 import { listTicketExternalLinksFixture } from "../../../api/team/list-ticket-external-links.fixture";
 import { listTicketWatchersFixture } from "../../../api/team/list-ticket-watchers.fixture";
 import { setTicketPriorityFixture } from "../../../api/team/set-ticket-priority.fixture";
+import { setTicketStatusFixture } from "../../../api/team/set-ticket-status.fixture";
 import { choose } from "../../../test/actions";
 import { mockApi } from "../../../test/mock-api";
 import { renderComponent } from "../../../test/render";
@@ -36,6 +37,17 @@ const ticket = getTicketFixture.ok({
     teamId: "team_1",
     teamName: "Billing",
   },
+});
+
+const status = (id: string, name: string) => ({
+  id,
+  name,
+  slug: name.toLowerCase(),
+  color: "gray",
+  category: "open" as const,
+  position: 0,
+  isDefault: false,
+  publicStage: null,
 });
 
 function render(update = true) {
@@ -65,7 +77,13 @@ function render(update = true) {
           },
         }}
       >
-        <TicketProperties ticket={ticket} />
+        <TicketProperties
+          ticket={ticket}
+          statuses={[
+            status("status_new", "New"),
+            status("status_doing", "Doing"),
+          ]}
+        />
       </TeamRuntimeProvider>
     </RouterContextProvider>,
   );
@@ -73,11 +91,14 @@ function render(update = true) {
 }
 
 describe("TicketProperties", () => {
-  it("shows the ticket properties and changes the priority", async () => {
+  it("shows the requester and the properties and changes the priority", async () => {
     const { api, view } = render();
     expect(await view.findByText("No links yet.")).toBeInTheDocument();
-    for (const text of ["New", "Billing", "Grace", "Acme", "No type"])
+    for (const text of ["Grace", "Acme", "No type"])
       expect(view.getByText(text)).toBeInTheDocument();
+    expect(view.getByRole("combobox", { name: "Status" })).toHaveTextContent(
+      "New",
+    );
     api.reply(setTicketPriorityFixture.ok());
     await choose("Priority", "Urgent");
     await waitFor(() =>
@@ -88,11 +109,25 @@ describe("TicketProperties", () => {
     ).toEqual({ priority: "urgent" });
   });
 
-  it("keeps the priority read only without update permission", async () => {
+  it("moves the ticket to another workspace status", async () => {
+    const { api, view } = render();
+    await view.findByText("No links yet.");
+    api.reply(setTicketStatusFixture.ok());
+    await choose("Status", "Doing");
+    await waitFor(() =>
+      expect(api.calls("setQuillsTicketStatus")).toHaveLength(1),
+    );
+    expect(await api.calls("setQuillsTicketStatus")[0]!.clone().json()).toEqual(
+      { statusId: "status_doing" },
+    );
+  });
+
+  it("keeps the status and priority read only without update permission", async () => {
     const { view } = render(false);
     await view.findByText("No links yet.");
-    expect(view.getByRole("combobox", { name: "Priority" })).toHaveAttribute(
-      "data-disabled",
-    );
+    for (const name of ["Status", "Priority"])
+      expect(view.getByRole("combobox", { name })).toHaveAttribute(
+        "data-disabled",
+      );
   });
 });

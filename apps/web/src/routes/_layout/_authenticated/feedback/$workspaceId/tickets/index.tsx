@@ -1,10 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { z } from "zod";
 import { TeamTicketsPage } from "@/quills/pages/team-tickets/team-tickets-page";
-const searchSchema = z.object({ status: z.string().optional() });
+import { ticketSearch } from "@/quills/pages/team-tickets/ticket-scope";
 export const Route = createFileRoute(
   "/_layout/_authenticated/feedback/$workspaceId/tickets/",
-)({ validateSearch: searchSchema, component: RouteComponent });
+)({ validateSearch: ticketSearch, component: RouteComponent });
 function RouteComponent() {
   const params = Route.useParams();
   return (

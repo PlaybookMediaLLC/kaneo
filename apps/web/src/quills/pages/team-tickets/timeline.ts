@@ -1,6 +1,6 @@
 import type { ListTicketActivityResponse } from "../../api/team/list-ticket-activity";
 import type { ListTicketMessagesResponse } from "../../api/team/list-ticket-messages";
-import { PRIORITY_KEYS } from "../team-tickets/ticket-scope";
+import { PRIORITY_KEYS } from "./ticket-scope";
 
 export type TicketMessage = ListTicketMessagesResponse["items"][number];
 export type TicketActivity = ListTicketActivityResponse["items"][number];

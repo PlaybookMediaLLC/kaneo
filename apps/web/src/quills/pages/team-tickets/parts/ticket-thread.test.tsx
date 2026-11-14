@@ -37,6 +37,14 @@ const message = listTicketMessagesFixture.ok({
     },
   ],
 });
+const ticket = getTicketFixture.ok({
+  id: "ticket_test_1",
+  requester: {
+    principalId: "principal_grace",
+    displayName: "Grace",
+    avatarUrl: null,
+  },
+});
 
 function render(permissions: TeamPermissions = all) {
   const api = mockApi();
@@ -51,27 +59,29 @@ function render(permissions: TeamPermissions = all) {
       }}
     >
       <ShortcutListener />
-      <TicketThread ticket={getTicketFixture.ok({ id: "ticket_test_1" })} />
+      <TicketThread ticket={ticket} />
     </TeamRuntimeProvider>,
   );
   return { api, view };
 }
 
+const refreshed = (api: ReturnType<typeof mockApi>) => {
+  api.reply(message);
+  api.reply(listTicketActivityFixture.ok());
+};
+
 describe("TicketThread", () => {
-  it("reads the thread with the internal notes and sends a reply", async () => {
+  it("reads the thread with the internal notes and sends a reply on Enter", async () => {
     const { api, view } = render();
     expect(await view.findByText("The login fails.")).toBeInTheDocument();
     const [list] = api.calls("listQuillsTicketMessages");
     expect(new URL(list!.url).searchParams.get("includeInternal")).toBe("true");
     api.reply(replyTicketFixture.ok());
-    api.reply(message);
-    api.reply(listTicketActivityFixture.ok());
-    press(/^Reply/);
-    fill("Reply to the requester", "We fixed it.");
-    press("Send reply");
-    await waitFor(() =>
-      expect(view.queryByLabelText("Reply to the requester")).toBeNull(),
-    );
+    refreshed(api);
+    const box = view.getByRole("textbox", { name: "Reply to Grace…" });
+    fill("Reply to Grace…", " We fixed it. ");
+    fireEvent.keyDown(box, { key: "Enter" });
+    await waitFor(() => expect(box).toHaveValue(""));
     const [reply] = api.calls("replyQuillsTicket");
     expect(new URL(reply!.url).pathname).toBe(
       "/api/quills/workspace_test_1/tickets/ticket_test_1/reply",
@@ -79,28 +89,45 @@ describe("TicketThread", () => {
     expect(await reply!.clone().json()).toEqual({ content: "We fixed it." });
   });
 
-  it("opens the note composer with the N key", async () => {
+  it("starts a note with N and a reply with R", async () => {
     const { api, view } = render();
     await view.findByText("The login fails.");
     fireEvent.keyDown(document.body, { key: "n", code: "KeyN" });
-    expect(view.getByLabelText("Internal note")).toHaveFocus();
+    const note = view.getByRole("textbox", { name: "Write an internal note…" });
+    expect(note).toHaveFocus();
     api.reply(addTicketNoteFixture.ok());
-    api.reply(message);
-    api.reply(listTicketActivityFixture.ok());
-    fill("Internal note", "Ask billing.");
-    press("Save note");
+    refreshed(api);
+    fill("Write an internal note…", "Ask billing.");
+    press("Send");
     await waitFor(() =>
       expect(api.calls("addQuillsTicketNote")).toHaveLength(1),
     );
     expect(await api.calls("addQuillsTicketNote")[0]!.clone().json()).toEqual({
       content: "Ask billing.",
     });
+    note.blur();
+    fireEvent.keyDown(document.body, { key: "r", code: "KeyR" });
+    expect(
+      view.getByRole("textbox", { name: "Reply to Grace…" }),
+    ).toHaveFocus();
+  });
+
+  it("keeps the text and says so when the message is not sent", async () => {
+    const { api, view } = render();
+    await view.findByText("The login fails.");
+    api.reply({ message: "Too long" }, 400);
+    fill("Reply to Grace…", "We fixed it.");
+    press("Send");
+    expect(await view.findByRole("alert")).toHaveTextContent(
+      "The message was not sent.",
+    );
+    expect(view.getByRole("textbox")).toHaveValue("We fixed it.");
   });
 
   it("keeps the thread read only without update permission", async () => {
     const { view } = render({ ...all, update: false });
     await view.findByText("The login fails.");
-    expect(view.queryByRole("group", { name: "Ticket actions" })).toBeNull();
+    expect(view.queryByRole("textbox")).toBeNull();
   });
 
   it("shows a thread that could not load", async () => {
