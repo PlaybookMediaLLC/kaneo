@@ -23,7 +23,8 @@ export function HelpSuggestions({ workspaceId, title }: HelpSuggestionsProps) {
       param: {
         workspace: !noHelpCenter && query.length >= 3 ? workspaceId : "",
       },
-      json: { query, limit: 3 },
+      // Partial titles are not real help searches: keep them out of the analytics.
+      json: { query, limit: 3, record: false },
     },
     portal.viewer,
   );

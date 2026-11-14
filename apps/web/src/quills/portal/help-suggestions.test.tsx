@@ -40,7 +40,11 @@ describe("HelpSuggestions", () => {
       "/portal/workspace_test_1/hc/articles/article-1",
     );
     const [request] = api.calls("searchQuillsPublicHelpCenter");
-    expect(await request!.json()).toEqual({ query: "refund", limit: 3 });
+    expect(await request!.json()).toEqual({
+      query: "refund",
+      limit: 3,
+      record: false,
+    });
   });
 
   it("does not search a short title", () => {

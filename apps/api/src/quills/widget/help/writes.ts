@@ -66,7 +66,13 @@ const search = defineQuillsRoute({
     });
     return {
       locale: viewer.locale,
-      articles: await searchArticles(db, viewer, body.query, body.limit),
+      articles: await searchArticles(
+        db,
+        viewer,
+        body.query,
+        body.limit,
+        body.record,
+      ),
     };
   },
 });

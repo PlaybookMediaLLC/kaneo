@@ -223,6 +223,11 @@ describe.skipIf(!url)(
         body: { query: "%" },
       });
       expect(wildcard.body.articles).toEqual([]);
+      // A suggestion while typing finds articles but is not logged.
+      const typing = await call("POST", "/hc/search", {
+        body: { query: ids.label, record: false },
+      });
+      expect(typing.body.articles).toHaveLength(2);
       const german = await call("POST", "/widget/kb-search", {
         body: { query: ids.label, locale: "de" },
       });

@@ -24,6 +24,10 @@ export const searchBody = z.object({
   query: z.string().trim().min(1).max(200),
   locale: uiLocale,
   limit: z.number().int().min(1).max(20).default(10),
+  record: z.boolean().default(true).openapi({
+    description:
+      "false: leave the search out of the help-center analytics, for suggestions while typing",
+  }),
 });
 export const searchHit = z
   .object({
@@ -40,19 +44,20 @@ export const searchHit = z
 /** One search attempt per second on average for a client, as in the source widget search. */
 export const searchRateLimit = { limit: 60, windowSeconds: 60 };
 export const searchEvent = {
-  none: "Records one search-term analytics row and no domain change",
+  none: "Records one search-term analytics row (none with record false) and no domain change",
 };
 
 /** `%`, `_` and `\` match themselves in an ILIKE pattern. */
 export const likePattern = (text: string) =>
   `%${text.replace(/[\\%_]/g, "\\$&")}%`;
 
-/** Full-text matches and title substring matches, best first; records the search. */
+/** Full-text matches and title substring matches, best first; records the search unless told not to. */
 export async function searchArticles(
   db: Db,
   viewer: Viewer,
   text: string,
   limit: number,
+  record = true,
 ) {
   const localized = viewer.locale !== DEFAULT_LOCALE;
   const source = localized ? helpCenterArticleTranslations : helpCenterArticles;
@@ -70,12 +75,13 @@ export async function searchArticles(
     content: true,
   });
   const collapsed = text.replace(/\s+/g, " ");
-  await db.insert(helpCenterSearchQueries).values({
-    query: collapsed.slice(0, 200),
-    normalizedQuery: collapsed.toLowerCase().slice(0, 200),
-    locale: viewer.locale,
-    resultsCount: rows.length,
-  });
+  if (record)
+    await db.insert(helpCenterSearchQueries).values({
+      query: collapsed.slice(0, 200),
+      normalizedQuery: collapsed.toLowerCase().slice(0, 200),
+      locale: viewer.locale,
+      resultsCount: rows.length,
+    });
   return rows.map((row) => ({
     id: row.id,
     urlId: row.urlId,
@@ -114,7 +120,13 @@ const search = defineQuillsRoute({
     });
     return {
       locale: viewer.locale,
-      articles: await searchArticles(db, viewer, body.query, body.limit),
+      articles: await searchArticles(
+        db,
+        viewer,
+        body.query,
+        body.limit,
+        body.record,
+      ),
     };
   },
 });
