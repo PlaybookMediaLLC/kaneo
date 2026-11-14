@@ -20,7 +20,7 @@ export {
   SheetPanel,
 } from "@/components/ui/sheet";
 export { toast } from "@/lib/toast";
-export { HttpError } from "@/lib/http-error";
+export { HttpError, handleUnauthorized } from "@/lib/http-error";
 export { authClient } from "@/lib/auth-client";
 export { i18n } from "@/lib/i18n";
 export { getSafeRedirectPath } from "@/components/auth/auth-methods";
@@ -58,3 +58,14 @@ export {
 export { Kbd } from "@/components/ui/kbd";
 
 export { useDebouncedValue } from "@/hooks/use-debounced-value";
+
+export { default as WorkspaceLayout } from "@/components/common/workspace-layout";
+export {
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar";
+export { default as useActiveWorkspace } from "@/hooks/queries/workspace/use-active-workspace";
+export { useWorkspacePermission } from "@/hooks/use-workspace-permission";

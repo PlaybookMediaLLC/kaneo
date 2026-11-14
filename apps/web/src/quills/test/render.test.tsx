@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { act } from "@testing-library/react";
 import type { PageMeta } from "../core/types";
+import { useTeamRuntime } from "../team/runtime";
 import { renderComponent, renderPage } from "./render";
 
 const meta: PageMeta = {
@@ -45,5 +46,34 @@ describe("renderPage", () => {
 
     await act(() => view.router.navigate({ to: "/next" }));
     expect(view.router.state.location.pathname).toBe("/next");
+  });
+});
+
+describe("renderPage for a teammate page", () => {
+  it("supplies the signed-in user, the workspace and the Quills permissions", () => {
+    function TeamPage() {
+      const team = useTeamRuntime();
+      return (
+        <output>
+          {team.workspaceId}:{team.viewer.id}:{String(team.permissions.read)}:
+          {String(team.permissions.manageSettings)}
+        </output>
+      );
+    }
+    const view = renderPage(
+      TeamPage,
+      {
+        ...meta,
+        route: "/dashboard/workspace/$workspaceId/quills",
+        audience: "teammate",
+      },
+      { permissions: { manageSettings: false } },
+    );
+    expect(view.getByRole("status")).toHaveTextContent(
+      "workspace_test_1:user_test_1:true:false",
+    );
+    expect(view.router.state.location.pathname).toBe(
+      "/dashboard/workspace/workspace_test_1/quills",
+    );
   });
 });

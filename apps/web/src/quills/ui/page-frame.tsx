@@ -20,6 +20,8 @@ export interface PageFrameProps {
   actions?: ReactNode;
   /** Use the full portal width for boards, lists and grids. */
   wide?: boolean;
+  /** Set false inside the app shell, which already has the main landmark. */
+  landmark?: boolean;
 }
 
 export function PageFrame({
@@ -34,6 +36,7 @@ export function PageFrame({
   description,
   actions,
   wide = false,
+  landmark = true,
 }: PageFrameProps) {
   const { t } = useTranslation("quills");
   const heading = useRef<HTMLHeadingElement>(null);
@@ -79,8 +82,9 @@ export function PageFrame({
     </div>
   );
 
+  const Root = landmark ? "main" : "div";
   return (
-    <main
+    <Root
       className={cn(
         "portal-page mx-auto w-full flex-1 px-5 pb-16 pt-8 md:pt-12 [&_h2]:tracking-tight [&_h3]:font-semibold [&_time]:text-xs [&_time]:text-muted-foreground",
         wide || aside ? "max-w-5xl" : "max-w-3xl",
@@ -102,6 +106,6 @@ export function PageFrame({
           {content}
         </>
       )}
-    </main>
+    </Root>
   );
 }

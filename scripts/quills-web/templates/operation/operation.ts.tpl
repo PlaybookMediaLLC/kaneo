@@ -12,7 +12,7 @@ export const {{NAME}}Key = (input: {{PASCAL}}Request, viewer: Viewer) =>
 export async function {{NAME}}(input: {{PASCAL}}Request): Promise<{{PASCAL}}Response> {
   try {
     const response = await endpoint(input);
-    if (!response.ok) throw await toPortalProblem(response, "record", {{TOKEN_OPERATION}});
+    if (!response.ok) throw await toPortalProblem(response, {{PROBLEM_TARGET}}, {{TOKEN_OPERATION}});
     return response.json();
   } catch (error) {
     if (typeof error === "object" && error !== null && "kind" in error) throw error;

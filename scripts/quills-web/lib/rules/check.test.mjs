@@ -286,6 +286,37 @@ export function Translated() { return <button aria-label={t("quills:core.action"
   return <main style={{ color: theme.foreground }} data-value={value} />;
 }`,
   );
+  const team =
+    "apps/web/src/routes/_layout/_authenticated/dashboard/workspace/$workspaceId/quills";
+  await write(
+    "apps/web/src/quills/pages/team-gated/meta.ts",
+    'export const meta = {id:"team-gated",audience:"teammate",route:"/dashboard/workspace/$workspaceId/quills/gated",token:"none",operations:[],states:["ready"]};',
+  );
+  await write(
+    "apps/web/src/quills/pages/team-gated/team-gated-page.tsx",
+    `import { useTeamItems } from "../../hooks/team/use-team-items";
+import { PortalGate } from "../../ui/portal-gate";
+import { StateView } from "../../ui/state-view";
+export function TeamGatedPage() { const items = useTeamItems(); return <PageFrame><StateView><PortalGate/></StateView></PageFrame>; }`,
+  );
+  await write(
+    "apps/web/src/quills/pages/team-ready/meta.ts",
+    'export const meta = {id:"team-ready",audience:"teammate",route:"/dashboard/workspace/$workspaceId/quills/ready",token:"none",operations:[],states:["ready"]};',
+  );
+  await write(
+    "apps/web/src/quills/pages/team-ready/team-ready-page.tsx",
+    `import { useTeamItems } from "../../hooks/team/use-team-items";
+import { TeamStateView } from "../../team/team-state-view";
+export function TeamReadyPage() { const items = useTeamItems(); return <PageFrame><TeamStateView/></PageFrame>; }`,
+  );
+  await write(
+    `${team}/ready/index.tsx`,
+    'import { TeamReadyPage } from "@/quills/pages/team-ready/team-ready-page"; export const Route = createFileRoute("/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/ready/")({component:TeamReadyPage});',
+  );
+  await write(
+    `${team}/ready/index.test.tsx`,
+    'import { Route } from "./index"; export const route = Route;',
+  );
   documents = await readDocuments(root);
 });
 after(async () => {
@@ -432,6 +463,30 @@ describe("conformance negative cases", () => {
     );
     assert.deepEqual(await inspectDocuments(root, allowed, "C5"), []);
     assert.equal((await inspectDocuments(root, rejected, "C5")).length, 1);
+  });
+  it("keeps teammate pages off the portal gate and on the teammate access state", async () => {
+    const gated = documents.filter((d) => d.file.includes("/team-gated/"));
+    const findings = await inspectDocuments(root, gated, "C14");
+    assert.equal(findings.length, 2, JSON.stringify(findings));
+    assert.match(findings[0].message + findings[1].message, /TeamStateView/);
+    const ready = documents.filter((d) => d.file.includes("/team-ready/"));
+    assert.deepEqual(await inspectDocuments(root, ready, "C14"), []);
+  });
+  it("matches a teammate page with its route in the D24 folder", async () => {
+    const selected = documents.filter(
+      (d) =>
+        d.file.includes("/team-ready/") ||
+        d.file.includes("/quills/ready/index"),
+    );
+    assert.equal(selected.length, 4);
+    for (const rule of ["C1", "C5", "C6"])
+      assert.deepEqual(
+        (await inspectDocuments(root, selected, rule)).filter(
+          (f) => f.file !== "apps/api/src/quills/portal/paths.ts",
+        ),
+        [],
+        rule,
+      );
   });
   it("accepts a generated redirect destination as a route declaration", async () => {
     const selected = documents.filter((d) =>

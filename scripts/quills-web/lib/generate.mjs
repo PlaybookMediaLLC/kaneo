@@ -14,11 +14,16 @@ import {
   addSortedJsonKeys,
   assertNewPaths,
   formatGenerated,
+  teamRoutes,
   writeNew,
 } from "./files.mjs";
 import { renderTemplate } from "./template.mjs";
 
 const marker = "TODO(quills-web)";
+// Teammate pages live in the upstream workspace layout (RFC 0002 D24).
+const teamRoute = "/dashboard/workspace/$workspaceId/quills";
+// Teammate API routes are mounted at /quills/{workspaceId}; portal routes at /quills-public.
+const isTeammatePath = (path) => path.startsWith("/quills/{workspaceId}/");
 
 function sampleValue(name, schema = {}) {
   if (schema.enum) return schema.enum[0];
@@ -190,6 +195,9 @@ export async function generateOperation(root, kind, operationId, options) {
     AREA: JSON.stringify(area),
     NAME_JSON: JSON.stringify(names.name),
     TOKEN_OPERATION: tokenOperation,
+    PROBLEM_TARGET: JSON.stringify(
+      isTeammatePath(found.path) ? "teammate" : "record",
+    ),
     QUERY_OPTIONS: `${queryOptionsSource}${infiniteQueryOptionsSource}`,
   });
   const fixture = await renderTemplate(root, "operation/fixture.ts.tpl", {
@@ -367,17 +375,69 @@ async function operationArea(root, file) {
   throw new Error(`Generate the operation hook before the page: ${file}`);
 }
 
+// Teammate page states come from the page's own queries, so the cases answer
+// each declared query through mockApi in declaration order.
+async function teamPageCases(root, document, operations) {
+  const queries = [];
+  for (const operationId of operations) {
+    if (findOperation(document, operationId).method !== "get") continue;
+    const { name, file } = operationNames(operationId);
+    queries.push({
+      fixture: `${name}Fixture`,
+      path: `../../api/${await operationArea(root, file)}/${file}.fixture`,
+    });
+  }
+  const answer = (call) =>
+    queries.length
+      ? `const api = mockApi(); ${queries.map(call).join(" ")}`
+      : "mockApi();";
+  const ready = answer((query) => `api.reply(${query.fixture}.ok());`);
+  const prepare = {
+    loading: answer(() => "api.defer(() => undefined);"),
+    failed: answer(() => "api.fail();"),
+    ready,
+    done: ready,
+  };
+  return {
+    imports: [
+      'import { mockApi } from "../../test/mock-api";',
+      ...queries.map(
+        (query) =>
+          `import { ${query.fixture} } from ${JSON.stringify(query.path)};`,
+      ),
+    ].join("\n"),
+    cases: (states) =>
+      states
+        .map(
+          (state) =>
+            `    ${JSON.stringify(state)}: { prepare: () => { ${prepare[state] ?? `/* ${marker}: answer the ${state} state. */`} } },`,
+        )
+        .join("\n"),
+    hasQueries: queries.length > 0,
+  };
+}
+
 export async function generatePage(root, name, options) {
   for (const required of ["route", "audience", "feature"])
     if (!options[required]) throw new Error(`--${required} is required`);
   const id = kebab(name);
   if (!name || id !== name)
     throw new Error("Page name must be lowercase kebab-case");
+  const teammate = options.audience === "teammate";
   if (
+    teammate &&
+    options.route !== teamRoute &&
+    !options.route.startsWith(`${teamRoute}/`)
+  )
+    throw new Error(`A teammate page route must stay under ${teamRoute}`);
+  if (
+    !teammate &&
     !options.route.startsWith("/portal/") &&
     !options.route.startsWith("/quills/")
   )
     throw new Error("Page route must stay under /portal or /quills");
+  if (teammate && (options.token ?? "none") !== "none")
+    throw new Error("A teammate page cannot take a mail token");
   if (
     !["public", "portal", "signed-in", "teammate", "development"].includes(
       options.audience,
@@ -419,9 +479,16 @@ export async function generatePage(root, name, options) {
       !item.pending &&
       item.pattern.startsWith(`${options.route.replace(/\/$/, "")}/`),
   );
-  const routeId = parentRoute
-    ? `${options.route.replace(/\/$/, "")}/`
-    : options.route;
+  // A teammate page is the index of its own folder, so a later child page
+  // never turns it into a layout without an outlet.
+  const routePath = teammate
+    ? `_layout/_authenticated${options.route.replace(/\/$/, "")}/index`
+    : routeFile(options.route, parentRoute);
+  const routeId = teammate
+    ? `/_layout/_authenticated${options.route.replace(/\/$/, "")}/`
+    : parentRoute
+      ? `${options.route.replace(/\/$/, "")}/`
+      : options.route;
   const component = pascal(name);
   const operations = options.operations?.split(",").filter(Boolean) ?? [];
   const document = await readOpenApi(root);
@@ -429,10 +496,13 @@ export async function generatePage(root, name, options) {
     (operationId) => findOperation(document, operationId).method !== "get",
   );
   const token = options.token ?? "none";
+  const team = teammate
+    ? await teamPageCases(root, document, operations)
+    : null;
   const states = [
-    "loading",
+    ...(teammate && !team.hasQueries ? [] : ["loading"]),
     ...(token === "none" ? [] : ["gone"]),
-    "failed",
+    ...(teammate && !team.hasQueries ? [] : ["failed"]),
     "ready",
     ...(hasMutation ? ["done"] : []),
   ];
@@ -450,51 +520,60 @@ export async function generatePage(root, name, options) {
   const meta = await renderTemplate(root, "page/meta.ts.tpl", {
     META: JSON.stringify(metaValue, null, 2),
   });
-  const page = await renderTemplate(root, "page/page.tsx.tpl", {
-    TOKEN_IMPORT:
-      token === "none"
-        ? ""
-        : 'import { useState } from "react";\nimport { takeStashedToken } from "../../core/token-stash";\n',
-    META_IMPORT: token === "none" ? "" : 'import { meta } from "./meta";',
-    COMPONENT: component,
-    TOKEN_STATE:
-      token === "none"
-        ? ""
-        : "const [token] = useState(() => takeStashedToken(tokenScope));",
-    TOKEN_SCOPE_DECL:
-      token === "none"
-        ? ""
-        : 'const tokenScope = [props.workspaceId, ...Object.entries(props.params).filter(([key]) => key !== "workspaceId").map(([, value]) => value), meta.id].join(":");',
-    TOKEN_VOID: token === "none" ? "" : "void token;",
-    OPERATIONS: operations.join(", ") || "this page",
-    TITLE_KEY: JSON.stringify(`${options.feature}.title`),
-    TOKEN_MODE: JSON.stringify(token),
-    TOKEN_SCOPE: token === "none" ? "undefined" : "tokenScope",
-    PERSIST_TOKEN: options.audience === "signed-in",
-  });
+  const page = teammate
+    ? await renderTemplate(root, "page/team-page.tsx.tpl", {
+        COMPONENT: component,
+        OPERATIONS: operations.join(", ") || "this page",
+        TITLE_KEY: JSON.stringify(`${options.feature}.title`),
+      })
+    : await renderTemplate(root, "page/page.tsx.tpl", {
+        TOKEN_IMPORT:
+          token === "none"
+            ? ""
+            : 'import { useState } from "react";\nimport { takeStashedToken } from "../../core/token-stash";\n',
+        META_IMPORT: token === "none" ? "" : 'import { meta } from "./meta";',
+        COMPONENT: component,
+        TOKEN_STATE:
+          token === "none"
+            ? ""
+            : "const [token] = useState(() => takeStashedToken(tokenScope));",
+        TOKEN_SCOPE_DECL:
+          token === "none"
+            ? ""
+            : 'const tokenScope = [props.workspaceId, ...Object.entries(props.params).filter(([key]) => key !== "workspaceId").map(([, value]) => value), meta.id].join(":");',
+        TOKEN_VOID: token === "none" ? "" : "void token;",
+        OPERATIONS: operations.join(", ") || "this page",
+        TITLE_KEY: JSON.stringify(`${options.feature}.title`),
+        TOKEN_MODE: JSON.stringify(token),
+        TOKEN_SCOPE: token === "none" ? "undefined" : "tokenScope",
+        PERSIST_TOKEN: options.audience === "signed-in",
+      });
   const test = await renderTemplate(root, "page/page.test.tsx.tpl", {
     COMPONENT: component,
     ID: id,
-    CASES: states
-      .map((state) => {
-        const options =
-          state === "loading"
-            ? "{ accessLoading: true }"
-            : [
-                  "authRequired",
-                  "conflict",
-                  "failed",
-                  "gone",
-                  "noAccess",
-                  "notFound",
-                ].includes(state)
-              ? `{ accessProblem: { kind: ${JSON.stringify(state)} } }`
-              : state === "rateLimited"
-                ? '{ accessProblem: { kind: "rateLimited", retryAt: Date.now() + 60_000 } }'
-                : "{}";
-        return `    ${JSON.stringify(state)}: { prepare: () => (${options}) },`;
-      })
-      .join("\n"),
+    IMPORTS: teammate ? `${team.imports}\n` : "",
+    CASES: teammate
+      ? team.cases(states)
+      : states
+          .map((state) => {
+            const options =
+              state === "loading"
+                ? "{ accessLoading: true }"
+                : [
+                      "authRequired",
+                      "conflict",
+                      "failed",
+                      "gone",
+                      "noAccess",
+                      "notFound",
+                    ].includes(state)
+                  ? `{ accessProblem: { kind: ${JSON.stringify(state)} } }`
+                  : state === "rateLimited"
+                    ? '{ accessProblem: { kind: "rateLimited", retryAt: Date.now() + 60_000 } }'
+                    : "{}";
+            return `    ${JSON.stringify(state)}: { prepare: () => (${options}) },`;
+          })
+          .join("\n"),
   });
   const searchItems =
     options.search
@@ -512,7 +591,8 @@ export async function generatePage(root, name, options) {
     .join(", ");
   const prefetches = [];
   const prefetchImports = [];
-  if (token === "none") {
+  // Teammate routes skip prefetch: the API decides access when the page asks.
+  if (token === "none" && !teammate) {
     for (const operationId of operations) {
       const found = findOperation(document, operationId);
       if (found.method !== "get") continue;
@@ -600,28 +680,24 @@ export async function generatePage(root, name, options) {
     BEFORE_LOAD: beforeLoad,
   });
   const routeTest = await renderTemplate(root, "page/route.test.tsx.tpl", {
-    ROUTE_FILE: routeFile(options.route, parentRoute).split("/").at(-1),
+    ROUTE_FILE: routePath.split("/").at(-1),
   });
   const outputs = [
     `${base}/meta.ts`,
     `${base}/${id}-page.tsx`,
     `${base}/${id}-page.test.tsx`,
-    `${root}/apps/web/src/routes/${routeFile(options.route, parentRoute)}.tsx`,
-    `${root}/apps/web/src/routes/${routeFile(options.route, parentRoute)}.test.tsx`,
+    `${root}/apps/web/src/routes/${routePath}.tsx`,
+    `${root}/apps/web/src/routes/${routePath}.test.tsx`,
   ];
   await assertNewPaths(root, outputs);
   const output = await Promise.all([
     writeNew(root, `${base}/meta.ts`, meta),
     writeNew(root, `${base}/${id}-page.tsx`, page),
     writeNew(root, `${base}/${id}-page.test.tsx`, test),
+    writeNew(root, `${root}/apps/web/src/routes/${routePath}.tsx`, route),
     writeNew(
       root,
-      `${root}/apps/web/src/routes/${routeFile(options.route, parentRoute)}.tsx`,
-      route,
-    ),
-    writeNew(
-      root,
-      `${root}/apps/web/src/routes/${routeFile(options.route, parentRoute)}.test.tsx`,
+      `${root}/apps/web/src/routes/${routePath}.test.tsx`,
       routeTest,
     ),
   ]);
@@ -765,7 +841,8 @@ export async function generateMissingTest(root, input) {
   if (
     !name.startsWith("apps/web/src/quills/") &&
     !name.startsWith("apps/web/src/routes/portal/") &&
-    !name.startsWith("apps/web/src/routes/quills/")
+    !name.startsWith("apps/web/src/routes/quills/") &&
+    !name.startsWith(`${teamRoutes}/`)
   )
     throw new Error("test source must be in a fork-owned Quills web path");
   const text = await readFile(source, "utf8");
@@ -859,30 +936,41 @@ export async function generateMissingTest(root, input) {
         /export const meta = (\{[\s\S]*\}) satisfies PageMeta/,
       )?.[1] ?? "{}",
     );
+    const team =
+      metaValue.audience === "teammate"
+        ? await teamPageCases(
+            root,
+            await readOpenApi(root),
+            metaValue.operations ?? [],
+          )
+        : null;
     output = await renderTemplate(root, "test/page.test.tsx.tpl", {
       NAME: component,
       LOCAL: JSON.stringify(local),
       NAME_JSON: JSON.stringify(component),
-      CASES: (metaValue.states ?? [])
-        .map((state) => {
-          const options =
-            state === "loading"
-              ? "{ accessLoading: true }"
-              : [
-                    "authRequired",
-                    "conflict",
-                    "failed",
-                    "gone",
-                    "noAccess",
-                    "notFound",
-                  ].includes(state)
-                ? `{ accessProblem: { kind: ${JSON.stringify(state)} } }`
-                : state === "rateLimited"
-                  ? '{ accessProblem: { kind: "rateLimited", retryAt: Date.now() + 60_000 } }'
-                  : "{}";
-          return `    ${JSON.stringify(state)}: { prepare: () => (${options}) },`;
-        })
-        .join("\n"),
+      IMPORTS: team ? `${team.imports}\n` : "",
+      CASES: team
+        ? team.cases(metaValue.states ?? [])
+        : (metaValue.states ?? [])
+            .map((state) => {
+              const options =
+                state === "loading"
+                  ? "{ accessLoading: true }"
+                  : [
+                        "authRequired",
+                        "conflict",
+                        "failed",
+                        "gone",
+                        "noAccess",
+                        "notFound",
+                      ].includes(state)
+                    ? `{ accessProblem: { kind: ${JSON.stringify(state)} } }`
+                    : state === "rateLimited"
+                      ? '{ accessProblem: { kind: "rateLimited", retryAt: Date.now() + 60_000 } }'
+                      : "{}";
+              return `    ${JSON.stringify(state)}: { prepare: () => (${options}) },`;
+            })
+            .join("\n"),
     });
   } else {
     const component = text.match(/export function (\w+)/)?.[1];

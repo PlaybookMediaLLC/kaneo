@@ -2,9 +2,10 @@ import type { PortalProblem } from "../core/types";
 import { HttpError } from "../ui/upstream";
 import { retryAfterAt } from "../core/retry-after";
 
+// A portal 403 on a record hides the record. A teammate 403 is a denied action.
 export async function toPortalProblem(
   response: Response,
-  target: "record" | "collection" = "record",
+  target: "record" | "collection" | "teammate" = "record",
   token = false,
 ): Promise<PortalProblem> {
   const error = await HttpError.fromResponse(response);
