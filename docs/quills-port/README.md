@@ -28,6 +28,7 @@ Goal: bring all of Quackback's feedback and support capability into Kaneo's API 
 | [roadmap.md](roadmap.md) | Level 1. Eleven phases (P0 to P10) in dependency and risk order. For each: ledger rows closed, endpoints, migrations, acceptance checks. |
 | [detailed-plan.md](detailed-plan.md) | Level 2. How to read each endpoint row, the merge rule, the action mapping, and the final route tables for P0 and P1. |
 | [framework.md](framework.md) | The route helper, the contract test, the map from each `apps/api/AGENTS.md` rule to a mechanism or a test, and the `links.ts` rewrite. |
+| [local-demo.md](local-demo.md) | `pnpm dev:demo`: a seeded local stack on its own PostgreSQL container, with demo sign-ins. |
 | [ledger/summary.md](ledger/summary.md) | Generated. Completeness checks and counts. |
 | [ledger/routes.csv](ledger/routes.csv) | Generated. One row per Quackback route file (514). |
 | [ledger/capabilities.csv](ledger/capabilities.csv) | Generated. One row per server function and HTTP handler (1,091). |
