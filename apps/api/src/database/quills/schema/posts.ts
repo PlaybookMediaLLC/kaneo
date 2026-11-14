@@ -448,6 +448,17 @@ export const postComments = quillsSchema
   )
   .enableRLS();
 
+/** The bounded set for feedback comment and changelog reactions (packages/widget RFC 0003). 👍 is also the widget's comment vote. */
+export const FEEDBACK_REACTION_EMOJIS = [
+  "👍",
+  "❤️",
+  "🎉",
+  "😄",
+  "😕",
+  "👀",
+  "🚀",
+] as const;
+
 export const postCommentReactions = quillsSchema
   .table(
     "post_comment_reactions",

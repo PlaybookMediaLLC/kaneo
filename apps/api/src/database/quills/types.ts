@@ -1385,16 +1385,6 @@ export type NewTicketActivityEntity = InferInsertModel<typeof ticketActivity>;
 // Reaction emoji constants (client-safe)
 export const REACTION_EMOJIS = ["👍", "❤️", "🎉", "😄", "🤔", "👀"] as const;
 export type ReactionEmoji = (typeof REACTION_EMOJIS)[number];
-/** The bounded set for feedback comment and changelog reactions (packages/widget RFC 0003). 👍 is also the widget's comment vote. */
-export const FEEDBACK_REACTION_EMOJIS = [
-  "👍",
-  "❤️",
-  "🎉",
-  "😄",
-  "😕",
-  "👀",
-  "🚀",
-] as const;
 
 // Integration types
 export type Integration = InferSelectModel<typeof integrations>;

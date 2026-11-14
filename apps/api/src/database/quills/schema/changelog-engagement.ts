@@ -9,9 +9,9 @@ import {
 } from "drizzle-orm/pg-core";
 import { typeIdColumn } from "@kaneo/ids/drizzle";
 import { quillsSchema, workspaceColumn, workspacePolicy } from "../tenancy";
-import { FEEDBACK_REACTION_EMOJIS } from "../types";
 import { principal } from "./auth";
 import { changelogEntries } from "./changelog";
+import { FEEDBACK_REACTION_EMOJIS } from "./posts";
 
 /** A customer's reaction to a changelog entry (RFC 0003, D9), from the comment reaction set. */
 export const changelogReactions = quillsSchema

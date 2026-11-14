@@ -26,8 +26,8 @@ import {
   z,
 } from "../../../openapi";
 import { principal } from "../../../database/quills/schema/auth";
-import { FEEDBACK_REACTION_EMOJIS } from "../../../database/quills/types";
 import {
+  FEEDBACK_REACTION_EMOJIS,
   postCommentEditHistory,
   postCommentReactions,
   postComments,
