@@ -13,6 +13,10 @@ export const updateQuillsBoardSettings = fixture({
   ...board,
   valid: (ids: Ids) => ({
     ...board.valid(ids),
-    body: { voteDisplay: "hidden", defaultSort: "random" },
+    body: {
+      voteDisplay: "hidden",
+      defaultSort: "random",
+      taskSync: { statusOnTaskDone: ids.a.otherStatusId },
+    },
   }),
 });

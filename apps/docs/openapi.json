@@ -147967,7 +147967,7 @@
         "tags": [
           "Quills"
         ],
-        "summary": "Get a board's voting settings",
+        "summary": "Get a board's voting and task sync settings",
         "parameters": [
           {
             "schema": {
@@ -147990,7 +147990,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Voting settings",
+            "description": "Voting and task sync settings",
             "content": {
               "application/json": {
                 "schema": {
@@ -148019,12 +148019,28 @@
                         null
                       ],
                       "description": "The order of the board's portal and widget posts when the caller names none. random is stable for one viewer for one UTC day. Null: newest in the API, the portal's own default in the web portal."
+                    },
+                    "taskSync": {
+                      "type": "object",
+                      "properties": {
+                        "statusOnTaskDone": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "description": "The post status that a linked post gets when its Kaneo task moves to a done column. Null: no change."
+                        }
+                      },
+                      "required": [
+                        "statusOnTaskDone"
+                      ]
                     }
                   },
                   "required": [
                     "boardId",
                     "voteDisplay",
-                    "defaultSort"
+                    "defaultSort",
+                    "taskSync"
                   ]
                 }
               }
@@ -148051,7 +148067,7 @@
             }
           },
           "404": {
-            "description": "Board not found",
+            "description": "Board or status not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -148070,8 +148086,8 @@
         "tags": [
           "Quills"
         ],
-        "summary": "Change a board's voting settings",
-        "description": "Changes only the given keys and keeps every other board setting. defaultSort null removes the board's default.",
+        "summary": "Change a board's voting and task sync settings",
+        "description": "Changes only the given keys and keeps every other board setting. defaultSort null removes the board's default. taskSync.statusOnTaskDone must be a live post status of the workspace; null turns the sync off.",
         "parameters": [
           {
             "schema": {
@@ -148118,6 +148134,21 @@
                       null
                     ],
                     "description": "The order of the board's portal and widget posts when the caller names none. random is stable for one viewer for one UTC day. Null: newest in the API, the portal's own default in the web portal."
+                  },
+                  "taskSync": {
+                    "type": "object",
+                    "properties": {
+                      "statusOnTaskDone": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "description": "The post status that a linked post gets when its Kaneo task moves to a done column. Null: no change."
+                      }
+                    },
+                    "required": [
+                      "statusOnTaskDone"
+                    ]
                   }
                 }
               }
@@ -148126,7 +148157,7 @@
         },
         "responses": {
           "200": {
-            "description": "Voting settings",
+            "description": "Voting and task sync settings",
             "content": {
               "application/json": {
                 "schema": {
@@ -148155,12 +148186,28 @@
                         null
                       ],
                       "description": "The order of the board's portal and widget posts when the caller names none. random is stable for one viewer for one UTC day. Null: newest in the API, the portal's own default in the web portal."
+                    },
+                    "taskSync": {
+                      "type": "object",
+                      "properties": {
+                        "statusOnTaskDone": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "description": "The post status that a linked post gets when its Kaneo task moves to a done column. Null: no change."
+                        }
+                      },
+                      "required": [
+                        "statusOnTaskDone"
+                      ]
                     }
                   },
                   "required": [
                     "boardId",
                     "voteDisplay",
-                    "defaultSort"
+                    "defaultSort",
+                    "taskSync"
                   ]
                 }
               }
@@ -148187,7 +148234,7 @@
             }
           },
           "404": {
-            "description": "Board not found",
+            "description": "Board or status not found",
             "content": {
               "application/json": {
                 "schema": {

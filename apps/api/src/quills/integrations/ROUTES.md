@@ -151,6 +151,39 @@ A workspace archive import pauses imported integrations, as it disables imported
 Sync operations are kept (a create's key prevents a duplicate remote item); attempts are small. The source
 prunes attempts and results of finished operations after 90 days; that pruning is a follow-up.
 
+## Task sync and CRM notes (RFC 0003, lane L6)
+
+Task sync (feature 12, D12). The board settings routes (`feedback/board-settings.ts`) read and write
+`taskSync.statusOnTaskDone`, a live post status of the workspace (`manage_settings`, `board.settings_updated`).
+
+- Handoff: Kaneo publishes `task.status_changed` after each status change commits (task controllers, bulk
+  updates, the GitHub, GitLab and Gitea webhooks). `jobs/worker.ts` subscribes. A task that is now in a final
+  column and has a `post_tasks` link gets one `quills.workflow` job `{ taskId }` in its workspace
+  (`task-sync-job.ts`). A process that stops between the Kaneo commit and the enqueue loses that sync.
+- Job: checks that the task is still done and in the job's workspace (`framework/platform-reads.ts`), then
+  reads the stored links under the workspace scope. Each live post on a board with the setting, whose status
+  differs, gets the status. One transaction holds the `hook_deliveries` row (`task-sync:{task}:{post}:{status}`),
+  the change, `post.status_changed` (actor `system`, payload `source: task`) and the job outcome. The existing
+  fan-out then tells voters and followers. No upstream file changes: the subscription needs no seam.
+
+CRM notes (feature 19, D13). No route and no table.
+
+- Trigger: `post.vote_importance_set` with importance `critical`, or `app.post_linked` with the type `hubspot`
+  or `salesforce` (`linkQuillsAppPost`). The fan-out queues `{ eventId, crm: "note" }` on `quills.webhook` only
+  when the workspace has an active HubSpot or Salesforce connection.
+- Mapping: a vote uses the voter's company `externalId`; a link uses its key. The ID must have the format of a
+  connected CRM: a HubSpot company ID (digits) or a Salesforce account ID (prefix `001`). Otherwise the job
+  sends and records nothing.
+- Delivery (`crm-notes.ts`): the job reads the vote (still critical) or the link (still there) at run time,
+  claims `crm-note:{vote}:{company}` or `crm-note:link:{post}:{type}:{record}` before the call, refreshes a due
+  token and keeps the new one, and records the connection health. Outcomes follow the table above: 408 and 429
+  retry with the job backoff; no answer or a 5xx is uncertain and is not sent again; 403 is
+  `write_access_required`. HubSpot gets a note associated with the company (type 190); Salesforce gets a `Note`
+  with the account as `ParentId`.
+- HubSpot scope: the connect URL asks for read scopes only (`providers/hubspot.ts`), so a HubSpot note gets 403
+  until the connect URL and the HubSpot app add a write scope. Not changed here: a scope that the operator's
+  HubSpot app does not list breaks the connect flow.
+
 ## Required migrations (not generated in this wave)
 
 1. `quills.runnable_workspaces` (migration `0010_delivery_queues.sql`) lists the queues that make a workspace

@@ -469,7 +469,7 @@ type Claim =
   | ({ kind: "send" } & Claimed);
 
 /** Health telemetry on the connection. The error is a mapped message, never provider text. */
-async function recordHealth(
+export async function recordHealth(
   db: Database,
   integrationId: string,
   outcome: Pick<Outcome, "state" | "errorCode">,

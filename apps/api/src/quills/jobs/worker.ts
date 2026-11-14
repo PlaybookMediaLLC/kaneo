@@ -7,6 +7,7 @@ import type { JobQueueRow } from "../../database/quills/schema/job-queue";
 import { workspaceUserTable, userTable } from "../../database/schema";
 import { roleHasWorkspacePermission } from "../../utils/require-workspace-permission";
 import { broadcastToUserAndWait } from "../../ws";
+import { subscribeToEvent } from "../../events";
 import { fanOut } from "./fanout";
 import { deliverCustomerChange } from "./handlers/customer-stream";
 import { fanOutIntegrations, runIntegrationJob } from "./handlers/integration";
@@ -21,6 +22,11 @@ import { runTransferJob } from "./handlers/transfer";
 import { runQuillsSweeps } from "./handlers/sweeps";
 import { runWipeJob } from "./handlers/wipe";
 import { runWorkflowJob } from "./handlers/workflow";
+import { runCrmNoteJob } from "../integrations/crm-notes";
+import {
+  handOffTaskStatus,
+  runTaskSyncJob,
+} from "../integrations/task-sync-job";
 import {
   claimFrom,
   enqueueQuillsEvent,
@@ -36,13 +42,15 @@ const handlers: Record<
   (workspaceId: string, job: JobQueueRow) => Promise<unknown>
 > = {
   // Integration deliveries and GitHub inbox comments share this queue until a quills.integration queue
-  // is runnable (integrations/ROUTES.md). A webhook job names its webhook.
+  // is runnable (integrations/ROUTES.md). A webhook job names its webhook; a CRM note job names `crm`.
   "quills.webhook": (workspaceId, job) =>
     "operationId" in (job.payload as object)
       ? runIntegrationJob(workspaceId, job)
       : "webhookId" in (job.payload as object)
         ? runWebhookJob(workspaceId, job)
-        : runGitHubCommentJob(workspaceId, job),
+        : "crm" in (job.payload as object)
+          ? runCrmNoteJob(workspaceId, job)
+          : runGitHubCommentJob(workspaceId, job),
   // The weekly digest (handlers/digest.ts) shares the mail queue; its job names a week.
   "quills.mail": (workspaceId, job) =>
     "digest" in (job.payload as object)
@@ -52,9 +60,17 @@ const handlers: Record<
   "quills.domain_check": runDomainCheckJob,
   "quills.wipe": runWipeJob,
   "quills.transfer": runTransferJob,
-  "quills.workflow": runWorkflowJob,
+  // A task-sync job (RFC 0003, D12) names its Kaneo task.
+  "quills.workflow": (workspaceId, job) =>
+    "taskId" in (job.payload as object)
+      ? runTaskSyncJob(workspaceId, job)
+      : runWorkflowJob(workspaceId, job),
   "quills.ai": runAiJob,
 };
+
+// Task sync (RFC 0003, D12): every Kaneo path that changes a task's status publishes this event
+// after its commit (task controllers, bulk updates and the GitHub, GitLab and Gitea webhooks).
+void subscribeToEvent("task.status_changed", handOffTaskStatus);
 
 export async function deliverQuillsChange(
   workspaceId: string,

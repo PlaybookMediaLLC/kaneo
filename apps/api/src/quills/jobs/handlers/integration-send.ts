@@ -190,7 +190,7 @@ async function createStory(d: Delivery): Promise<Outcome> {
 
 /** A refresh that failed. The delivery was not sent: never uncertain. A refused refresh needs a reconnect. */
 // A token endpoint that times out (408) or limits the rate (429) is busy, not a lost grant: wait.
-const refreshFailed = (error: unknown): Outcome =>
+export const refreshFailed = (error: unknown): Outcome =>
   error instanceof ProviderCallError &&
   error.status !== null &&
   error.status < 500 &&

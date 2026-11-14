@@ -6,6 +6,7 @@ export const updateBoardSettingsFixture = {
         boardId: "board_id_test_1",
         voteDisplay: "count",
         defaultSort: "votes",
+        taskSync: { statusOnTaskDone: null },
       },
       ...overrides,
     }) satisfies UpdateBoardSettingsResponse,

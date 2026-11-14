@@ -1,0 +1,6 @@
+{
+	"none": "Do not change the status",
+	"save": "Save task sync",
+	"statusOnTaskDone": "When a linked task is done, set the status to",
+	"title": "Task sync"
+}

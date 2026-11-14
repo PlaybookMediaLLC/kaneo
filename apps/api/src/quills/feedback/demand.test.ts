@@ -416,6 +416,7 @@ describe.skipIf(!url)("Feedback demand, scores and voting settings", () => {
       boardId,
       voteDisplay: "count",
       defaultSort: null,
+      taskSync: { statusOnTaskDone: null },
     });
     for (const bad of [{}, { voteDisplay: "none" }, { defaultSort: "oldest" }])
       expect((await call(app, env, owner(), "PATCH", path, bad)).status).toBe(
@@ -429,11 +430,17 @@ describe.skipIf(!url)("Feedback demand, scores and voting settings", () => {
       boardId,
       voteDisplay: "hidden",
       defaultSort: "random",
+      taskSync: { statusOnTaskDone: null },
     });
     expect(
       (await call(app, env, owner(), "PATCH", path, { defaultSort: null }))
         .body,
-    ).toEqual({ boardId, voteDisplay: "hidden", defaultSort: null });
+    ).toEqual({
+      boardId,
+      voteDisplay: "hidden",
+      defaultSort: null,
+      taskSync: { statusOnTaskDone: null },
+    });
     const [row] = await env.scoped(env.a, (db) =>
       db
         .select({ settings: boards.settings })
