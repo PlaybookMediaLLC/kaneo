@@ -2,6 +2,7 @@ import { apiRouter } from "../../../openapi";
 import { boardRoutes, taxonomyRoutes } from "./boards";
 import { changelogRoutes } from "./changelog";
 import { commentRoutes, ownCommentRoutes } from "./comments";
+import ai from "./ai";
 import feeds from "./feeds";
 import { ownPostRoutes, postRoutes } from "./posts";
 import attachments from "./attachment-routes";
@@ -19,4 +20,5 @@ export default apiRouter()
   .route("/", attachments)
   .route("/", roadmaps)
   .route("/", changelogRoutes("portal"))
-  .route("/", feeds);
+  .route("/", feeds)
+  .route("/", ai);
