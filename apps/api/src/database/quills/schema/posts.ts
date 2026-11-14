@@ -12,6 +12,7 @@ import {
   check,
   varchar,
   foreignKey,
+  real,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import {
@@ -133,6 +134,12 @@ export const posts = quillsSchema
       // Nullable target ship date for time-based roadmap columns. Stored as a full
       // timestamp (single-datetime ETA model); presented at month granularity.
       eta: timestamp("eta", { withTimezone: true }),
+      // RICE inputs (RFC 0003, D5). The score is computed at read time.
+      scoreReach: integer("score_reach"),
+      scoreImpact: real("score_impact"),
+      scoreConfidence: integer("score_confidence"),
+      /** Person-weeks. */
+      scoreEffort: real("score_effort"),
     },
     (table) => [
       // Named to match the constraint the SQL migration created.
@@ -202,6 +209,23 @@ export const posts = quillsSchema
       // CHECK constraints to ensure counts are never negative
       check("vote_count_non_negative", sql`vote_count >= 0`),
       check("comment_count_non_negative", sql`comment_count >= 0`),
+      check(
+        "posts_score_reach_check",
+        sql`${table.scoreReach} IS NULL OR ${table.scoreReach} >= 0`,
+      ),
+      check(
+        "posts_score_impact_check",
+        sql`${table.scoreImpact} IS NULL OR ${table.scoreImpact} IN (0.25, 0.5, 1, 2, 3)`,
+      ),
+      check(
+        "posts_score_confidence_check",
+        sql`${table.scoreConfidence} IS NULL OR ${table.scoreConfidence} BETWEEN 0 AND 100`,
+      ),
+      // The upper bound also rejects NaN and Infinity.
+      check(
+        "posts_score_effort_check",
+        sql`${table.scoreEffort} IS NULL OR (${table.scoreEffort} > 0 AND ${table.scoreEffort} <= 10000)`,
+      ),
       primaryKey({ columns: [table.workspaceId, table.id] }),
       foreignKey({
         columns: [table.workspaceId, table.boardId],
@@ -282,6 +306,10 @@ export const postVotes = quillsSchema
       addedByPrincipalId: typeIdColumnNullable("principal")(
         "added_by_principal_id",
       ),
+      // How much the voter needs it (RFC 0003, D4). A vote without one stays valid.
+      importance: text("importance", {
+        enum: ["nice", "important", "critical"],
+      }),
       createdAt: timestamp("created_at", { withTimezone: true })
         .defaultNow()
         .notNull(),
@@ -290,6 +318,10 @@ export const postVotes = quillsSchema
         .notNull(),
     },
     (table) => [
+      check(
+        "post_votes_importance_check",
+        sql`${table.importance} IS NULL OR ${table.importance} IN ('nice','important','critical')`,
+      ),
       // Named to match the constraint the SQL migration created.
       foreignKey({
         name: "post_votes_added_by_principal_id_fkey",
