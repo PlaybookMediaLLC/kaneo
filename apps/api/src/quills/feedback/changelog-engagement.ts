@@ -50,6 +50,8 @@ const list = defineQuillsRoute({
         publishedAt: sql<Date>`${changelogEntries.publishedAt}`.mapWith(
           changelogEntries.publishedAt,
         ),
+        // ponytail: one scan of changelog_reads per entry on the page; add an index on
+        // (workspace_id, last_read_at) through a migration when workspaces have many readers.
         readCount: sql<number>`(select count(*)::int from ${changelogReads} where ${changelogReads.lastReadAt} >= ${changelogEntries.publishedAt} and ${notTest(changelogReads.principalId)})`,
       })
       .from(changelogEntries)

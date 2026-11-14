@@ -9,7 +9,6 @@ import {
   isNull,
   lt,
   or,
-  sql,
 } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
@@ -141,14 +140,23 @@ export async function queueWeeklyDigests(db: Database, now = new Date()) {
   if (progress.success && progress.data.done) return;
   const after = progress.success ? progress.data.after : null;
   const changed = await changedPosts(db, from, to);
-  const asked = sql`exists (select 1 from ${posts} where ${inArray(posts.id, changed)} and ${or(
-    sql`exists (select 1 from ${postVotes} where ${postVotes.postId} = ${posts.id} and ${postVotes.principalId} = ${principal.id})`,
-    sql`exists (select 1 from ${postSubscriptions} where ${postSubscriptions.postId} = ${posts.id} and ${postSubscriptions.principalId} = ${principal.id})`,
-  )})`;
+  // Start from the votes and follows of the changed posts, not from every customer.
+  const askers = db
+    .select({ id: postVotes.principalId })
+    .from(postVotes)
+    .where(inArray(postVotes.postId, changed))
+    .union(
+      db
+        .select({ id: postSubscriptions.principalId })
+        .from(postSubscriptions)
+        .where(inArray(postSubscriptions.postId, changed)),
+    )
+    .as("askers");
   const due = changed.length
     ? await db
         .select({ id: principal.id })
-        .from(principal)
+        .from(askers)
+        .innerJoin(principal, eq(principal.id, askers.id))
         .where(
           and(
             isNull(principal.kaneoUserId),
@@ -156,7 +164,6 @@ export async function queueWeeklyDigests(db: Database, now = new Date()) {
             isNull(principal.blockedAt),
             isNull(principal.testOwnerPrincipalId),
             after ? gt(principal.id, after as PrincipalId) : undefined,
-            asked,
           ),
         )
         .orderBy(asc(principal.id))

@@ -25,6 +25,7 @@ export function TeamChangelogPage({ workspaceId }: TeamChangelogPageProps) {
     { param: { workspaceId }, query: {} },
     team.viewer,
   );
+  // ponytail: the 20 shipped posts with the most votes; add a search field when teams need older ones.
   const shipped = useSearchShippedPosts(
     { param: { workspaceId }, query: {} },
     team.viewer,
