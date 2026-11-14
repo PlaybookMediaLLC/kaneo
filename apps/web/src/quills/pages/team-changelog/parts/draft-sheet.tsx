@@ -41,7 +41,7 @@ export function DraftSheet({
     );
   return (
     <>
-      <Button type="button" onClick={() => setOpen(true)}>
+      <Button type="button" size="sm" onClick={() => setOpen(true)}>
         {t("team-changelog.draft.open")}
       </Button>
       <Sheet open={open} onOpenChange={setOpen}>
