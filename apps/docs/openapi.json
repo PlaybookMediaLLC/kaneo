@@ -124698,7 +124698,7 @@
           "Quills"
         ],
         "summary": "Count the views of the teammate app",
-        "description": "Open conversations assigned to the caller, unassigned and in total (test customers and spam not counted, as in the inbox counts); live tickets in an open status, as `listQuillsTickets` with `statusCategory=open`; pending merge suggestions whose two posts are visible to you; pending feedback signals that the autopilot list shows.",
+        "description": "Open conversations assigned to the caller, unassigned, waiting for a team reply (the queue) and in total (test customers and spam not counted, as in the inbox counts); the posts of each live status in the active category, in position order, as `getQuillsPostFilterCounts` counts them; live tickets in an open status, as `listQuillsTickets` with `statusCategory=open`; pending merge suggestions whose two posts are visible to you; pending feedback signals that the autopilot list shows.",
         "parameters": [
           {
             "schema": {
@@ -124731,6 +124731,10 @@
                       "type": "integer",
                       "minimum": 0
                     },
+                    "queueConversations": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
                     "openTickets": {
                       "type": "integer",
                       "minimum": 0
@@ -124742,15 +124746,45 @@
                     "pendingSignals": {
                       "type": "integer",
                       "minimum": 0
+                    },
+                    "postStatuses": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "color": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "color",
+                          "count"
+                        ]
+                      },
+                      "maxItems": 100
                     }
                   },
                   "required": [
                     "myConversations",
                     "unassignedConversations",
                     "openConversations",
+                    "queueConversations",
                     "openTickets",
                     "pendingDuplicates",
-                    "pendingSignals"
+                    "pendingSignals",
+                    "postStatuses"
                   ]
                 }
               }
