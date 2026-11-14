@@ -138,8 +138,10 @@ describe("TeamTriagePage", () => {
       );
       api.reply(listPostsFixture.ok({ items: [post] }));
       const view = renderPage(TeamTriagePage, meta);
-      await view.findByRole("button", { name: /score .export history/i });
-      press(/score .export history/i);
+      await view.findByRole("button", {
+        name: /edit the score of .export history/i,
+      });
+      press(/edit the score of .export history/i);
       fill("Reach", "100");
       fill("Confidence (%)", "80");
       fill("Effort (person-weeks)", "4");

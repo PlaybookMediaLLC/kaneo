@@ -65,6 +65,9 @@ export function TriageTable(props: TriageTableProps) {
           {props.posts.flatMap((post) => {
             const editing = props.editingId === post.id;
             const { rice, ...score } = post.score;
+            // The visible value starts the button's name (WCAG 2.5.3).
+            const riceText =
+              rice === null ? t("team-triage.unset") : number.format(rice);
             const row = (
               <tr key={post.id}>
                 <th scope="row" className="px-3 py-2 text-left font-medium">
@@ -84,18 +87,15 @@ export function TriageTable(props: TriageTableProps) {
                       size="sm"
                       aria-expanded={editing}
                       aria-label={t("team-triage.editScore", {
+                        value: riceText,
                         title: post.title,
                       })}
                       onClick={() => props.onEdit(editing ? null : post.id)}
                     >
-                      {rice === null
-                        ? t("team-triage.unset")
-                        : number.format(rice)}
+                      {riceText}
                     </Button>
-                  ) : rice === null ? (
-                    t("team-triage.unset")
                   ) : (
-                    number.format(rice)
+                    riceText
                   )}
                 </td>
               </tr>

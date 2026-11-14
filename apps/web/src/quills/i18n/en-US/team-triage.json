@@ -5,7 +5,7 @@
 	"critical": "Blocker",
 	"defaultSort": "Default order",
 	"description": "Rank requests by votes, customer revenue and RICE score.",
-	"editScore": "Score “{{title}}”",
+	"editScore": "{{value}}, edit the score of “{{title}}”",
 	"effort": "Effort (person-weeks)",
 	"impact": "Impact",
 	"impactHigh": "2 · High",

@@ -38,14 +38,14 @@ describe("TriageTable", () => {
   it("opens the inline score editor with the current inputs", () => {
     const onEdit = vi.fn();
     const view = renderComponent(<TriageTable {...props({ onEdit })} />);
-    press(/score .export history/i);
+    press(/edit the score of .export history/i);
     expect(onEdit).toHaveBeenCalledWith("post_test_1");
     view.rerender(
       <TriageTable {...props({ onEdit, editingId: "post_test_1" })} />,
     );
     expect(view.getByLabelText("Reach")).toHaveValue("10");
     expect(
-      view.getByRole("button", { name: /score .export history/i }),
+      view.getByRole("button", { name: /edit the score of .export history/i }),
     ).toHaveAttribute("aria-expanded", "true");
   });
 
