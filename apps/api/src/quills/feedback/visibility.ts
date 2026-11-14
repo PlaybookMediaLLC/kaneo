@@ -1,11 +1,12 @@
 import {
   and,
-  eq,
+  type AnyColumn,
+  inArray,
   isNotNull,
   isNull,
   or,
+  eq,
   sql,
-  type AnyColumn,
   type SQL,
   type SQLWrapper,
 } from "drizzle-orm";
@@ -71,6 +72,18 @@ export const visiblePost = (projects: string[]): SQL =>
  * A post and the active posts merged into it: one vote per person across all of them.
  * With `projects`, only posts on boards the caller can see.
  */
+/** The posts and the live duplicates merged into them: a vote or follow on a duplicate counts for its post. */
+export const withDuplicates = (db: Database, ids: TypeId<"post">[]) =>
+  db
+    .select({ id: posts.id })
+    .from(posts)
+    .where(
+      or(
+        inArray(posts.id, ids),
+        and(inArray(posts.canonicalPostId, ids), isNull(posts.deletedAt)),
+      ),
+    );
+
 export const relatedPosts = (
   db: Database,
   postId: TypeId<"post">,

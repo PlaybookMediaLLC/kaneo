@@ -24,6 +24,7 @@ import {
   segments,
   userSegments,
 } from "../../../database/quills/schema/segments";
+import { withDuplicates } from "../../feedback/visibility";
 import { entryVisible } from "../../portal/feedback/changelog";
 import { portalPaths } from "../../portal/paths";
 import {
@@ -92,14 +93,14 @@ const recipients: Subscribers["recipients"] = async (db, event) => {
   const rows = await db
     .select({ id: postVotes.principalId })
     .from(postVotes)
-    .where(inArray(postVotes.postId, ids))
+    .where(inArray(postVotes.postId, withDuplicates(db, ids)))
     .union(
       db
         .select({ id: postSubscriptions.principalId })
         .from(postSubscriptions)
         .where(
           and(
-            inArray(postSubscriptions.postId, ids),
+            inArray(postSubscriptions.postId, withDuplicates(db, ids)),
             eq(postSubscriptions.notifyStatusChanges, true),
           ),
         ),
@@ -107,6 +108,12 @@ const recipients: Subscribers["recipients"] = async (db, event) => {
     .limit(MAX_RECIPIENTS);
   return { principalIds: rows.map((row) => row.id) };
 };
+
+/** A vote or follow on a merged duplicate names the post it was merged into. */
+const requested =
+  sql<PostId>`coalesce(${posts.canonicalPostId}, ${posts.id})`.mapWith(
+    posts.id,
+  );
 
 /** The first linked post that this person voted for or follows: the request they asked for. */
 async function requestOf(
@@ -119,21 +126,23 @@ async function requestOf(
   const asked = new Set(
     (
       await db
-        .select({ id: postVotes.postId })
+        .select({ id: requested })
         .from(postVotes)
+        .innerJoin(posts, eq(posts.id, postVotes.postId))
         .where(
           and(
-            inArray(postVotes.postId, ids),
+            inArray(postVotes.postId, withDuplicates(db, ids)),
             eq(postVotes.principalId, principalId),
           ),
         )
         .union(
           db
-            .select({ id: postSubscriptions.postId })
+            .select({ id: requested })
             .from(postSubscriptions)
+            .innerJoin(posts, eq(posts.id, postSubscriptions.postId))
             .where(
               and(
-                inArray(postSubscriptions.postId, ids),
+                inArray(postSubscriptions.postId, withDuplicates(db, ids)),
                 eq(postSubscriptions.principalId, principalId),
                 eq(postSubscriptions.notifyStatusChanges, true),
               ),

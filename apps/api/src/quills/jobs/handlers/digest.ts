@@ -9,6 +9,7 @@ import {
   isNull,
   lt,
   or,
+  sql,
 } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
@@ -42,6 +43,7 @@ import { postSubscriptions } from "../../../database/quills/schema/notifications
 import { posts, postVotes } from "../../../database/quills/schema/posts";
 import { postStatuses } from "../../../database/quills/schema/statuses";
 import { realEmail } from "../../directory/customer";
+import { withDuplicates } from "../../feedback/visibility";
 import { mailTags } from "../../framework/signed";
 import { portalAccount } from "../../framework/platform-reads";
 import {
@@ -118,6 +120,10 @@ async function changedPosts(db: Database, from: Date, to: Date) {
     .filter((id): id is PostId => !!id && isValidTypeId(id, "post"));
 }
 
+/** The customer voted for or follows a live duplicate that was merged into the post. */
+const askedOnDuplicate = (me: PrincipalId) =>
+  sql`exists (select 1 from ${posts} d where d.canonical_post_id = ${posts.id} and d.deleted_at is null and (exists (select 1 from ${postVotes} v where v.post_id = d.id and v.principal_id = ${sql.param(me, postVotes.principalId)}) or exists (select 1 from ${postSubscriptions} s where s.post_id = d.id and s.principal_id = ${sql.param(me, postSubscriptions.principalId)})))`;
+
 const progressKey = (week: string) => `digest:${week}`;
 const progressSchema = z.object({
   after: z.string().nullable(),
@@ -144,12 +150,12 @@ export async function queueWeeklyDigests(db: Database, now = new Date()) {
   const askers = db
     .select({ id: postVotes.principalId })
     .from(postVotes)
-    .where(inArray(postVotes.postId, changed))
+    .where(inArray(postVotes.postId, withDuplicates(db, changed)))
     .union(
       db
         .select({ id: postSubscriptions.principalId })
         .from(postSubscriptions)
-        .where(inArray(postSubscriptions.postId, changed)),
+        .where(inArray(postSubscriptions.postId, withDuplicates(db, changed))),
     )
     .as("askers");
   const due = changed.length
@@ -279,6 +285,7 @@ export async function runDigestJob(workspaceId: string, job: JobQueueRow) {
                 or(
                   myPosts(principalId, "voted"),
                   myPosts(principalId, "following"),
+                  askedOnDuplicate(principalId),
                 ),
               ),
             )

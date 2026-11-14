@@ -20,7 +20,7 @@ import {
   notificationPreferences,
   postSubscriptions,
 } from "../../../database/quills/schema/notifications";
-import { postVotes } from "../../../database/quills/schema/posts";
+import { posts, postVotes } from "../../../database/quills/schema/posts";
 import * as kaneo from "../../../database/schema";
 import quillsRouter from "../../index";
 import publicRouter from "../../public";
@@ -322,6 +322,42 @@ describe.skipIf(!url)("Quills shipped notices", () => {
     await publish([p1.postId]);
     await drain();
     expect(to()).toEqual([visitors.follower!.email]);
+  });
+
+  it("mails the voter of a duplicate that was merged into a linked post", async () => {
+    const env = contractEnv();
+    const duplicate = await customerPost(env, env.a);
+    const visitor = await env.widgetVisitor(env.a);
+    await env.scoped(env.a, async (db) => {
+      await db
+        .update(posts)
+        .set({ canonicalPostId: p2.postId as PostId })
+        .where(eq(posts.id, duplicate.postId as PostId));
+      await db.insert(postVotes).values({
+        postId: duplicate.postId as PostId,
+        principalId: visitor.principalId as PrincipalId,
+      });
+    });
+    const [row] = await env.scoped(env.a, (db) =>
+      db
+        .select({ email: customer.email })
+        .from(principal)
+        .innerJoin(customer, eq(customer.id, principal.userId))
+        .where(eq(principal.id, visitor.principalId as PrincipalId)),
+    );
+    mail.shipped.length = 0;
+    expect((await publish([p2.postId])).status).toBe(200);
+    await drain();
+    // The mail names the post that the duplicate was merged into.
+    expect(mail.shipped.find((sent) => sent.to === row!.email)).toMatchObject({
+      requestTitle: p2.title,
+    });
+    // The next tests count the voters of p2: take this one away again.
+    await env.scoped(env.a, (db) =>
+      db
+        .delete(postVotes)
+        .where(eq(postVotes.principalId, visitor.principalId as PrincipalId)),
+    );
   });
 
   it("tells a teammate voter in-app on a scheduled publish, and nobody without a notice", async () => {
