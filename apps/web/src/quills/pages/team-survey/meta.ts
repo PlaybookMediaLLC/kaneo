@@ -8,6 +8,7 @@ export const meta = {
   token: "none",
   operations: [
     "getQuillsSurveyResults",
+    "listQuillsSurveys",
     "setQuillsSurveyStatus",
     "deleteQuillsSurvey",
   ],
