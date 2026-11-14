@@ -20,6 +20,7 @@ import reporting from "./reporting/index";
 import sharedTeams from "./teams";
 import taxonomy from "./feedback/taxonomy";
 import supportTickets from "./support/tickets-router";
+import surveys from "./feedback/surveys";
 import supportConversations from "./support/conversations-router";
 import supportAssistant from "./support/conversation-assistant";
 import workspaceSearch from "./assistant/search";
@@ -102,4 +103,5 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", assistant)
   .route("/", apps)
   .route("/", agentChannels)
+  .route("/", surveys)
   .openapi(...context);
