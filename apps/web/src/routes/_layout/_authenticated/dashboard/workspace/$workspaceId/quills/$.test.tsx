@@ -40,6 +40,12 @@ describe("old teammate addresses", () => {
     ).toBe("/feedback/workspace_1/surveys/survey_1?tab=results");
   });
 
+  it("redirect an old address with other letter case instead of looping", async () => {
+    expect(await follow("/dashboard/workspace/workspace_1/Quills/triage")).toBe(
+      "/feedback/workspace_1/triage",
+    );
+  });
+
   it("redirect the old overview address", async () => {
     expect(await follow("/dashboard/workspace/workspace_1/quills")).toBe(
       "/feedback/workspace_1",

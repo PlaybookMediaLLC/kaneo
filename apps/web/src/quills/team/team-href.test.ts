@@ -28,6 +28,16 @@ describe("legacyTeamHref", () => {
     ).toBe("/feedback/workspace%201");
   });
 
+  it("ignores letter case, as the router does", () => {
+    expect(
+      legacyTeamHref({
+        pathname: "/Dashboard/workspace/workspace_1/Quills/triage",
+        searchStr: "",
+        hash: "",
+      }),
+    ).toBe("/feedback/workspace_1/triage");
+  });
+
   it("does not rewrite a workspace page whose name starts with quills", () => {
     expect(
       legacyTeamHref({

@@ -4,7 +4,9 @@ export const teamHref = (workspaceId: string, path = "") =>
 
 /**
  * The teammate app address of an old /dashboard/workspace/{id}/quills address,
- * with the same sub-path, search and hash. The path stays encoded.
+ * with the same sub-path, search and hash. The path stays encoded. The router
+ * matches paths without letter case, so the pattern does too: else the old
+ * route would redirect to itself.
  */
 export function legacyTeamHref(location: {
   pathname: string;
@@ -12,7 +14,7 @@ export function legacyTeamHref(location: {
   hash: string;
 }) {
   const path = location.pathname.replace(
-    /^\/dashboard\/workspace\/([^/]+)\/quills(?=\/|$)/,
+    /^\/dashboard\/workspace\/([^/]+)\/quills(?=\/|$)/i,
     "/feedback/$1",
   );
   return `${path}${location.searchStr}${location.hash ? `#${location.hash}` : ""}`;

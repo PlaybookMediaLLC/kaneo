@@ -51,7 +51,7 @@ export function TeamShell({
       />
     ) : null;
   return (
-    <div className="group/shell flex h-svh min-h-0 flex-col bg-muted md:flex-row">
+    <div className="group/shell flex h-svh min-h-0 w-full flex-col bg-muted md:flex-row">
       <IconRail
         workspaceId={workspaceId}
         sections={visibleSections()}
