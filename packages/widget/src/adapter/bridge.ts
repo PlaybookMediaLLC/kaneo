@@ -2,14 +2,35 @@ import * as z from "zod/mini";
 import { identitySchema } from "../core/options.js";
 import { viewSchema, type OutboundMessage } from "../core/protocol.js";
 
-/** What the iframe accepts from the SDK. Other inbound types (metadata, device, mobile) have no route yet. */
+/** What the iframe accepts from the SDK. Other inbound types (device, mobile) have no route yet. */
 export type ParentMessage =
   | {
       type: "identify";
       identity: z.infer<typeof identitySchema> | null | "invalid";
     }
   | { type: "open"; target: z.infer<typeof openSchema> }
-  | { type: "locale"; locale: string };
+  | { type: "locale"; locale: string }
+  /** The host app's metadata and the page URL, for the next feedback post. */
+  | { type: "metadata"; metadata: Record<string, string> }
+  /** The answer to a capture request: a PNG of the host page, or null. */
+  | { type: "capture"; id: string; image: Blob | null };
+
+/** The API's bounds for post metadata: 20 keys of at most 64 characters, values of at most 500. */
+export const METADATA_KEYS = 20;
+const metadataOf = (data: unknown): Record<string, string> =>
+  data && typeof data === "object" && !Array.isArray(data)
+    ? Object.fromEntries(
+        Object.entries(data)
+          .filter(
+            (entry): entry is [string, string] =>
+              entry[0].trim().length > 0 &&
+              entry[0].length <= 64 &&
+              typeof entry[1] === "string",
+          )
+          .slice(0, METADATA_KEYS)
+          .map(([key, value]) => [key, value.slice(0, 500)]),
+      )
+    : {};
 
 /** A TypeID, UUID or slug. No dots or slashes, so a deep link cannot move up the API path. */
 const ref = z.string().check(z.regex(/^[A-Za-z0-9_-]{1,200}$/));
@@ -50,6 +71,17 @@ export function createParentBridge(
       onMessage({ type: "open", target: parsed.success ? parsed.data : {} });
     } else if (type === "quackback:locale" && typeof data === "string")
       onMessage({ type: "locale", locale: data.slice(0, 35) });
+    else if (type === "quackback:metadata")
+      onMessage({ type: "metadata", metadata: metadataOf(data) });
+    else if (type === "quackback:capture-result") {
+      const { id, image } = (data ?? {}) as { id?: unknown; image?: unknown };
+      if (typeof id === "string")
+        onMessage({
+          type: "capture",
+          id,
+          image: image instanceof Blob ? image : null,
+        });
+    }
   };
   window.addEventListener("message", listener);
   return {

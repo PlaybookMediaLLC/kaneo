@@ -37,6 +37,8 @@ export function useWidgetSession(
   /** Changes with every identity: the view remounts and drops the old visitor's drafts. */
   const [visitor, setVisitor] = useState(0);
   const [failed, setFailed] = useState(false);
+  /** The session belongs to a visitor that the host app identified with a signed token. */
+  const [identified, setIdentified] = useState(false);
   const epoch = useRef(0);
   const counter = useRef(0);
   const ssoToken = useRef<string | null>(null);
@@ -49,13 +51,15 @@ export function useWidgetSession(
     starting.current = false;
     setSession(null);
     setFailed(false);
+    setIdentified(false);
     setVisitor((value) => value + 1);
     return mine;
   };
-  const begin = (mine: number, token: string) => {
+  const begin = (mine: number, token: string, signed = true) => {
     if (mine !== epoch.current) return;
     api.setToken(token);
     starting.current = false;
+    setIdentified(signed);
     setSession(++counter.current);
   };
   /** The host's signed token when it still verifies, else an anonymous session. */
@@ -78,7 +82,7 @@ export function useWidgetSession(
           onAuthChange(null);
         }
       }
-      begin(mine, await api.mintAnonymous());
+      begin(mine, await api.mintAnonymous(), false);
     } catch {
       if (mine === epoch.current) {
         starting.current = false;
@@ -91,6 +95,7 @@ export function useWidgetSession(
     session,
     visitor,
     failed,
+    identified,
     establish,
     /** The panel opened: from now on the visitor needs a session. */
     activate() {

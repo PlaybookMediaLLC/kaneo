@@ -8,6 +8,9 @@ import {
   afterEach,
 } from "vite-plus/test";
 import { createSDK } from "../src/core/sdk";
+import { capturePage } from "../src/core/capture";
+
+vi.mock("../src/core/capture", () => ({ capturePage: vi.fn() }));
 
 let sdk: ReturnType<typeof createSDK> | undefined;
 
@@ -373,19 +376,92 @@ describe("sdk", () => {
     sdk = createSDK();
     sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
     fireReady();
+    // The page URL goes with the metadata, without its query and fragment.
+    window.history.replaceState(null, "", "/billing?token=secret#part");
+    const pageUrl = `${window.location.origin}/billing`;
     sdk.dispatch("metadata", { page: "/settings", app_version: "2.4.1" });
     expect(postMessage).toHaveBeenCalledWith(
       {
         type: "quackback:metadata",
-        data: { page: "/settings", app_version: "2.4.1" },
+        data: { page: "/settings", app_version: "2.4.1", pageUrl },
       },
       ORIGIN,
     );
     sdk.dispatch("metadata", { page: null });
     expect(postMessage).toHaveBeenLastCalledWith(
-      { type: "quackback:metadata", data: { app_version: "2.4.1" } },
+      { type: "quackback:metadata", data: { app_version: "2.4.1", pageUrl } },
       ORIGIN,
     );
+    // Each open sends the current page first, for single-page apps.
+    window.history.replaceState(null, "", "/settings");
+    sdk.dispatch("open");
+    expect(postMessage).toHaveBeenCalledWith(
+      {
+        type: "quackback:metadata",
+        data: {
+          app_version: "2.4.1",
+          pageUrl: `${window.location.origin}/settings`,
+        },
+      },
+      ORIGIN,
+    );
+    expect(JSON.stringify(postMessage.mock.calls)).not.toContain("secret");
+    window.history.replaceState(null, "", "/");
+    spy.mockRestore();
+  });
+
+  it("captures the host page only for the open panel and answers with the request ID", async () => {
+    const { postMessage, spy } = stubIframe();
+    const image = new Blob(["png"], { type: "image/png" });
+    vi.mocked(capturePage).mockResolvedValue(image);
+    sdk = createSDK();
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    fireReady();
+    const ask = (id: string) =>
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          origin: ORIGIN,
+          source: document.querySelector<HTMLIFrameElement>(
+            "iframe.quackback-widget-iframe",
+          )?.contentWindow,
+          data: { type: "quackback:capture", id },
+        }),
+      );
+    const answer = (id: string) =>
+      postMessage.mock.calls.find(
+        ([message]) =>
+          message.type === "quackback:capture-result" && message.data.id === id,
+      )?.[0];
+    // A closed panel never captures.
+    ask("closed");
+    await vi.waitFor(() =>
+      expect(answer("closed")).toEqual({
+        type: "quackback:capture-result",
+        data: { id: "closed", image: null },
+      }),
+    );
+    expect(capturePage).not.toHaveBeenCalled();
+    sdk.dispatch("open");
+    ask("capture-1");
+    await vi.waitFor(() =>
+      expect(answer("capture-1")).toEqual({
+        type: "quackback:capture-result",
+        data: { id: "capture-1", image },
+      }),
+    );
+    // The widget's own elements are never rendered.
+    const own = vi.mocked(capturePage).mock.calls[0]![0];
+    expect(own(document.querySelector("iframe.quackback-widget-iframe")!)).toBe(
+      true,
+    );
+    expect(own(document.body)).toBe(false);
+    // A failed capture answers null; a malformed request ID is ignored.
+    vi.mocked(capturePage).mockRejectedValueOnce(new Error("tainted"));
+    ask("capture-2");
+    await vi.waitFor(() => expect(answer("capture-2")?.data.image).toBeNull());
+    ask("../bad id");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(answer("../bad id")).toBeUndefined();
     spy.mockRestore();
   });
 

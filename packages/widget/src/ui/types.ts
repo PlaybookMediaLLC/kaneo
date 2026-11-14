@@ -161,8 +161,11 @@ export interface WidgetViewProps {
     detail?: string;
     composer?: "message" | "feedback";
   };
-  /** Opt in only when submission callbacks process SubmissionOptions.attachments. */
-  attachmentsEnabled?: boolean;
+  /**
+   * Opt in only when submission callbacks process SubmissionOptions.attachments. "feedback" turns
+   * attachments and the screenshot action on for the feedback composer only.
+   */
+  attachmentsEnabled?: boolean | "feedback";
   onCaptureScreenshot?: (signal: AbortSignal) => Promise<File | null>;
   onCommentFeedback?: (
     postId: string,

@@ -377,4 +377,135 @@ describe("widget host page", () => {
       HOST,
     );
   });
+
+  describe("screenshots and page context (RFC 0003 feature 6)", () => {
+    const png = () =>
+      new File(
+        [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0])],
+        "screenshot.png",
+        { type: "image/png" },
+      );
+    const created = {
+      ...post,
+      id: "p2",
+      title: "Save fails",
+      status: { id: "s1", name: "Open", color: "#000000" },
+    };
+    const identified = async () => {
+      mount();
+      fromParent({ type: "quackback:identify", data: { ssoToken: "a.b.c" } });
+      fromParent({
+        type: "quackback:metadata",
+        data: {
+          plan: "pro",
+          pageUrl: "https://host.test/billing",
+          browser: "spoofed",
+          ["k".repeat(65)]: "dropped",
+        },
+      });
+      fromParent({ type: "quackback:open", data: { view: "new-post" } });
+      return screen.findByLabelText("Your feedback");
+    };
+
+    it("uploads an attached image once, and posts it with the page and browser", async () => {
+      table["POST /widget/uploads"] = () => ({
+        body: {
+          key: "k1",
+          uploadUrl: "https://storage.test/put",
+          headers: { "Content-Type": "image/png" },
+          expiresAt: "2026-11-14T00:00:00.000Z",
+        },
+      });
+      table["PUT https://storage.test/put"] = () => ({ body: {} });
+      table["POST /widget/files"] = () => ({ body: { id: "file_1" } });
+      let lost = true;
+      table["POST /widget/posts"] = () =>
+        lost
+          ? ((lost = false), { status: 503, body: { message: "Busy" } })
+          : { body: { ...created, replayed: false } };
+      const field = await identified();
+      fireEvent.change(field, { target: { value: "Save fails" } });
+      fireEvent.change(screen.getByLabelText("Choose images"), {
+        target: { files: [png()] },
+      });
+      await screen.findByRole("button", { name: "Edit screenshot.png" });
+      fireEvent.click(screen.getByRole("button", { name: "Post" }));
+      await screen.findByRole("alert");
+      // The retry reuses the upload, so its idempotency key still fits.
+      fireEvent.click(screen.getByRole("button", { name: "Post" }));
+      await waitFor(() =>
+        expect(requested("POST /widget/posts")).toHaveLength(2),
+      );
+      expect(requested("POST /widget/uploads")).toHaveLength(1);
+      expect(requested("PUT https://storage.test/put")[0]!.init).toMatchObject({
+        credentials: "omit",
+        headers: { "Content-Type": "image/png" },
+      });
+      const [first, second] = requested("POST /widget/posts").map((call) =>
+        JSON.parse(String(call.init.body)),
+      );
+      expect(second).toEqual(first);
+      expect(first).toMatchObject({
+        content: "Save fails",
+        attachmentIds: ["file_1"],
+        metadata: {
+          plan: "pro",
+          pageUrl: "https://host.test/billing",
+          browser: expect.not.stringContaining("spoofed"),
+        },
+      });
+      expect(Object.keys(first.metadata)).toHaveLength(3);
+    });
+
+    it("asks the host page for a capture and reviews the image before attaching", async () => {
+      await identified();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Capture screenshot" }),
+      );
+      await waitFor(() => expect(posted("quackback:capture")).toHaveLength(1));
+      const [[request]] = posted("quackback:capture");
+      // Another ID is not the answer to this request.
+      fromParent({
+        type: "quackback:capture-result",
+        data: { id: "other", image: png() },
+      });
+      expect(screen.queryByRole("dialog")).toBeNull();
+      fromParent({
+        type: "quackback:capture-result",
+        data: { id: request.id, image: png() },
+      });
+      expect(
+        await screen.findByRole("heading", { name: "Review image" }),
+      ).toBeDefined();
+    });
+
+    it("explains a failed capture and keeps the composer", async () => {
+      await identified();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Capture screenshot" }),
+      );
+      await waitFor(() => expect(posted("quackback:capture")).toHaveLength(1));
+      const [[request]] = posted("quackback:capture");
+      fromParent({
+        type: "quackback:capture-result",
+        data: { id: request.id, image: null },
+      });
+      expect((await screen.findByRole("alert")).textContent).toContain(
+        "Could not capture the page",
+      );
+    });
+
+    it("offers no image or screenshot action to an anonymous visitor", async () => {
+      mount();
+      fromParent({ type: "quackback:identify", data: { anonymous: true } });
+      fromParent({ type: "quackback:open", data: { view: "new-post" } });
+      await screen.findByLabelText("Your feedback");
+      expect(
+        screen.queryByRole("button", { name: "Attach images" }),
+      ).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Capture screenshot" }),
+      ).toBeNull();
+    });
+  });
 });

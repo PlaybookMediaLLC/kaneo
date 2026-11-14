@@ -81,7 +81,7 @@ The script reads the instance URL and the workspace (ID or slug) from its own UR
 | `Quackback.open(options?)`                    | Open the panel; optional deep-link payload (see below).                        |
 | `Quackback.close()`                           | Close the panel.                                                               |
 | `Quackback.showLauncher()` / `hideLauncher()` | Toggle the floating button.                                                    |
-| `Quackback.metadata(patch)`                   | Attach session context to submitted feedback. Pass `null` to remove a key.     |
+| `Quackback.metadata(patch)`                   | Attach session context to submitted feedback. Pass `null` to remove a key. The SDK adds `pageUrl` and the widget adds `browser`. |
 | `Quackback.tracking(enabled)`                 | Allow or stop host-page visitor analytics. `false` also removes the device id. |
 | `Quackback.on(event, handler)`                | Subscribe to a widget event. Returns an unsubscribe function.                  |
 | `Quackback.off(event, handler?)`              | Remove a specific handler, or all listeners for the event.                     |
@@ -241,9 +241,9 @@ Full help and update readers call `onExpandedChange(true)`; Back and unmount req
 
 `FeedbackPost.comments` supplies the discussion. `onCommentFeedback(postId, body, {idempotencyKey, parentId?})` posts a root comment or reply; `onVoteComment(postId, commentId, voted)` sets the desired vote state. Failed comment/reply drafts survive navigation; the adapter must update comments and counts through props. `voters`, author metadata, and verified flags are optional authorized server data. `UpdateEntry.blocks`, `authorRole`, `relatedPostIds`, and `requesterCount` support the full update reader.
 
-Set `attachmentsEnabled` only when send/feedback/reply callbacks process `SubmissionOptions.attachments: readonly File[]`. The picker accepts up to four PNG/JPEG/WebP images, each at most 5 MiB, with MIME/signature checks. Attachment-only submissions have an empty body. Files remain in memory through navigation/failure and clear after success or session remount; editing/removing a file rotates the idempotency key. Preview object URLs are revoked when their view unmounts. Published `Attachment` records use `{id, name, url}`; host-supplied URLs must be authorized for the current visitor. Client checks do not replace server image validation.
+Set `attachmentsEnabled` only when send/feedback/reply callbacks process `SubmissionOptions.attachments: readonly File[]`. `attachmentsEnabled="feedback"` turns attachments and the screenshot action on for the feedback composer only. The picker accepts up to four PNG/JPEG/WebP images, each at most 5 MiB, with MIME/signature checks. Attachment-only submissions have an empty body. Files remain in memory through navigation/failure and clear after success or session remount; editing/removing a file rotates the idempotency key. Preview object URLs are revoked when their view unmounts. Published `Attachment` records use `{id, name, url}`; host-supplied URLs must be authorized for the current visitor. Client checks do not replace server image validation.
 
-Feedback's camera uses user-invoked `getDisplayMedia`, without audio; streams stop after capture, cancellation, or failure. The browser's chooser and secure context/Permissions Policy requirements still apply. Unsupported browsers retain image selection. `onCaptureScreenshot(signal)` can supply an approved host capture implementation. The review dialog can highlight or redact rectangles, supports keyboard position controls and Undo, and exports a flattened PNG (up to 2048 px on its longest side). Cancel preserves the original. No screenshot is silently captured or sent. Real uploads, authorization, image sanitization, and retention are specified in [RFC 0004](rfcs/0004-images-and-capture.md).
+Feedback's camera uses user-invoked `getDisplayMedia`, without audio; streams stop after capture, cancellation, or failure. The browser's chooser and secure context/Permissions Policy requirements still apply. Unsupported browsers retain image selection. `onCaptureScreenshot(signal)` can supply an approved host capture implementation. The review dialog draws boxes and arrows, blurs (pixelates) or redacts areas, supports keyboard position controls and Undo, and exports a flattened PNG (up to 2048 px on its longest side). Cancel preserves the original. No screenshot is silently captured or sent. Real uploads, authorization, image sanitization, and retention are specified in [RFC 0004](rfcs/0004-images-and-capture.md).
 
 The Kaneo API serves the iframe page at `/api/quills-public/{workspace}/widget`. The page bundle (`dist/host.js`, `dist/host.css`) mounts this view with the adapter in `src/adapter/`, which connects it to the workspace's Quills routes and to the existing iframe protocol. See [Kaneo host page](#kaneo-host-page). The SDK's commands, events, deep links, and protocol remain unchanged. React stays optional for the root, version, and browser entries; the UI and its locally served Inter font are excluded from the browser SDK bundle. Inter's [SIL Open Font License](src/ui/fonts/OFL.txt) is included with the font. The selected official SVG paths from `@phosphor-icons/core` 2.1.1 are vendored with the [Phosphor MIT license](src/icons/LICENSE), shared by the React UI and vanilla launcher. No icon runtime dependency is required.
 
@@ -283,11 +283,24 @@ Session rules:
 
 The adapter polls the unread count at the interval from `/widget/capabilities`. When the count changes, it reads only new messages (`?after=`). Before the panel first opens, it polls only for an identified visitor, for the launcher badge.
 
+### Screenshots of the host page
+
+A visitor that the host app identified can attach images and a screenshot to a new feedback post (RFC 0003 feature 6):
+
+1. The visitor presses **Capture screenshot** in the open panel. The iframe asks the SDK with `quackback:capture`, and the SDK answers with `quackback:capture-result` (a PNG, or `null`). The SDK never captures for a closed panel or without that request.
+2. The SDK renders the visible part of the host page with [html-to-image](https://github.com/bubkoo/html-to-image) (MIT). It never renders the launcher, the panel or the backdrop.
+3. These fields are left out of the image and covered with an opaque box: `input[type=password]`, any element with `data-private`, card fields (`autocomplete="cc-…"`, and names or IDs with `card`, `cvc` or `cvv`) and frames. Add `data-private` to any other element that must not appear, for example a field that shows a password as text.
+4. The visitor reviews the image, can draw boxes and arrows and blur or redact areas, and then attaches it. Nothing is sent before the visitor posts.
+5. The adapter uploads each image through `POST /widget/uploads`, the presigned PUT and `POST /widget/files`, and sends the file IDs with the post. A retry sends the same files.
+6. Each new post sends `metadata`: the keys from `Quackback.metadata`, `pageUrl` (the page origin and path, without the query and the fragment) and `browser` (for example `Chrome 131 on macOS`). Teammates read it on the post; customers do not.
+
+Limits: the copy shows a sticky element or an inner scroll area at its unscrolled position, and an image from another origin without CORS shows as blank. A host page with a Content-Security-Policy must allow `img-src data:` for the capture. An anonymous visitor gets no picker and no camera, because the upload routes need an identified visitor. The browser SDK grows by about 17 KB (6 KB gzip) for the capture; the ESM and CommonJS entries load html-to-image only when a capture starts.
+
 These view features have no Kaneo route yet. The adapter leaves the related prop out, so the view hides or disables the control:
 
 | Feature | In the view |
 | --- | --- |
-| Image attachments and screenshots (RFC 0004) | No picker or camera |
+| Image attachments in messages and replies (RFC 0004) | No picker or camera in messages |
 | Followed-request activity (RFC 0005) | No activity button |
 | Update read state and reactions | No unread dot on updates, no reaction or share buttons |
 | Article context on a new conversation | The message sends without the article reference |

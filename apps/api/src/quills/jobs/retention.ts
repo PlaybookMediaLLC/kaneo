@@ -20,8 +20,8 @@ export async function pruneQuillsWorkspace(
   const policy = retentionSchema.parse(input);
   // Keep this month's billing inputs even when an operator selects a shorter log retention.
   const statements = [
-    // Registered portal drafts expire after a day; row locks keep attachment commits safe.
-    sql`DELETE FROM quills.files WHERE (workspace_id,id) IN (SELECT workspace_id,id FROM quills.files WHERE source='portal' AND deleted_at IS NULL AND post_id IS NULL AND comment_id IS NULL AND message_id IS NULL AND attached_at IS NULL AND created_at<now()-interval '1 day' ORDER BY created_at LIMIT 1000 FOR UPDATE SKIP LOCKED)`,
+    // Registered portal and widget drafts expire after a day; row locks keep attachment commits safe.
+    sql`DELETE FROM quills.files WHERE (workspace_id,id) IN (SELECT workspace_id,id FROM quills.files WHERE source IN ('portal','visitor') AND deleted_at IS NULL AND post_id IS NULL AND comment_id IS NULL AND message_id IS NULL AND attached_at IS NULL AND created_at<now()-interval '1 day' ORDER BY created_at LIMIT 1000 FOR UPDATE SKIP LOCKED)`,
     sql`DELETE FROM quills.events WHERE (workspace_id,id) IN (SELECT workspace_id,id FROM quills.events WHERE published_at IS NOT NULL AND published_at<now()-${policy.events}*interval '1 day' ORDER BY id LIMIT 1000)`,
     sql`DELETE FROM quills.job_queue WHERE (workspace_id,id) IN (SELECT workspace_id,id FROM quills.job_queue WHERE (status='succeeded' OR (status='failed' AND NOT EXISTS (SELECT 1 FROM quills.events e WHERE e.event_id=job_queue.dedupe_key AND e.published_at IS NULL))) AND finished_at<now()-${policy.jobs}*interval '1 day' ORDER BY id LIMIT 1000)`,
     // Delivery ledger rows outlive their jobs, so a replayed job finds them. Kept while their event is unpublished.

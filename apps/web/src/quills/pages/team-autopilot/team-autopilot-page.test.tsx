@@ -53,6 +53,7 @@ const board = {
       comments: "inherit" as const,
     },
   },
+  visibleSegmentIds: null,
   createdAt: "2026-11-01T00:00:00.000Z",
   updatedAt: "2026-11-01T00:00:00.000Z",
 };

@@ -22,6 +22,7 @@ import { createTracker, type Tracker } from "./tracker.js";
 import { clearDeviceId, getOrCreateDeviceId } from "./device.js";
 import { removeStyles } from "./style.js";
 import { privacyOptedOut } from "./privacy.js";
+import { capturePage } from "./capture.js";
 import {
   initOptionsSchema,
   identitySchema,
@@ -89,6 +90,44 @@ export function createSDK(): SDK {
     return new URL(config!.instanceUrl).origin;
   }
 
+  /**
+   * The host metadata with the page the visitor is on, for the next feedback post. The query and
+   * the fragment stay out: they can hold tokens.
+   */
+  function sendContext(): void {
+    if (!ready || !bridge) return;
+    const { protocol, origin, pathname } = window.location;
+    bridge.send("quackback:metadata", {
+      ...metadata,
+      ...(/^https?:$/.test(protocol) && { pageUrl: origin + pathname }),
+    });
+  }
+
+  /** Only the open panel asks, after the visitor pressed its capture button. */
+  let capturing = false;
+  async function capture(id: string): Promise<void> {
+    const target = bridge;
+    if (!target) return;
+    let image: Blob | null = null;
+    if (panelOpen && !capturing) {
+      capturing = true;
+      try {
+        image = await capturePage(
+          (element) =>
+            !!element.closest(
+              ".quackback-launcher, .quackback-panel, .quackback-backdrop",
+            ),
+        );
+      } catch {
+        image = null;
+      } finally {
+        capturing = false;
+      }
+    }
+    if (bridge === target)
+      target.send("quackback:capture-result", { id, image });
+  }
+
   function onIframeMessage(msg: OutboundMessage) {
     switch (msg.type) {
       case "quackback:ready":
@@ -96,7 +135,7 @@ export function createSDK(): SDK {
         panel?.markReady();
         flushIdentity();
         if (config?.locale) bridge!.send("quackback:locale", config.locale);
-        if (metadata) bridge!.send("quackback:metadata", metadata);
+        sendContext();
         if (pendingDevice && hostTracking && !privacyOptedOut()) {
           bridge!.send("quackback:device", pendingDevice);
           pendingDevice = null;
@@ -140,6 +179,9 @@ export function createSDK(): SDK {
         break;
       case "quackback:event":
         emitter.emit(msg.name, msg.payload);
+        break;
+      case "quackback:capture":
+        void capture(msg.id);
         break;
       case "quackback:navigate": {
         if (isSafeHttpUrl(msg.url)) {
@@ -396,6 +438,8 @@ export function createSDK(): SDK {
       case "open": {
         if (!config) return; // open before init is a no-op, matching close/hide
         const opts = (a as OpenOptions) ?? {};
+        // The page may have changed since the last open in a single-page app.
+        sendContext();
         if (ready && bridge) bridge.send("quackback:open", opts);
         else pendingOpen = opts;
         // The idle preload may not have fired yet — create the panel now.
@@ -449,7 +493,7 @@ export function createSDK(): SDK {
           if (v === null) delete metadata[k];
           else metadata[k] = String(v);
         }
-        if (ready && bridge) bridge.send("quackback:metadata", metadata);
+        sendContext();
         return;
       }
       case "tracking":

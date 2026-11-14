@@ -3,8 +3,9 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { encodeCustomFieldValue } from "../kaneo/custom-field-value.js";
 import { buildFullTaskUpdateBody } from "../kaneo/task-helpers.js";
-import { errorResult, textResult } from "../utils/mcp-result.js";
+import { errorResult, run } from "../utils/mcp-result.js";
 import { getCurrentUser } from "./get-current-user.js";
+import { registerQuillsTools } from "./quills.js";
 
 export type ToolClient = {
   readonly usingApiKey?: boolean;
@@ -40,14 +41,6 @@ const hexColorSchema = z
     /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/,
     "Expected a hex color like #FF6600",
   );
-
-function run(fn: () => Promise<unknown>): Promise<CallToolResult> {
-  return fn()
-    .then((data) => textResult(data))
-    .catch((e: unknown) =>
-      errorResult(e instanceof Error ? e.message : String(e)),
-    );
-}
 
 export function registerTools(
   server: ToolRegistrar,
@@ -971,4 +964,6 @@ export function registerTools(
     },
     async () => run(() => client.json("/api/notification")),
   );
+
+  registerQuillsTools(registerTool, client);
 }

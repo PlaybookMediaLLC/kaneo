@@ -79,9 +79,10 @@ transaction resolves the caller again (409 when it changed) and writes the refer
 - Purposes: `customer_file` (images, PDF, plain text, CSV), `customer_image` and `customer_avatar`
   (images). The `S3_MAX_IMAGE_UPLOAD_BYTES` limit applies. A portal account needs a customer profile
   here first (403, as the source); so does a removed customer, which keeps the profile row only.
-- Widget uploads need the messenger or tickets tab and a visitor that the host app identified. An
-  anonymous widget session gets 403. This is stricter than the source: customer files have no consumer
-  and no sweep yet, so an anonymous caller must not fill storage.
+- Widget uploads need the feedback, messenger or tickets tab and a visitor that the host app
+  identified. An anonymous widget session gets 403. This is stricter than the source: an anonymous
+  caller must not fill storage. A feedback post or comment attaches the visitor's own widget upload
+  (RFC 0003 feature 6, a screenshot); retention removes an unattached one after a day.
 - Rate limits per client and workspace: 20 a minute for uploads and registrations, 10 in 10 minutes
   for the avatar.
 - Known gap: no route reads a registered customer file yet, and no sweep removes unattached `files` rows

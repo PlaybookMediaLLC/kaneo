@@ -50,15 +50,19 @@ function owner(caller: QuillsCaller) {
 }
 
 /**
- * Widget attachments: the widget's messenger or tickets tab is on, and the host app identified the
- * visitor. Stricter than the source, which also lets an anonymous session upload: customer files
- * have no consumer and no sweep yet, so an anonymous session must not fill storage.
+ * Widget attachments: the widget's feedback, messenger or tickets tab is on, and the host app
+ * identified the visitor. Stricter than the source, which also lets an anonymous session upload:
+ * an anonymous session must not fill storage. A feedback post attaches these files (a screenshot);
+ * retention removes an unattached one after a day.
  */
 async function widgetUploader(db: Database, caller: QuillsCaller) {
   const customerId = owner(caller);
   const [row] = await db.select().from(settings).limit(1);
   const config = row && readConfig(row);
-  if (!config?.enabled || !(config.tabs.messenger || config.tabs.tickets))
+  if (
+    !config?.enabled ||
+    !(config.tabs.feedback || config.tabs.messenger || config.tabs.tickets)
+  )
     throw new HTTPException(404, { message: "Widget attachments not found" });
   const [person] = await db
     .select({ type: principal.type })
@@ -167,7 +171,7 @@ const widgetUpload = defineQuillsRoute({
   operationId: "createQuillsWidgetUpload",
   summary: "Request an upload URL for a widget attachment",
   description:
-    "Returns a presigned PUT for a key in the visitor's own namespace. Register it with POST /widget/files. Needs the messenger or tickets tab and a visitor that the host app identified.",
+    "Returns a presigned PUT for a key in the visitor's own namespace. Register it with POST /widget/files, then attach it to a feedback post. Needs the feedback, messenger or tickets tab and a visitor that the host app identified.",
   action: "create",
   rateLimit: perMinute,
   body: uploadRequest(attachments),

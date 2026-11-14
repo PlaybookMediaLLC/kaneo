@@ -1,14 +1,20 @@
 import { useEffect, useId, useRef, useState, type PointerEvent } from "react";
 import { validateImage } from "./media.js";
 import { Icon } from "./Icon.js";
+import { drawMarks, type Mark, type Tool } from "./annotation-draw.js";
 
-type Mark = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  redact: boolean;
-};
+const TOOLS: readonly [Tool, string][] = [
+  ["box", "Box"],
+  ["arrow", "Arrow"],
+  ["blur", "Blur"],
+  ["redact", "Redact"],
+];
+const POINTS = [
+  ["x", "From x"],
+  ["y", "From y"],
+  ["x2", "To x"],
+  ["y2", "To y"],
+] as const;
 
 export function ImageAnnotation({
   file,
@@ -25,7 +31,7 @@ export function ImageAnnotation({
   const source = useRef<HTMLImageElement | null>(null);
   const start = useRef<{ x: number; y: number } | null>(null);
   const [marks, setMarks] = useState<Mark[]>([]);
-  const [redact, setRedact] = useState(false);
+  const [tool, setTool] = useState<Tool>("box");
   const [ready, setReady] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -70,26 +76,10 @@ export function ImageAnnotation({
     };
   }, [file]);
   useEffect(() => {
-    const target = canvas.current;
     const image = source.current;
-    const context = target?.getContext("2d");
-    if (!target || !image || !context || !ready) return;
-    context.clearRect(0, 0, target.width, target.height);
-    context.drawImage(image, 0, 0, target.width, target.height);
-    for (const mark of marks) {
-      const x = (mark.x * target.width) / 100,
-        y = (mark.y * target.height) / 100,
-        width = (mark.width * target.width) / 100,
-        height = (mark.height * target.height) / 100;
-      if (mark.redact) {
-        context.fillStyle = "#171717";
-        context.fillRect(x, y, width, height);
-      } else {
-        context.strokeStyle = "#e53935";
-        context.lineWidth = Math.max(3, target.width / 300);
-        context.strokeRect(x, y, width, height);
-      }
-    }
+    const context = canvas.current?.getContext("2d");
+    if (!image || !context || !ready) return;
+    drawMarks(context, image, marks);
   }, [marks, ready]);
   const point = (event: PointerEvent<HTMLCanvasElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -157,33 +147,30 @@ export function ImageAnnotation({
           <Icon name="close" />
         </button>
       </header>
-      <p>Draw a highlight or hide sensitive information before attaching.</p>
-      <div className="qb-annotation-tools">
-        <button
-          type="button"
-          aria-pressed={!redact}
-          onClick={() => setRedact(false)}
-        >
-          Highlight
-        </button>
-        <button
-          type="button"
-          aria-pressed={redact}
-          onClick={() => setRedact(true)}
-        >
-          Redact
-        </button>
+      <p>
+        Draw a box or an arrow, and blur or redact private information before
+        attaching. Check the whole image: anything you do not cover stays
+        visible.
+      </p>
+      <div className="qb-annotation-tools" role="group" aria-label="Tool">
+        {TOOLS.map(([value, label]) => (
+          <button
+            type="button"
+            key={value}
+            aria-pressed={tool === value}
+            onClick={() => setTool(value)}
+          >
+            {label}
+          </button>
+        ))}
         <button
           type="button"
           disabled={!ready || saving}
           onClick={() =>
-            setMarks([
-              ...marks,
-              { x: 20, y: 20, width: 30, height: 20, redact },
-            ])
+            setMarks([...marks, { tool, x: 20, y: 20, x2: 50, y2: 40 }])
           }
         >
-          Add rectangle
+          Add {TOOLS.find(([value]) => value === tool)![1].toLowerCase()}
         </button>
         <button
           type="button"
@@ -196,29 +183,27 @@ export function ImageAnnotation({
       </div>
       <canvas
         ref={canvas}
-        aria-label="Image preview. Draw with a pointer or use Add rectangle and position fields."
+        aria-label="Image preview. Draw with a pointer, or use the Add button and the position fields."
         onPointerDown={(event) => {
           if (!ready || saving) return;
           event.currentTarget.setPointerCapture(event.pointerId);
           start.current = point(event);
           setMarks([
             ...marks,
-            { ...start.current, width: 0, height: 0, redact },
+            {
+              tool,
+              ...start.current,
+              x2: start.current.x,
+              y2: start.current.y,
+            },
           ]);
         }}
         onPointerMove={(event) => {
           if (!start.current) return;
-          const p = point(event),
-            s = start.current;
+          const p = point(event);
           setMarks((current) => [
             ...current.slice(0, -1),
-            {
-              x: Math.min(p.x, s.x),
-              y: Math.min(p.y, s.y),
-              width: Math.abs(p.x - s.x),
-              height: Math.abs(p.y - s.y),
-              redact,
-            },
+            { ...current[current.length - 1]!, x2: p.x, y2: p.y },
           ]);
         }}
         onPointerUp={() => {
@@ -230,12 +215,12 @@ export function ImageAnnotation({
       />
       {selected && (
         <fieldset disabled={saving}>
-          <legend>Rectangle position (%)</legend>
-          {(["x", "y", "width", "height"] as const).map((key) => (
+          <legend>Last mark position (%)</legend>
+          {POINTS.map(([key, label]) => (
             <label key={key}>
-              {key}
+              {label}
               <input
-                aria-label={`Rectangle ${key}`}
+                aria-label={`Mark ${label.toLowerCase()}`}
                 type="number"
                 min="0"
                 max="100"

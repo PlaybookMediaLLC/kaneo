@@ -13,4 +13,5 @@ export const teamNavigation: readonly TeamNavEntry[] = [
   { path: "/insights", labelKey: "insights.nav" },
   { path: "/surveys", labelKey: "surveys.title" },
   { path: "/changelog", labelKey: "team-changelog.nav" },
+  { path: "/boards", labelKey: "boards.nav" },
 ];

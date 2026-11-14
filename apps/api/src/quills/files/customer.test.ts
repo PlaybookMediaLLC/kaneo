@@ -4,7 +4,9 @@ import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { toUuid, type TypeId } from "@kaneo/ids";
+import { eq } from "drizzle-orm";
 import { settings } from "../../database/quills/schema/auth";
+import { files } from "../../database/quills/schema/files";
 import * as kaneo from "../../database/schema";
 import quillsRouter from "../index";
 import publicRouter from "../public";
@@ -15,7 +17,9 @@ import {
   startContract,
   stopContract,
 } from "../framework/contract";
+import { pruneQuillsWorkspace } from "../jobs/retention";
 import { enablePortal } from "../portal/seed.fixture";
+import { world } from "../portal/feedback/seed.fixture";
 import { image } from "./seed.fixture";
 
 let pool: Pool;
@@ -299,7 +303,7 @@ describe.skipIf(!url)("Quills portal and widget uploads", () => {
     expect(a.customerId).toBeTruthy();
   });
 
-  it("refuses widget uploads from an anonymous session or with the support tabs off", async () => {
+  it("refuses widget uploads from an anonymous session or with the feedback and support tabs off", async () => {
     const env = contractEnv();
     const visitor = await env.widgetVisitor(env.a);
     const request = {
@@ -320,7 +324,7 @@ describe.skipIf(!url)("Quills portal and widget uploads", () => {
     ).toBe(403);
     await setWidget({
       enabled: true,
-      tabs: { messenger: false, tickets: false },
+      tabs: { feedback: false, messenger: false, tickets: false },
     });
     try {
       expect(
@@ -373,5 +377,131 @@ describe.skipIf(!url)("Quills portal and widget uploads", () => {
     });
     expect(deleted.body).toMatchObject({ changed: false });
     expect(await avatarKey(env.customerB)).toBe(before);
+  });
+
+  it("attaches a widget screenshot to the visitor's feedback post with the page context (RFC 0003 feature 6)", async () => {
+    const env = contractEnv();
+    const visitor = await env.widgetVisitor(env.a);
+    const scene = await world(env, env.a, visitor.principalId);
+    // The feedback tab alone opens widget uploads.
+    await setWidget({
+      enabled: true,
+      tabs: { feedback: true, messenger: false, tickets: false },
+    });
+    const screenshot = async (bearer: string) => {
+      const upload = await call("POST", "/widget/uploads", {
+        bearer,
+        body: {
+          purpose: "customer_image",
+          filename: "screenshot.png",
+          ...image,
+        },
+      });
+      expect(upload.status).toBe(200);
+      const file = await call("POST", "/widget/files", {
+        bearer,
+        body: { key: upload.body.key, name: "screenshot.png", ...image },
+      });
+      expect(file.status).toBe(200);
+      return file.body.id as string;
+    };
+    try {
+      const fileId = await screenshot(visitor.token);
+      const metadata = {
+        pageUrl: "https://app.example.test/settings/billing",
+        browser: "Chrome 131 on macOS",
+        plan: "pro",
+      };
+      const body = {
+        boardId: scene.boardId,
+        title: "The save button does nothing",
+        content: "See the screenshot",
+        attachmentIds: [fileId],
+        metadata,
+        idempotencyKey: env.id("key"),
+      };
+      // Another visitor's screenshot is not found and changes nothing.
+      const other = await env.widgetVisitor(env.a);
+      const stolen = await call("POST", "/widget/posts", {
+        bearer: other.token,
+        body: { ...body, idempotencyKey: env.id("key") },
+      });
+      expect(stolen.status).toBe(404);
+      // More than 20 metadata keys, or a long key, is refused.
+      for (const bad of [
+        Object.fromEntries(
+          Array.from({ length: 21 }, (_, i) => [`k${i}`, "v"]),
+        ),
+        { ["k".repeat(65)]: "v" },
+        { pageUrl: "x".repeat(501) },
+      ])
+        expect(
+          (
+            await call("POST", "/widget/posts", {
+              bearer: visitor.token,
+              body: { ...body, metadata: bad, idempotencyKey: env.id("key") },
+            })
+          ).status,
+        ).toBe(400);
+
+      const created = await call("POST", "/widget/posts", {
+        bearer: visitor.token,
+        body,
+      });
+      expect(created.status).toBe(200);
+      const postId = created.body.id as string;
+      // A retry from another page is the same post, not a conflict.
+      const retry = await call("POST", "/widget/posts", {
+        bearer: visitor.token,
+        body: {
+          ...body,
+          metadata: { ...metadata, pageUrl: "https://app.example.test/" },
+        },
+      });
+      expect(retry.body).toMatchObject({ id: postId, replayed: true });
+
+      const read = await call("GET", `/widget/posts/${postId}`, {
+        bearer: visitor.token,
+      });
+      expect(read.body.attachments).toEqual([
+        expect.objectContaining({ id: fileId, name: "screenshot.png" }),
+      ]);
+      // Customers never read the page context.
+      expect(JSON.stringify(read.body)).not.toContain("app.example.test");
+      const portalRead = await call("GET", `/portal/files/${fileId}`, {
+        user: env.customerA,
+      });
+      expect(portalRead.status).toBe(200);
+      expect(portalRead.body.downloadUrl).toMatch(/^http/);
+
+      const teammate = await app.request(`/quills/${env.a}/posts/${postId}`, {
+        headers: { "x-test-user": env.owner },
+      });
+      expect((await teammate.json()).widgetMetadata).toEqual(metadata);
+
+      // An unattached widget upload is removed by retention after a day.
+      const draft = await screenshot(visitor.token);
+      await env.scoped(env.a, async (db) => {
+        await db
+          .update(files)
+          .set({ createdAt: new Date("2020-01-01") })
+          .where(eq(files.id, draft as never));
+        await pruneQuillsWorkspace(db);
+        const left = await db
+          .select({ id: files.id })
+          .from(files)
+          .where(eq(files.id, draft as never));
+        expect(left).toEqual([]);
+        // The attached screenshot stays.
+        expect(
+          await db
+            .select({ postId: files.postId })
+            .from(files)
+            .where(eq(files.id, fileId as never)),
+        ).toEqual([{ postId }]);
+      });
+    } finally {
+      await setWidget({ enabled: true });
+    }
   });
 });

@@ -71,6 +71,8 @@ const board = z.object({
   slug: z.string(),
   description: z.string().nullable(),
   access: accessShape(z.array(z.string())),
+  /** RFC 0003 D11: null shows the board to every viewer that its tier admits. */
+  visibleSegmentIds: z.array(z.string()).nullable(),
   createdAt: responseTimestamp,
   updatedAt: responseTimestamp,
   postCount: z.number().optional(),
@@ -81,6 +83,7 @@ const columns = {
   slug: boards.slug,
   description: boards.description,
   access: boards.access,
+  visibleSegmentIds: boards.visibleSegmentIds,
   createdAt: boards.createdAt,
   updatedAt: boards.updatedAt,
 };
@@ -174,13 +177,17 @@ async function freeSlug(db: Database, base: string) {
   throw new HTTPException(409, { message: "Board slug is taken" });
 }
 
-/** Every segment of an access matrix exists in this workspace. */
+/** Every segment of an access matrix and of the board's visible segments exists in this workspace. */
 async function checkSegments(
   db: Database,
   access?: z.output<typeof accessInput>,
+  visible: readonly TypeId<"segment">[] = [],
 ) {
   const ids = [
-    ...new Set(actions.flatMap((action) => access?.segments[action] ?? [])),
+    ...new Set([
+      ...actions.flatMap((action) => access?.segments[action] ?? []),
+      ...visible,
+    ]),
   ];
   if (!ids.length) return;
   const found = await db
@@ -325,6 +332,14 @@ const updateBoard = defineQuillsRoute({
       slug: slug.optional(),
       description: description.nullable().optional(),
       access: accessInput.optional(),
+      visibleSegmentIds: z
+        .array(flexibleToTypeIdSchema("segment"))
+        .max(50)
+        .nullable()
+        .optional()
+        .describe(
+          "Show the board only to signed-in customers in one of these segments. Null or an empty list shows it to every customer that the view tier admits.",
+        ),
     })
     .refine((fields) => Object.values(fields).some((v) => v !== undefined), {
       message: "Provide at least one field",
@@ -341,7 +356,7 @@ const updateBoard = defineQuillsRoute({
   load: loadProjects,
   handler: async ({ db, params, body, loaded: projects }) => {
     const current = await findBoard(db, params.boardId, projects);
-    await checkSegments(db, body.access);
+    await checkSegments(db, body.access, body.visibleSegmentIds ?? []);
     let nextSlug: string | undefined;
     if (body.slug !== undefined && body.slug !== current.slug) {
       if (await slugTaken(db, body.slug, current.id))
@@ -363,6 +378,12 @@ const updateBoard = defineQuillsRoute({
         description:
           body.description === undefined ? undefined : body.description || null,
         access: body.access,
+        visibleSegmentIds:
+          body.visibleSegmentIds === undefined
+            ? undefined
+            : body.visibleSegmentIds?.length
+              ? [...new Set(body.visibleSegmentIds)]
+              : null,
         updatedAt: new Date(),
       })
       .where(eq(boards.id, current.id))

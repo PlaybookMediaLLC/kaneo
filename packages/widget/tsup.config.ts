@@ -25,7 +25,8 @@ export default defineConfig([
     entry: { browser: "src/browser-queue.ts" },
     format: ["iife"],
     globalName: "QuackbackBundle",
-    noExternal: [/^zod(?:\/|$)/],
+    // html-to-image renders the host page for a screenshot (RFC 0003 feature 6).
+    noExternal: [/^zod(?:\/|$)/, /^html-to-image$/],
     minify: true,
     // Keeps the license notice on the served sdk.js (a different license from the server).
     banner: {

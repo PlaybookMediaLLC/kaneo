@@ -11,6 +11,7 @@ import { useWidgetSurvey } from "./surveys.js";
 import { Unavailable } from "./Unavailable.js";
 import { useWidgetData } from "./useWidgetData.js";
 import { useWidgetSession } from "./useWidgetSession.js";
+import { useHostCapture } from "./useHostCapture.js";
 import type { OutboundMessage } from "../core/protocol.js";
 import type { WidgetViewProps } from "../ui/types.js";
 
@@ -65,6 +66,9 @@ export function WidgetHost({
   const [pending, setPending] =
     useState<ReturnType<typeof navigationFor>>(null);
   const [navigation, setNavigation] = useState<Navigation>();
+  /** The host app's metadata and the page URL, from the SDK. */
+  const [context, setContext] = useState<Record<string, string>>({});
+  const capture = useHostCapture(bridge);
   const visitor = useWidgetSession(api, (user) =>
     bridge.current?.post({ type: "quackback:auth-change", user }),
   );
@@ -103,6 +107,8 @@ export function WidgetHost({
   const handle = useRef<(message: ParentMessage) => void>(() => {});
   handle.current = (message) => {
     if (message.type === "locale") setLocale(message.locale);
+    if (message.type === "metadata") setContext(message.metadata);
+    if (message.type === "capture") capture.receive(message.id, message.image);
     if (message.type === "identify")
       void visitor.identify(message.identity).then((result) =>
         bridge.current?.post({
@@ -138,6 +144,7 @@ export function WidgetHost({
     locale,
     board: params.get("board") ?? undefined,
     pollIntervalMs: ready ? config.pollIntervalMs : 10_000,
+    context,
     host: {
       event: (name, payload) =>
         bridge.current?.post({
@@ -177,6 +184,16 @@ export function WidgetHost({
       navigation={navigation}
       {...survey}
       {...data}
+      // Screenshots and images go with feedback only, from a visitor that the host app
+      // identified: the upload routes refuse an anonymous session (RFC 0003 feature 6).
+      {...(data.onSubmitFeedback &&
+        visitor.identified && {
+          attachmentsEnabled: "feedback" as const,
+          // The SDK in the parent page renders it; a page that is not framed has no parent.
+          ...(window.parent !== window && {
+            onCaptureScreenshot: capture.request,
+          }),
+        })}
       {...(config === "error" || visitor.failed
         ? {
             loadState: "error" as const,

@@ -124,6 +124,7 @@ For headless or sandboxed environments where opening a browser is impractical, s
 - Comments: `list_task_comments`, `create_task_comment`, `update_task_comment`, `delete_task_comment`
 - Labels: `list_workspace_labels`, `create_label`, `attach_label_to_task`, `detach_label_from_task`, `delete_label`
 - Task relations: `create_task_relation`, `get_task_relations`, `delete_task_relation`
+- Quills feedback: `quills_list_boards`, `quills_list_statuses`, `quills_list_posts`, `quills_get_post`, `quills_create_post`, `quills_add_proxy_vote`, `quills_add_comment`, `quills_set_post_status`, `quills_list_feedback_signals`, `quills_draft_changelog`
 
 Call `list_project_columns` before setting a status: the column slugs it
 returns are the values `create_task` and `update_task_status` accept.
@@ -136,6 +137,33 @@ Time entries have no delete endpoint on the API, so there is no
 Call `list_project_custom_fields` for the field IDs and options
 `set_task_custom_field_value` expects. Pass multiselect values as an array of
 options, dates as `YYYY-MM-DD`, and `null` to clear a value.
+
+### Quills feedback tools
+
+The `quills_*` tools call the Quills teammate API (`/api/quills/{workspaceId}/...`) with your own
+credential. They add no server permission:
+
+1. The API checks your workspace membership and your Quills permission (`read`, `create`,
+   `update`). A Kaneo API key must also have the matching `quills` scope.
+2. A refused or failed call returns `{ "error": "..." }` with the API's message. The credential is
+   never part of the result.
+3. Each tool checks its input first: IDs cannot contain `/` or `.`, text fields have a maximum
+   length, and `limit` is at most 100.
+
+Use them in this order:
+
+1. Call `quills_list_boards` and `quills_list_statuses` for the IDs.
+2. Call `quills_list_posts` to search posts (board, status, search, sort and limit), and
+   `quills_get_post` to read one post. A post from the widget includes `widgetMetadata`, for
+   example the page URL and the browser.
+3. Call `quills_create_post`, `quills_add_proxy_vote` (a vote for a customer's principal ID),
+   `quills_add_comment` or `quills_set_post_status` to change feedback. `quills_add_comment`
+   requires `isPrivate`: `true` keeps the comment inside the team, and `false` shows it to
+   customers.
+4. Call `quills_list_feedback_signals` to read the requests that the autopilot found in
+   conversations and tickets.
+5. Call `quills_draft_changelog` with up to 25 shipped post IDs to get a draft entry. It saves
+   nothing, so a teammate reviews it before it is published.
 
 ## Releasing
 

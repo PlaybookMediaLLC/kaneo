@@ -21,6 +21,8 @@ import {
   toReactions,
   VOTE_EMOJI,
 } from "./map.js";
+import { postMetadata } from "./post-context.js";
+import { uploadImage } from "./uploads.js";
 import { writes, type Sent } from "./writes.js";
 import type { EventMap } from "../core/protocol.js";
 import type {
@@ -51,6 +53,8 @@ interface Options {
   board?: string;
   host: HostEvents;
   pollIntervalMs: number;
+  /** The host app's metadata and the page URL from the SDK, sent with a new post. */
+  context?: Record<string, string>;
 }
 
 /** Replaces the item with the same ID, or adds it at `where`. */
@@ -78,6 +82,7 @@ export function useWidgetData({
   board,
   host,
   pollIntervalMs,
+  context = {},
 }: Options): Partial<WidgetViewProps> {
   const [state, setState] = useState({
     session,
@@ -95,6 +100,10 @@ export function useWidgetData({
   data.current = current ? state.data : emptySnapshot;
   const events = useRef(host);
   events.current = host;
+  const page = useRef(context);
+  page.current = context;
+  /** A retry sends the files that an earlier attempt uploaded, so its idempotency key still fits. */
+  const uploaded = useRef(new WeakMap<File, string>());
   const unread = useRef(-1);
   /** Unread changelog updates; the launcher badge shows them with the unread replies. */
   const updatesUnread = useRef(0);
@@ -310,11 +319,25 @@ export function useWidgetData({
     ...(available.feedback && {
       onSubmitFeedback: (body: string, options: SubmissionOptions) =>
         run(async (signal) => {
+          const attachmentIds: string[] = [];
+          for (const file of options.attachments ?? []) {
+            let id = uploaded.current.get(file);
+            if (!id) {
+              id = await uploadImage(api, file, signal);
+              uploaded.current.set(file, id);
+            }
+            attachmentIds.push(id);
+          }
           const created = await send.createPost(
-            body,
+            // A post needs a title: a screenshot alone gets a plain one.
+            body || (attachmentIds.length ? "Screenshot" : body),
             options.idempotencyKey,
             boardId.current || undefined,
             signal,
+            {
+              attachmentIds,
+              metadata: postMetadata(page.current, navigator.userAgent),
+            },
           );
           const post = toPost(created);
           if (post)

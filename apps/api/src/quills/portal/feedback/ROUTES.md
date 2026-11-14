@@ -57,6 +57,9 @@ similar posts, voted posts, roadmap posts, the changelog, the feed and the sitem
 
 - boards whose view tier does not admit the caller (`team` never does), deleted boards and
   boards with `board_projects` links
+- boards with `visible_segment_ids` (RFC 0003 D11) unless the caller is signed in and in one of
+  those segments; an anonymous caller is in no segment, and an empty list admits nobody. A hidden
+  board, and each of its posts and comments, is a 404 like a missing one
 - deleted posts, merged posts in lists, and held (`pending`) posts of other people
 - private (internal) comments and held comments of other people; a deleted comment keeps its
   place with empty content and no author

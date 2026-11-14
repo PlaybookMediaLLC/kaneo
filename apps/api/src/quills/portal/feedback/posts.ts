@@ -74,8 +74,16 @@ const errors = {
 const writeErrors = { ...errors, 409: "Idempotency key reused" };
 const importance = z.enum(postVotes.importance.enumValues);
 const voteCount = z.number().optional().openapi({
-  description: "Portal: left out when the post's board hides vote counts",
+  description: "Left out when the post's board hides vote counts",
 });
+/** Host-page context from the widget (RFC 0003 feature 6), kept with the post for the team. */
+const widgetMetadata = z
+  .record(z.string().trim().min(1).max(64), z.string().max(500))
+  .refine((map) => Object.keys(map).length <= 20, "At most 20 metadata keys")
+  .optional()
+  .describe(
+    "Context from the host page, such as pageUrl and browser, and keys that the host app set with Quackback.metadata. Teammates read it; customers never do.",
+  );
 
 export const postItem = z.object({
   id: z.string(),
@@ -550,6 +558,7 @@ export const createPost = (audience: Customer) =>
         content: z.string().trim().max(10000),
         attachmentIds,
         idempotencyKey: z.string().min(1).max(128).optional(),
+        ...(audience === "widget" && { metadata: widgetMetadata }),
       })
       .refine((body) => body.title || body.content, {
         message: "Provide a title or content",
@@ -576,6 +585,8 @@ export const createPost = (audience: Customer) =>
         throw forbidden("Submissions are not open to you on this board");
       const postTitle =
         body.title ?? body.content.split("\n")[0]!.trim().slice(0, 200);
+      const sent = (body as { metadata?: Record<string, string> }).metadata;
+      const metadata = sent && Object.keys(sent).length ? sent : undefined;
       const receipt = body.idempotencyKey
         ? await claimReceipt(db, "post", me, body.idempotencyKey, {
             boardId: board.id,
@@ -616,6 +627,7 @@ export const createPost = (audience: Customer) =>
           // A test customer's vote is kept but not counted, as on the teammate path.
           voteCount: viewer.isTest ? 0 : 1,
           moderationState: pending ? "pending" : "published",
+          widgetMetadata: metadata,
         })
         .returning({ id: posts.id });
       const postId = post!.id;
