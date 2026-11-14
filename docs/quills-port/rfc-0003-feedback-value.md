@@ -195,29 +195,30 @@ each feature is kept in section 9.
 
 | # | Feature | Lane | Status |
 |---|---|---|---|
-| 1 | Feedback autopilot | L1 | built |
-| 2 | In-app surveys | L2 | built |
-| 3 | Vote importance | L3 | built |
-| 4 | AI composer help | L4 | built |
-| 5 | Help-article suggestions | L4 | built |
-| 6 | Widget screenshot and annotation | L8 | built |
-| 7 | Revenue and segment demand | L3 | built |
-| 8 | Scoring frameworks | L3 | built |
-| 9 | Voting-bias controls | L3 | built |
-| 10 | Duplicate review | L7 | built |
-| 11 | Topic and sentiment insights | L7 | built |
-| 12 | Task sync | L6 | built |
-| 13 | Shipped notifications | L5 | built |
-| 14 | AI changelog drafts | L5 | built |
-| 15 | Changelog engagement | L5 | built |
-| 16 | My feedback and weekly digest | L5 | built |
-| 17 | Segment boards | L8 | built |
-| 18 | Auto-translation | L4 | built |
-| 19 | CRM sync | L6 | built |
-| 20 | Agent access (MCP) | L8 | built |
+| 1 | Feedback autopilot | L1 | done |
+| 2 | In-app surveys | L2 | done |
+| 3 | Vote importance | L3 | done |
+| 4 | AI composer help | L4 | done |
+| 5 | Help-article suggestions | L4 | done |
+| 6 | Widget screenshot and annotation | L8 | done |
+| 7 | Revenue and segment demand | L3 | done |
+| 8 | Scoring frameworks | L3 | done |
+| 9 | Voting-bias controls | L3 | done |
+| 10 | Duplicate review | L7 | done |
+| 11 | Topic and sentiment insights | L7 | done |
+| 12 | Task sync | L6 | done |
+| 13 | Shipped notifications | L5 | done |
+| 14 | AI changelog drafts | L5 | done |
+| 15 | Changelog engagement | L5 | done |
+| 16 | My feedback and weekly digest | L5 | done |
+| 17 | Segment boards | L8 | done |
+| 18 | Auto-translation | L4 | done |
+| 19 | CRM sync | L6 | done |
+| 20 | Agent access (MCP) | L8 | done |
 
-"Built" means that the API, jobs, web and docs parts are merged and the tests pass under a real
-database. A feature becomes "done" after the review team (section 8) finds no blocking issue.
+"Done" means that the API, jobs, web and docs parts are merged, the tests pass under a real
+database, and the review team (section 8) found no blocking issue. The review of 2026-11-14 found
+none; its should-fix items that broke a feature rule are fixed.
 
 Known limits after the merge:
 
