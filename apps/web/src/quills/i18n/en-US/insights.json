@@ -1,0 +1,23 @@
+{
+	"description": "What customers ask for and how they feel, on the boards that you can see.",
+	"lastDays_other": "Last {{count}} days",
+	"nav": "Insights",
+	"negative": "Negative",
+	"neutral": "Neutral",
+	"newVotes_one": "{{board}} · +{{count}} vote",
+	"newVotes_other": "{{board}} · +{{count}} votes",
+	"noSentiment": "No new post has a sentiment yet.",
+	"noTopics": "No new post has a tag in this range.",
+	"noTopPosts": "No post got a vote in this range.",
+	"period": "{{from}} to {{to}} (UTC)",
+	"positive": "Positive",
+	"posts": "New posts",
+	"range": "Range",
+	"sentiment": "Sentiment of new posts",
+	"title": "Insights",
+	"topics": "Topics of new posts",
+	"topPosts": "Most new votes",
+	"trend": "Weekly trend",
+	"votes": "New votes",
+	"week": "Week of"
+}
