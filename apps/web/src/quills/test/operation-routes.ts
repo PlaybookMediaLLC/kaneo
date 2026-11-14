@@ -1,6 +1,16 @@
 // Generated from apps/docs/openapi.json by scripts/quills-web/sync-operation-routes.mjs.
 export const quillsOperationRoutes = [
   {
+    operationId: "acceptQuillsFeedbackSignalAsPost",
+    method: "POST",
+    path: "/api/quills/{workspaceId}/feedback-signals/{signalId}/post",
+  },
+  {
+    operationId: "acceptQuillsFeedbackSignalAsVote",
+    method: "POST",
+    path: "/api/quills/{workspaceId}/feedback-signals/{signalId}/vote",
+  },
+  {
     operationId: "acceptQuillsPortalInvite",
     method: "POST",
     path: "/api/quills-public/{workspace}/portal/invites/{inviteId}/accept",
@@ -829,6 +839,11 @@ export const quillsOperationRoutes = [
     operationId: "discardQuillsPortalFile",
     method: "DELETE",
     path: "/api/quills-public/{workspace}/portal/files/{fileId}",
+  },
+  {
+    operationId: "dismissQuillsFeedbackSignal",
+    method: "POST",
+    path: "/api/quills/{workspaceId}/feedback-signals/{signalId}/dismiss",
   },
   {
     operationId: "dismissQuillsInboxTranslationSuggestion",
@@ -1821,6 +1836,11 @@ export const quillsOperationRoutes = [
     path: "/api/quills/{workspaceId}/transfer/export-runs/{runId}/download",
   },
   {
+    operationId: "listQuillsFeedbackSignals",
+    method: "GET",
+    path: "/api/quills/{workspaceId}/feedback-signals",
+  },
+  {
     operationId: "listQuillsFlaggedMessages",
     method: "GET",
     path: "/api/quills/{workspaceId}/conversation-messages/flagged",
@@ -2729,6 +2749,11 @@ export const quillsOperationRoutes = [
     operationId: "restoreQuillsConversationTag",
     method: "POST",
     path: "/api/quills/{workspaceId}/conversation-tags/{tagId}/restore",
+  },
+  {
+    operationId: "restoreQuillsFeedbackSignal",
+    method: "POST",
+    path: "/api/quills/{workspaceId}/feedback-signals/{signalId}/restore",
   },
   {
     operationId: "restoreQuillsHelpCenterArticle",

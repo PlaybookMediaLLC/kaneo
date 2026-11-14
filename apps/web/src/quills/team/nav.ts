@@ -10,4 +10,5 @@ export const teamNavigation: readonly TeamNavEntry[] = [
   { path: "/duplicates", labelKey: "duplicates.nav" },
   { path: "/insights", labelKey: "insights.nav" },
   { path: "/surveys", labelKey: "surveys.title" },
+  { path: "/autopilot", labelKey: "autopilot.nav" },
 ];

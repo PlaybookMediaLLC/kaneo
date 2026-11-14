@@ -376,6 +376,8 @@ export const changeSchema = z.object({
     "signal.created",
     "signal.accepted",
     "signal.dismissed",
+    // Lane L1: a dismissed signal goes back to the review queue.
+    "signal.restored",
     "survey.created",
     "survey.updated",
     "survey.closed",
