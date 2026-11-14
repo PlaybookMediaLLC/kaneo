@@ -961,6 +961,11 @@ export const quillsOperationRoutes = [
     path: "/api/quills/{workspaceId}/boards/{boardId}",
   },
   {
+    operationId: "getQuillsBoardSettings",
+    method: "GET",
+    path: "/api/quills/{workspaceId}/boards/{boardId}/settings",
+  },
+  {
     operationId: "getQuillsBrandingSettings",
     method: "GET",
     path: "/api/quills/{workspaceId}/settings/branding",
@@ -1256,6 +1261,11 @@ export const quillsOperationRoutes = [
     path: "/api/quills/{workspaceId}/posts/{postId}",
   },
   {
+    operationId: "getQuillsPostDemand",
+    method: "GET",
+    path: "/api/quills/{workspaceId}/posts/{postId}/demand",
+  },
+  {
     operationId: "getQuillsPostFilterCounts",
     method: "GET",
     path: "/api/quills/{workspaceId}/posts/counts",
@@ -1359,6 +1369,11 @@ export const quillsOperationRoutes = [
     operationId: "getQuillsQuinnToolMetrics",
     method: "GET",
     path: "/api/quills/{workspaceId}/assistant/analytics/tools",
+  },
+  {
+    operationId: "getQuillsRevenueAtRisk",
+    method: "GET",
+    path: "/api/quills/{workspaceId}/feedback/revenue-at-risk",
   },
   {
     operationId: "getQuillsRoadmap",
@@ -3066,6 +3081,11 @@ export const quillsOperationRoutes = [
     path: "/api/quills/{workspaceId}/posts/{postId}/owner",
   },
   {
+    operationId: "setQuillsPostScore",
+    method: "PUT",
+    path: "/api/quills/{workspaceId}/posts/{postId}/score",
+  },
+  {
     operationId: "setQuillsPostStatus",
     method: "PUT",
     path: "/api/quills/{workspaceId}/posts/{postId}/status",
@@ -3434,6 +3454,11 @@ export const quillsOperationRoutes = [
     operationId: "updateQuillsBoard",
     method: "PATCH",
     path: "/api/quills/{workspaceId}/boards/{boardId}",
+  },
+  {
+    operationId: "updateQuillsBoardSettings",
+    method: "PATCH",
+    path: "/api/quills/{workspaceId}/boards/{boardId}/settings",
   },
   {
     operationId: "updateQuillsBrandingSettings",
