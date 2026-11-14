@@ -6,6 +6,10 @@ export const meta = {
   audience: "teammate",
   mailLinked: false,
   token: "none",
-  operations: ["fetchQuillsAdminOverview", "listQuillsBoards"],
+  operations: [
+    "fetchQuillsAdminOverview",
+    "listQuillsBoards",
+    "getQuillsTeamCounts",
+  ],
   states: ["loading", "failed", "ready"],
 } satisfies PageMeta;
