@@ -13774,6 +13774,8 @@
                         "unsubscribe_all",
                         "unsubscribe_changelog",
                         "unsubscribe_status",
+                        "unsubscribe_shipped",
+                        "unsubscribe_digest",
                         null
                       ]
                     },
@@ -13858,6 +13860,8 @@
                         "unsubscribe_all",
                         "unsubscribe_changelog",
                         "unsubscribe_status",
+                        "unsubscribe_shipped",
+                        "unsubscribe_digest",
                         null
                       ]
                     },
@@ -13953,6 +13957,8 @@
                         "unsubscribe_all",
                         "unsubscribe_changelog",
                         "unsubscribe_status",
+                        "unsubscribe_shipped",
+                        "unsubscribe_digest",
                         null
                       ]
                     },
@@ -13974,6 +13980,387 @@
           },
           "404": {
             "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/portal/my-feedback": {
+      "get": {
+        "operationId": "listQuillsPortalMyFeedback",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "List the posts that the caller created, voted for or follows",
+        "description": "Visible posts only, most recently changed first. lastChangedAt is the post's last update. Empty without a customer profile.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "mine",
+                "voted",
+                "following"
+              ],
+              "default": "all"
+            },
+            "required": false,
+            "name": "filter",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000,
+              "default": 0
+            },
+            "required": false,
+            "name": "offset",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of the caller's posts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "board": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name"
+                            ]
+                          },
+                          "status": {
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "color": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "color"
+                            ]
+                          },
+                          "stage": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "enum": [
+                              "open",
+                              "planned",
+                              "in_progress",
+                              "shipped",
+                              null
+                            ]
+                          },
+                          "voteCount": {
+                            "type": "number"
+                          },
+                          "isAuthor": {
+                            "type": "boolean"
+                          },
+                          "voted": {
+                            "type": "boolean"
+                          },
+                          "following": {
+                            "type": "boolean"
+                          },
+                          "lastChangedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title",
+                          "board",
+                          "status",
+                          "stage",
+                          "voteCount",
+                          "isAuthor",
+                          "voted",
+                          "following",
+                          "lastChangedAt"
+                        ]
+                      }
+                    },
+                    "nextOffset": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextOffset"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/user/weekly-digest": {
+      "get": {
+        "operationId": "getQuillsMyWeeklyDigestPreference",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get the caller's weekly digest preference",
+        "description": "True until the caller turns the digest off.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The caller's weekly digest preference",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "weeklyDigest": {
+                      "type": "boolean",
+                      "description": "A weekly mail when the status of the caller's feedback changed. On by default."
+                    }
+                  },
+                  "required": [
+                    "weeklyDigest"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "setQuillsMyWeeklyDigestPreference",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Turn the caller's weekly digest on or off",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "weeklyDigest": {
+                    "type": "boolean",
+                    "description": "A weekly mail when the status of the caller's feedback changed. On by default."
+                  }
+                },
+                "required": [
+                  "weeklyDigest"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The caller's weekly digest preference",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "weeklyDigest": {
+                      "type": "boolean",
+                      "description": "A weekly mail when the status of the caller's feedback changed. On by default."
+                    }
+                  },
+                  "required": [
+                    "weeklyDigest"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
             "content": {
               "application/json": {
                 "schema": {
@@ -18832,6 +19219,307 @@
         }
       }
     },
+    "/quills-public/{workspace}/portal/changelog/unread": {
+      "get": {
+        "operationId": "getQuillsPortalChangelogUnread",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Count the changelog entries that the caller has not read",
+        "description": "Published entries that the caller may see, published after its read mark. At most 99. Zero without a customer profile.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The unread count",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "count"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/portal/changelog/read": {
+      "put": {
+        "operationId": "markQuillsPortalChangelogRead",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Mark every changelog entry read for the caller",
+        "description": "Moves the caller's read mark to now. Entries published later count as unread.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The caller's new read mark",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "lastReadAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "lastReadAt"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/portal/changelog/{entryId}/reactions": {
+      "put": {
+        "operationId": "setQuillsPortalChangelogReaction",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Add or remove the caller's emoji reaction on a changelog entry",
+        "description": "Desired state, from the comment reaction emoji set. One reaction per caller, entry and emoji. Without sign-in only a widget visitor of a workspace that allows anonymous interaction reacts.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "entryId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "emoji": {
+                    "type": "string",
+                    "enum": [
+                      "👍",
+                      "❤️",
+                      "🎉",
+                      "😄",
+                      "😕",
+                      "👀",
+                      "🚀"
+                    ]
+                  },
+                  "reacted": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "emoji",
+                  "reacted"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The entry's reactions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "entryId": {
+                      "type": "string"
+                    },
+                    "changed": {
+                      "type": "boolean"
+                    },
+                    "reactions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "emoji": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          },
+                          "reacted": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "emoji",
+                          "count",
+                          "reacted"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "entryId",
+                    "changed",
+                    "reactions"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Blocked account, no portal access, or reactions are not open to the caller",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Changelog entry not found; Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/quills-public/{workspace}/portal/changelog": {
       "get": {
         "operationId": "listQuillsPortalChangelog",
@@ -18985,6 +19673,32 @@
                           "requesterCount": {
                             "type": "number",
                             "description": "Distinct people who voted on the linked posts that the caller may see"
+                          },
+                          "reactions": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "emoji": {
+                                  "type": "string"
+                                },
+                                "count": {
+                                  "type": "number"
+                                },
+                                "reacted": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "emoji",
+                                "count",
+                                "reacted"
+                              ]
+                            }
+                          },
+                          "unread": {
+                            "type": "boolean",
+                            "description": "Published after the caller last marked the changelog read. False without a profile."
                           }
                         },
                         "required": [
@@ -18995,7 +19709,9 @@
                           "author",
                           "categories",
                           "linkedPosts",
-                          "requesterCount"
+                          "requesterCount",
+                          "reactions",
+                          "unread"
                         ]
                       }
                     },
@@ -19170,6 +19886,32 @@
                     "requesterCount": {
                       "type": "number",
                       "description": "Distinct people who voted on the linked posts that the caller may see"
+                    },
+                    "reactions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "emoji": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          },
+                          "reacted": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "emoji",
+                          "count",
+                          "reacted"
+                        ]
+                      }
+                    },
+                    "unread": {
+                      "type": "boolean",
+                      "description": "Published after the caller last marked the changelog read. False without a profile."
                     }
                   },
                   "required": [
@@ -19180,7 +19922,9 @@
                     "author",
                     "categories",
                     "linkedPosts",
-                    "requesterCount"
+                    "requesterCount",
+                    "reactions",
+                    "unread"
                   ]
                 }
               }
@@ -21615,6 +22359,317 @@
         }
       }
     },
+    "/quills-public/{workspace}/widget/changelog/unread": {
+      "get": {
+        "operationId": "getQuillsWidgetChangelogUnread",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Count the changelog entries that the caller has not read",
+        "description": "Published entries that the caller may see, published after its read mark. At most 99. Zero without a customer profile.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The unread count",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "count"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Valid widget session required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/widget/changelog/read": {
+      "put": {
+        "operationId": "markQuillsWidgetChangelogRead",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Mark every changelog entry read for the caller",
+        "description": "Moves the caller's read mark to now. Entries published later count as unread.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The caller's new read mark",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "lastReadAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "lastReadAt"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Valid widget session required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/widget/changelog/{entryId}/reactions": {
+      "put": {
+        "operationId": "setQuillsWidgetChangelogReaction",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Add or remove the caller's emoji reaction on a changelog entry",
+        "description": "Desired state, from the comment reaction emoji set. One reaction per caller, entry and emoji. Without sign-in only a widget visitor of a workspace that allows anonymous interaction reacts.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "entryId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "emoji": {
+                    "type": "string",
+                    "enum": [
+                      "👍",
+                      "❤️",
+                      "🎉",
+                      "😄",
+                      "😕",
+                      "👀",
+                      "🚀"
+                    ]
+                  },
+                  "reacted": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "emoji",
+                  "reacted"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The entry's reactions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "entryId": {
+                      "type": "string"
+                    },
+                    "changed": {
+                      "type": "boolean"
+                    },
+                    "reactions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "emoji": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          },
+                          "reacted": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "emoji",
+                          "count",
+                          "reacted"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "entryId",
+                    "changed",
+                    "reactions"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Valid widget session required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Blocked account, no portal access, or reactions are not open to the caller",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Changelog entry not found; Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/quills-public/{workspace}/widget/changelog": {
       "get": {
         "operationId": "listQuillsWidgetChangelog",
@@ -21768,6 +22823,32 @@
                           "requesterCount": {
                             "type": "number",
                             "description": "Distinct people who voted on the linked posts that the caller may see"
+                          },
+                          "reactions": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "emoji": {
+                                  "type": "string"
+                                },
+                                "count": {
+                                  "type": "number"
+                                },
+                                "reacted": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "emoji",
+                                "count",
+                                "reacted"
+                              ]
+                            }
+                          },
+                          "unread": {
+                            "type": "boolean",
+                            "description": "Published after the caller last marked the changelog read. False without a profile."
                           }
                         },
                         "required": [
@@ -21778,7 +22859,9 @@
                           "author",
                           "categories",
                           "linkedPosts",
-                          "requesterCount"
+                          "requesterCount",
+                          "reactions",
+                          "unread"
                         ]
                       }
                     },
@@ -21963,6 +23046,32 @@
                     "requesterCount": {
                       "type": "number",
                       "description": "Distinct people who voted on the linked posts that the caller may see"
+                    },
+                    "reactions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "emoji": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          },
+                          "reacted": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "emoji",
+                          "count",
+                          "reacted"
+                        ]
+                      }
+                    },
+                    "unread": {
+                      "type": "boolean",
+                      "description": "Published after the caller last marked the changelog read. False without a profile."
                     }
                   },
                   "required": [
@@ -21973,7 +23082,9 @@
                     "author",
                     "categories",
                     "linkedPosts",
-                    "requesterCount"
+                    "requesterCount",
+                    "reactions",
+                    "unread"
                   ]
                 }
               }
@@ -145585,6 +146696,280 @@
           },
           "404": {
             "description": "Survey not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/changelog/drafts": {
+      "post": {
+        "operationId": "draftQuillsChangelogFromPosts",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Draft a changelog entry from shipped posts with AI",
+        "description": "Returns a title and a Markdown body for review. Saves and publishes nothing; the usage log row is its record. Every post must be one the caller may see. 409 when AI is not configured, 502 when the provider fails.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "postIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "maxItems": 25
+                  }
+                },
+                "required": [
+                  "postIds"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The draft for review",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "body": {
+                      "type": "string",
+                      "description": "Markdown"
+                    },
+                    "postIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "requesterCount": {
+                      "type": "number",
+                      "description": "Distinct people who voted for the posts"
+                    }
+                  },
+                  "required": [
+                    "title",
+                    "body",
+                    "postIds",
+                    "requesterCount"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Post not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "AI is not configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          },
+          "502": {
+            "description": "The AI provider failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/changelog-engagement": {
+      "get": {
+        "operationId": "listQuillsChangelogEngagement",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "List published changelog entries with reaction and read counts",
+        "description": "Newest publish time first. At most 50 entries per page.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 10000000,
+              "default": 0
+            },
+            "required": false,
+            "name": "offset",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of entries with their engagement",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "publishedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "readCount": {
+                            "type": "number"
+                          },
+                          "reactions": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "emoji": {
+                                  "type": "string"
+                                },
+                                "count": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "emoji",
+                                "count"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title",
+                          "publishedAt",
+                          "readCount",
+                          "reactions"
+                        ]
+                      }
+                    },
+                    "nextOffset": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextOffset"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
             "content": {
               "application/json": {
                 "schema": {

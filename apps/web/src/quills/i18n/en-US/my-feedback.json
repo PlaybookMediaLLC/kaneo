@@ -1,0 +1,20 @@
+{
+	"changed": "Changed {{time}}",
+	"description": "The ideas that you shared, voted for or follow, and where they stand.",
+	"digest": "Weekly digest email",
+	"filter": "Show feedback",
+	"filters": {
+		"all": "All",
+		"following": "Following",
+		"mine": "Shared by me",
+		"voted": "Voted"
+	},
+	"following": "Following",
+	"loadMore": "Load more feedback",
+	"mine": "Shared by you",
+	"nav": "My feedback",
+	"noStatus": "No status",
+	"place": "{{board}} · {{status}}",
+	"title": "My feedback",
+	"voted": "Voted"
+}

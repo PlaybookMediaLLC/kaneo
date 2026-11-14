@@ -1,6 +1,7 @@
 import { AttachmentPicker } from "../ui/attachment-picker";
 import { BoardSelect } from "../ui/post/board-select";
 import { CommentReactions } from "../ui/post/comment-reactions";
+import { ReactionBar } from "../ui/reaction-bar";
 import { ComposerDetails } from "../ui/post/composer-details";
 import { FeedbackEditor } from "../ui/feedback-editor";
 import { BoardNavigation } from "../ui/board-navigation";
@@ -424,6 +425,12 @@ export function KitGallery() {
                 onReact={async (_emoji, reacted) => setVoted(reacted)}
               />
             </div>
+            <ReactionBar
+              reactions={
+                empty ? [] : [{ emoji: "🎉", count: 2, reacted: voted }]
+              }
+              onReact={async (_emoji, reacted) => setVoted(reacted)}
+            />
             <ul>
               <PostComment
                 comment={{

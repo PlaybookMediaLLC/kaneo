@@ -98,7 +98,9 @@ Merged: `sendPortalInviteFn`, `fetchPortalInvitesFn`, `resendPortalInviteFn`, `c
 Merged: `previewUnsubscribeTokenFn`, `processUnsubscribeTokenFn`, `one-click-unsubscribe.ts`.
 
 - Actions: `unsubscribe_post`, `unsubscribe_all` (mute mail), `unsubscribe_changelog`,
-  `unsubscribe_status`. Each is idempotent; the token is spent in the same transaction.
+  `unsubscribe_status`, and (RFC 0003) `unsubscribe_shipped` and `unsubscribe_digest`. The last
+  two set the mail cell of the `post_shipped` or `weekly_digest` matrix type to false. Each is
+  idempotent; the token is spent in the same transaction.
 - Link generation: `unsubscribe-token.ts#mintUnsubscribeToken` and `#unsubscribeUrl`
   (`KANEO_API_URL/api/quills-public/{workspaceId}/unsubscribe?token=…`). The P4 content table
   (`jobs/fanout.ts#subscribers`) now has mail entries for `post.status_changed` and
@@ -137,6 +139,8 @@ Merged: the portal audience of `fetchSubscriptionStatusSubscriptions`, `subscrib
 | `getQuillsMyLanguagePreference` | `GET /user/language` | portal | read | `customer_identity` | - | contract |
 | `setQuillsMyLanguagePreference` | `PUT /user/language` (BCP-47 tag or null) | portal (ensureCustomer) | update | `customer_identity` | none (personal) | contract, rollback |
 | `listQuillsPortalMentionSuggestions` | `GET /mentions/suggest?q=&scope=` (10, prefix only, no email; 60 per min per client) | portal | read | `principal` | - | contract |
+| `getQuillsMyWeeklyDigestPreference` | `GET /user/weekly-digest` (RFC 0003; true until turned off) | portal | read | `notification_preferences` | - | contract |
+| `setQuillsMyWeeklyDigestPreference` | `PUT /user/weekly-digest` `{weeklyDigest}` (30 per 10 min) | portal (ensureCustomer) | update | `notification_preferences` (the `weekly_digest` matrix cell) | none (personal) | contract, rollback |
 
 Merged: `teammate-preferences.ts` (the customer side; a teammate's language is the Kaneo account
 locale) and the portal caller of `routes/api/v1/mentions/suggest.ts`. Mentions need a customer

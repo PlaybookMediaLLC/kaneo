@@ -861,6 +861,11 @@ export const quillsOperationRoutes = [
     path: "/api/quills/{workspaceId}/conversation-attributes/description-draft",
   },
   {
+    operationId: "draftQuillsChangelogFromPosts",
+    method: "POST",
+    path: "/api/quills/{workspaceId}/changelog/drafts",
+  },
+  {
     operationId: "editQuillsPortalOwnComment",
     method: "PUT",
     path: "/api/quills-public/{workspace}/portal/comments/{commentId}",
@@ -1236,6 +1241,11 @@ export const quillsOperationRoutes = [
     path: "/api/quills-public/{workspace}/support/unread",
   },
   {
+    operationId: "getQuillsMyWeeklyDigestPreference",
+    method: "GET",
+    path: "/api/quills-public/{workspace}/user/weekly-digest",
+  },
+  {
     operationId: "getQuillsNotificationPreferences",
     method: "GET",
     path: "/api/quills/{workspaceId}/notification-preferences",
@@ -1264,6 +1274,11 @@ export const quillsOperationRoutes = [
     operationId: "getQuillsPortalChangelogEntry",
     method: "GET",
     path: "/api/quills-public/{workspace}/portal/changelog/{entryId}",
+  },
+  {
+    operationId: "getQuillsPortalChangelogUnread",
+    method: "GET",
+    path: "/api/quills-public/{workspace}/portal/changelog/unread",
   },
   {
     operationId: "getQuillsPortalFile",
@@ -1536,6 +1551,11 @@ export const quillsOperationRoutes = [
     path: "/api/quills-public/{workspace}/widget/changelog/{entryId}",
   },
   {
+    operationId: "getQuillsWidgetChangelogUnread",
+    method: "GET",
+    path: "/api/quills-public/{workspace}/widget/changelog/unread",
+  },
+  {
     operationId: "getQuillsWidgetConfig",
     method: "GET",
     path: "/api/quills-public/{workspace}/widget/config.json",
@@ -1759,6 +1779,11 @@ export const quillsOperationRoutes = [
     operationId: "listQuillsChangelogCategories",
     method: "GET",
     path: "/api/quills/{workspaceId}/changelog/categories",
+  },
+  {
+    operationId: "listQuillsChangelogEngagement",
+    method: "GET",
+    path: "/api/quills/{workspaceId}/changelog-engagement",
   },
   {
     operationId: "listQuillsCompanies",
@@ -1989,6 +2014,11 @@ export const quillsOperationRoutes = [
     operationId: "listQuillsPortalMentionSuggestions",
     method: "GET",
     path: "/api/quills-public/{workspace}/mentions/suggest",
+  },
+  {
+    operationId: "listQuillsPortalMyFeedback",
+    method: "GET",
+    path: "/api/quills-public/{workspace}/portal/my-feedback",
   },
   {
     operationId: "listQuillsPortalPostComments",
@@ -2371,6 +2401,11 @@ export const quillsOperationRoutes = [
     path: "/api/quills/{workspaceId}/notifications/{notificationId}/read",
   },
   {
+    operationId: "markQuillsPortalChangelogRead",
+    method: "PUT",
+    path: "/api/quills-public/{workspace}/portal/changelog/read",
+  },
+  {
     operationId: "markQuillsTicketRead",
     method: "POST",
     path: "/api/quills/{workspaceId}/tickets/{ticketId}/read",
@@ -2379,6 +2414,11 @@ export const quillsOperationRoutes = [
     operationId: "markQuillsTicketUnread",
     method: "POST",
     path: "/api/quills/{workspaceId}/tickets/{ticketId}/unread",
+  },
+  {
+    operationId: "markQuillsWidgetChangelogRead",
+    method: "PUT",
+    path: "/api/quills-public/{workspace}/widget/changelog/read",
   },
   {
     operationId: "markQuillsWidgetConversationRead",
@@ -3096,9 +3136,19 @@ export const quillsOperationRoutes = [
     path: "/api/quills-public/{workspace}/posts/{postId}/subscription",
   },
   {
+    operationId: "setQuillsMyWeeklyDigestPreference",
+    method: "PUT",
+    path: "/api/quills-public/{workspace}/user/weekly-digest",
+  },
+  {
     operationId: "setQuillsOfficeHours",
     method: "PUT",
     path: "/api/quills/{workspaceId}/support/office-hours",
+  },
+  {
+    operationId: "setQuillsPortalChangelogReaction",
+    method: "PUT",
+    path: "/api/quills-public/{workspace}/portal/changelog/{entryId}/reactions",
   },
   {
     operationId: "setQuillsPortalCommentReaction",
@@ -3194,6 +3244,11 @@ export const quillsOperationRoutes = [
     operationId: "setQuillsWebSourceEnabled",
     method: "PATCH",
     path: "/api/quills/{workspaceId}/assistant/web-sources/{webSourceId}",
+  },
+  {
+    operationId: "setQuillsWidgetChangelogReaction",
+    method: "PUT",
+    path: "/api/quills-public/{workspace}/widget/changelog/{entryId}/reactions",
   },
   {
     operationId: "setQuillsWidgetCommentReaction",

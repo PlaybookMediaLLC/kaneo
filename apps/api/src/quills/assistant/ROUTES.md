@@ -344,6 +344,7 @@ job was lost or ran out of attempts). The copilot is not streamed.
 | `acceptQuillsSuggestion` | `POST /suggestions/{suggestionId}/accept` (`mergePosts`, shared with `mergeQuillsPost`) | update | `post.merged` |
 | `dismissQuillsSuggestion` | `POST /suggestions/{suggestionId}/dismiss` | update | `merge_suggestion.dismissed` |
 | `restoreQuillsSuggestion` | `POST /suggestions/{suggestionId}/restore` | update | `merge_suggestion.restored` |
+| `draftQuillsChangelogFromPosts` | `POST /changelog/drafts` (1-25 visible posts; read in `prepare`, provider call in `call`, 1,500 output tokens at most; RFC 0003, `../feedback/changelog-ai.ts`) | create | none: usage row only, nothing saved or published |
 | `retryQuillsPostMergeCheck` | `POST /posts/{postId}/merge-check` (409 without an embedding model) | update | `post.merge_check_requested` |
 | `listQuillsSimilarPosts` | `GET /posts/{postId}/similar` (stored embeddings; no provider call) | read | - |
 | `getQuillsPostSentiment` | `GET /posts/{postId}/sentiment` | read | - |

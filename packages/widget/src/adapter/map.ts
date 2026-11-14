@@ -44,7 +44,11 @@ export interface ApiChangelogEntry {
   author: { name: string; avatarUrl: string | null } | null;
   linkedPosts: Array<{ id: string }>;
   requesterCount: number;
+  /** RFC 0003: the caller's reactions and read mark. Missing from an older API. */
+  reactions?: ApiReaction[];
+  unread?: boolean;
 }
+export type ApiReaction = { emoji: string; count: number; reacted: boolean };
 export interface ApiArticle {
   id: string;
   title: string;
@@ -109,6 +113,20 @@ export function toComment(comment: ApiComment): FeedbackComment {
   };
 }
 
+/** The changelog reactions that the API accepts, in display order. */
+export const UPDATE_EMOJI = ["👍", "❤️", "🎉", "😄", "😕", "👀", "🚀"];
+/** Offered on every update; the other emoji show once someone used them. */
+const OFFERED = new Set(["👍", "❤️", "🎉"]);
+
+/** The offered emoji and every used one, in the API's order. */
+export const toReactions = (reactions: readonly ApiReaction[]) =>
+  UPDATE_EMOJI.map((emoji) => ({
+    emoji,
+    count: 0,
+    reacted: false,
+    ...reactions.find((reaction) => reaction.emoji === emoji),
+  })).filter((reaction) => OFFERED.has(reaction.emoji) || reaction.count > 0);
+
 export function toUpdate(entry: ApiChangelogEntry): UpdateEntry {
   const blocks = markdownBlocks(entry.content);
   return {
@@ -126,6 +144,8 @@ export function toUpdate(entry: ApiChangelogEntry): UpdateEntry {
     avatarUrl: optional(entry.author?.avatarUrl),
     relatedPostIds: entry.linkedPosts.map((post) => post.id),
     requesterCount: entry.requesterCount,
+    unread: entry.unread ?? false,
+    reactions: toReactions(entry.reactions ?? []),
   };
 }
 

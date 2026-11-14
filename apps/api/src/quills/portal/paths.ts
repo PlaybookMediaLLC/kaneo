@@ -33,6 +33,7 @@ export const portalPaths = {
   changelog: (workspaceId: string) => portalPath(workspaceId, "/changelog"),
   changelogEntry: (workspaceId: string, entryId: string) =>
     portalPath(workspaceId, `/changelog/${encodeURIComponent(entryId)}`),
+  myFeedback: (workspaceId: string) => portalPath(workspaceId, "/my-feedback"),
   helpCenter: (workspaceId: string, locale?: string) =>
     portalPath(
       workspaceId,
@@ -73,6 +74,7 @@ export const portalPathPatterns = [
     id: "changelogEntry",
     pattern: "/portal/$workspaceId/changelog/$entryId",
   },
+  { id: "myFeedback", pattern: "/portal/$workspaceId/my-feedback" },
   { id: "helpCenter", pattern: "/portal/$workspaceId/hc" },
   { id: "helpCenterLocale", pattern: "/portal/$workspaceId/hc/$locale" },
   {
