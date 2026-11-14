@@ -294,7 +294,10 @@ export function WidgetView({
             posts={feedback}
             onOpenPost={(id) => open("feedback", id)}
             teamMember={teamMember}
-            attachmentsEnabled={attachmentsEnabled}
+            attachmentsEnabled={
+              attachmentsEnabled === true ||
+              (attachmentsEnabled === "feedback" && composer === "feedback")
+            }
             attachmentReset={attachmentReset}
             onFilesChange={(files) => draftStore.changeFiles(composeKey, files)}
             onCapture={onCaptureScreenshot}
@@ -366,7 +369,7 @@ export function WidgetView({
             key={conversation.id}
             scrollContainer={nav.content}
             conversation={conversation}
-            attachmentsEnabled={attachmentsEnabled}
+            attachmentsEnabled={attachmentsEnabled === true}
             attachmentReset={attachmentReset}
             onFilesChange={(files) =>
               draftStore.changeFiles(`reply:${conversation.id}`, files)

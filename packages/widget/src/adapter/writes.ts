@@ -14,16 +14,29 @@ export type Sent = { conversation: ApiConversation; message: ApiMessage };
 const id = encodeURIComponent;
 
 export const writes = (api: Api) => ({
+  /** `context`: attached file IDs and the page metadata (RFC 0003 feature 6). */
   createPost: (
     content: string,
     idempotencyKey: string,
     boardId?: string,
     signal?: AbortSignal,
+    context: {
+      attachmentIds?: string[];
+      metadata?: Record<string, string>;
+    } = {},
   ) =>
     api.request<ApiPost>(
       "POST",
       "/widget/posts",
-      { content, idempotencyKey, ...(boardId && { boardId }) },
+      {
+        content,
+        idempotencyKey,
+        ...(boardId && { boardId }),
+        ...(context.attachmentIds?.length && {
+          attachmentIds: context.attachmentIds,
+        }),
+        ...(context.metadata && { metadata: context.metadata }),
+      },
       signal,
     ),
   /** Desired state, not a toggle: a retry changes nothing. */
