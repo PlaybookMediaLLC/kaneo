@@ -65,11 +65,12 @@ export async function capturePage(
     height,
     pixelRatio: ratio,
     backgroundColor: pageBackground(),
-    // Moves the copy of the page to the current scroll position.
+    // Moves the copy of the page to the current scroll position. Margins keep fixed elements in
+    // place; "relative" moves absolute elements with the page (checked in Chromium).
     style: {
       position: "relative",
-      top: `${-window.scrollY}px`,
-      left: `${-window.scrollX}px`,
+      marginTop: `${-window.scrollY}px`,
+      marginLeft: `${-window.scrollX}px`,
     },
     filter: (node: Node) =>
       !(node instanceof Element) ||
