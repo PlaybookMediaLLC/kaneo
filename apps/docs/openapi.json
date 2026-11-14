@@ -13774,6 +13774,8 @@
                         "unsubscribe_all",
                         "unsubscribe_changelog",
                         "unsubscribe_status",
+                        "unsubscribe_shipped",
+                        "unsubscribe_digest",
                         null
                       ]
                     },
@@ -13858,6 +13860,8 @@
                         "unsubscribe_all",
                         "unsubscribe_changelog",
                         "unsubscribe_status",
+                        "unsubscribe_shipped",
+                        "unsubscribe_digest",
                         null
                       ]
                     },
@@ -13953,6 +13957,8 @@
                         "unsubscribe_all",
                         "unsubscribe_changelog",
                         "unsubscribe_status",
+                        "unsubscribe_shipped",
+                        "unsubscribe_digest",
                         null
                       ]
                     },
@@ -13974,6 +13980,387 @@
           },
           "404": {
             "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/portal/my-feedback": {
+      "get": {
+        "operationId": "listQuillsPortalMyFeedback",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "List the posts that the caller created, voted for or follows",
+        "description": "Visible posts only, most recently changed first. lastChangedAt is the post's last update. Empty without a customer profile.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "mine",
+                "voted",
+                "following"
+              ],
+              "default": "all"
+            },
+            "required": false,
+            "name": "filter",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000,
+              "default": 0
+            },
+            "required": false,
+            "name": "offset",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of the caller's posts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "board": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name"
+                            ]
+                          },
+                          "status": {
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "color": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "color"
+                            ]
+                          },
+                          "stage": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "enum": [
+                              "open",
+                              "planned",
+                              "in_progress",
+                              "shipped",
+                              null
+                            ]
+                          },
+                          "voteCount": {
+                            "type": "number"
+                          },
+                          "isAuthor": {
+                            "type": "boolean"
+                          },
+                          "voted": {
+                            "type": "boolean"
+                          },
+                          "following": {
+                            "type": "boolean"
+                          },
+                          "lastChangedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title",
+                          "board",
+                          "status",
+                          "stage",
+                          "voteCount",
+                          "isAuthor",
+                          "voted",
+                          "following",
+                          "lastChangedAt"
+                        ]
+                      }
+                    },
+                    "nextOffset": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextOffset"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/user/weekly-digest": {
+      "get": {
+        "operationId": "getQuillsMyWeeklyDigestPreference",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get the caller's weekly digest preference",
+        "description": "True until the caller turns the digest off.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The caller's weekly digest preference",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "weeklyDigest": {
+                      "type": "boolean",
+                      "description": "A weekly mail when the status of the caller's feedback changed. On by default."
+                    }
+                  },
+                  "required": [
+                    "weeklyDigest"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "setQuillsMyWeeklyDigestPreference",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Turn the caller's weekly digest on or off",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "weeklyDigest": {
+                    "type": "boolean",
+                    "description": "A weekly mail when the status of the caller's feedback changed. On by default."
+                  }
+                },
+                "required": [
+                  "weeklyDigest"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The caller's weekly digest preference",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "weeklyDigest": {
+                      "type": "boolean",
+                      "description": "A weekly mail when the status of the caller's feedback changed. On by default."
+                    }
+                  },
+                  "required": [
+                    "weeklyDigest"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
             "content": {
               "application/json": {
                 "schema": {
@@ -15283,6 +15670,27 @@
                           },
                           "canComment": {
                             "type": "boolean"
+                          },
+                          "voteDisplay": {
+                            "type": "string",
+                            "enum": [
+                              "count",
+                              "hidden"
+                            ],
+                            "description": "hidden: the board's posts come without voteCount"
+                          },
+                          "defaultSort": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "enum": [
+                              "votes",
+                              "newest",
+                              "random",
+                              null
+                            ],
+                            "description": "The board's post order when the caller names none. Null: no board default."
                           }
                         },
                         "required": [
@@ -15293,7 +15701,9 @@
                           "postCount",
                           "canSubmit",
                           "canVote",
-                          "canComment"
+                          "canComment",
+                          "voteDisplay",
+                          "defaultSort"
                         ]
                       }
                     }
@@ -15582,11 +15992,13 @@
               "enum": [
                 "newest",
                 "oldest",
-                "votes"
+                "votes",
+                "random"
               ],
-              "default": "newest"
+              "description": "Without sort: the default sort of the board that boardId names, else newest. random is the same order for one caller for one UTC day."
             },
             "required": false,
+            "description": "Without sort: the default sort of the board that boardId names, else newest. random is the same order for one caller for one UTC day.",
             "name": "sort",
             "in": "query"
           },
@@ -15712,7 +16124,8 @@
                             ]
                           },
                           "voteCount": {
-                            "type": "number"
+                            "type": "number",
+                            "description": "Portal: left out when the post's board hides vote counts"
                           },
                           "commentCount": {
                             "type": "number"
@@ -15765,7 +16178,6 @@
                           "status",
                           "stage",
                           "author",
-                          "voteCount",
                           "commentCount",
                           "pending",
                           "isAuthor",
@@ -15974,7 +16386,8 @@
                       ]
                     },
                     "voteCount": {
-                      "type": "number"
+                      "type": "number",
+                      "description": "Portal: left out when the post's board hides vote counts"
                     },
                     "commentCount": {
                       "type": "number"
@@ -16030,7 +16443,6 @@
                     "status",
                     "stage",
                     "author",
-                    "voteCount",
                     "commentCount",
                     "pending",
                     "isAuthor",
@@ -16161,7 +16573,8 @@
                             "type": "string"
                           },
                           "voteCount": {
-                            "type": "number"
+                            "type": "number",
+                            "description": "Portal: left out when the post's board hides vote counts"
                           },
                           "stage": {
                             "type": [
@@ -16195,7 +16608,6 @@
                         "required": [
                           "id",
                           "title",
-                          "voteCount",
                           "stage",
                           "board"
                         ]
@@ -16370,7 +16782,8 @@
                       ]
                     },
                     "voteCount": {
-                      "type": "number"
+                      "type": "number",
+                      "description": "Portal: left out when the post's board hides vote counts"
                     },
                     "commentCount": {
                       "type": "number"
@@ -16475,6 +16888,19 @@
                         "id",
                         "title"
                       ]
+                    },
+                    "importance": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "enum": [
+                        "nice",
+                        "important",
+                        "critical",
+                        null
+                      ],
+                      "description": "How much the caller needs the post, when the caller voted and said so"
                     }
                   },
                   "required": [
@@ -16485,7 +16911,6 @@
                     "status",
                     "stage",
                     "author",
-                    "voteCount",
                     "commentCount",
                     "pending",
                     "isAuthor",
@@ -16500,7 +16925,8 @@
                     "canDelete",
                     "isCommentsLocked",
                     "authorOnlyReplies",
-                    "mergedInto"
+                    "mergedInto",
+                    "importance"
                   ]
                 }
               }
@@ -16686,7 +17112,8 @@
                       ]
                     },
                     "voteCount": {
-                      "type": "number"
+                      "type": "number",
+                      "description": "Portal: left out when the post's board hides vote counts"
                     },
                     "commentCount": {
                       "type": "number"
@@ -16739,7 +17166,6 @@
                     "status",
                     "stage",
                     "author",
-                    "voteCount",
                     "commentCount",
                     "pending",
                     "isAuthor",
@@ -16893,7 +17319,7 @@
           "Quills"
         ],
         "summary": "Set the caller's vote on a post",
-        "description": "Desired state, not a toggle: a retry changes nothing. A vote on a merged post counts on the post it was merged into. changed is false when the state was already set.",
+        "description": "Desired state, not a toggle: a retry changes nothing. A vote on a merged post counts on the post it was merged into. changed is false when the vote was already in that state. importance (only with voted: true) says how much the caller needs the post; without it, a stored importance stays. Removing the vote removes its importance.",
         "security": [],
         "parameters": [
           {
@@ -16925,6 +17351,14 @@
                 "properties": {
                   "voted": {
                     "type": "boolean"
+                  },
+                  "importance": {
+                    "type": "string",
+                    "enum": [
+                      "nice",
+                      "important",
+                      "critical"
+                    ]
                   }
                 },
                 "required": [
@@ -16949,17 +17383,30 @@
                       "type": "boolean"
                     },
                     "voteCount": {
-                      "type": "number"
+                      "type": "number",
+                      "description": "Portal: left out when the post's board hides vote counts"
                     },
                     "changed": {
                       "type": "boolean"
+                    },
+                    "importance": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "enum": [
+                        "nice",
+                        "important",
+                        "critical",
+                        null
+                      ]
                     }
                   },
                   "required": [
                     "postId",
                     "voted",
-                    "voteCount",
-                    "changed"
+                    "changed",
+                    "importance"
                   ]
                 }
               }
@@ -18697,7 +19144,8 @@
                             "type": "string"
                           },
                           "voteCount": {
-                            "type": "number"
+                            "type": "number",
+                            "description": "Left out when the post's board hides vote counts"
                           },
                           "commentCount": {
                             "type": "number"
@@ -18738,7 +19186,6 @@
                         "required": [
                           "id",
                           "title",
-                          "voteCount",
                           "commentCount",
                           "statusId",
                           "eta",
@@ -18821,6 +19268,307 @@
           },
           "404": {
             "description": "Roadmap or status not found; Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/portal/changelog/unread": {
+      "get": {
+        "operationId": "getQuillsPortalChangelogUnread",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Count the changelog entries that the caller has not read",
+        "description": "Published entries that the caller may see, published after its read mark. At most 99. Zero without a customer profile.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The unread count",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "count"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/portal/changelog/read": {
+      "put": {
+        "operationId": "markQuillsPortalChangelogRead",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Mark every changelog entry read for the caller",
+        "description": "Moves the caller's read mark to now. Entries published later count as unread.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The caller's new read mark",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "lastReadAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "lastReadAt"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/portal/changelog/{entryId}/reactions": {
+      "put": {
+        "operationId": "setQuillsPortalChangelogReaction",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Add or remove the caller's emoji reaction on a changelog entry",
+        "description": "Desired state, from the comment reaction emoji set. One reaction per caller, entry and emoji. Without sign-in only a widget visitor of a workspace that allows anonymous interaction reacts.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "entryId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "emoji": {
+                    "type": "string",
+                    "enum": [
+                      "👍",
+                      "❤️",
+                      "🎉",
+                      "😄",
+                      "😕",
+                      "👀",
+                      "🚀"
+                    ]
+                  },
+                  "reacted": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "emoji",
+                  "reacted"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The entry's reactions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "entryId": {
+                      "type": "string"
+                    },
+                    "changed": {
+                      "type": "boolean"
+                    },
+                    "reactions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "emoji": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          },
+                          "reacted": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "emoji",
+                          "count",
+                          "reacted"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "entryId",
+                    "changed",
+                    "reactions"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign-in required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Blocked account, no portal access, or reactions are not open to the caller",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Changelog entry not found; Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
             "content": {
               "application/json": {
                 "schema": {
@@ -18985,6 +19733,32 @@
                           "requesterCount": {
                             "type": "number",
                             "description": "Distinct people who voted on the linked posts that the caller may see"
+                          },
+                          "reactions": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "emoji": {
+                                  "type": "string"
+                                },
+                                "count": {
+                                  "type": "number"
+                                },
+                                "reacted": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "emoji",
+                                "count",
+                                "reacted"
+                              ]
+                            }
+                          },
+                          "unread": {
+                            "type": "boolean",
+                            "description": "Published after the caller last marked the changelog read. False without a profile."
                           }
                         },
                         "required": [
@@ -18995,7 +19769,9 @@
                           "author",
                           "categories",
                           "linkedPosts",
-                          "requesterCount"
+                          "requesterCount",
+                          "reactions",
+                          "unread"
                         ]
                       }
                     },
@@ -19170,6 +19946,32 @@
                     "requesterCount": {
                       "type": "number",
                       "description": "Distinct people who voted on the linked posts that the caller may see"
+                    },
+                    "reactions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "emoji": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          },
+                          "reacted": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "emoji",
+                          "count",
+                          "reacted"
+                        ]
+                      }
+                    },
+                    "unread": {
+                      "type": "boolean",
+                      "description": "Published after the caller last marked the changelog read. False without a profile."
                     }
                   },
                   "required": [
@@ -19180,7 +19982,9 @@
                     "author",
                     "categories",
                     "linkedPosts",
-                    "requesterCount"
+                    "requesterCount",
+                    "reactions",
+                    "unread"
                   ]
                 }
               }
@@ -19470,6 +20274,27 @@
                           },
                           "canComment": {
                             "type": "boolean"
+                          },
+                          "voteDisplay": {
+                            "type": "string",
+                            "enum": [
+                              "count",
+                              "hidden"
+                            ],
+                            "description": "hidden: the board's posts come without voteCount"
+                          },
+                          "defaultSort": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "enum": [
+                              "votes",
+                              "newest",
+                              "random",
+                              null
+                            ],
+                            "description": "The board's post order when the caller names none. Null: no board default."
                           }
                         },
                         "required": [
@@ -19480,7 +20305,9 @@
                           "postCount",
                           "canSubmit",
                           "canVote",
-                          "canComment"
+                          "canComment",
+                          "voteDisplay",
+                          "defaultSort"
                         ]
                       }
                     }
@@ -19585,11 +20412,13 @@
               "enum": [
                 "newest",
                 "oldest",
-                "votes"
+                "votes",
+                "random"
               ],
-              "default": "newest"
+              "description": "Without sort: the default sort of the board that boardId names, else newest. random is the same order for one caller for one UTC day."
             },
             "required": false,
+            "description": "Without sort: the default sort of the board that boardId names, else newest. random is the same order for one caller for one UTC day.",
             "name": "sort",
             "in": "query"
           },
@@ -19715,7 +20544,8 @@
                             ]
                           },
                           "voteCount": {
-                            "type": "number"
+                            "type": "number",
+                            "description": "Portal: left out when the post's board hides vote counts"
                           },
                           "commentCount": {
                             "type": "number"
@@ -19768,7 +20598,6 @@
                           "status",
                           "stage",
                           "author",
-                          "voteCount",
                           "commentCount",
                           "pending",
                           "isAuthor",
@@ -19987,7 +20816,8 @@
                       ]
                     },
                     "voteCount": {
-                      "type": "number"
+                      "type": "number",
+                      "description": "Portal: left out when the post's board hides vote counts"
                     },
                     "commentCount": {
                       "type": "number"
@@ -20043,7 +20873,6 @@
                     "status",
                     "stage",
                     "author",
-                    "voteCount",
                     "commentCount",
                     "pending",
                     "isAuthor",
@@ -20174,7 +21003,8 @@
                             "type": "string"
                           },
                           "voteCount": {
-                            "type": "number"
+                            "type": "number",
+                            "description": "Portal: left out when the post's board hides vote counts"
                           },
                           "stage": {
                             "type": [
@@ -20208,7 +21038,6 @@
                         "required": [
                           "id",
                           "title",
-                          "voteCount",
                           "stage",
                           "board"
                         ]
@@ -20393,7 +21222,8 @@
                       ]
                     },
                     "voteCount": {
-                      "type": "number"
+                      "type": "number",
+                      "description": "Portal: left out when the post's board hides vote counts"
                     },
                     "commentCount": {
                       "type": "number"
@@ -20498,6 +21328,19 @@
                         "id",
                         "title"
                       ]
+                    },
+                    "importance": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "enum": [
+                        "nice",
+                        "important",
+                        "critical",
+                        null
+                      ],
+                      "description": "How much the caller needs the post, when the caller voted and said so"
                     }
                   },
                   "required": [
@@ -20508,7 +21351,6 @@
                     "status",
                     "stage",
                     "author",
-                    "voteCount",
                     "commentCount",
                     "pending",
                     "isAuthor",
@@ -20523,7 +21365,8 @@
                     "canDelete",
                     "isCommentsLocked",
                     "authorOnlyReplies",
-                    "mergedInto"
+                    "mergedInto",
+                    "importance"
                   ]
                 }
               }
@@ -20569,7 +21412,7 @@
           "Quills"
         ],
         "summary": "Set the caller's vote on a post",
-        "description": "Desired state, not a toggle: a retry changes nothing. A vote on a merged post counts on the post it was merged into. changed is false when the state was already set.",
+        "description": "Desired state, not a toggle: a retry changes nothing. A vote on a merged post counts on the post it was merged into. changed is false when the vote was already in that state. importance (only with voted: true) says how much the caller needs the post; without it, a stored importance stays. Removing the vote removes its importance.",
         "security": [],
         "parameters": [
           {
@@ -20601,6 +21444,14 @@
                 "properties": {
                   "voted": {
                     "type": "boolean"
+                  },
+                  "importance": {
+                    "type": "string",
+                    "enum": [
+                      "nice",
+                      "important",
+                      "critical"
+                    ]
                   }
                 },
                 "required": [
@@ -20625,17 +21476,30 @@
                       "type": "boolean"
                     },
                     "voteCount": {
-                      "type": "number"
+                      "type": "number",
+                      "description": "Portal: left out when the post's board hides vote counts"
                     },
                     "changed": {
                       "type": "boolean"
+                    },
+                    "importance": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "enum": [
+                        "nice",
+                        "important",
+                        "critical",
+                        null
+                      ]
                     }
                   },
                   "required": [
                     "postId",
                     "voted",
-                    "voteCount",
-                    "changed"
+                    "changed",
+                    "importance"
                   ]
                 }
               }
@@ -21615,6 +22479,317 @@
         }
       }
     },
+    "/quills-public/{workspace}/widget/changelog/unread": {
+      "get": {
+        "operationId": "getQuillsWidgetChangelogUnread",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Count the changelog entries that the caller has not read",
+        "description": "Published entries that the caller may see, published after its read mark. At most 99. Zero without a customer profile.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The unread count",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "count"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Valid widget session required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/widget/changelog/read": {
+      "put": {
+        "operationId": "markQuillsWidgetChangelogRead",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Mark every changelog entry read for the caller",
+        "description": "Moves the caller's read mark to now. Entries published later count as unread.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The caller's new read mark",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "lastReadAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "lastReadAt"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Valid widget session required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This account is blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/widget/changelog/{entryId}/reactions": {
+      "put": {
+        "operationId": "setQuillsWidgetChangelogReaction",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Add or remove the caller's emoji reaction on a changelog entry",
+        "description": "Desired state, from the comment reaction emoji set. One reaction per caller, entry and emoji. Without sign-in only a widget visitor of a workspace that allows anonymous interaction reacts.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "entryId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "emoji": {
+                    "type": "string",
+                    "enum": [
+                      "👍",
+                      "❤️",
+                      "🎉",
+                      "😄",
+                      "😕",
+                      "👀",
+                      "🚀"
+                    ]
+                  },
+                  "reacted": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "emoji",
+                  "reacted"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The entry's reactions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "entryId": {
+                      "type": "string"
+                    },
+                    "changed": {
+                      "type": "boolean"
+                    },
+                    "reactions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "emoji": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          },
+                          "reacted": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "emoji",
+                          "count",
+                          "reacted"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "entryId",
+                    "changed",
+                    "reactions"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Valid widget session required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Blocked account, no portal access, or reactions are not open to the caller",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Changelog entry not found; Workspace not found or archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/quills-public/{workspace}/widget/changelog": {
       "get": {
         "operationId": "listQuillsWidgetChangelog",
@@ -21768,6 +22943,32 @@
                           "requesterCount": {
                             "type": "number",
                             "description": "Distinct people who voted on the linked posts that the caller may see"
+                          },
+                          "reactions": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "emoji": {
+                                  "type": "string"
+                                },
+                                "count": {
+                                  "type": "number"
+                                },
+                                "reacted": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "emoji",
+                                "count",
+                                "reacted"
+                              ]
+                            }
+                          },
+                          "unread": {
+                            "type": "boolean",
+                            "description": "Published after the caller last marked the changelog read. False without a profile."
                           }
                         },
                         "required": [
@@ -21778,7 +22979,9 @@
                           "author",
                           "categories",
                           "linkedPosts",
-                          "requesterCount"
+                          "requesterCount",
+                          "reactions",
+                          "unread"
                         ]
                       }
                     },
@@ -21963,6 +23166,32 @@
                     "requesterCount": {
                       "type": "number",
                       "description": "Distinct people who voted on the linked posts that the caller may see"
+                    },
+                    "reactions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "emoji": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          },
+                          "reacted": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "emoji",
+                          "count",
+                          "reacted"
+                        ]
+                      }
+                    },
+                    "unread": {
+                      "type": "boolean",
+                      "description": "Published after the caller last marked the changelog read. False without a profile."
                     }
                   },
                   "required": [
@@ -21973,7 +23202,9 @@
                     "author",
                     "categories",
                     "linkedPosts",
-                    "requesterCount"
+                    "requesterCount",
+                    "reactions",
+                    "unread"
                   ]
                 }
               }
@@ -65777,7 +67008,7 @@
           "Quills"
         ],
         "summary": "List the visible feedback posts",
-        "description": "Leaves out merged posts, test-customer posts and posts on boards hidden by their project links. showDeleted=true lists posts deleted in the last 30 days.",
+        "description": "Leaves out merged posts, test-customer posts and posts on boards hidden by their project links. showDeleted=true lists posts deleted in the last 30 days. Each post has its demand, as getQuillsPostDemand counts it, without segments.",
         "parameters": [
           {
             "schema": {
@@ -65902,11 +67133,15 @@
               "enum": [
                 "newest",
                 "oldest",
-                "votes"
+                "votes",
+                "rice",
+                "mrr"
               ],
-              "default": "newest"
+              "default": "newest",
+              "description": "rice: the RICE score, posts without one last. mrr: the monthly revenue of the voters' companies."
             },
             "required": false,
+            "description": "rice: the RICE score, posts without one last. mrr: the monthly revenue of the voters' companies.",
             "name": "sort",
             "in": "query"
           },
@@ -66043,6 +67278,90 @@
                                 "color"
                               ]
                             }
+                          },
+                          "score": {
+                            "type": "object",
+                            "properties": {
+                              "reach": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "impact": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "confidence": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "effort": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "rice": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ],
+                                "description": "reach × impact × confidence ÷ 100 ÷ effort. Null when an input is missing."
+                              }
+                            },
+                            "required": [
+                              "reach",
+                              "impact",
+                              "confidence",
+                              "effort",
+                              "rice"
+                            ]
+                          },
+                          "demand": {
+                            "type": "object",
+                            "properties": {
+                              "voters": {
+                                "type": "number"
+                              },
+                              "companies": {
+                                "type": "number",
+                                "description": "Distinct voter companies"
+                              },
+                              "mrrCents": {
+                                "type": "number",
+                                "description": "The monthly revenue of the voters' companies, in cents. Each company counts once."
+                              },
+                              "importance": {
+                                "type": "object",
+                                "properties": {
+                                  "nice": {
+                                    "type": "number"
+                                  },
+                                  "important": {
+                                    "type": "number"
+                                  },
+                                  "critical": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "nice",
+                                  "important",
+                                  "critical"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "voters",
+                              "companies",
+                              "mrrCents",
+                              "importance"
+                            ]
                           }
                         },
                         "required": [
@@ -66064,7 +67383,9 @@
                           "createdAt",
                           "updatedAt",
                           "deletedAt",
-                          "tags"
+                          "tags",
+                          "score",
+                          "demand"
                         ]
                       }
                     },
@@ -66298,6 +67619,49 @@
                           "color"
                         ]
                       }
+                    },
+                    "score": {
+                      "type": "object",
+                      "properties": {
+                        "reach": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "impact": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "effort": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "rice": {
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "description": "reach × impact × confidence ÷ 100 ÷ effort. Null when an input is missing."
+                        }
+                      },
+                      "required": [
+                        "reach",
+                        "impact",
+                        "confidence",
+                        "effort",
+                        "rice"
+                      ]
                     }
                   },
                   "required": [
@@ -66319,7 +67683,8 @@
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
-                    "tags"
+                    "tags",
+                    "score"
                   ]
                 }
               }
@@ -66895,6 +68260,49 @@
                         ]
                       }
                     },
+                    "score": {
+                      "type": "object",
+                      "properties": {
+                        "reach": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "impact": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "effort": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "rice": {
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "description": "reach × impact × confidence ÷ 100 ÷ effort. Null when an input is missing."
+                        }
+                      },
+                      "required": [
+                        "reach",
+                        "impact",
+                        "confidence",
+                        "effort",
+                        "rice"
+                      ]
+                    },
                     "hasVoted": {
                       "type": "boolean"
                     }
@@ -66919,6 +68327,7 @@
                     "updatedAt",
                     "deletedAt",
                     "tags",
+                    "score",
                     "hasVoted"
                   ]
                 }
@@ -67136,6 +68545,49 @@
                           "color"
                         ]
                       }
+                    },
+                    "score": {
+                      "type": "object",
+                      "properties": {
+                        "reach": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "impact": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "effort": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "rice": {
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "description": "reach × impact × confidence ÷ 100 ÷ effort. Null when an input is missing."
+                        }
+                      },
+                      "required": [
+                        "reach",
+                        "impact",
+                        "confidence",
+                        "effort",
+                        "rice"
+                      ]
                     }
                   },
                   "required": [
@@ -67157,7 +68609,8 @@
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
-                    "tags"
+                    "tags",
+                    "score"
                   ]
                 }
               }
@@ -67343,6 +68796,49 @@
                           "color"
                         ]
                       }
+                    },
+                    "score": {
+                      "type": "object",
+                      "properties": {
+                        "reach": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "impact": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "effort": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "rice": {
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "description": "reach × impact × confidence ÷ 100 ÷ effort. Null when an input is missing."
+                        }
+                      },
+                      "required": [
+                        "reach",
+                        "impact",
+                        "confidence",
+                        "effort",
+                        "rice"
+                      ]
                     }
                   },
                   "required": [
@@ -67364,7 +68860,8 @@
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
-                    "tags"
+                    "tags",
+                    "score"
                   ]
                 }
               }
@@ -67568,6 +69065,49 @@
                           "color"
                         ]
                       }
+                    },
+                    "score": {
+                      "type": "object",
+                      "properties": {
+                        "reach": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "impact": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "effort": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "rice": {
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "description": "reach × impact × confidence ÷ 100 ÷ effort. Null when an input is missing."
+                        }
+                      },
+                      "required": [
+                        "reach",
+                        "impact",
+                        "confidence",
+                        "effort",
+                        "rice"
+                      ]
                     }
                   },
                   "required": [
@@ -67589,7 +69129,8 @@
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
-                    "tags"
+                    "tags",
+                    "score"
                   ]
                 }
               }
@@ -67794,6 +69335,49 @@
                           "color"
                         ]
                       }
+                    },
+                    "score": {
+                      "type": "object",
+                      "properties": {
+                        "reach": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "impact": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "effort": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "rice": {
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "description": "reach × impact × confidence ÷ 100 ÷ effort. Null when an input is missing."
+                        }
+                      },
+                      "required": [
+                        "reach",
+                        "impact",
+                        "confidence",
+                        "effort",
+                        "rice"
+                      ]
                     }
                   },
                   "required": [
@@ -67815,7 +69399,8 @@
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
-                    "tags"
+                    "tags",
+                    "score"
                   ]
                 }
               }
@@ -68023,6 +69608,49 @@
                           "color"
                         ]
                       }
+                    },
+                    "score": {
+                      "type": "object",
+                      "properties": {
+                        "reach": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "impact": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "effort": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "rice": {
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "description": "reach × impact × confidence ÷ 100 ÷ effort. Null when an input is missing."
+                        }
+                      },
+                      "required": [
+                        "reach",
+                        "impact",
+                        "confidence",
+                        "effort",
+                        "rice"
+                      ]
                     }
                   },
                   "required": [
@@ -68044,7 +69672,8 @@
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
-                    "tags"
+                    "tags",
+                    "score"
                   ]
                 }
               }
@@ -68253,6 +69882,49 @@
                           "color"
                         ]
                       }
+                    },
+                    "score": {
+                      "type": "object",
+                      "properties": {
+                        "reach": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "impact": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "effort": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "rice": {
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "description": "reach × impact × confidence ÷ 100 ÷ effort. Null when an input is missing."
+                        }
+                      },
+                      "required": [
+                        "reach",
+                        "impact",
+                        "confidence",
+                        "effort",
+                        "rice"
+                      ]
                     }
                   },
                   "required": [
@@ -68274,7 +69946,8 @@
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
-                    "tags"
+                    "tags",
+                    "score"
                   ]
                 }
               }
@@ -68462,6 +70135,49 @@
                           "color"
                         ]
                       }
+                    },
+                    "score": {
+                      "type": "object",
+                      "properties": {
+                        "reach": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "impact": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "effort": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "rice": {
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "description": "reach × impact × confidence ÷ 100 ÷ effort. Null when an input is missing."
+                        }
+                      },
+                      "required": [
+                        "reach",
+                        "impact",
+                        "confidence",
+                        "effort",
+                        "rice"
+                      ]
                     }
                   },
                   "required": [
@@ -68483,7 +70199,8 @@
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
-                    "tags"
+                    "tags",
+                    "score"
                   ]
                 }
               }
@@ -68805,7 +70522,7 @@
           "Quills"
         ],
         "summary": "List a post's voters, newest first",
-        "description": "The votes the post's count is made of: for a merged post, those of the post it was merged into. Leaves out test customers and votes on posts the caller cannot see. Names come from the principal profile; emails are not returned.",
+        "description": "The votes the post's count is made of: for a merged post, those of the post it was merged into. Leaves out test customers and votes on posts the caller cannot see. Names come from the principal profile; emails are not returned. importance is how much the voter needs the post, when the voter said so.",
         "parameters": [
           {
             "schema": {
@@ -68891,6 +70608,18 @@
                               "null"
                             ]
                           },
+                          "importance": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "enum": [
+                              "nice",
+                              "important",
+                              "critical",
+                              null
+                            ]
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -68903,6 +70632,7 @@
                           "isAnonymous",
                           "sourceType",
                           "addedByPrincipalId",
+                          "importance",
                           "createdAt"
                         ]
                       }
@@ -71062,6 +72792,775 @@
         }
       }
     },
+    "/quills/{workspaceId}/feedback-signals": {
+      "get": {
+        "operationId": "listQuillsFeedbackSignals",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "List the feedback signals",
+        "description": "Feature requests and bug reports that the autopilot found in closed conversations and resolved tickets, newest first. A signal of a deleted ticket or a test customer is left out. A matched or resulting post is null when its board is not visible to you.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "accepted",
+                "dismissed"
+              ],
+              "default": "pending"
+            },
+            "required": false,
+            "name": "status",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "conversation",
+                "ticket"
+              ]
+            },
+            "required": false,
+            "name": "source",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 10000000,
+              "default": 0
+            },
+            "required": false,
+            "name": "offset",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of signals",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "accepted",
+                              "dismissed"
+                            ]
+                          },
+                          "source": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "conversation",
+                                  "ticket"
+                                ]
+                              },
+                              "id": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "number": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "id",
+                              "title",
+                              "number"
+                            ]
+                          },
+                          "customer": {
+                            "type": "object",
+                            "properties": {
+                              "principalId": {
+                                "type": "string"
+                              },
+                              "displayName": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "principalId",
+                              "displayName"
+                            ]
+                          },
+                          "excerpt": {
+                            "type": "string"
+                          },
+                          "suggestedTitle": {
+                            "type": "string"
+                          },
+                          "matchedPost": {
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "voteCount": {
+                                "type": "number"
+                              },
+                              "boardName": {
+                                "type": "string"
+                              },
+                              "statusName": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "title",
+                              "voteCount",
+                              "boardName",
+                              "statusName"
+                            ]
+                          },
+                          "resultingPost": {
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "voteCount": {
+                                "type": "number"
+                              },
+                              "boardName": {
+                                "type": "string"
+                              },
+                              "statusName": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "title",
+                              "voteCount",
+                              "boardName",
+                              "statusName"
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "decidedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "status",
+                          "source",
+                          "customer",
+                          "excerpt",
+                          "suggestedTitle",
+                          "matchedPost",
+                          "resultingPost",
+                          "createdAt",
+                          "decidedAt"
+                        ]
+                      }
+                    },
+                    "nextOffset": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextOffset"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/feedback-signals/{signalId}/post": {
+      "post": {
+        "operationId": "acceptQuillsFeedbackSignalAsPost",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Accept a signal as a new post",
+        "description": "Creates a post on a board that you can see, as createQuillsPost does: the customer is its author and first voter, you are the teammate who tracks it, and the excerpt is its content. The post and the decision commit together. 409 when the signal is not pending.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "signalId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "boardId": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "boardId",
+                  "title"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The accepted signal and its new post",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "accepted",
+                        "dismissed"
+                      ]
+                    },
+                    "resultingPostId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "status",
+                    "resultingPostId"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Signal, board or post not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The signal is not pending",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/feedback-signals/{signalId}/vote": {
+      "post": {
+        "operationId": "acceptQuillsFeedbackSignalAsVote",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Accept a signal as a vote on a post",
+        "description": "Adds the customer's vote to a post that you can see, usually the matched post, as addQuillsPostProxyVote does: a merged post's vote counts on the post it was merged into, and a vote that exists already is kept (`voteAdded` false). The vote and the decision commit together. 409 when the signal is not pending.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "signalId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "postId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "postId"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The accepted signal and the post that holds the vote",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "accepted",
+                        "dismissed"
+                      ]
+                    },
+                    "resultingPostId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "voteAdded": {
+                      "type": "boolean"
+                    },
+                    "voterPrincipalId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "status",
+                    "resultingPostId",
+                    "voteAdded",
+                    "voterPrincipalId"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Signal, board or post not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The signal is not pending",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/feedback-signals/{signalId}/dismiss": {
+      "post": {
+        "operationId": "dismissQuillsFeedbackSignal",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Dismiss a feedback signal",
+        "description": "Only a pending signal. 409 otherwise.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "signalId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The signal's new status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "accepted",
+                        "dismissed"
+                      ]
+                    },
+                    "resultingPostId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "status",
+                    "resultingPostId"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Signal not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The signal is not in the right status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/feedback-signals/{signalId}/restore": {
+      "post": {
+        "operationId": "restoreQuillsFeedbackSignal",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Restore a dismissed feedback signal",
+        "description": "Puts a dismissed signal back in the pending queue. 409 for a signal that is not dismissed.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "signalId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The signal's new status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "accepted",
+                        "dismissed"
+                      ]
+                    },
+                    "resultingPostId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "status",
+                    "resultingPostId"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Signal not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The signal is not in the right status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
     "/quills/{workspaceId}/webhooks": {
       "get": {
         "operationId": "listQuillsWebhooks",
@@ -71505,6 +74004,7 @@
                         "signal.created",
                         "signal.accepted",
                         "signal.dismissed",
+                        "signal.restored",
                         "survey.created",
                         "survey.updated",
                         "survey.closed",
@@ -72071,6 +74571,7 @@
                         "signal.created",
                         "signal.accepted",
                         "signal.dismissed",
+                        "signal.restored",
                         "survey.created",
                         "survey.updated",
                         "survey.closed",
@@ -138563,6 +141064,7 @@
                             "signal.created",
                             "signal.accepted",
                             "signal.dismissed",
+                            "signal.restored",
                             "survey.created",
                             "survey.updated",
                             "survey.closed",
@@ -144813,6 +147315,1056 @@
           },
           "404": {
             "description": "Survey not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/changelog/drafts": {
+      "post": {
+        "operationId": "draftQuillsChangelogFromPosts",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Draft a changelog entry from shipped posts with AI",
+        "description": "Returns a title and a Markdown body for review. Saves and publishes nothing; the usage log row is its record. Every post must be one the caller may see. 409 when AI is not configured, 502 when the provider fails.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "postIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "maxItems": 25
+                  }
+                },
+                "required": [
+                  "postIds"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The draft for review",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "body": {
+                      "type": "string",
+                      "description": "Markdown"
+                    },
+                    "postIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "requesterCount": {
+                      "type": "number",
+                      "description": "Distinct people who voted for the posts"
+                    }
+                  },
+                  "required": [
+                    "title",
+                    "body",
+                    "postIds",
+                    "requesterCount"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Post not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "AI is not configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          },
+          "502": {
+            "description": "The AI provider failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/changelog-engagement": {
+      "get": {
+        "operationId": "listQuillsChangelogEngagement",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "List published changelog entries with reaction and read counts",
+        "description": "Newest publish time first. At most 50 entries per page.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 10000000,
+              "default": 0
+            },
+            "required": false,
+            "name": "offset",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of entries with their engagement",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "publishedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "readCount": {
+                            "type": "number"
+                          },
+                          "reactions": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "emoji": {
+                                  "type": "string"
+                                },
+                                "count": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "emoji",
+                                "count"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title",
+                          "publishedAt",
+                          "readCount",
+                          "reactions"
+                        ]
+                      }
+                    },
+                    "nextOffset": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextOffset"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/boards/{boardId}/settings": {
+      "get": {
+        "operationId": "getQuillsBoardSettings",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get a board's voting settings",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "boardId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Voting settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "boardId": {
+                      "type": "string"
+                    },
+                    "voteDisplay": {
+                      "type": "string",
+                      "enum": [
+                        "count",
+                        "hidden"
+                      ],
+                      "description": "hidden leaves vote counts out of portal and widget responses. Voting still works."
+                    },
+                    "defaultSort": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "enum": [
+                        "votes",
+                        "newest",
+                        "random",
+                        null
+                      ],
+                      "description": "The order of the board's portal and widget posts when the caller names none. random is stable for one viewer for one UTC day. Null: newest in the API, the portal's own default in the web portal."
+                    }
+                  },
+                  "required": [
+                    "boardId",
+                    "voteDisplay",
+                    "defaultSort"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Board not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateQuillsBoardSettings",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Change a board's voting settings",
+        "description": "Changes only the given keys and keeps every other board setting. defaultSort null removes the board's default.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "boardId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "voteDisplay": {
+                    "type": "string",
+                    "enum": [
+                      "count",
+                      "hidden"
+                    ],
+                    "description": "hidden leaves vote counts out of portal and widget responses. Voting still works."
+                  },
+                  "defaultSort": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "votes",
+                      "newest",
+                      "random",
+                      null
+                    ],
+                    "description": "The order of the board's portal and widget posts when the caller names none. random is stable for one viewer for one UTC day. Null: newest in the API, the portal's own default in the web portal."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Voting settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "boardId": {
+                      "type": "string"
+                    },
+                    "voteDisplay": {
+                      "type": "string",
+                      "enum": [
+                        "count",
+                        "hidden"
+                      ],
+                      "description": "hidden leaves vote counts out of portal and widget responses. Voting still works."
+                    },
+                    "defaultSort": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "enum": [
+                        "votes",
+                        "newest",
+                        "random",
+                        null
+                      ],
+                      "description": "The order of the board's portal and widget posts when the caller names none. random is stable for one viewer for one UTC day. Null: newest in the API, the portal's own default in the web portal."
+                    }
+                  },
+                  "required": [
+                    "boardId",
+                    "voteDisplay",
+                    "defaultSort"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Board not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/posts/{postId}/demand": {
+      "get": {
+        "operationId": "getQuillsPostDemand",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Get the demand for a post",
+        "description": "Voters, their companies and revenue, the five segments with the most voters, and the importance that voters gave. For a merged post: the demand of the post it was merged into. Votes on boards that the caller cannot see and test customers' votes are left out.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "postId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Demand",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "voters": {
+                      "type": "number"
+                    },
+                    "companies": {
+                      "type": "number",
+                      "description": "Distinct voter companies"
+                    },
+                    "mrrCents": {
+                      "type": "number",
+                      "description": "The monthly revenue of the voters' companies, in cents. Each company counts once."
+                    },
+                    "importance": {
+                      "type": "object",
+                      "properties": {
+                        "nice": {
+                          "type": "number"
+                        },
+                        "important": {
+                          "type": "number"
+                        },
+                        "critical": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "nice",
+                        "important",
+                        "critical"
+                      ]
+                    },
+                    "postId": {
+                      "type": "string"
+                    },
+                    "segments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "voters": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "voters"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "voters",
+                    "companies",
+                    "mrrCents",
+                    "importance",
+                    "postId",
+                    "segments"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Post not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/feedback/revenue-at-risk": {
+      "get": {
+        "operationId": "getQuillsRevenueAtRisk",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Sum the revenue of companies with a critical vote on an open post",
+        "description": "An open post is live, not merged and has no complete or closed status. Votes count as in getQuillsPostDemand. Each company counts once.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revenue at risk",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "companies": {
+                      "type": "number"
+                    },
+                    "mrrCents": {
+                      "type": "number",
+                      "description": "Monthly revenue in cents"
+                    }
+                  },
+                  "required": [
+                    "companies",
+                    "mrrCents"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/ApiKeyRateLimited"
+          }
+        }
+      }
+    },
+    "/quills/{workspaceId}/posts/{postId}/score": {
+      "put": {
+        "operationId": "setQuillsPostScore",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Set a post's RICE inputs",
+        "description": "Desired state: send all four inputs. Null clears one. The response has the score with its RICE value.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "workspaceId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "postId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reach": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "maximum": 2147483647,
+                    "description": "People or events in a period"
+                  },
+                  "impact": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "enum": [
+                          0.25
+                        ]
+                      },
+                      {
+                        "type": "number",
+                        "enum": [
+                          0.5
+                        ]
+                      },
+                      {
+                        "type": "number",
+                        "enum": [
+                          1
+                        ]
+                      },
+                      {
+                        "type": "number",
+                        "enum": [
+                          2
+                        ]
+                      },
+                      {
+                        "type": "number",
+                        "enum": [
+                          3
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "0.25 minimal, 0.5 low, 1 medium, 2 high, 3 massive"
+                  },
+                  "confidence": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "maximum": 100,
+                    "description": "Percent"
+                  },
+                  "effort": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "minimum": 0.01,
+                    "maximum": 10000,
+                    "description": "Person-weeks"
+                  }
+                },
+                "required": [
+                  "reach",
+                  "impact",
+                  "confidence",
+                  "effort"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated post",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "boardId": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "content": {
+                      "type": "string"
+                    },
+                    "statusId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "principalId": {
+                      "type": "string"
+                    },
+                    "authorName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "ownerPrincipalId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "voteCount": {
+                      "type": "number"
+                    },
+                    "commentCount": {
+                      "type": "number"
+                    },
+                    "pinnedCommentId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "isCommentsLocked": {
+                      "type": "boolean"
+                    },
+                    "moderationState": {
+                      "type": "string"
+                    },
+                    "canonicalPostId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "eta": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "deletedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "color": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "color"
+                        ]
+                      }
+                    },
+                    "score": {
+                      "type": "object",
+                      "properties": {
+                        "reach": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "impact": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "effort": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "rice": {
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "description": "reach × impact × confidence ÷ 100 ÷ effort. Null when an input is missing."
+                        }
+                      },
+                      "required": [
+                        "reach",
+                        "impact",
+                        "confidence",
+                        "effort",
+                        "rice"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "boardId",
+                    "title",
+                    "content",
+                    "statusId",
+                    "principalId",
+                    "authorName",
+                    "ownerPrincipalId",
+                    "voteCount",
+                    "commentCount",
+                    "pinnedCommentId",
+                    "isCommentsLocked",
+                    "moderationState",
+                    "canonicalPostId",
+                    "eta",
+                    "createdAt",
+                    "updatedAt",
+                    "deletedAt",
+                    "tags",
+                    "score"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Post not found",
             "content": {
               "application/json": {
                 "schema": {

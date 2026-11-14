@@ -110,6 +110,10 @@ export function filterConditions(
   );
 }
 
+/** The RICE score of a `posts` row, or -1 when an input is missing. Every input is checked by the table. */
+const rice = (row: SQL) =>
+  sql`coalesce(${row}.score_reach::float8 * ${row}.score_impact * ${row}.score_confidence / 100 / ${row}.score_effort, -1)`;
+
 export const sorts = {
   newest: {
     order: [desc(posts.createdAt), desc(posts.id)],
@@ -126,7 +130,27 @@ export const sorts = {
     key: sql`(${posts.voteCount}, ${posts.createdAt}, ${posts.id}) <`,
     cursor: sql`cursor_post.vote_count, cursor_post.created_at, cursor_post.id`,
   },
+  // RFC 0003, D5: reach × impact × confidence% ÷ effort. A post without all four inputs comes last.
+  rice: {
+    order: [desc(rice(sql`${posts}`)), desc(posts.createdAt), desc(posts.id)],
+    key: sql`(${rice(sql`${posts}`)}, ${posts.createdAt}, ${posts.id}) <`,
+    cursor: sql`${rice(sql`cursor_post`)}, cursor_post.created_at, cursor_post.id`,
+  },
 };
+export type Sort = (typeof sorts)[keyof typeof sorts];
+
+/**
+ * A shuffled order that stays the same for one seed (RFC 0003, D6). The caller makes the seed
+ * from the viewer and the day, so a viewer pages through one order and sees a new one tomorrow.
+ */
+export function randomSort(seed: string): Sort {
+  const rank = (id: SQL) => sql`md5(${seed} || ${id}::text)`;
+  return {
+    order: [asc(rank(sql`${posts.id}`)), asc(posts.id)],
+    key: sql`(${rank(sql`${posts.id}`)}, ${posts.id}) >`,
+    cursor: sql`${rank(sql`cursor_post.id`)}, cursor_post.id`,
+  };
+}
 
 /**
  * Rows after the cursor post. Its values are read in SQL, so timestamps keep microseconds.
@@ -134,6 +158,8 @@ export const sorts = {
  */
 export const afterCursor = (
   cursor: TypeId<"post">,
-  sort: keyof typeof sorts,
-): SQL =>
-  sql`${sorts[sort].key} (select ${sorts[sort].cursor} from ${posts} cursor_post where cursor_post.id = ${sql.param(cursor, posts.id)})`;
+  sort: keyof typeof sorts | Sort,
+): SQL => {
+  const by = typeof sort === "string" ? sorts[sort] : sort;
+  return sql`${by.key} (select ${by.cursor} from ${posts} cursor_post where cursor_post.id = ${sql.param(cursor, posts.id)})`;
+};

@@ -1,6 +1,16 @@
 // Generated from apps/docs/openapi.json by scripts/quills-web/sync-operation-routes.mjs.
 export const quillsOperationRoutes = [
   {
+    operationId: "acceptQuillsFeedbackSignalAsPost",
+    method: "POST",
+    path: "/api/quills/{workspaceId}/feedback-signals/{signalId}/post",
+  },
+  {
+    operationId: "acceptQuillsFeedbackSignalAsVote",
+    method: "POST",
+    path: "/api/quills/{workspaceId}/feedback-signals/{signalId}/vote",
+  },
+  {
     operationId: "acceptQuillsPortalInvite",
     method: "POST",
     path: "/api/quills-public/{workspace}/portal/invites/{inviteId}/accept",
@@ -831,6 +841,11 @@ export const quillsOperationRoutes = [
     path: "/api/quills-public/{workspace}/portal/files/{fileId}",
   },
   {
+    operationId: "dismissQuillsFeedbackSignal",
+    method: "POST",
+    path: "/api/quills/{workspaceId}/feedback-signals/{signalId}/dismiss",
+  },
+  {
     operationId: "dismissQuillsInboxTranslationSuggestion",
     method: "POST",
     path: "/api/quills/{workspaceId}/conversations/{conversationId}/translation/dismiss",
@@ -844,6 +859,11 @@ export const quillsOperationRoutes = [
     operationId: "draftQuillsAttributeDescriptions",
     method: "POST",
     path: "/api/quills/{workspaceId}/conversation-attributes/description-draft",
+  },
+  {
+    operationId: "draftQuillsChangelogFromPosts",
+    method: "POST",
+    path: "/api/quills/{workspaceId}/changelog/drafts",
   },
   {
     operationId: "editQuillsPortalOwnComment",
@@ -969,6 +989,11 @@ export const quillsOperationRoutes = [
     operationId: "getQuillsBoard",
     method: "GET",
     path: "/api/quills/{workspaceId}/boards/{boardId}",
+  },
+  {
+    operationId: "getQuillsBoardSettings",
+    method: "GET",
+    path: "/api/quills/{workspaceId}/boards/{boardId}/settings",
   },
   {
     operationId: "getQuillsBrandingSettings",
@@ -1221,6 +1246,11 @@ export const quillsOperationRoutes = [
     path: "/api/quills-public/{workspace}/support/unread",
   },
   {
+    operationId: "getQuillsMyWeeklyDigestPreference",
+    method: "GET",
+    path: "/api/quills-public/{workspace}/user/weekly-digest",
+  },
+  {
     operationId: "getQuillsNotificationPreferences",
     method: "GET",
     path: "/api/quills/{workspaceId}/notification-preferences",
@@ -1251,6 +1281,11 @@ export const quillsOperationRoutes = [
     path: "/api/quills-public/{workspace}/portal/changelog/{entryId}",
   },
   {
+    operationId: "getQuillsPortalChangelogUnread",
+    method: "GET",
+    path: "/api/quills-public/{workspace}/portal/changelog/unread",
+  },
+  {
     operationId: "getQuillsPortalFile",
     method: "GET",
     path: "/api/quills-public/{workspace}/portal/files/{fileId}",
@@ -1274,6 +1309,11 @@ export const quillsOperationRoutes = [
     operationId: "getQuillsPost",
     method: "GET",
     path: "/api/quills/{workspaceId}/posts/{postId}",
+  },
+  {
+    operationId: "getQuillsPostDemand",
+    method: "GET",
+    path: "/api/quills/{workspaceId}/posts/{postId}/demand",
   },
   {
     operationId: "getQuillsPostFilterCounts",
@@ -1379,6 +1419,11 @@ export const quillsOperationRoutes = [
     operationId: "getQuillsQuinnToolMetrics",
     method: "GET",
     path: "/api/quills/{workspaceId}/assistant/analytics/tools",
+  },
+  {
+    operationId: "getQuillsRevenueAtRisk",
+    method: "GET",
+    path: "/api/quills/{workspaceId}/feedback/revenue-at-risk",
   },
   {
     operationId: "getQuillsRoadmap",
@@ -1519,6 +1564,11 @@ export const quillsOperationRoutes = [
     operationId: "getQuillsWidgetChangelogEntry",
     method: "GET",
     path: "/api/quills-public/{workspace}/widget/changelog/{entryId}",
+  },
+  {
+    operationId: "getQuillsWidgetChangelogUnread",
+    method: "GET",
+    path: "/api/quills-public/{workspace}/widget/changelog/unread",
   },
   {
     operationId: "getQuillsWidgetConfig",
@@ -1746,6 +1796,11 @@ export const quillsOperationRoutes = [
     path: "/api/quills/{workspaceId}/changelog/categories",
   },
   {
+    operationId: "listQuillsChangelogEngagement",
+    method: "GET",
+    path: "/api/quills/{workspaceId}/changelog-engagement",
+  },
+  {
     operationId: "listQuillsCompanies",
     method: "GET",
     path: "/api/quills/{workspaceId}/companies",
@@ -1819,6 +1874,11 @@ export const quillsOperationRoutes = [
     operationId: "listQuillsExportRunsDownload",
     method: "GET",
     path: "/api/quills/{workspaceId}/transfer/export-runs/{runId}/download",
+  },
+  {
+    operationId: "listQuillsFeedbackSignals",
+    method: "GET",
+    path: "/api/quills/{workspaceId}/feedback-signals",
   },
   {
     operationId: "listQuillsFlaggedMessages",
@@ -1969,6 +2029,11 @@ export const quillsOperationRoutes = [
     operationId: "listQuillsPortalMentionSuggestions",
     method: "GET",
     path: "/api/quills-public/{workspace}/mentions/suggest",
+  },
+  {
+    operationId: "listQuillsPortalMyFeedback",
+    method: "GET",
+    path: "/api/quills-public/{workspace}/portal/my-feedback",
   },
   {
     operationId: "listQuillsPortalPostComments",
@@ -2351,6 +2416,11 @@ export const quillsOperationRoutes = [
     path: "/api/quills/{workspaceId}/notifications/{notificationId}/read",
   },
   {
+    operationId: "markQuillsPortalChangelogRead",
+    method: "PUT",
+    path: "/api/quills-public/{workspace}/portal/changelog/read",
+  },
+  {
     operationId: "markQuillsTicketRead",
     method: "POST",
     path: "/api/quills/{workspaceId}/tickets/{ticketId}/read",
@@ -2359,6 +2429,11 @@ export const quillsOperationRoutes = [
     operationId: "markQuillsTicketUnread",
     method: "POST",
     path: "/api/quills/{workspaceId}/tickets/{ticketId}/unread",
+  },
+  {
+    operationId: "markQuillsWidgetChangelogRead",
+    method: "PUT",
+    path: "/api/quills-public/{workspace}/widget/changelog/read",
   },
   {
     operationId: "markQuillsWidgetConversationRead",
@@ -2731,6 +2806,11 @@ export const quillsOperationRoutes = [
     path: "/api/quills/{workspaceId}/conversation-tags/{tagId}/restore",
   },
   {
+    operationId: "restoreQuillsFeedbackSignal",
+    method: "POST",
+    path: "/api/quills/{workspaceId}/feedback-signals/{signalId}/restore",
+  },
+  {
     operationId: "restoreQuillsHelpCenterArticle",
     method: "POST",
     path: "/api/quills/{workspaceId}/help-center/articles/{articleId}/restore",
@@ -3071,9 +3151,19 @@ export const quillsOperationRoutes = [
     path: "/api/quills-public/{workspace}/posts/{postId}/subscription",
   },
   {
+    operationId: "setQuillsMyWeeklyDigestPreference",
+    method: "PUT",
+    path: "/api/quills-public/{workspace}/user/weekly-digest",
+  },
+  {
     operationId: "setQuillsOfficeHours",
     method: "PUT",
     path: "/api/quills/{workspaceId}/support/office-hours",
+  },
+  {
+    operationId: "setQuillsPortalChangelogReaction",
+    method: "PUT",
+    path: "/api/quills-public/{workspace}/portal/changelog/{entryId}/reactions",
   },
   {
     operationId: "setQuillsPortalCommentReaction",
@@ -3104,6 +3194,11 @@ export const quillsOperationRoutes = [
     operationId: "setQuillsPostOwner",
     method: "PUT",
     path: "/api/quills/{workspaceId}/posts/{postId}/owner",
+  },
+  {
+    operationId: "setQuillsPostScore",
+    method: "PUT",
+    path: "/api/quills/{workspaceId}/posts/{postId}/score",
   },
   {
     operationId: "setQuillsPostStatus",
@@ -3169,6 +3264,11 @@ export const quillsOperationRoutes = [
     operationId: "setQuillsWebSourceEnabled",
     method: "PATCH",
     path: "/api/quills/{workspaceId}/assistant/web-sources/{webSourceId}",
+  },
+  {
+    operationId: "setQuillsWidgetChangelogReaction",
+    method: "PUT",
+    path: "/api/quills-public/{workspace}/widget/changelog/{entryId}/reactions",
   },
   {
     operationId: "setQuillsWidgetCommentReaction",
@@ -3489,6 +3589,11 @@ export const quillsOperationRoutes = [
     operationId: "updateQuillsBoard",
     method: "PATCH",
     path: "/api/quills/{workspaceId}/boards/{boardId}",
+  },
+  {
+    operationId: "updateQuillsBoardSettings",
+    method: "PATCH",
+    path: "/api/quills/{workspaceId}/boards/{boardId}/settings",
   },
   {
     operationId: "updateQuillsBrandingSettings",

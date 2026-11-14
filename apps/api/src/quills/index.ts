@@ -29,6 +29,13 @@ import supportPresence from "./support/presence";
 import supportLinkPreview from "./support/link-preview";
 import supportReadBatch from "./support/read-batch";
 import testConversations from "./support/test-conversations";
+// RFC 0003 lane L5.
+import changelogAi from "./feedback/changelog-ai";
+import changelogEngagement from "./feedback/changelog-engagement";
+// RFC 0003, lane L3.
+import boardSettings from "./feedback/board-settings";
+import demand from "./feedback/demand";
+import scores from "./feedback/scores";
 // RFC 0003, lane L6.
 import taskSync from "./integrations/task-sync";
 import { brandText } from "@kaneo/branding";
@@ -106,6 +113,13 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", apps)
   .route("/", agentChannels)
   .route("/", surveys)
+  // RFC 0003 lane L5.
+  .route("/", changelogAi)
+  .route("/", changelogEngagement)
+  // RFC 0003, lane L3.
+  .route("/", boardSettings)
+  .route("/", demand)
+  .route("/", scores)
   // RFC 0003, lane L6.
   .route("/", taskSync)
   .openapi(...context);

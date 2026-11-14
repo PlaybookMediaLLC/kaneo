@@ -8,6 +8,7 @@ import {
   summarizeTicket,
   translateRequested,
 } from "./content";
+import { extractSignals } from "../../jobs/handlers/signals";
 import { runApprovedAction } from "./connector-calls";
 import { answerRun } from "./runs";
 import type { Work } from "./shared";
@@ -33,4 +34,7 @@ export const assistantWork: Record<string, Work> = {
   "help_center.article_published": articlePublished,
   // RFC 0001 lane G1: the Slack assistant's answer to a stored hook (slack.ts).
   "integration.hook_received": answerSlackHook,
+  // RFC 0003 lane L1: feedback autopilot (jobs/handlers/signals.ts).
+  "conversation.status_changed": extractSignals,
+  "ticket.status_changed": extractSignals,
 };

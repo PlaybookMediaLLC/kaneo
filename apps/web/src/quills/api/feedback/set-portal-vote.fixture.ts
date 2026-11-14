@@ -7,6 +7,7 @@ export const setPortalVoteFixture = {
         voted: false,
         voteCount: 0,
         changed: false,
+        importance: null,
       },
       ...overrides,
     }) satisfies SetPortalVoteResponse,

@@ -14,6 +14,7 @@ import { fanOutIntegrations, runIntegrationJob } from "./handlers/integration";
 import { runAiJob } from "./handlers/ai";
 import { runDomainCheckJob } from "./handlers/domain-check";
 import { runGitHubCommentJob } from "./handlers/github-comment";
+import { runDigestJob } from "./handlers/digest";
 import { runMailJob } from "./handlers/mail";
 import { runNotificationJob } from "./handlers/notification";
 import { runWebhookJob } from "./handlers/webhook";
@@ -50,7 +51,11 @@ const handlers: Record<
         : "crm" in (job.payload as object)
           ? runCrmNoteJob(workspaceId, job)
           : runGitHubCommentJob(workspaceId, job),
-  "quills.mail": runMailJob,
+  // The weekly digest (handlers/digest.ts) shares the mail queue; its job names a week.
+  "quills.mail": (workspaceId, job) =>
+    "digest" in (job.payload as object)
+      ? runDigestJob(workspaceId, job)
+      : runMailJob(workspaceId, job),
   "quills.notification": runNotificationJob,
   "quills.domain_check": runDomainCheckJob,
   "quills.wipe": runWipeJob,

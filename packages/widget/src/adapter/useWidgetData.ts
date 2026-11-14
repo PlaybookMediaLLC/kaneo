@@ -18,6 +18,7 @@ import {
   toConversation,
   toMessage,
   toPost,
+  toReactions,
   VOTE_EMOJI,
 } from "./map.js";
 import { writes, type Sent } from "./writes.js";
@@ -95,6 +96,10 @@ export function useWidgetData({
   const events = useRef(host);
   events.current = host;
   const unread = useRef(-1);
+  /** Unread changelog updates; the launcher badge shows them with the unread replies. */
+  const updatesUnread = useRef(0);
+  const badge = () =>
+    events.current.unread(Math.max(0, unread.current) + updatesUnread.current);
   /** The threads are loaded; until then a poll only reports the unread count. */
   const loaded = useRef(false);
   /** The unread count changed since the threads were last read. */
@@ -130,9 +135,17 @@ export function useWidgetData({
     const { unreadCount } = await send.unread(signal);
     if (!signal.aborted && unreadCount !== unread.current) {
       unread.current = unreadCount;
-      events.current.unread(unreadCount);
+      badge();
     }
     return unreadCount;
+  };
+  // ponytail: read once per session and after a mark, not polled; updates ship rarely.
+  const reportUpdatesUnread = async (signal: AbortSignal) => {
+    const { count } = await send.updatesUnread(signal);
+    if (!signal.aborted) {
+      updatesUnread.current = count;
+      badge();
+    }
   };
   const load = (signal: AbortSignal) =>
     run(async () => {
@@ -187,12 +200,15 @@ export function useWidgetData({
     const controller = new AbortController();
     abort.current = controller;
     unread.current = -1;
+    updatesUnread.current = 0;
     loaded.current = false;
     stale.current = false;
     if (active) {
       setState({ session, data: emptySnapshot, loadState: "loading" });
       void load(controller.signal).catch(() => {});
     }
+    if (surfaces.changelog)
+      void reportUpdatesUnread(controller.signal).catch(() => {});
     if (!surfaces.messenger) return () => controller.abort();
     if (!active) void reportUnread(controller.signal).catch(() => {});
     // No push channel for widget visitors: poll the unread count, then read only what changed.
@@ -378,6 +394,38 @@ export function useWidgetData({
                 : comment,
             ),
           }));
+        }),
+    }),
+    ...(available.changelog && {
+      onReactToUpdate: (entryId: string, emoji: string) =>
+        run(async (signal) => {
+          const reacted = !data.current.updates
+            .find((item) => item.id === entryId)
+            ?.reactions?.find((reaction) => reaction.emoji === emoji)?.reacted;
+          const result = await send.reactToUpdate(
+            entryId,
+            emoji,
+            reacted,
+            signal,
+          );
+          patch(signal, (value) => ({
+            ...value,
+            updates: value.updates.map((item) =>
+              item.id === entryId
+                ? { ...item, reactions: toReactions(result.reactions) }
+                : item,
+            ),
+          }));
+        }),
+      // The read mark covers every update, so one read clears them all.
+      onReadUpdate: () =>
+        run(async (signal) => {
+          await send.readUpdates(signal);
+          patch(signal, (value) => ({
+            ...value,
+            updates: value.updates.map((item) => ({ ...item, unread: false })),
+          }));
+          await reportUpdatesUnread(signal);
         }),
     }),
     ...(available.help && {

@@ -24,6 +24,8 @@ describe("FeedbackBoardPage", () => {
     canSubmit: true,
     canVote: true,
     canComment: true,
+    voteDisplay: "count" as const,
+    defaultSort: null,
   };
   const prepareBoard = (signedIn = false) => {
     const api = mockApi();
@@ -146,6 +148,29 @@ describe("FeedbackBoardPage", () => {
       const filtered = new URL(api.calls("listQuillsPortalPosts")[1]!.url);
       expect(filtered.searchParams.get("stage")).toBe("planned");
       expect(filtered.searchParams.get("boardId")).toBe("board_test_1");
+    });
+    it("uses the board's default sort and hides counts the board hides", async () => {
+      const api = mockApi();
+      const { voteCount: _count, ...hidden } = getPortalPostFixture.ok({
+        id: "post_test_1",
+        title: "Export history",
+      });
+      api.reply(
+        listPortalBoardsFixture.ok({
+          items: [{ ...board, voteDisplay: "hidden", defaultSort: "random" }],
+        }),
+      );
+      api.reply(listPortalStatusesFixture.ok());
+      api.reply(listPortalPostsFixture.ok({ items: [hidden] }));
+      const view = renderPage(FeedbackBoardPage, meta, options);
+      await view.findByText(hidden.title);
+      const listed = new URL(api.calls("listQuillsPortalPosts")[0]!.url);
+      expect(listed.searchParams.get("sort")).toBe("random");
+      expect(view.getByRole("combobox", { name: "Sort" })).toHaveTextContent(
+        "Shuffled",
+      );
+      expect(view.getByRole("button", { name: "Vote" })).toBeVisible();
+      expect(view.queryByText(/\d+ votes?/)).not.toBeInTheDocument();
     });
     it("does not fetch a board without portal access", async () => {
       const api = mockApi();

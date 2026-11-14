@@ -46,6 +46,7 @@ import {
 } from "../portal/unsubscribe-token";
 import { crmNoteDue } from "../integrations/crm-notes";
 import { githubCommentDue } from "./handlers/github-comment";
+import { shippedSubscribers } from "./handlers/shipped-mail";
 import { statusSubscribers } from "./handlers/status-mail";
 import { supportSubscribers } from "./handlers/support-mail";
 import { enqueueQuillsJob, type QuillsQueue } from "./queue";
@@ -399,6 +400,7 @@ export const subscribers: Partial<Record<string, Subscribers>> = {
   },
   ...supportSubscribers,
   ...statusSubscribers,
+  ...shippedSubscribers,
 };
 
 export async function loadEvent(db: Database, eventId: string) {

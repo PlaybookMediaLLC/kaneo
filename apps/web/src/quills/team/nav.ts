@@ -10,4 +10,9 @@ export const teamNavigation: readonly TeamNavEntry[] = [
   { path: "/duplicates", labelKey: "duplicates.nav" },
   { path: "/insights", labelKey: "insights.nav" },
   { path: "/surveys", labelKey: "surveys.title" },
+  { path: "/autopilot", labelKey: "autopilot.nav" },
+  // RFC 0003 lane L5.
+  { path: "/changelog", labelKey: "team-changelog.nav" },
+  // RFC 0003, lane L3.
+  { path: "/triage", labelKey: "team-triage.nav" },
 ];

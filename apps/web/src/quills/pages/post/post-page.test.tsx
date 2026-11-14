@@ -174,6 +174,38 @@ describe("PostPage", () => {
       expect(api.calls("setQuillsPortalVote")).toHaveLength(1);
     });
 
+    it("asks how important the post is after a vote and sends the answer", async () => {
+      const api = mockApi();
+      const post = getPortalPostFixture.ok({
+        id: "post_test_1",
+        title: "Export history",
+        voted: true,
+        canVote: true,
+      });
+      api.reply(post);
+      api.reply(listPortalPostCommentsFixture.ok());
+      api.reply(findPortalSimilarPostsFixture.ok());
+      api.reply(
+        setPortalVoteFixture.ok({
+          postId: "post_test_1",
+          voted: true,
+          voteCount: 1,
+          importance: "critical",
+        }),
+      );
+      api.reply({ ...post, importance: "critical" });
+      const view = renderPage(PostPage, meta, options);
+      await view.findByRole("group", { name: /how important/i });
+      press("Blocker");
+      expect(
+        await view.findByRole("button", { name: "Blocker", pressed: true }),
+      ).toBeInTheDocument();
+      expect(await api.calls("setQuillsPortalVote")[0]!.json()).toEqual({
+        voted: true,
+        importance: "critical",
+      });
+    });
+
     it("lists related requests without the post itself", async () => {
       const api = mockApi();
       api.reply(
