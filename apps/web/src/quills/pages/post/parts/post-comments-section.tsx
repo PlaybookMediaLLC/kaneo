@@ -43,8 +43,8 @@ export function PostCommentsSection(props: PostCommentsSectionProps) {
   const create = useCreatePortalComment(props.viewer);
   const react = useSetPortalCommentReaction(props.viewer);
   const signedIn = props.viewer.kind === "user";
-  // English readers get the plain comment, with no translation query for each comment.
-  const translatable = browserLocale() !== null;
+  // English readers, and instances without AI, get the plain comment and no translation query.
+  const translatable = props.translatable !== false && browserLocale() !== null;
   // Comments load oldest first, so a new one can fall past the loaded pages.
   // ponytail: an edit of such a comment shows the old text until the page reloads;
   // keep the edit response here if people edit fresh comments on long threads.
@@ -89,7 +89,6 @@ export function PostCommentsSection(props: PostCommentsSectionProps) {
       body={
         translatable ? (
           <TranslatedText
-            translatable={props.translatable}
             workspaceId={props.workspaceId}
             viewer={props.viewer}
             target={{ commentId: comment.id }}
