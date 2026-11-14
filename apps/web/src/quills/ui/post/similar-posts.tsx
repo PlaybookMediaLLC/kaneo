@@ -2,6 +2,7 @@ import { useId } from "react";
 import { useTranslation } from "react-i18next";
 import { portalHref } from "../../core/portal-href";
 import { ArrowUpIcon } from "../arrow-up-icon";
+import { ConfirmAction } from "../confirm-action";
 import { StatusIcon } from "./status-icon";
 
 export interface SimilarPostsProps {
@@ -16,6 +17,9 @@ export interface SimilarPostsProps {
   }>;
   /** Posts the viewer voted for get a mark. */
   votedIds?: ReadonlySet<string>;
+  /** Posts that offer a vote instead of a new post, unless the viewer voted for them. */
+  voteIds?: ReadonlySet<string>;
+  onVote?: (postId: string) => Promise<void>;
 }
 
 /** A compact list of posts, such as matches for a new title or an update's requests. */
@@ -24,6 +28,8 @@ export function SimilarPosts({
   titleKey = "feedback.similar",
   posts,
   votedIds,
+  voteIds,
+  onVote,
 }: SimilarPostsProps) {
   const { t } = useTranslation("quills");
   const headingId = useId();
@@ -38,9 +44,10 @@ export function SimilarPosts({
       </h2>
       <ul className="-mx-3">
         {posts.map((post) => (
-          <li key={post.id}>
+          <li key={post.id} className="flex items-center gap-2">
             <a
-              className="flex items-center gap-4 rounded-xl px-3 py-2.5 transition-colors hover:bg-muted/60"
+              id={`${headingId}-${post.id}`}
+              className="flex min-w-0 flex-1 items-center gap-4 rounded-xl px-3 py-2.5 transition-colors hover:bg-muted/60"
               href={portalHref(workspaceId, `posts/${post.id}`)}
             >
               <span className="inline-flex h-7 min-w-13 items-center justify-center gap-1.5 rounded-full border border-border px-2.5 text-xs tabular-nums">
@@ -62,6 +69,20 @@ export function SimilarPosts({
                 <StatusIcon stage={post.stage} className="size-3.5" />
               ) : null}
             </a>
+            {onVote && voteIds?.has(post.id) && !votedIds?.has(post.id) ? (
+              <ConfirmAction
+                labelKey="duplicates.voteInsteadFor"
+                labelValues={{ title: post.title }}
+                className="h-7 rounded-full px-3 text-xs"
+                onConfirm={async () => {
+                  await onVote(post.id);
+                  // The button leaves once the vote counts, so focus moves to the post.
+                  document.getElementById(`${headingId}-${post.id}`)?.focus();
+                }}
+              >
+                {t("duplicates.voteInstead")}
+              </ConfirmAction>
+            ) : null}
           </li>
         ))}
       </ul>
