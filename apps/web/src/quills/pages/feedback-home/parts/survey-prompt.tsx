@@ -46,6 +46,8 @@ export function SurveyPrompt({ workspaceId, viewer }: SurveyPromptProps) {
       onDismiss={() => {
         const next = [...dismissed, survey.id];
         setDismissed(next);
+        // A dismissed thanks state makes room for the next waiting survey.
+        setAnswered(null);
         try {
           sessionStorage.setItem(storageKey(workspaceId), JSON.stringify(next));
         } catch {
@@ -60,6 +62,9 @@ export function SurveyPrompt({ workspaceId, viewer }: SurveyPromptProps) {
           });
           setAnswered(survey);
         } catch (problem) {
+          // An answer from another tab already counts: thank the customer.
+          if ((problem as PortalProblem).kind === "conflict")
+            return void setAnswered(survey);
           return problem as PortalProblem;
         }
       }}

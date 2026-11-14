@@ -12,7 +12,8 @@
 		"openAnswer": "Your answer",
 		"required": "Choose an answer",
 		"submit": "Send answer",
-		"thanks": "Thanks for your answer"
+		"thanks": "Thanks for your answer",
+		"writeAnswer": "Write an answer"
 	},
 	"create": {
 		"options": "Answers, one on each line",

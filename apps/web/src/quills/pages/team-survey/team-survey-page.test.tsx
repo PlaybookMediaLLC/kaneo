@@ -116,15 +116,37 @@ describe("TeamSurveyPage", () => {
       ).toBeInTheDocument();
     });
 
+    it("closes an active survey", async () => {
+      const api = mockApi();
+      api.reply(results({ survey: { ...survey, status: "active" } }));
+      api.reply(setSurveyStatusFixture.ok({ status: "closed" }));
+      api.reply(results({ survey: { ...survey, status: "closed" } }));
+      const view = renderPage(TeamSurveyPage, meta);
+      await view.findByRole("button", { name: "Close survey" });
+      press("Close survey");
+      await waitFor(() =>
+        expect(api.calls("setQuillsSurveyStatus")).toHaveLength(1),
+      );
+      expect(await api.calls("setQuillsSurveyStatus")[0]!.json()).toEqual({
+        status: "closed",
+      });
+      await waitFor(() =>
+        expect(
+          view.queryByRole("button", { name: "Close survey" }),
+        ).not.toBeInTheDocument(),
+      );
+    });
+
     it("deletes a draft and links back to the list", async () => {
       const api = mockApi();
       api.reply(results());
       api.reply(deleteSurveyFixture.ok());
-      api.reply({ message: "Survey not found" }, 404);
       const view = renderPage(TeamSurveyPage, meta);
       await view.findByRole("button", { name: "Delete draft" });
       press("Delete draft");
       expect(await view.findByText("The draft is deleted")).toBeVisible();
+      // The deleted survey's results are not read again.
+      expect(api.calls("getQuillsSurveyResults")).toHaveLength(1);
       expect(
         view.getAllByRole("link", { name: "All surveys" })[0],
       ).toHaveAttribute(

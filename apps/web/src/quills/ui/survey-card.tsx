@@ -55,7 +55,7 @@ export function SurveyCard({
     .object({ answer: z.string(), comment: z.string().trim().max(2000) })
     .refine((values) => Boolean(open ? values.comment : values.answer), {
       path: [open ? "comment" : "answer"],
-      message: t("surveys.card.required"),
+      message: t(open ? "surveys.card.writeAnswer" : "surveys.card.required"),
     });
   const dismiss = (
     <Button type="button" variant="ghost" onClick={onDismiss}>

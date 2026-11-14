@@ -53,7 +53,7 @@ describe("SurveyPrompt", () => {
     );
   });
 
-  it("shows the conflict when the customer already answered", async () => {
+  it("thanks the customer who already answered in another tab", async () => {
     const api = mockApi();
     api.reply(getPortalActiveSurveyFixture.ok({ survey }));
     api.reply({ message: "You already answered this survey" }, 409);
@@ -62,8 +62,21 @@ describe("SurveyPrompt", () => {
     );
     fireEvent.click(await view.findByRole("radio", { name: "5" }));
     press("Send answer");
+    expect(await view.findByText("Thanks for your answer")).toBeVisible();
+    expect(view.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("shows a failed answer and keeps the choice", async () => {
+    const api = mockApi();
+    api.reply(getPortalActiveSurveyFixture.ok({ survey }));
+    api.reply({ message: "Server error" }, 500);
+    const view = renderComponent(
+      <SurveyPrompt workspaceId="workspace_test_1" viewer={user} />,
+    );
+    fireEvent.click(await view.findByRole("radio", { name: "2" }));
+    press("Send answer");
     expect(await view.findByRole("alert")).toBeInTheDocument();
-    expect(view.queryByText("Thanks for your answer")).not.toBeInTheDocument();
+    expect(view.getByRole("radio", { name: "2" })).toBeChecked();
   });
 
   it("hides a dismissed survey for the rest of the session", async () => {
@@ -83,6 +96,10 @@ describe("SurveyPrompt", () => {
       <SurveyPrompt workspaceId="workspace_test_1" viewer={user} />,
     );
     await waitFor(() => expect(api.calls()).toHaveLength(2));
+    await waitFor(() => expect(again.queryClient.isFetching()).toBe(0));
+    expect(
+      again.queryClient.getQueryCache().getAll()[0]?.state.data,
+    ).toMatchObject({ survey: { id: survey.id } });
     expect(again.queryByRole("heading")).not.toBeInTheDocument();
   });
 });

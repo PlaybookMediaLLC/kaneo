@@ -21,12 +21,6 @@ describe("useDeleteSurvey", () => {
         "team",
         "listSurveys",
       ),
-      quillsOperationKey(
-        "workspace_test_1",
-        { kind: "anonymous" },
-        "team",
-        "getSurveyResults",
-      ),
     ],
   });
 });

@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
+import type { CreateSurveyRequest } from "../../../api/team/create-survey";
 import type { PortalProblem } from "../../../core/types";
 import { PortalForm } from "../../../ui/portal-form";
 import { PortalSelectContent } from "../../../ui/portal-select-content";
@@ -29,15 +30,11 @@ const pollAnswersFit = (answers: string[]) =>
   new Set(answers).size === answers.length &&
   answers.every((answer) => answer.length <= 200);
 
-/** The create body of the API: a poll sends its answers, other types send none. */
-export interface CreateSurveyValues {
-  type: SurveyType;
-  question: string;
-  options?: string[];
-}
-
 export interface CreateSurveyFormProps {
-  onSubmit: (values: CreateSurveyValues) => Promise<PortalProblem | void>;
+  /** The create body of the API: a poll sends its answers, other types send none. */
+  onSubmit: (
+    values: CreateSurveyRequest["json"],
+  ) => Promise<PortalProblem | void>;
 }
 
 export function CreateSurveyForm({ onSubmit }: CreateSurveyFormProps) {
@@ -50,7 +47,7 @@ export function CreateSurveyForm({ onSubmit }: CreateSurveyFormProps) {
         .trim()
         .min(1, t("surveys.create.questionRequired"))
         .max(500),
-      options: z.string().max(4400),
+      options: z.string(),
     })
     .refine(
       (values) =>
