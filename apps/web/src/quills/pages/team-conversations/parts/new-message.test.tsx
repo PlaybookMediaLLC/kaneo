@@ -73,7 +73,7 @@ describe("NewMessage", () => {
       view.getByRole("heading", { level: 2, name: "New message" }),
     ).toBeInTheDocument();
     fill("To", "ada");
-    fireEvent.click(await view.findByRole("button", { name: /Ada Customer/ }));
+    fireEvent.click(await view.findByRole("option", { name: /Ada Customer/ }));
     expect(
       view.getByRole("button", { name: "Remove Ada Customer" }),
     ).toBeInTheDocument();
@@ -103,7 +103,7 @@ describe("NewMessage", () => {
       await view.findByText("No customer matches this search."),
     ).toBeInTheDocument();
     fill("To", "ada");
-    fireEvent.click(await view.findByRole("button", { name: /Ada Customer/ }));
+    fireEvent.click(await view.findByRole("option", { name: /Ada Customer/ }));
     fill("Write a message…", "Hello");
     press("Send");
     expect(await view.findByRole("alert")).toHaveTextContent(
