@@ -16,16 +16,12 @@ describe("SuggestionProperties", () => {
     );
   });
 
-  it("names a pair without an AI rating", () => {
+  it("names a dismissed pair", () => {
     const view = renderComponent(
       <SuggestionProperties
-        suggestion={suggestionsFixture.suggestion({
-          status: "dismissed",
-          llmConfidence: null,
-        })}
+        suggestion={suggestionsFixture.suggestion({ status: "dismissed" })}
       />,
     );
     expect(view.getByText("Dismissed")).toBeInTheDocument();
-    expect(view.getByText("Not rated")).toBeInTheDocument();
   });
 });

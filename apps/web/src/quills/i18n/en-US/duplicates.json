@@ -15,7 +15,6 @@
 	"merge": "Merge",
 	"merged": "Merged “{{source}}” into “{{target}}”.",
 	"nav": "Duplicates",
-	"noConfidence": "Not rated",
 	"pair": "“{{source}}” and “{{target}}”",
 	"pending": "Pending",
 	"percent": "{{percent}}%",

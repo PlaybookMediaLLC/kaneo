@@ -25,11 +25,9 @@ export function SuggestionProperties({
         {t(statusKeys[suggestion.status])}
       </PropertyRow>
       <PropertyRow label={t("duplicates.confidence")}>
-        {suggestion.llmConfidence === null
-          ? t("duplicates.noConfidence")
-          : t("duplicates.percent", {
-              percent: Math.round(suggestion.llmConfidence * 100),
-            })}
+        {t("duplicates.percent", {
+          percent: Math.round(suggestion.llmConfidence * 100),
+        })}
       </PropertyRow>
       <PropertyRow label={t("duplicates.found")}>
         <time dateTime={suggestion.createdAt}>
