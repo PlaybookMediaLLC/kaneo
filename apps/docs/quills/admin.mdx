@@ -51,6 +51,31 @@ Use `GET /quills/{workspaceId}/portal/invites` to view invitations. For a pendin
 An accepted invitation cannot be canceled through this endpoint. To remove that customer's access,
 block the customer. Treat invitation links as private and never paste them into public logs or tickets.
 
+## Ask customers a survey
+
+Open **Feedback > Surveys** in the workspace to create and run in-app surveys. You need
+`quills:create` to create a draft, `quills:update` to activate or close a survey, and
+`quills:delete` to delete a draft. `quills:read` shows the results.
+
+1. Select **New survey**. Choose a type and write the question:
+   - Net Promoter Score: a score from 0 to 10. The score is % promoters (9-10) minus % detractors (0-6).
+   - Satisfaction (CSAT): a score from 1 to 5. The score is the % of 4 and 5.
+   - Customer effort (CES): a score from 1 to 7. The score is the average.
+   - Product-market fit: three fixed answers. The score is the % of "Very disappointed".
+   - Poll: 2 to 20 answers that you write, one on each line.
+   - Open question: a text answer.
+2. Open the draft and select **Activate survey**.
+3. Select **Close survey** to stop new answers. A closed survey keeps its results.
+
+Signed-in customers see the latest active survey that they did not answer, above the posts on the
+feedback page. Identified widget visitors see it on the widget home tab. Each person answers a survey once.
+A customer can also add a comment of up to 2,000 characters. The results page shows the latest
+20 comments with the name of each person.
+
+To show a survey only to some customers, send `targetSegmentIds` with
+`POST /quills/{workspaceId}/surveys` or `PATCH /quills/{workspaceId}/surveys/{surveyId}`. Only
+members of those segments then see the survey. The Surveys page does not select segments yet.
+
 ## Branding and supported URLs
 
 The portal uses the public logo, supported theme colors, and header display name from workspace
