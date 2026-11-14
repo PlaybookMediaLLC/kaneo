@@ -26,8 +26,8 @@ export interface RequestRowProps {
   comments?: number;
   /** The board name, shown as a chip with a dot. */
   board?: string | null;
-  /** An ISO time. */
-  time: string;
+  /** An ISO time. Left out for a row without a date, such as a board. */
+  time?: string;
   /** The author or the customer. */
   person?: InboxPerson | null;
   /** The stacked card of the list pane beside an open item. */
@@ -62,11 +62,11 @@ export function RequestRow(props: RequestRowProps) {
     props.comments,
     <MessageCircle aria-hidden="true" className="size-3.5" />,
   );
-  const date = (
+  const date = props.time ? (
     <time dateTime={props.time} className="shrink-0">
       {shortDate(props.time, i18n.language)}
     </time>
-  );
+  ) : null;
   const avatar = props.person ? (
     <PersonAvatar
       colored
