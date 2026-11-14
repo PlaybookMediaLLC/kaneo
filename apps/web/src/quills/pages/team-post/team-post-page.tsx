@@ -117,6 +117,7 @@ export function TeamPostPage({
         properties={
           ready ? (
             <PostProperties
+              key={postId}
               workspaceId={workspaceId}
               post={data}
               onScoreSaved={() => void post.refetch()}
@@ -156,7 +157,7 @@ export function TeamPostPage({
                     post={data}
                     boards={boards.data.items}
                   />
-                  <CommentBox workspaceId={workspaceId} postId={postId} />
+                  <CommentBox key={postId} {...param} />
                   <PostThread
                     workspaceId={workspaceId}
                     post={data}

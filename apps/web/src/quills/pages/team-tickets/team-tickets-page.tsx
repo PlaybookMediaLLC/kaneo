@@ -125,7 +125,11 @@ export function TeamTicketsPage({
         itemOpen={Boolean(ticketId) || creating}
         properties={
           ticket.data ? (
-            <TicketProperties ticket={ticket.data} statuses={statusItems} />
+            <TicketProperties
+              key={ticketId}
+              ticket={ticket.data}
+              statuses={statusItems}
+            />
           ) : null
         }
         propertiesLabel={t("team-tickets.properties")}

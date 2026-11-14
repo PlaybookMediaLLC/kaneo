@@ -92,4 +92,10 @@ const queryClient = new QueryClient({
   },
 });
 
+// Quills: a change event refetches only the views on screen. A closed view keeps its invalidated
+// cache, so it refetches when it opens again; unchanged Quills data still comes from the cache.
+queryClient.setQueryDefaults(["quills"], {
+  refetchOnMount: (query) => query.state.isInvalidated,
+});
+
 export default queryClient;

@@ -23,6 +23,7 @@ const workspacePath = /^\/(?:dashboard\/workspace|feedback)\/([^/]+)/;
 const MAX_RETRY_DELAY = 30_000;
 const BASE_DELAY = 1000;
 const WS_PING_INTERVAL_MS = 30_000;
+const QUILLS_REFETCH_MS = 300;
 
 /**
  * Maintains a user-scoped WebSocket connection for receiving user-targeted
@@ -44,6 +45,7 @@ export function useUserWebSocket() {
 
     // A previous session's delayed socket events must not control this session.
     let disposed = false;
+    const quillsRefetch = new Map<string, ReturnType<typeof setTimeout>>();
     let userRevoked = false;
     let activeSocket: WebSocket | null = null;
     let retryDelay = BASE_DELAY;
@@ -134,8 +136,13 @@ export function useUserWebSocket() {
             void queryClient.invalidateQueries({
               queryKey: ["workspace-status"],
             });
-            for (const workspaceId of message.workspaceIds)
+            for (const workspaceId of message.workspaceIds) {
               reconcileProjectAccess(queryClient, workspaceId, () => !disposed);
+              // Each connect sends this sync: Quills changes missed while the socket was down reload.
+              void queryClient.invalidateQueries({
+                queryKey: ["quills", workspaceId, userId],
+              });
+            }
             refreshOrganizationState();
             const path = pathnameRef.current;
             const current =
@@ -196,22 +203,33 @@ export function useUserWebSocket() {
             message.type === "QUILLS_CHANGED" &&
             typeof message.workspaceId === "string"
           ) {
-            // quills-web keys start with ["quills", workspaceId, userId].
-            void queryClient.invalidateQueries({
-              queryKey: ["quills", message.workspaceId, userId],
-            });
-            void queryClient.invalidateQueries({
-              predicate: (query) =>
-                [
-                  "quills-context",
-                  "quills-links",
-                  "quills-teams",
-                  "quills-exports",
-                  "quills-jobs",
-                ].includes(String(query.queryKey[0])) &&
-                query.queryKey[1] === userId &&
-                query.queryKey[2] === message.workspaceId,
-            });
+            const workspaceId = message.workspaceId;
+            // A burst of changes refetches once: the first event opens a short window and the
+            // others in it join that refetch.
+            if (!quillsRefetch.has(workspaceId))
+              quillsRefetch.set(
+                workspaceId,
+                setTimeout(() => {
+                  quillsRefetch.delete(workspaceId);
+                  if (disposed) return;
+                  // quills-web keys start with ["quills", workspaceId, userId].
+                  void queryClient.invalidateQueries({
+                    queryKey: ["quills", workspaceId, userId],
+                  });
+                  void queryClient.invalidateQueries({
+                    predicate: (query) =>
+                      [
+                        "quills-context",
+                        "quills-links",
+                        "quills-teams",
+                        "quills-exports",
+                        "quills-jobs",
+                      ].includes(String(query.queryKey[0])) &&
+                      query.queryKey[1] === userId &&
+                      query.queryKey[2] === workspaceId,
+                  });
+                }, QUILLS_REFETCH_MS),
+              );
           }
           if (message.type === "NOTIFICATION_CREATED") {
             queryClient.invalidateQueries({ queryKey: ["notifications"] });
@@ -243,6 +261,7 @@ export function useUserWebSocket() {
 
     return () => {
       disposed = true;
+      for (const timer of quillsRefetch.values()) clearTimeout(timer);
       clearPing();
       if (retryTimeout !== null) {
         clearTimeout(retryTimeout);

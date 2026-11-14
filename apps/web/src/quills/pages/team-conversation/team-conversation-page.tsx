@@ -142,6 +142,7 @@ export function TeamConversationPage(props: TeamConversationPageProps) {
         properties={
           data ? (
             <ConversationProperties
+              key={conversationId}
               workspaceId={workspaceId}
               conversation={data}
             />

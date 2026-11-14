@@ -49,7 +49,7 @@
 		{
 			"file": "apps/web/src/hooks/use-user-websocket.ts",
 			"state": "existing",
-			"lines": "the QUILLS_CHANGED block: invalidate the legacy quills-* keys and the quills-web keys [\"quills\", workspaceId, userId] of the current user; RFC 0004: the workspacePath pattern also matches the teammate app (/feedback/{id}), so an access revocation leaves it as it leaves a Kaneo workspace page",
+			"lines": "the QUILLS_CHANGED block: invalidate the legacy quills-* keys and the quills-web keys [\"quills\", workspaceId, userId] of the current user; RFC 0004: the workspacePath pattern also matches the teammate app (/feedback/{id}), so an access revocation leaves it as it leaves a Kaneo workspace page; the QUILLS_CHANGED invalidation waits a 300 ms window so a burst refetches once; WORKSPACE_ACCESS_SYNC (sent on each connect) also invalidates the quills-web keys of each workspace",
 			"plannedChange": "none"
 		},
 		{

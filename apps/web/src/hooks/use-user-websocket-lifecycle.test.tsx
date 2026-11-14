@@ -114,15 +114,22 @@ describe("user WebSocket lifecycle", () => {
   });
   it("invalidates Quills data only for the current user and changed workspace", () => {
     renderHook(useUserWebSocket);
-    act(() =>
-      TestSocket.instances[0].onmessage?.({
-        data: JSON.stringify({
-          type: "QUILLS_CHANGED",
-          workspaceId: "workspace",
-          eventId: "event",
+    const change = (eventId: string) =>
+      act(() =>
+        TestSocket.instances[0].onmessage?.({
+          data: JSON.stringify({
+            type: "QUILLS_CHANGED",
+            workspaceId: "workspace",
+            eventId,
+          }),
         }),
-      }),
-    );
+      );
+    // Two changes in one burst refetch once, after a short window.
+    change("event");
+    change("event-2");
+    expect(client.invalidateQueries).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(300));
+    expect(client.invalidateQueries).toHaveBeenCalledTimes(2);
     const predicate = client.invalidateQueries.mock.calls.at(-1)?.[0].predicate;
     expect(
       predicate({ queryKey: ["quills-context", "user-a", "workspace"] }),

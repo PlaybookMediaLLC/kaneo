@@ -94,3 +94,20 @@ describe("global unauthorized handling", () => {
     expect(handleUnauthorized).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("Quills query defaults", () => {
+  it("refetches an invalidated Quills view when it opens again, and only then", () => {
+    const refetchOnMount = queryClient.getQueryDefaults([
+      "quills",
+      "workspace",
+      "user",
+    ]).refetchOnMount as (query: {
+      state: { isInvalidated: boolean };
+    }) => boolean;
+    expect(refetchOnMount({ state: { isInvalidated: true } })).toBe(true);
+    expect(refetchOnMount({ state: { isInvalidated: false } })).toBe(false);
+    expect(queryClient.getQueryDefaults(["projects"]).refetchOnMount).toBe(
+      undefined,
+    );
+  });
+});
