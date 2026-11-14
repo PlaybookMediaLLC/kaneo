@@ -25,6 +25,9 @@ export const OMITTED_TABLES = [
   "custom_domains",
   // An app is bound to an API key of this instance (RFC 0001, D12); an import must not bind it again.
   "apps",
+  // A cache of machine translations (RFC 0003, D10). The target translates again on request,
+  // and the bounded archive keeps its room for source data.
+  "content_translations",
 ] as const;
 export const portableTables = Object.values(schema)
   .filter((value) => is(value, PgTable))

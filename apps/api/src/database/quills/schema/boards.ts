@@ -41,6 +41,8 @@ export const boards = quillsSchema
         .default(DEFAULT_BOARD_ACCESS)
         .notNull(),
       settings: jsonb("settings").$type<BoardSettings>().default({}).notNull(),
+      // RFC 0003, D11: null means every viewer that the access tier lets in.
+      visibleSegmentIds: jsonb("visible_segment_ids").$type<string[] | null>(),
       createdAt: timestamp("created_at", { withTimezone: true })
         .defaultNow()
         .notNull(),
@@ -53,6 +55,10 @@ export const boards = quillsSchema
     (table) => [
       // Note: boards_slug_unique constraint already provides uniqueness; no separate index needed
       index("boards_deleted_at_idx").on(table.deletedAt),
+      check(
+        "boards_visible_segment_ids_array_check",
+        sql`${table.visibleSegmentIds} IS NULL OR jsonb_typeof(${table.visibleSegmentIds}) = 'array'`,
+      ),
       primaryKey({ columns: [table.workspaceId, table.id] }),
       unique().on(table.workspaceId, table.slug),
       workspacePolicy(table.workspaceId),

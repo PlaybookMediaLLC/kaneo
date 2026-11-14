@@ -175,8 +175,11 @@ when adding an event; do not cast around the existing allowed values. The helper
 writes canonical audit, outbox event and job together. Runtime audit history is
 append-only. Do not send mail, webhooks or WebSocket updates before commit.
 
-The [worker](src/quills/jobs/worker.ts) currently dispatches `quills.event` cache
-invalidations only. Imported queue tables are not implemented workers. A feature
+The [worker](src/quills/jobs/worker.ts) delivers each `quills.event` (cache invalidation
+and the customer stream) and fans it out to jobs. The handlers in `src/quills/jobs/handlers/`
+run webhooks, integration deliveries, GitHub comments, mail, in-app notifications, domain
+checks, wipes, transfers, workflows, AI work and the scheduled sweeps. Imported queue tables
+are not implemented workers. A feature
 needing mail or webhook dispatch must add a validated handler, retry/idempotency
 behavior and tests; do not turn on old imported jobs implicitly. Preserve leases,
 retry limits, workspace isolation and the [retention rules](src/quills/jobs/retention.ts).

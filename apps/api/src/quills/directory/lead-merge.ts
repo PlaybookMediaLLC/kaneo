@@ -64,6 +64,19 @@ const steps: { table: string; column: string; unique?: string[] }[] = [
   { table: "ticket_activity", column: "principal_id" },
   { table: "changelog_subscriptions", column: "principal_id", unique: [] },
   { table: "status_subscriptions", column: "principal_id", unique: [] },
+  // RFC 0003. These cascade on a principal delete, so a missed table would lose rows, not fail.
+  { table: "feedback_signals", column: "principal_id" },
+  {
+    table: "survey_responses",
+    column: "principal_id",
+    unique: ["survey_id"],
+  },
+  {
+    table: "changelog_reactions",
+    column: "principal_id",
+    unique: ["changelog_entry_id", "emoji"],
+  },
+  { table: "changelog_reads", column: "principal_id", unique: [] },
 ];
 
 /** Profile fields on the customer that the lead fills only when the customer has none. */

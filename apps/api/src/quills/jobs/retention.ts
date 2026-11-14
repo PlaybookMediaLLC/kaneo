@@ -42,6 +42,8 @@ export async function pruneQuillsWorkspace(
     // Attempts and their results go; the operation row stays, as its operation_key stops a second
     // external create, and keeps the remote link the sync history shows.
     sql`DELETE FROM quills.integration_sync_attempts WHERE (workspace_id,id) IN (SELECT workspace_id,id FROM quills.integration_sync_attempts WHERE finished_at<now()-${policy.logs}*interval '1 day' ORDER BY finished_at LIMIT 1000)`,
+    // The translation cache (RFC 0003): an edit leaves the old row behind, and a request translates again.
+    sql`DELETE FROM quills.content_translations WHERE (workspace_id,id) IN (SELECT workspace_id,id FROM quills.content_translations WHERE created_at<now()-${policy.logs}*interval '1 day' ORDER BY created_at LIMIT 1000)`,
     // Expired, canceled and pending-but-expired invites. An accepted invite grants portal access.
     sql`DELETE FROM quills.portal_invites WHERE (workspace_id,id) IN (SELECT workspace_id,id FROM quills.portal_invites WHERE status<>'accepted' AND expires_at<now()-${policy.logs}*interval '1 day' LIMIT 1000)`,
   ];
