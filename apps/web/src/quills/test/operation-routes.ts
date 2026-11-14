@@ -1061,6 +1061,11 @@ export const quillsOperationRoutes = [
     path: "/api/quills/{workspaceId}/support/routing",
   },
   {
+    operationId: "getQuillsConversationTicketLink",
+    method: "GET",
+    path: "/api/quills/{workspaceId}/conversations/{conversationId}/ticket",
+  },
+  {
     operationId: "getQuillsConversationTyping",
     method: "GET",
     path: "/api/quills/{workspaceId}/conversations/{conversationId}/typing",

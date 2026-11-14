@@ -1,0 +1,48 @@
+import type { GetConversationResponse } from "./get-conversation";
+export const getConversationFixture = {
+  ok: (overrides: Partial<GetConversationResponse> = {}) =>
+    ({
+      ...{
+        id: "id_test_1",
+        status: "open",
+        priority: "none",
+        channel: "value",
+        source: "value",
+        subject: null,
+        lastMessagePreview: null,
+        lastMessageAt: "2026-01-01T00:00:00.000Z",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: null,
+        visitorPrincipalId: "visitor_principal_id_test_1",
+        visitorName: null,
+        visitorEmail: null,
+        isTest: false,
+        assignedAgentPrincipalId: null,
+        assignedTeamId: null,
+        unreadCount: 0,
+        waitingSince: null,
+        snoozedUntil: null,
+        resolvedAt: null,
+        endReason: null,
+        endNote: null,
+        spamReason: null,
+        csatRating: null,
+        agentLastReadAt: null,
+        visitorLastReadAt: null,
+        tags: [],
+        attributes: [],
+        translation: {
+          enabled: false,
+          detectedLanguage: null,
+          dismissedAt: null,
+        },
+        summary: null,
+        csatComment: null,
+      },
+      ...overrides,
+    }) satisfies GetConversationResponse,
+  problem: (status: 401 | 403 | 404 | 409 | 429) => ({
+    status,
+    body: { message: "Request could not be completed" },
+  }),
+};
