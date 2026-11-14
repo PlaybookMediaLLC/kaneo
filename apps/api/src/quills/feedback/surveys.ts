@@ -30,6 +30,7 @@ import {
 } from "../framework/define-route";
 import { idList, page, pageQuery, someField } from "./schemas";
 import { PMF_OPTIONS, summarize, type SurveyType } from "./surveys-rules";
+import { notTest } from "./visibility";
 
 // Teammate routes for in-app surveys (RFC 0003, D8). A survey starts as a draft, goes active
 // once, and closes once. Only a draft can be deleted; responses stay with a closed survey.
@@ -65,7 +66,7 @@ const fields = {
 const columns = {
   ...fields,
   // Qualified by hand: a single-table select names its own columns without the table.
-  responseCount: sql<number>`(select count(*)::int from ${surveyResponses} where ${surveyResponses.surveyId} = ${surveys}.${sql.identifier("id")})`,
+  responseCount: sql<number>`(select count(*)::int from ${surveyResponses} where ${surveyResponses.surveyId} = ${surveys}.${sql.identifier("id")} and ${notTest(surveyResponses.principalId)})`,
 };
 const params = z.object({ surveyId: flexibleToTypeIdSchema("survey") });
 const question = z.string().trim().min(1).max(500);
@@ -343,7 +344,11 @@ const getSurveyResults = defineQuillsRoute({
       .from(surveys)
       .where(eq(surveys.id, params.surveyId));
     if (!found) throw notFound();
-    const mine = eq(surveyResponses.surveyId, params.surveyId);
+    // Answers of test customers (widget previews) stay out of the results, as in every report.
+    const mine = and(
+      eq(surveyResponses.surveyId, params.surveyId),
+      notTest(surveyResponses.principalId),
+    );
     // A choice outside the current options (a poll that changed) counts only in the total.
     const counts = await db
       .select({

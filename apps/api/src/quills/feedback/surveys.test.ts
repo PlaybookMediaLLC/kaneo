@@ -500,6 +500,30 @@ describe.skipIf(!url)("Quills in-app surveys", () => {
     expect(nps.scores).toHaveLength(11);
     expect(nps.scores[10]).toEqual({ value: 10, count: 2 });
     expect(nps.survey.responseCount).toBe(5);
+    // The answer of a test customer (a widget preview) changes no result.
+    const previewId = await activeSurvey({ type: "nps", question: "Preview?" });
+    await env().scoped(env().a, async (db, actor) => {
+      const [tester] = await db
+        .insert(principal)
+        .values({
+          type: "user",
+          role: "user",
+          displayName: "Tester",
+          createdAt: new Date(),
+          testOwnerPrincipalId: actor.principalId,
+        })
+        .returning({ id: principal.id });
+      await db.insert(surveyResponses).values({
+        surveyId: previewId as TypeId<"survey">,
+        principalId: tester!.id,
+        score: 0,
+        comment: "Answer of a test customer",
+      });
+    });
+    const preview = await respond(previewId, [{ score: 10 }]);
+    expect(preview).toMatchObject({ total: 1, score: 100 });
+    expect(preview.survey.responseCount).toBe(1);
+    expect(JSON.stringify(preview)).not.toContain("Answer of a test customer");
     // A 6 is a detractor and a 7 is passive: 2 promoters and 3 detractors of 7 give -14.
     const negative = await respond(
       await activeSurvey({ type: "nps", question: "NPS below zero?" }),
