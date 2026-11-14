@@ -35,7 +35,11 @@ describe("SignalActions", () => {
     const { view, calls } = render();
     expect(
       view.getByRole("group", { name: "Signal actions" }),
-    ).toBeInTheDocument();
+    ).toHaveTextContent(/^Pending/);
+    // The vote is the main button at the end of the bar.
+    expect(view.getAllByRole("button").at(-1)).toHaveAccessibleName(
+      /^Add vote/,
+    );
     press("Accept as new post");
     press("Add vote");
     press("Dismiss");
@@ -51,6 +55,9 @@ describe("SignalActions", () => {
       signal: signalsFixture.signal({ matchedPost: null }),
     });
     expect(view.queryByRole("button", { name: "Add vote" })).toBeNull();
+    expect(view.getAllByRole("button").at(-1)).toHaveAccessibleName(
+      /^Accept as new post/,
+    );
   });
 
   it("offers only a restore for a dismissed signal, and nothing for an accepted one", () => {

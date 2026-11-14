@@ -9,22 +9,12 @@ export interface SignalDetailProps {
 
 const muted = "text-sm text-muted-foreground";
 
-/** The open signal: its title, the customer, the customer's words and the matching post. */
+/** The body of the open signal under its header: the customer's words and the matching post. */
 export function SignalDetail({ signal }: SignalDetailProps) {
   const { t } = useTranslation("quills");
   const { matchedPost, resultingPost } = signal;
   return (
-    <article className="grid gap-4 px-6 py-5">
-      <header className="grid gap-1">
-        <h1 tabIndex={-1} className="text-lg font-semibold outline-none">
-          {signal.suggestedTitle}
-        </h1>
-        <p className={muted}>
-          {signal.customer.displayName
-            ? t("autopilot.from", { name: signal.customer.displayName })
-            : t("autopilot.anonymous")}
-        </p>
-      </header>
+    <article className="mx-auto grid w-full max-w-3xl gap-4 px-6 py-5">
       <blockquote className="border-s-2 border-border ps-3">
         {signal.excerpt}
       </blockquote>

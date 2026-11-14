@@ -4,21 +4,17 @@ import { signalsFixture } from "../signals.fixture";
 import { SignalDetail } from "./signal-detail";
 
 describe("SignalDetail", () => {
-  it("shows the title, the customer, the excerpt and the match", () => {
+  it("shows the excerpt and the match", () => {
     const view = renderComponent(
       <SignalDetail signal={signalsFixture.signal()} />,
     );
-    expect(
-      view.getByRole("heading", { level: 1, name: "Dark theme" }),
-    ).toBeInTheDocument();
-    expect(view.getByText("From Ada")).toBeInTheDocument();
     expect(view.getByText("Please add a dark mode.")).toBeInTheDocument();
     expect(
       view.getByText("Matches “Dark mode” · Ideas · 1 vote"),
     ).toBeInTheDocument();
   });
 
-  it("names an anonymous customer and the post that an accepted signal became", () => {
+  it("names the post that an accepted signal became", () => {
     const view = renderComponent(
       <SignalDetail
         signal={signalsFixture.signal({
@@ -29,7 +25,6 @@ describe("SignalDetail", () => {
         })}
       />,
     );
-    expect(view.getByText("From an anonymous customer")).toBeInTheDocument();
     expect(view.getByText("Added to “Dark mode”")).toBeInTheDocument();
     expect(view.queryByText(/^Matches/)).toBeNull();
   });

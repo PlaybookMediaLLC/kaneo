@@ -185,7 +185,16 @@ describe("TeamAutopilotPage", () => {
       api.reply(listFeedbackSignalsFixture.ok());
       const view = renderPage(TeamAutopilotPage, meta);
       await view.findByText("Nothing is here yet.");
-      fireEvent.click(view.getByRole("tab", { name: "Dismissed" }));
+      press("Filters");
+      fireEvent.click(
+        await view.findByRole("menuitemradio", { name: "Dismissed" }),
+      );
+      expect(
+        await view.findByRole("heading", {
+          level: 1,
+          name: "Dismissed signals",
+        }),
+      ).toBeInTheDocument();
       fireEvent.click(await view.findByRole("link", { name: /Dark theme/ }));
       const dismissed = new URL(api.calls("listQuillsFeedbackSignals")[1]!.url);
       expect(dismissed.searchParams.get("status")).toBe("dismissed");
