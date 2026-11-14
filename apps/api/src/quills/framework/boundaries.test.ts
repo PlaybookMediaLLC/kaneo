@@ -184,6 +184,7 @@ describe("Quills module boundaries", () => {
       matching(quills, /from "(\.\.\/)+database(\/index|\/schema)?"/),
     ).toEqual([
       // Local-only portal demo seed; its environment guard is tested beside it.
+      "dev/demo-logins.ts",
       "dev/seed-portal.ts",
       // An app's API key in public.apikey: mint, scope and undo (RFC 0001, D14).
       "framework/app-keys.ts",

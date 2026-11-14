@@ -25,6 +25,7 @@ import {
 import { postStatuses } from "../../database/quills/schema/statuses";
 import { recordQuillsChange } from "../events";
 import { reconcileComponents } from "../content/status/shared";
+import { seedDemoLogins } from "./demo-logins";
 import { seedPortalShowcase } from "./showcase";
 
 config();
@@ -95,6 +96,7 @@ export async function seedPortal(reset = false) {
       emailVerified: true,
     })
     .onConflictDoNothing();
+  await seedDemoLogins(USER_ID);
   await db
     .insert(workspaceTable)
     .values({

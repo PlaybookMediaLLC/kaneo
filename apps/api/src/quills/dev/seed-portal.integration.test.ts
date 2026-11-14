@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vite-plus/test";
-import { count, eq, sql } from "drizzle-orm";
+import bcrypt from "bcryptjs";
+import { and, count, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as schema from "../../database/schema";
@@ -32,6 +33,7 @@ import {
   stopContract,
 } from "../framework/contract";
 import { seedPortal } from "./seed-portal";
+import { DEMO_CUSTOMER, seedDemoLogins } from "./demo-logins";
 
 let pool: Pool;
 vi.mock("../../database/index", () => ({
@@ -81,6 +83,14 @@ describe.skipIf(!url)("portal demo seed integration", () => {
         .delete(schema.userTable)
         .where(eq(schema.userTable.id, "quills_portal_demo_user"));
     }
+    await db
+      .delete(schema.userTable)
+      .where(
+        and(
+          eq(schema.userTable.id, DEMO_CUSTOMER.id),
+          eq(schema.userTable.email, DEMO_CUSTOMER.email),
+        ),
+      );
     vi.unstubAllEnvs();
     await stopContract();
   }, 60000);
@@ -171,15 +181,15 @@ describe.skipIf(!url)("portal demo seed integration", () => {
     ]);
     let featuredId = "";
     await withQuillsWorkspace(identity, async (db) => {
-      expect(await db.select().from(kvStore)).toHaveLength(1);
+      expect(await db.select().from(kvStore)).toHaveLength(2);
       expect(
         await db
           .select({ count: count() })
           .from(events)
           .where(eq(events.type, "workspace.imported")),
-      ).toEqual([{ count: 1 }]);
+      ).toEqual([{ count: 2 }]);
       expect(await db.select({ count: count() }).from(posts)).toEqual([
-        { count: 121 },
+        { count: 124 },
       ]);
       expect(
         await db.select({ count: count() }).from(helpCenterArticles),
@@ -242,14 +252,14 @@ describe.skipIf(!url)("portal demo seed integration", () => {
         .where(eq(posts.title, "Linear integration"));
       expect(featured!.content).toBe("An edit made while exploring the demo.");
       expect(await db.select({ count: count() }).from(posts)).toEqual([
-        { count: 121 },
+        { count: 124 },
       ]);
       expect(
         await db
           .select({ count: count() })
           .from(auditLog)
           .where(eq(auditLog.eventType, "workspace.imported")),
-      ).toEqual([{ count: 1 }]);
+      ).toEqual([{ count: 2 }]);
     });
     const env = contractEnv();
     await expect(env.scoped(env.b, seedPortalShowcase)).rejects.toThrow(
@@ -259,4 +269,79 @@ describe.skipIf(!url)("portal demo seed integration", () => {
       expect(await db.select({ id: posts.id }).from(posts)).toEqual([]);
     });
   }, 30000);
+  it("gives every teammate page data, sets the demo sign-ins and reseeds on reset", async () => {
+    const identity = {
+      workspaceId: "quills_portal_demo",
+      userId: "quills_portal_demo_user",
+    };
+    const summary = () =>
+      withQuillsWorkspace(identity, async (db) => {
+        const result = await db.execute(sql`select
+          (select count(*)::int from quills.conversations where status = 'open' and assigned_agent_principal_id is null) as unassigned,
+          (select count(*)::int from quills.conversations where status = 'open' and assigned_agent_principal_id is not null) as assigned,
+          (select count(*)::int from quills.conversations where status = 'snoozed' and snoozed_until > now()) as snoozed,
+          (select count(*)::int from quills.conversations where status = 'closed') as closed,
+          (select count(*)::int from quills.conversation_messages) as messages,
+          (select count(distinct status_id)::int from quills.tickets) as "ticketStatuses",
+          (select count(distinct priority)::int from quills.tickets) as "ticketPriorities",
+          (select string_agg(distinct status, ',') from quills.feedback_signals) as signals,
+          (select count(*)::int from quills.post_merge_suggestions where status = 'pending') as duplicates,
+          (select count(*)::int from quills.posts where score_reach is not null) as scored,
+          (select count(*) > 0 from quills.post_votes where importance is not null) as importance,
+          (select count(*)::int from quills.survey_responses) as responses,
+          (select count(*)::int from quills.boards where visible_segment_ids is not null) as "segmentBoards",
+          (select count(*)::int from quills.user_segments) as members,
+          (select count(*) > 0 from quills.changelog_reactions) as reactions,
+          (select count(*)::int from quills.changelog_reads) as reads,
+          (select count(*)::int from quills.posts) as posts`);
+        return result.rows[0];
+      });
+    const seeded = {
+      unassigned: 4,
+      assigned: 3,
+      snoozed: 2,
+      closed: 3,
+      messages: 36,
+      ticketStatuses: 7,
+      ticketPriorities: 5,
+      signals: "accepted,dismissed,pending",
+      duplicates: 4,
+      scored: 12,
+      importance: true,
+      responses: 74,
+      segmentBoards: 1,
+      members: 48,
+      reactions: true,
+      reads: 60,
+      posts: 124,
+    };
+    expect(await summary()).toEqual(seeded);
+
+    await seedDemoLogins(identity.userId, "local-demo-password");
+    const accounts = await drizzle(pool, { schema })
+      .select({
+        userId: schema.accountTable.userId,
+        password: schema.accountTable.password,
+      })
+      .from(schema.accountTable)
+      .where(eq(schema.accountTable.providerId, "credential"));
+    for (const userId of [identity.userId, DEMO_CUSTOMER.id]) {
+      const account = accounts.find((row) => row.userId === userId);
+      expect(
+        await bcrypt.compare("local-demo-password", account!.password!),
+      ).toBe(true);
+    }
+
+    await seedPortal(true);
+    expect(await summary()).toEqual(seeded);
+    await withQuillsWorkspace(identity, async (db) => {
+      const [featured] = await db
+        .select({ content: posts.content })
+        .from(posts)
+        .where(eq(posts.title, "Linear integration"));
+      expect(featured!.content).not.toBe(
+        "An edit made while exploring the demo.",
+      );
+    });
+  }, 120000);
 });
