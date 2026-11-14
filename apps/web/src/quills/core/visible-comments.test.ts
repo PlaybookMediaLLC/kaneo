@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { visibleComments } from "./visible-comments";
+import { commentThread, visibleComments } from "./visible-comments";
 
 const comment = (id: string, parentId: string | null, deleted = false) => ({
   id,
@@ -39,5 +39,15 @@ describe("visibleComments", () => {
         comment("c", "b"),
       ]).map((item) => item.id),
     ).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("commentThread", () => {
+  it("adds new comments once and finds the top-level ones", () => {
+    const loaded = [comment("a", null), comment("b", "a")];
+    const created = [comment("b", "a"), comment("c", "x")];
+    const thread = commentThread(loaded, created);
+    expect(thread.comments.map((item) => item.id)).toEqual(["a", "b", "c"]);
+    expect(thread.top.map((item) => item.id)).toEqual(["a", "c"]);
   });
 });

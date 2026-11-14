@@ -8,7 +8,7 @@ import { useCreatePortalComment } from "../../../hooks/feedback/use-create-porta
 import { useSetPortalCommentReaction } from "../../../hooks/feedback/use-set-portal-comment-reaction";
 import { commentText, PostComment } from "../../../ui/post/post-comment";
 import { Button } from "../../../ui/upstream";
-import { visibleComments } from "../../../core/visible-comments";
+import { commentThread } from "../../../core/visible-comments";
 import { runMutation } from "../run-mutation";
 import { CommentSheets } from "./comment-sheets";
 import { CreateCommentForm } from "./create-comment-form";
@@ -53,16 +53,7 @@ export function PostCommentsSection(props: PostCommentsSectionProps) {
   const [reacted, setReacted] = useState<Record<string, Comment["reactions"]>>(
     {},
   );
-  const loaded = new Set(props.comments.map((comment) => comment.id));
-  const all = [
-    ...props.comments,
-    ...created.filter((comment) => !loaded.has(comment.id)),
-  ];
-  const comments = visibleComments(all);
-  const ids = new Set(comments.map((comment) => comment.id));
-  const top = comments.filter(
-    (comment) => !comment.parentId || !ids.has(comment.parentId),
-  );
+  const { comments, top } = commentThread(props.comments, created);
   const submit =
     (parentId?: string) =>
     (values: {

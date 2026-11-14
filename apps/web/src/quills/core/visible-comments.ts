@@ -21,3 +21,22 @@ export function visibleComments<
   };
   return comments.filter(shows);
 }
+
+/**
+ * The thread to show: the loaded comments plus new ones that fell past the loaded pages,
+ * the visible ones of those, and the top-level ones (no parent, or a parent not shown).
+ */
+export function commentThread<
+  T extends { id: string; parentId: string | null; deleted: boolean },
+>(loaded: T[], created: T[]) {
+  const ids = new Set(loaded.map((comment) => comment.id));
+  const comments = visibleComments([
+    ...loaded,
+    ...created.filter((comment) => !ids.has(comment.id)),
+  ]);
+  const shown = new Set(comments.map((comment) => comment.id));
+  const top = comments.filter(
+    (comment) => !comment.parentId || !shown.has(comment.parentId),
+  );
+  return { comments, top };
+}
