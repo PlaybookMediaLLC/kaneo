@@ -64,6 +64,7 @@ const listTickets = defineQuillsRoute({
   query: z.object({
     type: z.enum(TICKET_KINDS).optional(),
     ticketTypeId: flexibleToTypeIdSchema("ticket_type").optional(),
+    statusId: flexibleToTypeIdSchema("ticket_status").optional(),
     statusCategory: z.enum(CATEGORIES).optional(),
     stage: z.enum(STAGES).optional(),
     priority: z.enum(PRIORITIES).optional(),

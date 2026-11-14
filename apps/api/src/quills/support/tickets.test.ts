@@ -268,6 +268,29 @@ describe.skipIf(!url)("Support tickets", () => {
     expect(ids).toContain(own.id);
     expect(ids).not.toContain(foreign.id);
     expect(JSON.stringify(list.body)).not.toContain("Needle in B");
+    // The status filter: a status of this workspace, or another workspace's, which matches nothing.
+    const byStatus = await world.request(
+      world.users.owner,
+      "GET",
+      `/tickets?search=Needle&statusId=${own.statusId}`,
+    );
+    expect(byStatus.body.items.map((t: { id: string }) => t.id)).toEqual([
+      own.id,
+    ]);
+    const other = statuses.find((s) => s.id !== own.statusId)!.id;
+    const byOther = await world.request(
+      world.users.owner,
+      "GET",
+      `/tickets?search=Needle&statusId=${other}`,
+    );
+    expect(byOther.body.items).toEqual([]);
+    const byForeign = await world.request(
+      world.users.owner,
+      "GET",
+      `/tickets?search=Needle&statusId=${foreign.statusId}`,
+    );
+    expect(byForeign.status).toBe(200);
+    expect(byForeign.body.items).toEqual([]);
     expect(
       (
         await world.request(

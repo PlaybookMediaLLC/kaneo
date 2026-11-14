@@ -41,6 +41,7 @@ const sorts = {
 export type TicketFilters = {
   type?: (typeof TICKET_KINDS)[number];
   ticketTypeId?: TypeId<"ticket_type">;
+  statusId?: TypeId<"ticket_status">;
   statusCategory?: (typeof CATEGORIES)[number];
   stage?: (typeof STAGES)[number];
   priority?: (typeof PRIORITIES)[number];
@@ -110,6 +111,7 @@ export async function listTicketPage(
         query.type && eq(tickets.type, query.type),
         query.ticketTypeId && eq(tickets.ticketTypeId, query.ticketTypeId),
         query.priority && eq(tickets.priority, query.priority),
+        query.statusId && eq(tickets.statusId, query.statusId),
         query.statusCategory && statusIn(db, "category", query.statusCategory),
         query.stage && statusIn(db, "publicStage", query.stage),
         query.assignee === "me"

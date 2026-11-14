@@ -47,7 +47,7 @@ the status, so it waits for a concurrent status delete and then gets 404.
 
 | operationId | Route | Action | Tables | Event | Tests |
 |---|---|---|---|---|---|
-| `listQuillsTickets` | `GET /tickets` (type, ticketTypeId, statusCategory, stage, priority, assignee `me`/`unassigned`/ID, teamId, requesterPrincipalId, companyId, search, sort, cursor; `limit` ≤ 100) | read | `tickets`, `ticket_statuses`, `ticket_types`, `principal`, `teams`, `companies`, `settings` | - | contract, read-leak, page-bounds |
+| `listQuillsTickets` | `GET /tickets` (type, ticketTypeId, statusId, statusCategory, stage, priority, assignee `me`/`unassigned`/ID, teamId, requesterPrincipalId, companyId, search, sort, cursor; `limit` ≤ 100) | read | `tickets`, `ticket_statuses`, `ticket_types`, `principal`, `teams`, `companies`, `settings` | - | contract, read-leak, page-bounds |
 | `getQuillsTicket` | `GET /tickets/{ticketId}` | read | same | - | contract, two-workspace |
 | `createQuillsTicket` | `POST /tickets` | create | `tickets`, `ticket_types`, `ticket_conversations`, `conversations`, `conversation_messages`, `ticket_subscriptions`, `ticket_activity` | `ticket.created` | contract, rollback, concurrency |
 | `setQuillsTicketStatus` | `POST /tickets/{ticketId}/status` | update | `tickets`, `ticket_statuses`, `ticket_activity`, `ticket_links`, `conversation_messages` | `ticket.status_changed` | contract, rollback, feature |
