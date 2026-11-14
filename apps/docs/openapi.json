@@ -19867,7 +19867,7 @@
                           },
                           "requesterCount": {
                             "type": "number",
-                            "description": "Distinct people who voted on the linked posts that the caller may see"
+                            "description": "Distinct people who voted on the linked posts that the caller may see, on boards that show vote counts"
                           },
                           "reactions": {
                             "type": "array",
@@ -20080,7 +20080,7 @@
                     },
                     "requesterCount": {
                       "type": "number",
-                      "description": "Distinct people who voted on the linked posts that the caller may see"
+                      "description": "Distinct people who voted on the linked posts that the caller may see, on boards that show vote counts"
                     },
                     "reactions": {
                       "type": "array",
@@ -23229,7 +23229,7 @@
                           },
                           "requesterCount": {
                             "type": "number",
-                            "description": "Distinct people who voted on the linked posts that the caller may see"
+                            "description": "Distinct people who voted on the linked posts that the caller may see, on boards that show vote counts"
                           },
                           "reactions": {
                             "type": "array",
@@ -23452,7 +23452,7 @@
                     },
                     "requesterCount": {
                       "type": "number",
-                      "description": "Distinct people who voted on the linked posts that the caller may see"
+                      "description": "Distinct people who voted on the linked posts that the caller may see, on boards that show vote counts"
                     },
                     "reactions": {
                       "type": "array",

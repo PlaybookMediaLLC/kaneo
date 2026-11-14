@@ -102,7 +102,7 @@ const entry = z.object({
   ),
   requesterCount: z.number().openapi({
     description:
-      "Distinct people who voted on the linked posts that the caller may see",
+      "Distinct people who voted on the linked posts that the caller may see, on boards that show vote counts",
   }),
   reactions: z.array(
     z.object({ emoji: z.string(), count: z.number(), reacted: z.boolean() }),
@@ -218,6 +218,10 @@ async function present(
       ),
     )
     .orderBy(asc(changelogEntryPosts.createdAt), asc(posts.id));
+  // A board that hides its vote counts adds no requesters: the number would reveal its votes.
+  const counted = boardList
+    .filter((board) => board.voting.voteDisplay !== "hidden")
+    .map((board) => board.id);
   const requesters = await db
     .select({
       entryId: changelogEntryPosts.changelogEntryId,
@@ -229,7 +233,7 @@ async function present(
     .where(
       and(
         inArray(changelogEntryPosts.changelogEntryId, ids),
-        postVisible(viewer, boardIds),
+        postVisible(viewer, counted),
         notTest(postVotes.principalId),
       ),
     )

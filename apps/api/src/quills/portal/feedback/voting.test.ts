@@ -284,6 +284,11 @@ describe.skipIf(!url)("Quills customer voting", () => {
     ).linkedPosts;
     expect(linked).toHaveLength(1);
     expect(linked[0]).not.toHaveProperty("voteCount");
+    // The requester count of the update would reveal the hidden votes too.
+    expect(
+      updates.body.entries.find((item: { id: string }) => item.id === entryId)
+        .requesterCount,
+    ).toBe(0);
     // The widget hides them too.
     await enableWidget(env, env.a);
     const visitor = await env.widgetVisitor(env.a);
