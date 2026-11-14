@@ -3,7 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { getRevenueAtRiskFixture } from "../../api/team/get-revenue-at-risk.fixture";
 import { listPostsFixture } from "../../api/team/list-posts.fixture";
 import { setPostScoreFixture } from "../../api/team/set-post-score.fixture";
-import { fill, press } from "../../test/actions";
+import { choose, fill, press } from "../../test/actions";
 import { describePageContract } from "../../test/contracts";
 import { mockApi } from "../../test/mock-api";
 import { renderPage } from "../../test/render";
@@ -114,7 +114,7 @@ describe("TeamTriagePage", () => {
       fill("Reach", "100");
       fill("Confidence (%)", "80");
       fill("Effort (person-weeks)", "4");
-      fill("Impact", "2");
+      await choose("Impact", "2 · High");
       press("Save score");
       await waitFor(() =>
         expect(api.calls("setQuillsPostScore")).toHaveLength(1),
