@@ -64,7 +64,7 @@ describe("renderPage for a teammate page", () => {
       TeamPage,
       {
         ...meta,
-        route: "/dashboard/workspace/$workspaceId/quills",
+        route: "/feedback/$workspaceId",
         audience: "teammate",
       },
       { permissions: { manageSettings: false } },
@@ -73,7 +73,7 @@ describe("renderPage for a teammate page", () => {
       "workspace_test_1:user_test_1:true:false",
     );
     expect(view.router.state.location.pathname).toBe(
-      "/dashboard/workspace/workspace_test_1/quills",
+      "/feedback/workspace_test_1",
     );
   });
 });

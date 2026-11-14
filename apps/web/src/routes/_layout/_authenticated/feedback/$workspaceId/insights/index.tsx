@@ -1,14 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { TeamAutopilotPage } from "@/quills/pages/team-autopilot/team-autopilot-page";
+import { TeamInsightsPage } from "@/quills/pages/team-insights/team-insights-page";
 const searchSchema = z.object({});
 export const Route = createFileRoute(
-  "/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/autopilot/",
+  "/_layout/_authenticated/feedback/$workspaceId/insights/",
 )({ validateSearch: searchSchema, component: RouteComponent });
 function RouteComponent() {
   const params = Route.useParams();
   return (
-    <TeamAutopilotPage
+    <TeamInsightsPage
       workspaceId={"workspaceId" in params ? String(params.workspaceId) : ""}
       params={params}
       search={Route.useSearch()}

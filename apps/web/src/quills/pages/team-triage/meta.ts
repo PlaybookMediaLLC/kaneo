@@ -2,7 +2,7 @@ import type { PageMeta } from "../../core/types";
 export const meta = {
   id: "team-triage",
   feature: "team-triage",
-  route: "/dashboard/workspace/$workspaceId/quills/triage",
+  route: "/feedback/$workspaceId/triage",
   audience: "teammate",
   mailLinked: false,
   token: "none",

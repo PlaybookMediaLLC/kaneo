@@ -17,6 +17,9 @@ export function getUserWsUrl() {
   return `${wsBase}/user?windowId=${encodeURIComponent(windowId)}`;
 }
 
+// Workspace pages: Kaneo's and the Quills teammate app's (/feedback/{id}).
+const workspacePath = /^\/(?:dashboard\/workspace|feedback)\/([^/]+)/;
+
 const MAX_RETRY_DELAY = 30_000;
 const BASE_DELAY = 1000;
 const WS_PING_INTERVAL_MS = 30_000;
@@ -138,7 +141,7 @@ export function useUserWebSocket() {
             const current =
               /^\/dashboard\/settings\/(workspace|projects)(\/|$)/.test(path)
                 ? activeWorkspaceRef.current
-                : path.match(/^\/dashboard\/workspace\/([^/]+)/)?.[1];
+                : path.match(workspacePath)?.[1];
             if (current && !message.workspaceIds.includes(current))
               void navigate({ to: "/dashboard" });
           }
@@ -152,14 +155,13 @@ export function useUserWebSocket() {
             const current =
               /^\/dashboard\/settings\/(workspace|projects)(\/|$)/.test(path)
                 ? activeWorkspaceRef.current
-                : path.match(/^\/dashboard\/workspace\/([^/]+)/)?.[1];
+                : path.match(workspacePath)?.[1];
             void queryClient.invalidateQueries({
               queryKey: workspaceStatusQueryKey(message.workspaceId),
             });
             if (
               current === message.workspaceId &&
-              (message.reason !== "archived" ||
-                !path.startsWith("/dashboard/workspace/"))
+              (message.reason !== "archived" || !workspacePath.test(path))
             )
               void navigate({ to: "/dashboard" });
           }

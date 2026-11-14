@@ -6,18 +6,25 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 import { act } from "@testing-library/react";
-import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { getTeamCountsFixture } from "../api/team/get-team-counts.fixture";
 import { quillsKey } from "../api/keys";
+import { mockApi } from "../test/mock-api";
 import { renderComponent } from "../test/render";
 import { useTeamRuntime } from "./runtime";
 import { TeamRoute } from "./team-route";
 
-vi.mock("@/components/common/workspace-layout", () => ({
-  default: ({ title, children }: { title: string; children: ReactNode }) => (
-    <section aria-label={title}>{children}</section>
-  ),
+const state = vi.hoisted(() => ({ archived: false }));
+vi.mock("@/hooks/queries/workspace/use-workspace-archived", () => ({
+  default: () => state.archived,
 }));
+vi.mock("@/hooks/queries/workspace/use-active-workspace", () => ({
+  default: () => ({ data: { id: "workspace_1", name: "Acme" } }),
+}));
+vi.mock("@/components/common/workspace-archived", () => ({
+  default: () => <h1>Workspace archived</h1>,
+}));
+vi.mock("@/components/user-avatar", () => ({ UserAvatar: () => null }));
 vi.mock("@/lib/auth-client", () => ({
   authClient: { useSession: () => ({ data: { user: { id: "user_1" } } }) },
 }));
@@ -45,7 +52,7 @@ function renderTeam(path: string) {
   const root = createRootRoute();
   const team = createRoute({
     getParentRoute: () => root,
-    path: "/dashboard/workspace/$workspaceId/quills",
+    path: "/feedback/$workspaceId",
     component: TeamRoute,
   });
   const home = createRoute({
@@ -63,32 +70,48 @@ function renderTeam(path: string) {
 }
 
 describe("TeamRoute", () => {
-  it("renders the app header title, the team navigation and the page", async () => {
-    const view = renderTeam("/dashboard/workspace/workspace_1/quills");
-    expect(
-      await view.findByRole("region", { name: "Feedback" }),
-    ).toBeInTheDocument();
-    expect(
-      view.getByRole("navigation", { name: /feedback/i }),
-    ).toBeInTheDocument();
+  beforeEach(() => {
+    state.archived = false;
+  });
+
+  it("renders the app shell without the Kaneo sidebar, with the runtime for the page", async () => {
+    mockApi().reply(getTeamCountsFixture.ok());
+    const view = renderTeam("/feedback/workspace_1");
     expect(await view.findByRole("status")).toHaveTextContent(
       "workspace_1:user_1:true:false",
     );
+    expect(
+      view.getByRole("navigation", { name: "App sections" }),
+    ).toBeInTheDocument();
+    expect(view.getByRole("main")).toContainElement(view.getByRole("status"));
+    expect(view.getByText("Acme")).toBeVisible();
   });
 
   it("drops the Quills data of the previous workspace on a switch", async () => {
-    const view = renderTeam("/dashboard/workspace/workspace_1/quills");
+    const api = mockApi();
+    api.reply(getTeamCountsFixture.ok());
+    api.reply(getTeamCountsFixture.ok());
+    const view = renderTeam("/feedback/workspace_1");
     await view.findByRole("status");
     const user = { kind: "user", id: "user_1" } as const;
     const previous = quillsKey("workspace_1", user, "team", "listBoards");
     const next = quillsKey("workspace_2", user, "team", "listBoards");
     view.queryClient.setQueryData(previous, { items: [] });
     view.queryClient.setQueryData(next, { items: [] });
-    await act(() =>
-      view.router.navigate({ to: "/dashboard/workspace/workspace_2/quills" }),
-    );
+    await act(() => view.router.navigate({ to: "/feedback/workspace_2" }));
     expect(await view.findByRole("status")).toHaveTextContent("workspace_2");
     expect(view.queryClient.getQueryData(previous)).toBeUndefined();
     expect(view.queryClient.getQueryData(next)).toEqual({ items: [] });
+    // The active workspace is another one, so its name is not shown.
+    expect(view.queryByText("Acme")).toBeNull();
+  });
+
+  it("shows the archived state instead of the app for an archived workspace", async () => {
+    state.archived = true;
+    const view = renderTeam("/feedback/workspace_1");
+    expect(
+      await view.findByRole("heading", { name: "Workspace archived" }),
+    ).toBeInTheDocument();
+    expect(view.queryByRole("main")).toBeNull();
   });
 });

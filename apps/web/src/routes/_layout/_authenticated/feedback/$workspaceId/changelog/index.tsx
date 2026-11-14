@@ -3,7 +3,7 @@ import { z } from "zod";
 import { TeamChangelogPage } from "@/quills/pages/team-changelog/team-changelog-page";
 const searchSchema = z.object({});
 export const Route = createFileRoute(
-  "/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/changelog/",
+  "/_layout/_authenticated/feedback/$workspaceId/changelog/",
 )({ validateSearch: searchSchema, component: RouteComponent });
 function RouteComponent() {
   const params = Route.useParams();

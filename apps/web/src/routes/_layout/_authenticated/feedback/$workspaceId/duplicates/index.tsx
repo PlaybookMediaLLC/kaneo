@@ -3,7 +3,7 @@ import { z } from "zod";
 import { TeamDuplicatesPage } from "@/quills/pages/team-duplicates/team-duplicates-page";
 const searchSchema = z.object({});
 export const Route = createFileRoute(
-  "/_layout/_authenticated/dashboard/workspace/$workspaceId/quills/duplicates/",
+  "/_layout/_authenticated/feedback/$workspaceId/duplicates/",
 )({ validateSearch: searchSchema, component: RouteComponent });
 function RouteComponent() {
   const params = Route.useParams();

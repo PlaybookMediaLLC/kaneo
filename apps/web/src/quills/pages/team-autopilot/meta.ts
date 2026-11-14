@@ -2,7 +2,7 @@ import type { PageMeta } from "../../core/types";
 export const meta = {
   id: "team-autopilot",
   feature: "autopilot",
-  route: "/dashboard/workspace/$workspaceId/quills/autopilot",
+  route: "/feedback/$workspaceId/autopilot",
   audience: "teammate",
   mailLinked: false,
   token: "none",

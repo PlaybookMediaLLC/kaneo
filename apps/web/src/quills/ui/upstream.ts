@@ -1,4 +1,3 @@
-import { lazy } from "react";
 export { Button } from "@/components/ui/button";
 export {
   Card,
@@ -60,11 +59,6 @@ export { Kbd } from "@/components/ui/kbd";
 
 export { useDebouncedValue } from "@/hooks/use-debounced-value";
 
-// Loaded on demand: the app sidebar imports the Quills entry, so a static
-// import would form a cycle and pull the app shell into portal pages.
-export const WorkspaceLayout = lazy(
-  () => import("@/components/common/workspace-layout"),
-);
 export {
   SidebarGroup,
   SidebarGroupContent,
@@ -75,3 +69,19 @@ export {
 } from "@/components/ui/sidebar";
 export { default as useActiveWorkspace } from "@/hooks/queries/workspace/use-active-workspace";
 export { useWorkspacePermission } from "@/hooks/use-workspace-permission";
+
+// RFC 0004: the teammate app shell and its inbox primitives. Do not export the
+// app layout here: the app sidebar imports the Quills entry, so that forms a cycle.
+export { Tabs, TabsList, TabsTab } from "@/components/ui/tabs";
+export {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+export { UserAvatar } from "@/components/user-avatar";
+export { default as WorkspaceArchived } from "@/components/common/workspace-archived";
+export { default as useWorkspaceArchived } from "@/hooks/queries/workspace/use-workspace-archived";
+export { shortcutRegistry } from "@/lib/shortcuts/registry";
+export { parseBinding } from "@/lib/shortcuts/key-combo";
+export { ShortcutListener } from "@/lib/shortcuts/shortcut-listener";

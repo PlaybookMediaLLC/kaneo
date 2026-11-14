@@ -1,17 +1,25 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Outlet, useParams } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { useTranslation } from "react-i18next";
 import { usePortalViewer } from "../core/use-portal-viewer";
 import { StateView } from "../ui/state-view";
-import { useWorkspacePermission, WorkspaceLayout } from "../ui/upstream";
+import {
+  useActiveWorkspace,
+  useWorkspaceArchived,
+  useWorkspacePermission,
+  WorkspaceArchived,
+} from "../ui/upstream";
 import { TeamRuntimeProvider } from "./runtime";
 import { isOtherQuillsScope } from "./team-cache";
 import { TeamShell } from "./team-shell";
 
-// The layout of every teammate page: the app header, the team navigation and the page.
+/**
+ * The layout of the teammate app at /feedback/{id} (RFC 0004 D1). It replaces Kaneo's
+ * workspace layout. Kaneo's authenticated layout still provides the session, the user
+ * WebSocket (QUILLS_CHANGED and access changes) and the global shortcuts. The workspace
+ * permissions and the active workspace read the workspaceId route parameter.
+ */
 export function TeamRoute() {
-  const { t } = useTranslation("quills");
   const workspaceId = useParams({
     strict: false,
     select: (params) =>
@@ -19,6 +27,8 @@ export function TeamRoute() {
   });
   const viewer = usePortalViewer();
   const permission = useWorkspacePermission();
+  const { data: workspace } = useActiveWorkspace();
+  const archived = useWorkspaceArchived(workspaceId);
   const queryClient = useQueryClient();
   const userId = viewer.kind === "user" ? viewer.id : "";
 
@@ -31,29 +41,34 @@ export function TeamRoute() {
     });
   }, [queryClient, workspaceId, userId]);
 
+  if (archived) return <WorkspaceArchived />;
   return (
-    <WorkspaceLayout title={t("team.title")}>
-      <StateView loading={viewer.kind !== "user"}>
-        {viewer.kind === "user" ? (
-          <TeamRuntimeProvider
-            value={{
-              workspaceId,
-              viewer,
-              permissions: {
-                read: permission.canReadQuills(),
-                create: permission.canCreateQuills(),
-                update: permission.canUpdateQuills(),
-                delete: permission.canDeleteQuills(),
-                manageSettings: permission.canManageQuillsSettings(),
-              },
-            }}
+    <StateView loading={viewer.kind !== "user"}>
+      {viewer.kind === "user" ? (
+        <TeamRuntimeProvider
+          value={{
+            workspaceId,
+            viewer,
+            permissions: {
+              read: permission.canReadQuills(),
+              create: permission.canCreateQuills(),
+              update: permission.canUpdateQuills(),
+              delete: permission.canDeleteQuills(),
+              manageSettings: permission.canManageQuillsSettings(),
+            },
+          }}
+        >
+          <TeamShell
+            workspaceId={workspaceId}
+            // The active workspace falls back to another one when the route ID is unknown.
+            workspaceName={
+              workspace?.id === workspaceId ? workspace.name : undefined
+            }
           >
-            <TeamShell workspaceId={workspaceId}>
-              <Outlet />
-            </TeamShell>
-          </TeamRuntimeProvider>
-        ) : null}
-      </StateView>
-    </WorkspaceLayout>
+            <Outlet />
+          </TeamShell>
+        </TeamRuntimeProvider>
+      ) : null}
+    </StateView>
   );
 }

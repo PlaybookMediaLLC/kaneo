@@ -5,6 +5,7 @@ import type { PortalProblem } from "../../core/types";
 import { useCreateSurvey } from "../../hooks/team/use-create-survey";
 import { useListSurveys } from "../../hooks/team/use-list-surveys";
 import { useTeamRuntime } from "../../team/runtime";
+import { teamHref } from "../../team/team-href";
 import { TeamStateView } from "../../team/team-state-view";
 import { PageFrame } from "../../ui/page-frame";
 import { PortalSheetContent } from "../../ui/portal-sheet-content";
@@ -40,7 +41,7 @@ export function TeamSurveysPage({ workspaceId }: TeamSurveysPageProps) {
     team.viewer,
   );
   const create = useCreateSurvey(team.viewer);
-  const base = `/dashboard/workspace/${encodeURIComponent(workspaceId)}/quills/surveys`;
+  const base = teamHref(workspaceId, "/surveys");
   const items = surveys.data?.surveys ?? [];
 
   return (

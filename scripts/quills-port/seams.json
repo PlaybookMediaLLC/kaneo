@@ -6,6 +6,7 @@
 		"apps/web/src/routes/portal",
 		"apps/web/src/routes/quills",
 		"apps/web/src/routes/_layout/_authenticated/dashboard/workspace/$workspaceId/quills",
+		"apps/web/src/routes/_layout/_authenticated/feedback",
 		"scripts/quills-web",
 		".github/workflows/quills-web.yml",
 		"apps/docs/quills",
@@ -42,12 +43,12 @@
 			"file": "apps/web/src/components/app-sidebar.tsx",
 			"state": "existing",
 			"lines": "1 import + 1 <QuillsSidebarEntry /> element after <NavMain />",
-			"plannedChange": "none. RFC 0003 navigation seam: the entry links to /dashboard/workspace/{id}/quills and lives in apps/web/src/quills/team/sidebar-entry.tsx. Team pages add their links to apps/web/src/quills/team/nav.ts, not to the sidebar"
+			"plannedChange": "none. RFC 0003 navigation seam, RFC 0004 target: the entry links to the teammate app at /feedback/{id} and lives in apps/web/src/quills/team/sidebar-entry.tsx. Team pages add their views to apps/web/src/quills/team/nav.ts, not to the sidebar"
 		},
 		{
 			"file": "apps/web/src/hooks/use-user-websocket.ts",
 			"state": "existing",
-			"lines": "the QUILLS_CHANGED block: invalidate the legacy quills-* keys and the quills-web keys [\"quills\", workspaceId, userId] of the current user",
+			"lines": "the QUILLS_CHANGED block: invalidate the legacy quills-* keys and the quills-web keys [\"quills\", workspaceId, userId] of the current user; RFC 0004: the workspacePath pattern also matches the teammate app (/feedback/{id}), so an access revocation leaves it as it leaves a Kaneo workspace page",
 			"plannedChange": "none"
 		},
 		{

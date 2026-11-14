@@ -189,6 +189,35 @@ describe("user WebSocket lifecycle", () => {
     );
     expect(navigate).toHaveBeenCalledWith({ to: "/dashboard" });
   });
+  it("redirects a revoked workspace from the Quills teammate app", () => {
+    auth.pathname = "/feedback/workspace/triage";
+    renderHook(useUserWebSocket);
+    act(() =>
+      TestSocket.instances[0].onmessage?.({
+        data: JSON.stringify({
+          type: "WORKSPACE_ACCESS_REVOKED",
+          workspaceId: "workspace",
+        }),
+      }),
+    );
+    expect(navigate).toHaveBeenCalledWith({ to: "/dashboard" });
+  });
+
+  it("keeps an archived workspace open in the teammate app to show its archived state", () => {
+    auth.pathname = "/feedback/workspace";
+    renderHook(useUserWebSocket);
+    act(() =>
+      TestSocket.instances[0].onmessage?.({
+        data: JSON.stringify({
+          type: "WORKSPACE_ACCESS_REVOKED",
+          workspaceId: "workspace",
+          reason: "archived",
+        }),
+      }),
+    );
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
   it("clears revoked workspace data from the global user connection", () => {
     renderHook(() => useUserWebSocket());
     act(() =>

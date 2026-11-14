@@ -149,10 +149,7 @@ describe("TeamSurveyPage", () => {
       expect(api.calls("getQuillsSurveyResults")).toHaveLength(1);
       expect(
         view.getAllByRole("link", { name: "All surveys" })[0],
-      ).toHaveAttribute(
-        "href",
-        "/dashboard/workspace/workspace_test_1/quills/surveys",
-      );
+      ).toHaveAttribute("href", "/feedback/workspace_test_1/surveys");
     });
 
     it("hides the actions without the permissions", async () => {

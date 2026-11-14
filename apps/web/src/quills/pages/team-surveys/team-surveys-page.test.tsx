@@ -59,7 +59,7 @@ describe("TeamSurveysPage", () => {
       });
       expect(link).toHaveAttribute(
         "href",
-        "/dashboard/workspace/workspace_test_1/quills/surveys/survey_test_1",
+        "/feedback/workspace_test_1/surveys/survey_test_1",
       );
       expect(
         view.getByText("Net Promoter Score (0 to 10) · Active · 3 responses"),
