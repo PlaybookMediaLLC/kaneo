@@ -13,6 +13,13 @@ tickets). The teammate API for both exists, so this RFC is mostly web work.
 
 ## 2. Decisions
 
+**Revision 2 (2026-11-14):** the owner chose the UserJot dashboard as the layout benchmark.
+[`teammate-app-design.md`](./teammate-app-design.md) replaces decisions 2, 3, 4 and 7 below: one
+sidebar with the Conversations, Requests and Workspace sections, two-pane conversations and
+tickets with chat bubbles and a bottom composer, and a requests list with a floating action bar.
+Decisions 1, 5, 6 and 8 stay.
+
+
 1. **URL.** The app lives at `/feedback/{workspaceId}/...` under `_layout/_authenticated`. It does
    not use Kaneo's `WorkspaceLayout`, so Kaneo's sidebar is not shown. The old
    `/dashboard/workspace/{workspaceId}/quills/...` paths redirect to the same sub-path. Kaneo's
@@ -83,11 +90,8 @@ pass, and the review team finds no blocking issue.
 
 ## 6. Status
 
-| Lane | Status |
-|---|---|
-| S | planned |
-| D | planned |
-| P | planned |
-| C | planned |
-| T | planned |
-| R | planned |
+| Lane | Revision | Status |
+|---|---|---|
+| S, D, P, C, T, R | 1 (Plain-style shell) | merged |
+| S2 | 2: sidebar shell and shared thread parts | planned |
+| C2, P2, T2, R2 | 2: conversations, requests, tickets, other pages | planned |
