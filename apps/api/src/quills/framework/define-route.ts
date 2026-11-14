@@ -182,8 +182,11 @@ export type QuillsRouteDeclaration<
   signIn?: boolean;
   /** Portal: create the caller's customer profile and principal when missing. */
   ensureCustomer?: boolean;
-  /** Non-teammate writes: attempts per client IP and workspace, counted even when the request fails. */
-  rateLimit?: { limit: number; windowSeconds: number };
+  /**
+   * Non-teammate writes: attempts per client IP and workspace, counted even when the request fails.
+   * `per: "caller"` counts per signed-in portal account instead, and per client IP without one.
+   */
+  rateLimit?: { limit: number; windowSeconds: number; per?: "caller" };
   /**
    * Portal, widget and public reads (RSS, XML) and signed reads (HTML): the handler returns the
    * document as a string (the response schema is a string), sent with this content type instead of
@@ -882,9 +885,18 @@ export function buildQuillsRoute<
         query: d.query && c.req.valid("query"),
         body: d.body && (await readBody(c, d.body, d.textBody)),
       };
-      if (d.rateLimit)
+      if (d.rateLimit && d.rateLimit.per !== "caller")
         await enforceRateLimit(c, params.workspace, d.operationId, d.rateLimit);
       const credentials = await readCredentials(c, audience, params.workspace);
+      // A per-caller bucket needs the session, so it is counted after the session read.
+      if (d.rateLimit?.per === "caller")
+        await enforceRateLimit(
+          c,
+          params.workspace,
+          d.operationId,
+          d.rateLimit,
+          credentials.account?.id,
+        );
       // `call` may wait on a provider or object storage, so it holds no pooled connection: `prepare`
       // reads with the caller first, and the handler's transaction must find the same caller again.
       let seen: { workspaceId: string; caller: QuillsCaller } | undefined;
