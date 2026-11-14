@@ -359,6 +359,30 @@ describe.skipIf(!url)("Feedback autopilot extraction", () => {
     expect(await signalsOf(seeded)).toHaveLength(1);
   });
 
+  it("stores the signals without a match when the embedding call fails", async () => {
+    const seeded = await closed();
+    provider.reply(({ path }) =>
+      path.endsWith("/embeddings")
+        ? { status: 503, json: {} }
+        : chatReply({ requests: [darkMode] }),
+    );
+    const eventId = await closeEvent(seeded.conversationId);
+    await h.drain(h.a);
+    expect(await aiJob(eventId)).toMatchObject({ status: "succeeded" });
+    expect(await signalsOf(seeded)).toMatchObject([
+      { sourceMessageId: seeded.askId, matchedPostId: null },
+    ]);
+    const [failed] = await h.system(h.a, (db) =>
+      db
+        .select({ status: aiUsageLog.status, error: aiUsageLog.error })
+        .from(aiUsageLog)
+        .where(eq(aiUsageLog.pipelineStep, "signal_embedding"))
+        .orderBy(sql`${aiUsageLog.createdAt} desc`)
+        .limit(1),
+    );
+    expect(failed).toEqual({ status: "error", error: "unavailable" });
+  });
+
   it("does nothing and records nothing while AI is off", async () => {
     const seeded = await closed();
     const since = new Date();

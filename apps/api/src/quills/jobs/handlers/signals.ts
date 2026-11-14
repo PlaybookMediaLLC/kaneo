@@ -15,7 +15,7 @@ import { hookDeliveries } from "../../../database/quills/schema/hook-deliveries"
 import { posts } from "../../../database/quills/schema/posts";
 import { tickets } from "../../../database/quills/schema/tickets";
 import { exactDistance } from "../../assistant/engine/distance";
-import { nothing, type Work } from "../../assistant/engine/shared";
+import { failedUsage, nothing, type Work } from "../../assistant/engine/shared";
 import { aiConfig, chatJson, embed, untrusted } from "../../assistant/provider";
 import { logUsage, type UsageEntry } from "../../assistant/runs";
 import { recordQuillsChange } from "../../events";
@@ -192,10 +192,17 @@ export const extractSignals: Work = async (workspaceId, event) => {
   });
   const signals = found.slice(0, MAX_SIGNALS);
   const matches: (string | null)[] = signals.map(() => null);
-  if (signals.length && aiConfig()?.embeddingModel) {
-    const embedded = await embed(
-      signals.map((signal) => `${signal.title}\n${signal.excerpt}`),
-    );
+  // A failed embedding call leaves the signals without a match; it does not repeat the extraction.
+  const embedded =
+    signals.length && aiConfig()?.embeddingModel
+      ? await embed(
+          signals.map((signal) => `${signal.title}\n${signal.excerpt}`),
+        ).catch((error: unknown) => {
+          usage.push(failedUsage("signal_embedding", "embedding", error));
+          return undefined;
+        })
+      : undefined;
+  if (embedded) {
     usage.push({
       step: "signal_embedding",
       callType: "embedding",
