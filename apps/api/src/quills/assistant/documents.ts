@@ -136,7 +136,7 @@ const uploadPdf = defineQuillsRoute({
     // One read: the digest of the file row comes from the same bytes the parse reads.
     const bytes = await readObject(upload.key, MAX_PDF_BYTES);
     const sha256 = Buffer.from(
-      await crypto.subtle.digest("SHA-256", bytes),
+      await crypto.subtle.digest("SHA-256", new Uint8Array(bytes)),
     ).toString("hex");
     let text: string;
     try {

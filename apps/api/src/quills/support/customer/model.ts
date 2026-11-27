@@ -48,6 +48,7 @@ import {
   type PrincipalId,
 } from "../conversation-model";
 import { embedsOf, type MessageId } from "../message-model";
+import { reopenLinkedTicketsForConversation } from "../../integrations/work-item-graph";
 import { projectCustomerStatus } from "../office-hours-calc";
 import { readCsatSettings } from "../support-settings";
 import { getWaitTimeEstimate } from "../wait-estimate";
@@ -137,6 +138,14 @@ export const customerMessageSchema = z.object({
       postId: z.string().nullable(),
     })
     .nullable(),
+  /** Verified sources cited by the customer AI agent; empty for human messages. */
+  citations: z.array(
+    z.object({
+      title: z.string(),
+      url: z.string(),
+      sourceType: z.string(),
+    }),
+  ),
 });
 
 export const customerConversationSchema = z.object({
@@ -260,6 +269,7 @@ export const selectCustomerMessages = (
       content: conversationMessages.content,
       contentJson: conversationMessages.contentJson,
       attachments: conversationMessages.attachments,
+      citations: conversationMessages.citations,
       createdAt: conversationMessages.createdAt,
       editedAt: conversationMessages.editedAt,
       // Read for the assistant marker and the feedback card only; the rest never leaves.
@@ -304,6 +314,11 @@ export const toMessages = (rows: MessageRow[]) =>
           postId: row.metadata.feedbackCard.postId ?? null,
         }
       : null,
+    citations: (row.citations ?? []).map((cite) => ({
+      title: cite.title,
+      url: cite.url,
+      sourceType: cite.type,
+    })),
   }));
 
 /** A customer-visible message of this conversation (deleted included, for cursors), or 404. */
@@ -448,6 +463,10 @@ export async function insertVisitorMessage(
       }),
     })
     .where(eq(conversations.id, conversation.id));
+  // #298: A customer reply on a non-spam conversation also reopens any solved/closed linked ticket.
+  if (conversation.endReason !== "spam") {
+    await reopenLinkedTicketsForConversation(db, conversation.id, me);
+  }
 }
 
 /**

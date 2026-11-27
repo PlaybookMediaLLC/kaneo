@@ -70,6 +70,7 @@ export const eventQueues: Partial<Record<string, QuillsQueue>> = {
   "workspace.wipe_requested": "quills.wipe",
   "export.requested": "quills.transfer",
   "import.requested": "quills.transfer",
+  "privacy.access_requested": "quills.transfer",
   // Assistant work (assistant/engine/index.ts). Without a provider the job finishes with no work.
   ...Object.fromEntries(
     Object.keys(assistantWork).map((type) => [type, "quills.ai" as const]),

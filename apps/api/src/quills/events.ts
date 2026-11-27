@@ -453,6 +453,25 @@ export const changeSchema = z.object({
     "export_schedule.deleted",
     "settings.preset_applied",
     "settings.setup_state_updated",
+    // #329: Privacy built in (erasure, redaction, retention schedules, access requests).
+    "privacy.customer_erased",
+    "privacy.access_requested",
+    "privacy.access_completed",
+    "privacy.retention_updated",
+    "message.redacted",
+    // #299: AI customer agent guardrails, drafts, evals, and deterministic handoff.
+    "assistant_decline_topic.created",
+    "assistant_decline_topic.updated",
+    "assistant_decline_topic.deleted",
+    "assistant_eval.recorded",
+    "assistant_draft.created",
+    "assistant_draft.sent",
+    "assistant_draft.dismissed",
+    "conversation.handed_off",
+    // #298: Verified release loop and ticket-post linking.
+    "release.verified",
+    "release.shipped",
+    "ticket.post_linked",
   ]),
   entityType: z.enum([
     "board",
@@ -524,6 +543,15 @@ export const changeSchema = z.object({
     "brand",
     "email_template",
     "notification",
+    // #329.
+    "privacy_request",
+    "retention_policy",
+    // #299.
+    "agent_decline_topic",
+    "ai_eval_run",
+    "assistant_draft_reply",
+    // #298.
+    "verified_release",
   ]),
   entityId: z.string().min(1).max(200),
   payload: z.record(z.string(), z.string().max(500)).default({}),

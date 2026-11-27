@@ -279,6 +279,11 @@ const pt_BR: Catalog = {
   Remove: "Remover",
   "Picture updated": "Foto atualizada",
   "Could not save the picture.": "Não foi possível salvar a foto.",
+  Sources: "Fontes",
+  "Talk to a person": "Falar com uma pessoa",
+  "Connecting you with the team…": "Conectando você à equipe…",
+  "Could not connect to a person. Please try again.":
+    "Não foi possível conectar com uma pessoa. Tente novamente.",
 };
 
 export default pt_BR;

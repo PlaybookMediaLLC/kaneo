@@ -1,6 +1,7 @@
 import { apiRouter } from "../../../openapi";
 import { conversationRoutes } from "./conversations";
 import csatEmail from "./csat-email";
+import { handoffRoutes } from "./handoff";
 import magicLink from "./magic-link";
 import { ticketRoutes } from "./tickets";
 import { embedRoutes } from "../embeds";
@@ -14,6 +15,7 @@ export default apiRouter()
   .route("/", csatEmail)
   .route("/", magicLink)
   .route("/", conversationRoutes("portal"))
+  .route("/", handoffRoutes("portal"))
   .route("/", ticketRoutes("portal"))
   .route("/", portalPresenceRoutes)
   .route("/", embedRoutes("portal"))

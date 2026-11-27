@@ -7,6 +7,7 @@ import {
   revokeSessionConnections,
   revokeUserConnections,
   revokeWorkspaceConnections,
+  revokeWorkspaceRoleChange,
 } from "./ws";
 import { apiKey } from "@better-auth/api-key";
 import {
@@ -660,6 +661,7 @@ export const auth = betterAuth({
           if (isOwnerRole(member.role)) {
             await handleOwnerPromoted(member.organizationId, member.userId);
           }
+          await revokeWorkspaceRoleChange(member.userId, member.organizationId);
           if (member?.organizationId) {
             void syncWorkspaceSeats(member.organizationId).catch((error) => {
               console.error("Seat sync failed:", error);

@@ -435,6 +435,27 @@
 			"when": 1795820010000,
 			"tag": "0061_m10_review_hardening",
 			"breakpoints": true
+		},
+		{
+			"idx": 62,
+			"version": "7",
+			"when": 1795820011000,
+			"tag": "0062_privacy_built_in",
+			"breakpoints": true
+		},
+		{
+			"idx": 63,
+			"version": "7",
+			"when": 1795820012000,
+			"tag": "0063_ai_customer_agent_guardrails",
+			"breakpoints": true
+		},
+		{
+			"idx": 64,
+			"version": "7",
+			"when": 1795820013000,
+			"tag": "0064_verified_releases",
+			"breakpoints": true
 		}
 	]
 }

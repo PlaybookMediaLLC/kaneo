@@ -17,6 +17,7 @@ import {
   SettingsSection,
 } from "../../ui/upstream";
 import { DomainsForm } from "./parts/domains-form";
+import { RetentionSection } from "./parts/retention-section";
 import { SignInSection } from "./parts/sign-in-section";
 
 export interface SettingsPrivacyPageProps {
@@ -189,6 +190,7 @@ export function SettingsPrivacyPage({ workspaceId }: SettingsPrivacyPageProps) {
               data={data.signIn}
             />
           ) : null}
+          <RetentionSection workspaceId={workspaceId} locked={locked} />
         </TeamStateView>
       </SettingsPage>
     </PageFrame>

@@ -42,6 +42,7 @@ const seedTables = new Set([
   "principal_role_assignments",
   "post_statuses",
   "ticket_statuses",
+  "agent_decline_topics",
 ]);
 export function prepareArchive(
   input: unknown,
@@ -288,6 +289,7 @@ export async function importWorkspaceArchive(
     "permissions",
     "post_statuses",
     "ticket_statuses",
+    "agent_decline_topics",
     "settings",
     "principal",
   ])

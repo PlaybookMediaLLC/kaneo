@@ -288,6 +288,11 @@ const pl: Catalog = {
   Remove: "Usuń",
   "Picture updated": "Zdjęcie zaktualizowane",
   "Could not save the picture.": "Nie udało się zapisać zdjęcia.",
+  Sources: "Źródła",
+  "Talk to a person": "Porozmawiaj z człowiekiem",
+  "Connecting you with the team…": "Łączenie z zespołem…",
+  "Could not connect to a person. Please try again.":
+    "Nie udało się połączyć z człowiekiem. Spróbuj ponownie.",
 };
 
 export default pl;

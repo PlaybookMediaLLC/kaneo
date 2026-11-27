@@ -559,3 +559,13 @@
 .qb-avatar-setting > span:not(.qb-avatar) { display: grid; flex: 1; min-width: 0; gap: 2px; font-size: 13px; }
 .qb-avatar-setting small { font-size: 12px; color: var(--qb-muted); }
 .qb-avatar-setting .qb-text-button { padding: 4px 0; }
+
+/* AI citations and always-visible human handoff (#299). */
+.qb-citations { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; }
+.qb-citations-label { color: var(--qb-muted); font-weight: 500; }
+.qb-citation-chip { display: inline-flex; align-items: center; max-width: 100%; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--qb-line); background: var(--qb-bg); color: var(--qb-ink); text-decoration: none; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+.qb-citation-chip:hover { background: var(--qb-hover); }
+.qb-handoff-bar { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 6px 16px 0; }
+.qb-widget .qb-handoff-button { font-size: 12px; color: var(--qb-muted); padding: 4px 10px; border: 1px solid var(--qb-line); border-radius: 999px; background: var(--qb-bg); }
+.qb-widget .qb-handoff-button:not(:disabled):hover { background: var(--qb-hover); color: var(--qb-ink); }
+

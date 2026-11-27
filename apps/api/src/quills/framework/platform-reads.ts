@@ -65,6 +65,57 @@ export async function doneTaskWorkspace(taskId: string, workspaceId?: string) {
   return task?.workspaceId;
 }
 
+/**
+ * Resolves a task's current sync stage (`done` | `in_progress` | `planned`) and workspace (#298).
+ * - `done`: task is in a final/completed column (`taskIsCompleted`)
+ * - `in_progress`: task status/column slug indicates active work (`in-progress`, `in_progress`, `doing`, `review`)
+ * - `planned`: task is scheduled into a sprint (`sprintId IS NOT NULL`) or a `planned` column
+ */
+export async function taskSyncStage(
+  taskId: string,
+  workspaceId?: string,
+): Promise<{
+  workspaceId: string;
+  stage: "done" | "in_progress" | "planned";
+} | null> {
+  const doneWs = await doneTaskWorkspace(taskId, workspaceId);
+  if (doneWs) return { workspaceId: doneWs, stage: "done" };
+
+  const [row] = await platformDb
+    .select({
+      workspaceId: projectTable.workspaceId,
+      status: taskTable.status,
+      startDate: taskTable.startDate,
+      columnSlug: columnTable.slug,
+    })
+    .from(taskTable)
+    .innerJoin(projectTable, eq(projectTable.id, taskTable.projectId))
+    .leftJoin(columnTable, eq(columnTable.id, taskTable.columnId))
+    .where(
+      and(
+        eq(taskTable.id, taskId),
+        workspaceId ? eq(projectTable.workspaceId, workspaceId) : undefined,
+      ),
+    )
+    .limit(1);
+  if (!row) return null;
+
+  const slug = (row.columnSlug || row.status || "").toLowerCase();
+  if (
+    slug === "in-progress" ||
+    slug === "in_progress" ||
+    slug === "doing" ||
+    slug === "in-review" ||
+    slug === "in_review"
+  ) {
+    return { workspaceId: row.workspaceId, stage: "in_progress" };
+  }
+  if (row.startDate || slug === "planned" || slug === "scheduled") {
+    return { workspaceId: row.workspaceId, stage: "planned" };
+  }
+  return null;
+}
+
 /** A Kaneo team of this workspace. 404 otherwise. */
 export async function canonicalTeam(workspaceId: string, id: string) {
   const [team] = await platformDb

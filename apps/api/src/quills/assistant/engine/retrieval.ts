@@ -19,6 +19,7 @@ import {
   assistantSnippets,
 } from "../../../database/quills/schema/assistant";
 import { assistantWebSources } from "../../../database/quills/schema/assistant-web-sources";
+import { settings } from "../../../database/quills/schema/auth";
 import {
   helpCenterArticles,
   helpCenterCategories,
@@ -37,6 +38,8 @@ export type Source = {
   id: string;
   title: string;
   excerpt: string;
+  url?: string;
+  score?: number;
 };
 const LIMIT = 5;
 const like = (query: string) =>
@@ -58,48 +61,78 @@ export async function searchArticles(
   db: Database,
   query: string,
   audience: Audience,
+  near?: Near | null,
 ): Promise<Source[]> {
+  const [ws] = await db.select({ slug: settings.slug }).from(settings).limit(1);
+  const slug = ws?.slug ?? "";
+  const baseWhere = and(
+    isNull(helpCenterArticles.deletedAt),
+    // Exclude stale-flagged KB articles from AI grounding by default (#314).
+    isNull(helpCenterArticles.staleFlaggedAt),
+    // A future publish time is a scheduled article, not a published one.
+    lte(helpCenterArticles.publishedAt, sql`now()`),
+    isNull(helpCenterCategories.deletedAt),
+    audience === "public"
+      ? and(
+          eq(helpCenterCategories.isPublic, true),
+          sql`${helpCenterArticles.segmentIds} = '[]'::jsonb`,
+          sql`${helpCenterCategories.segmentIds} = '[]'::jsonb`,
+        )
+      : undefined,
+  );
+  const articleNear = nearTo(near, {
+    embedding: helpCenterArticles.embedding,
+    embeddingModel: helpCenterArticles.embeddingModel,
+  });
+  const selectFields = {
+    id: helpCenterArticles.id,
+    slug: helpCenterArticles.slug,
+    urlId: helpCenterArticles.urlId,
+    title: helpCenterArticles.title,
+    excerpt: sql<string>`left(${helpCenterArticles.content}, 1200)`,
+  };
   const match = sql`${helpCenterArticles.searchVector} @@ plainto_tsquery('english', ${query})`;
-  const rows = await db
-    .select({
-      id: helpCenterArticles.id,
-      title: helpCenterArticles.title,
-      excerpt: sql<string>`left(${helpCenterArticles.content}, 1200)`,
-    })
-    .from(helpCenterArticles)
-    .innerJoin(
-      helpCenterCategories,
-      eq(helpCenterCategories.id, helpCenterArticles.categoryId),
-    )
-    .where(
-      and(
-        isNull(helpCenterArticles.deletedAt),
-        // Exclude stale-flagged KB articles from AI grounding by default (#314).
-        isNull(helpCenterArticles.staleFlaggedAt),
-        // A future publish time is a scheduled article, not a published one.
-        lte(helpCenterArticles.publishedAt, sql`now()`),
-        isNull(helpCenterCategories.deletedAt),
-        audience === "public"
-          ? and(
-              eq(helpCenterCategories.isPublic, true),
-              sql`${helpCenterArticles.segmentIds} = '[]'::jsonb`,
-              sql`${helpCenterCategories.segmentIds} = '[]'::jsonb`,
+  const rows = await searchHybrid(
+    articleNear
+      ? () =>
+          db
+            .select(selectFields)
+            .from(helpCenterArticles)
+            .innerJoin(
+              helpCenterCategories,
+              eq(helpCenterCategories.id, helpCenterArticles.categoryId),
             )
-          : undefined,
-        or(match, ilike(helpCenterArticles.title, like(query))),
-      ),
-    )
-    .orderBy(
-      desc(
-        sql`ts_rank(${helpCenterArticles.searchVector}, plainto_tsquery('english', ${query}))`,
-      ),
-    )
-    .limit(LIMIT);
+            .where(and(baseWhere, articleNear.match))
+            .orderBy(articleNear.order)
+            .limit(LIMIT)
+      : null,
+    () =>
+      db
+        .select(selectFields)
+        .from(helpCenterArticles)
+        .innerJoin(
+          helpCenterCategories,
+          eq(helpCenterCategories.id, helpCenterArticles.categoryId),
+        )
+        .where(
+          and(
+            baseWhere,
+            or(match, ilike(helpCenterArticles.title, like(query))),
+          ),
+        )
+        .orderBy(
+          desc(
+            sql`ts_rank(${helpCenterArticles.searchVector}, plainto_tsquery('english', ${query}))`,
+          ),
+        )
+        .limit(LIMIT),
+  );
   return rows.map((row) => ({
     type: "article",
     id: row.id,
     title: row.title,
     excerpt: row.excerpt,
+    url: slug ? `/portal/${slug}/help/${row.urlId}-${row.slug}` : "",
   }));
 }
 
@@ -138,7 +171,9 @@ export const publicSources = async (
   query: string,
   near?: Near | null,
 ): Promise<Source[]> => [
-  ...(knowledge.helpCenter ? await searchArticles(db, query, "public") : []),
+  ...(knowledge.helpCenter
+    ? await searchArticles(db, query, "public", near)
+    : []),
   ...(await searchKnowledge(db, query, "public", knowledge.documents, near)),
 ];
 
@@ -268,6 +303,7 @@ export async function searchKnowledge(
     .select({
       id: assistantWebSources.id,
       title: assistantWebSources.title,
+      url: assistantWebSources.url,
       excerpt: sql<string>`left(${assistantWebSources.content}, 1200)`,
     })
     .from(assistantWebSources)

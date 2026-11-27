@@ -279,6 +279,11 @@ const es: Catalog = {
   Remove: "Quitar",
   "Picture updated": "Foto actualizada",
   "Could not save the picture.": "No se pudo guardar la foto.",
+  Sources: "Fuentes",
+  "Talk to a person": "Hablar con una persona",
+  "Connecting you with the team…": "Conectándote con el equipo…",
+  "Could not connect to a person. Please try again.":
+    "No se pudo conectar con una persona. Inténtalo de nuevo.",
 };
 
 export default es;

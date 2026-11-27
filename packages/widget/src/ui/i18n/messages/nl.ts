@@ -280,6 +280,11 @@ const nl: Catalog = {
   Remove: "Verwijderen",
   "Picture updated": "Foto bijgewerkt",
   "Could not save the picture.": "De foto kon niet worden opgeslagen.",
+  Sources: "Bronnen",
+  "Talk to a person": "Met een persoon spreken",
+  "Connecting you with the team…": "Verbinden met het team…",
+  "Could not connect to a person. Please try again.":
+    "Kan geen verbinding maken met een persoon. Probeer het opnieuw.",
 };
 
 export default nl;

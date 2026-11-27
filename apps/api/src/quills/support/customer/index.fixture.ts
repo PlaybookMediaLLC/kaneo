@@ -158,6 +158,12 @@ export const [
 export const [submitQuillsWidgetCsat, submitQuillsCsat] = both((audience) =>
   onConversation(audience, () => ({ body: { rating: 4, comment: "Quick" } })),
 );
+export const [
+  handoffQuillsWidgetConversation,
+  handoffQuillsPortalConversation,
+] = both((audience) =>
+  onConversation(audience, () => ({ body: { reason: "Need a human" } })),
+);
 
 export const [
   submitQuillsWidgetResolutionFeedback,

@@ -33,6 +33,7 @@ import { commentByMail } from "./post-reply";
 import { preview } from "../support/conversation-model";
 import { trustedEmailAuth } from "./email-auth";
 import { reopened } from "../support/conversation-ops";
+import { reopenLinkedTicketsForConversation } from "../integrations/work-item-graph";
 import { parseForwardedEmail, parseMailboxList } from "./forward-parser";
 import {
   extractDataUriImages,
@@ -662,7 +663,7 @@ const inbound = defineQuillsRoute({
     const now = new Date();
     const isSpamThread = Boolean(thread && thread.endReason === "spam");
     let spawnFollowUpFrom: ConversationId | null = null;
-    let activeThread = thread;
+    let activeThread: typeof thread | undefined = thread;
     if (
       thread &&
       thread.status === "closed" &&
@@ -706,11 +707,13 @@ const inbound = defineQuillsRoute({
             channel: "email",
             source: "email",
             status: quarantined ? "closed" : "open",
-            ...(quarantined && {
-              endReason: "spam",
-              spamReason: "heuristic",
-              resolvedAt: now,
-            }),
+            ...(quarantined
+              ? {
+                  endReason: "spam",
+                  spamReason: "heuristic",
+                  resolvedAt: now,
+                }
+              : {}),
             subject:
               (spawnFollowUpFrom && effectiveSubject
                 ? `Follow-up: ${effectiveSubject}`
@@ -965,7 +968,10 @@ const inbound = defineQuillsRoute({
         updatedAt: message.createdAt,
       })
       .where(eq(conversations.id, conversation.id));
-
+    // #298: A customer email reply reopens any solved/closed linked ticket (unless the thread stays closed).
+    if (!shouldStayClosed) {
+      await reopenLinkedTicketsForConversation(db, conversation.id, senderId);
+    }
     return { status: "received" as const, messageId: message.id };
   },
 });

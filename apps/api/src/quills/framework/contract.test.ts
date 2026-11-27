@@ -30,6 +30,8 @@ import * as taxonomyFixtures from "../feedback/taxonomy.fixture";
 import * as widgetFixtures from "../widget/index.fixture";
 import * as ticketFixtures from "../support/tickets-router.fixture";
 import * as supportFixtures from "../support/index.fixture";
+import * as privacyFixtures from "../privacy/index.fixture";
+import * as releaseFixtures from "../releases/index.fixture";
 import {
   checkRoute,
   contractApp,
@@ -110,6 +112,8 @@ const fixtures: Record<string, Fixture> = {
   ...inboundFixtures,
   ...wakeFixtures,
   ...appFixtures,
+  ...privacyFixtures,
+  ...releaseFixtures,
 };
 const app = contractApp(quillsRouter, publicRouter);
 // CI runs the routes in shards ("2/3"). Each fingerprint hashes every row that earlier routes seeded.

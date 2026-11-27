@@ -1,5 +1,6 @@
 import { getLocalRealtimeStats } from "../../ws";
 import { probeDatabase } from "./probe-database";
+import { probeDoctor } from "./probe-doctor";
 import { probeEmail } from "./probe-email";
 import { probeRedis } from "./probe-redis";
 import { probeStorage } from "./probe-storage";
@@ -14,6 +15,7 @@ export async function getServiceStatus() {
     probeEmail(PROBE_TIMEOUT_MS),
     probeStorage(PROBE_TIMEOUT_MS),
   ]);
+  const doctor = await probeDoctor(PROBE_TIMEOUT_MS, { email, storage });
   const realtime = getLocalRealtimeStats();
   return {
     checkedAt: new Date().toISOString(),
@@ -33,5 +35,6 @@ export async function getServiceStatus() {
     redis,
     email,
     storage,
+    doctor,
   };
 }

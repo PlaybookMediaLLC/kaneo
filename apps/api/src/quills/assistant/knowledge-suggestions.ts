@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import {
   afterTurn,
@@ -16,7 +16,12 @@ import {
   assistantSnippets,
 } from "../../database/quills/schema/assistant";
 import {
+  helpCenterArticles,
+  helpCenterCategories,
+} from "../../database/quills/schema/kb";
+import {
   knowledgeQuestions,
+  knowledgeSources,
   knowledgeSuggestions,
 } from "../../database/quills/schema/knowledge-suggestions";
 import { someField } from "../feedback/schemas";
@@ -289,9 +294,14 @@ const approveKnowledgeSuggestion = defineQuillsRoute({
       ),
     title: fields.title.optional(),
     content: fields.content.optional(),
+    /** When true, also creates an unpublished Help Center draft article with provenance (#299). */
+    createDraftArticle: z.boolean().optional(),
   }),
-  response: suggestionSchema,
-  responseDescription: "The approved suggestion, with the new snippet's ID",
+  response: suggestionSchema.extend({
+    draftArticleId: z.string().nullable().optional(),
+  }),
+  responseDescription:
+    "The approved suggestion, with the new snippet and optional draft article ID",
   errors: {
     ...errors,
     409: `The suggestion is not in that step, or the workspace has ${MAX_SNIPPETS} snippets`,
@@ -318,22 +328,62 @@ const approveKnowledgeSuggestion = defineQuillsRoute({
       throw conflict();
     if ((await db.$count(assistantSnippets)) >= MAX_SNIPPETS)
       throw conflict(`A workspace has at most ${MAX_SNIPPETS} snippets`);
+    const finalTitle = body.title ?? suggestion.title;
+    const finalContent = body.content ?? suggestion.content;
     const [snippet] = await db
       .insert(assistantSnippets)
       .values({
-        title: body.title ?? suggestion.title,
-        content: body.content ?? suggestion.content,
+        title: finalTitle,
+        content: finalContent,
         audience: body.audience,
         enabled: true,
         createdById: actor.principalId,
       })
       .returning({ id: assistantSnippets.id });
+
+    let draftArticleId: string | null = null;
+    if (body.createDraftArticle) {
+      const [category] = await db
+        .select({ id: helpCenterCategories.id })
+        .from(helpCenterCategories)
+        .where(isNull(helpCenterCategories.deletedAt))
+        .orderBy(asc(helpCenterCategories.position))
+        .limit(1);
+      if (category) {
+        const [source] = await db
+          .select({ conversationId: knowledgeSources.conversationId })
+          .from(knowledgeSources)
+          .where(eq(knowledgeSources.suggestionId, suggestion.id))
+          .limit(1);
+        const baseSlug =
+          finalTitle
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-|-$/g, "")
+            .slice(0, 60) || "learned-article";
+        const [article] = await db
+          .insert(helpCenterArticles)
+          .values({
+            categoryId: category.id,
+            slug: `${baseSlug}-${Date.now().toString(36)}`,
+            title: finalTitle,
+            content: finalContent,
+            principalId: actor.principalId,
+            publishedAt: null, // Never auto-published — teammate reviews in Help Center.
+            sourceConversationId: source?.conversationId ?? null,
+            sourceType: "learned",
+          })
+          .returning({ id: helpCenterArticles.id });
+        draftArticleId = article?.id ?? null;
+      }
+    }
+
     const [row] = await db
       .update(knowledgeSuggestions)
       .set({
         status: "approved",
-        title: body.title ?? suggestion.title,
-        content: body.content ?? suggestion.content,
+        title: finalTitle,
+        content: finalContent,
         approvedSnippetId: snippet!.id,
         decidedById: actor.principalId,
         decidedAt: new Date(),
@@ -341,7 +391,7 @@ const approveKnowledgeSuggestion = defineQuillsRoute({
       })
       .where(eq(knowledgeSuggestions.id, params.suggestionId))
       .returning(columns);
-    return row!;
+    return { ...row!, draftArticleId };
   },
 });
 

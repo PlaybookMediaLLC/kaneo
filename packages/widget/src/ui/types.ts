@@ -141,6 +141,12 @@ export interface UpdateEntry {
   }>;
 }
 
+export interface MessageCitation {
+  title: string;
+  url: string;
+  sourceType: "article" | "web";
+}
+
 export interface Conversation {
   id: string;
   title: string;
@@ -157,6 +163,8 @@ export interface Conversation {
     files?: ReadonlyArray<{ id: string; name: string }>;
     /** The workspace's assistant wrote it. */
     fromAssistant?: boolean;
+    /** Grounded sources cited by the assistant reply (#299). */
+    citations?: readonly MessageCitation[];
     /** A request the assistant proposed; the visitor submits it once. */
     feedbackCard?: { title: string; body: string; confirmed: boolean };
   }>;
@@ -285,6 +293,8 @@ export interface WidgetViewProps {
     messageId: string,
     card: { title: string; body: string },
   ) => Promise<unknown>;
+  /** Immediately connects the visitor with a human teammate (zero LLM call, #299). */
+  onHandoffConversation?: (conversationId: string) => Promise<unknown>;
   onReadConversation?: (
     conversationId: string,
     throughMessageId: string,

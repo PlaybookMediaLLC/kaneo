@@ -655,6 +655,23 @@ export function useWidgetData({
             });
           }),
       }),
+      onHandoffConversation: (conversationId: string) =>
+        run(async (signal) => {
+          const result = await send.handoffConversation(conversationId, signal);
+          patch(signal, (value) => ({
+            ...value,
+            conversations: value.conversations.map((item) =>
+              item.id === conversationId
+                ? {
+                    ...item,
+                    messages: mergeMessages(item.messages, [
+                      toMessage(result.message),
+                    ]),
+                  }
+                : item,
+            ),
+          }));
+        }),
       onReadConversation: (conversationId: string, throughMessageId: string) =>
         run(async (signal) => {
           const result = await send.markRead(

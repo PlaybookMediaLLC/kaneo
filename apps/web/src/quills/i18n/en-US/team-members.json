@@ -67,5 +67,11 @@
 	"companyNameRequired": "Enter the company's name.",
 	"noCompany": "No company yet.",
 	"removeCompany": "Remove from company",
-	"saveCompany": "Save company"
+	"saveCompany": "Save company",
+	"exportData": "Export customer data",
+	"exportQueued": "Customer data export queued. Download it from Settings › Privacy.",
+	"eraseData": "Erase personal data",
+	"eraseTitle": "Erase personal data for {{name}}?",
+	"eraseText": "Permanently removes this customer's personal information, attachments, summaries, embeddings, and logs. Aggregate counts are preserved. This cannot be undone.",
+	"erased": "Customer personal data erased."
 }

@@ -22,6 +22,7 @@ import widgetSurveys from "./widget/surveys";
 import widgetHelp from "./widget/help/index";
 import widgetKbAsk from "./widget/kb-ask";
 import widgetSupport from "./widget/support/index";
+import portalPrivacy from "./privacy/portal-export";
 
 // Portal, widget and public Quills routes. src/index.ts mounts this router at /quills-public
 // before Kaneo's session middleware: each route resolves its own caller in framework/audience.ts
@@ -54,9 +55,10 @@ export type QuillsPublicRouters = [
   typeof track,
   typeof portalSurveys,
   typeof widgetSurveys,
+  typeof portalPrivacy,
 ];
 
-// Mount sub-routers imperatively so TypeScript does not compute a 23-deep nested
+// Mount sub-routers imperatively so TypeScript does not compute a 24-deep nested
 // Hono MergeSchemaPath generic on the default export (typed clients use QuillsPublicRouters).
 const quillsPublicRouter = apiRouter();
 quillsPublicRouter.route("/", widgetHost);
@@ -82,5 +84,6 @@ quillsPublicRouter.route("/", publicMedia);
 quillsPublicRouter.route("/", track);
 quillsPublicRouter.route("/", portalSurveys);
 quillsPublicRouter.route("/", widgetSurveys);
+quillsPublicRouter.route("/", portalPrivacy);
 
 export default quillsPublicRouter;

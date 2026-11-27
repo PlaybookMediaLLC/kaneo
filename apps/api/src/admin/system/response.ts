@@ -87,6 +87,23 @@ export const adminSystemStatusSchema = z
         }),
       }),
     ),
+    doctor: z
+      .array(
+        z.object({
+          id: z.enum([
+            "public_url",
+            "pgvector",
+            "storage",
+            "email",
+            "inbound_email",
+            "ai_provider",
+          ]),
+          status: serviceStatusSchema,
+          detail: z.string(),
+          remediation: z.string().nullable(),
+        }),
+      )
+      .optional(),
   })
   .openapi("AdminSystemStatus");
 

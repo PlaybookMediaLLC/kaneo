@@ -1,6 +1,9 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useEffect, useRef } from "react";
+import { ShieldAlert } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { redactConversationMessage } from "@/fetchers/quills/privacy";
 import type { ListConversationMessagesResponse } from "../../../api/team/list-conversation-messages";
 import { useGetConversationTyping } from "../../../hooks/team/use-get-conversation-typing";
 import {
@@ -15,7 +18,7 @@ import { ScheduledSendFooter } from "../../../ui/inbox/scheduled-send-footer";
 import { SystemEvent } from "../../../ui/inbox/system-event";
 import { arrivedClass, useArrived } from "../../../ui/inbox/use-arrived";
 import { PageContext } from "../../../ui/page-context";
-import { cn } from "../../../ui/upstream";
+import { cn, ConfirmDialog, toast } from "../../../ui/upstream";
 import type { Teammate } from "../../team-conversations/conversation-list";
 import { AttachmentLink } from "./attachment-link";
 import { eventIcons } from "../event-icons";
@@ -55,6 +58,9 @@ const day = (iso: string) => new Date(iso).toDateString();
 export function MessageList(props: MessageListProps) {
   const { t } = useTranslation("quills");
   const team = useTeamRuntime();
+  const queryClient = useQueryClient();
+  const [redactTarget, setRedactTarget] = useState<string | null>(null);
+  const [redacting, setRedacting] = useState(false);
   const recall = useRecallScheduledMessage(team.viewer);
   const sendNow = useSendScheduledMessageNow(team.viewer);
   const typing = useGetConversationTyping(
@@ -88,6 +94,25 @@ export function MessageList(props: MessageListProps) {
     if (actor === me?.id) return t(keys.you);
     const name = peopleById.get(actor)?.name;
     return name ? t(keys.named, { name }) : message.content;
+  };
+  const confirmRedact = async () => {
+    if (!redactTarget) return;
+    setRedacting(true);
+    try {
+      await redactConversationMessage(
+        props.workspaceId,
+        props.conversationId,
+        redactTarget,
+        { mode: "both", reason: "Sensitive data redacted" },
+      );
+      setRedactTarget(null);
+      await queryClient.invalidateQueries();
+      toast.success(t("team-conversations.redacted"));
+    } catch {
+      toast.error(t("team-conversations.problem.failed"));
+    } finally {
+      setRedacting(false);
+    }
   };
   return (
     <section
@@ -221,6 +246,27 @@ export function MessageList(props: MessageListProps) {
                     name={file.name}
                   />
                 ))}
+                {message.redactedAt ? (
+                  <p className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
+                    <ShieldAlert className="size-3.5" aria-hidden="true" />
+                    {t("team-conversations.redactedBadge", {
+                      name:
+                        message.redactedByName ??
+                        t("team-conversations.teammate"),
+                      date: new Date(message.redactedAt).toLocaleDateString(),
+                    })}
+                  </p>
+                ) : team.permissions.update ? (
+                  <div className="mt-1 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setRedactTarget(message.id)}
+                      className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                    >
+                      {t("team-conversations.redactAction")}
+                    </button>
+                  </div>
+                ) : null}
                 {message.senderType === "visitor" ? (
                   <PageContext
                     context={message.widgetMetadata}
@@ -241,6 +287,17 @@ export function MessageList(props: MessageListProps) {
           ? t("team-conversations.typing", { name: props.customerName })
           : null}
       </p>
+      <ConfirmDialog
+        open={Boolean(redactTarget)}
+        onOpenChange={(open) => {
+          if (!open) setRedactTarget(null);
+        }}
+        title={t("team-conversations.redactTitle")}
+        description={t("team-conversations.redactText")}
+        confirmLabel={t("team-conversations.redactAction")}
+        pending={redacting}
+        onConfirm={() => void confirmRedact()}
+      />
     </section>
   );
 }

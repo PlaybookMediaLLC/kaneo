@@ -408,6 +408,12 @@ export const conversationMessages = quillsSchema
       recalledByPrincipalId: typeIdColumnNullable("principal")(
         "recalled_by_principal_id",
       ),
+      // Surgical PII/secret redaction (#329): clears content/attachments/embeddings while keeping the thread.
+      redactedAt: timestamp("redacted_at", { withTimezone: true }),
+      redactedByPrincipalId: typeIdColumnNullable("principal")(
+        "redacted_by_principal_id",
+      ),
+      redactionReason: text("redaction_reason"),
     },
     (table) => [
       // FK names match the constraints the SQL migration created.
@@ -464,6 +470,11 @@ export const conversationMessages = quillsSchema
         columns: [table.workspaceId, table.recalledByPrincipalId],
         foreignColumns: [principal.workspaceId, principal.id],
       }).onDelete("set null"),
+      foreignKey({
+        name: "conversation_messages_redacted_by_principal_id_fkey",
+        columns: [table.workspaceId, table.redactedByPrincipalId],
+        foreignColumns: [principal.workspaceId, principal.id],
+      }).onDelete("set null"),
       // Live feed + keyset pagination on the composite (conversationId, createdAt, id);
       // id is the tie-break so same-microsecond siblings page deterministically.
       index("conversation_messages_conversation_created_idx").on(
@@ -486,6 +497,9 @@ export const conversationMessages = quillsSchema
       index("conversation_messages_recalled_by_principal_idx")
         .on(table.recalledByPrincipalId)
         .where(sql`"recalled_by_principal_id" IS NOT NULL`),
+      index("conversation_messages_redacted_by_principal_fk_idx")
+        .on(table.workspaceId, table.redactedByPrincipalId)
+        .where(sql`"redacted_by_principal_id" IS NOT NULL`),
       index("conversation_messages_scheduled_send_idx")
         .on(table.workspaceId, table.scheduledSendAt)
         .where(sql`${table.sendStatus} = 'scheduled'`),
