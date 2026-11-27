@@ -7,6 +7,7 @@ import { useListPrincipals } from "../../hooks/team/use-list-principals";
 import { useListTicketStatuses } from "../../hooks/team/use-list-ticket-statuses";
 import { useListTickets } from "../../hooks/team/use-list-tickets";
 import { useMarkTicketRead } from "../../hooks/team/use-mark-ticket-read";
+import { useThreadPresence } from "../../hooks/team/use-thread-presence";
 import { useTeamRuntime } from "../../team/runtime";
 import { TeamStateView } from "../../team/team-state-view";
 import { DetailLayout } from "../../ui/inbox/detail-layout";
@@ -65,6 +66,14 @@ export function TeamTicketsPage({
   const people = useListPrincipals(
     { param: { workspaceId: ticketId ? workspaceId : "" }, query: {} },
     team.viewer,
+  );
+  const [replyingThreadId, setReplyingThreadId] = useState<string | null>(null);
+  const viewers = useThreadPresence(
+    "ticket",
+    workspaceId,
+    ticketId,
+    team.viewer,
+    replyingThreadId === ticketId ? "replying" : "viewing",
   );
   const { mutate: markRead } = useMarkTicketRead();
   useEffect(() => {
@@ -142,6 +151,7 @@ export function TeamTicketsPage({
               ticket={ticket.data}
               statuses={statusItems}
               people={people.data?.items ?? []}
+              viewers={viewers}
               onBack={back}
               onPrevious={nav.previous}
               onNext={nav.next}
@@ -153,7 +163,15 @@ export function TeamTicketsPage({
                 onRetry={() => void ticket.refetch()}
               >
                 {ticket.data ? (
-                  <TicketThread key={ticketId} ticket={ticket.data} />
+                  <TicketThread
+                    key={ticketId}
+                    ticket={ticket.data}
+                    people={people.data?.items ?? []}
+                    viewers={viewers}
+                    onReplyingChange={(isReplying) =>
+                      setReplyingThreadId(isReplying ? ticketId : null)
+                    }
+                  />
                 ) : null}
               </TeamStateView>
             </div>

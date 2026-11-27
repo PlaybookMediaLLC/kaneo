@@ -111,7 +111,16 @@ export function HomeView({
             {teamAvailability ??
               ([
                 team?.online ? t("We’re online now.") : "",
-                replyTime ? t(REPLY_TIME[replyTime]) : "",
+                !team?.online &&
+                team?.withinOfficeHours === false &&
+                team.nextOpenAt &&
+                !Number.isNaN(new Date(team.nextOpenAt).getTime())
+                  ? `Back online ${new Date(team.nextOpenAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}.`
+                  : team?.waitEstimateLabel
+                    ? `Usually replies in ${team.waitEstimateLabel}.`
+                    : replyTime
+                      ? t(REPLY_TIME[replyTime])
+                      : "",
               ]
                 .filter(Boolean)
                 .join(" ") ||

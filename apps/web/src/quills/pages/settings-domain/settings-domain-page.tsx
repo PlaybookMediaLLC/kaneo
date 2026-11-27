@@ -13,6 +13,7 @@ import { TeamStateView } from "../../team/team-state-view";
 import { PageFrame } from "../../ui/page-frame";
 import { SettingsPage } from "../../ui/upstream";
 import { DomainSection } from "./parts/domain-section";
+import { WidgetProxySnippets } from "./parts/widget-proxy-snippets";
 
 export interface SettingsDomainPageProps {
   workspaceId: string;
@@ -87,6 +88,7 @@ export function SettingsDomainPage({ workspaceId }: SettingsDomainPageProps) {
               onRemove={() => helpCenter.remove.mutateAsync({ param })}
             />
           ) : null}
+          <WidgetProxySnippets workspaceId={workspaceId} />
         </TeamStateView>
       </SettingsPage>
     </PageFrame>

@@ -3,10 +3,15 @@ import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import type { ListConversationMessagesResponse } from "../../../api/team/list-conversation-messages";
 import { useGetConversationTyping } from "../../../hooks/team/use-get-conversation-typing";
+import {
+  useRecallScheduledMessage,
+  useSendScheduledMessageNow,
+} from "../../../hooks/team/use-scheduled-send";
 import { useTeamRuntime } from "../../../team/runtime";
 import { teamHref } from "../../../team/team-href";
 import { DateSeparator } from "../../../ui/inbox/date-separator";
 import { MessageBubble } from "../../../ui/inbox/message-bubble";
+import { ScheduledSendFooter } from "../../../ui/inbox/scheduled-send-footer";
 import { SystemEvent } from "../../../ui/inbox/system-event";
 import { arrivedClass, useArrived } from "../../../ui/inbox/use-arrived";
 import { PageContext } from "../../../ui/page-context";
@@ -27,6 +32,8 @@ export interface MessageListProps {
   customerAvatarUrl?: string | null;
   /** The teammates, for the avatars of team replies. */
   people: readonly Teammate[];
+  /** Called when a scheduled/undo-send reply is recalled so its text returns to the composer. */
+  onRestoreDraft?: (content: string) => void;
 }
 
 // Resolve and reopen notices name the teammate who acted: "You resolved this conversation".
@@ -48,6 +55,8 @@ const day = (iso: string) => new Date(iso).toDateString();
 export function MessageList(props: MessageListProps) {
   const { t } = useTranslation("quills");
   const team = useTeamRuntime();
+  const recall = useRecallScheduledMessage(team.viewer);
+  const sendNow = useSendScheduledMessageNow(team.viewer);
   const typing = useGetConversationTyping(
     {
       param: {
@@ -133,6 +142,61 @@ export function MessageList(props: MessageListProps) {
                       }
                 }
                 time={message.createdAt}
+                footer={
+                  message.sendStatus === "scheduled" &&
+                  message.scheduledSendAt ? (
+                    <ScheduledSendFooter
+                      scheduledSendAt={message.scheduledSendAt}
+                      recalling={
+                        recall.isPending &&
+                        recall.variables?.param.messageId === message.id
+                      }
+                      sendingNow={
+                        sendNow.isPending &&
+                        sendNow.variables?.param.messageId === message.id
+                      }
+                      canManage={
+                        team.permissions.update &&
+                        (message.authorPrincipalId === me?.id ||
+                          team.permissions.manageSettings)
+                      }
+                      error={
+                        (recall.error &&
+                          recall.variables?.param.messageId === message.id) ||
+                        (sendNow.error &&
+                          sendNow.variables?.param.messageId === message.id)
+                          ? t("core.problem.failed")
+                          : null
+                      }
+                      onUndo={() => {
+                        recall.reset();
+                        sendNow.reset();
+                        recall.mutate(
+                          {
+                            param: {
+                              workspaceId: props.workspaceId,
+                              messageId: message.id,
+                            },
+                          },
+                          {
+                            onSuccess: (res) =>
+                              props.onRestoreDraft?.(res.content),
+                          },
+                        );
+                      }}
+                      onSendNow={() => {
+                        recall.reset();
+                        sendNow.reset();
+                        sendNow.mutate({
+                          param: {
+                            workspaceId: props.workspaceId,
+                            messageId: message.id,
+                          },
+                        });
+                      }}
+                    />
+                  ) : null
+                }
               >
                 {message.content ? (
                   <p className="whitespace-pre-wrap">{message.content}</p>

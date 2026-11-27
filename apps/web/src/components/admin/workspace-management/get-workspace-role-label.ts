@@ -2,6 +2,7 @@ const BUILT_IN_ROLE_LABEL_KEYS = new Map([
   ["owner", "team:roles.owner"],
   ["admin", "team:roles.admin"],
   ["member", "team:roles.member"],
+  ["collaborator", "team:roles.collaborator"],
   ["viewer", "team:roles.viewer"],
 ]);
 

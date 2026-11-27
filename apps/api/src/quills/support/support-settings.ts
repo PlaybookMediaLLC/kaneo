@@ -156,7 +156,32 @@ const setRouting = defineQuillsRoute({
     })),
 });
 
-const autoAckSchema = z.object({ enabled: z.boolean() });
+export const autoAckSchema = z.object({
+  enabled: z.boolean().default(false),
+  delaySeconds: z.number().int().min(0).max(600).default(30),
+  skipIfMedianUnderMinutes: z.number().int().min(0).max(60).default(5),
+  includeWaitEstimate: z.boolean().default(true),
+  includeKbSuggestions: z.boolean().default(true),
+  maxPerConversation: z.number().int().min(1).max(5).default(3),
+  customMessage: z.string().trim().max(1000).optional(),
+});
+
+export async function readEmailAutoAck(
+  db: Parameters<typeof readSettingsKey>[0],
+) {
+  const raw = await readSettingsKey(db, "metadata", "emailAutoAck");
+  const parsed = autoAckSchema.safeParse(raw ?? { enabled: false });
+  return parsed.success
+    ? parsed.data
+    : {
+        enabled: enabledIn(raw),
+        delaySeconds: 30,
+        skipIfMedianUnderMinutes: 5,
+        includeWaitEstimate: true,
+        includeKbSuggestions: true,
+        maxPerConversation: 3,
+      };
+}
 
 const getAutoAck = defineQuillsRoute({
   method: "get",
@@ -166,9 +191,17 @@ const getAutoAck = defineQuillsRoute({
   action: "manage_settings",
   response: autoAckSchema,
   responseDescription: "The auto-acknowledgement setting",
-  handler: async ({ db }) => ({
-    enabled: enabledIn(await readSettingsKey(db, "metadata", "emailAutoAck")),
-  }),
+  handler: ({ db }) => readEmailAutoAck(db),
+});
+
+export const autoAckUpdateSchema = z.object({
+  enabled: z.boolean(),
+  delaySeconds: z.number().int().min(0).max(600).optional(),
+  skipIfMedianUnderMinutes: z.number().int().min(0).max(60).optional(),
+  includeWaitEstimate: z.boolean().optional(),
+  includeKbSuggestions: z.boolean().optional(),
+  maxPerConversation: z.number().int().min(1).max(5).optional(),
+  customMessage: z.string().trim().max(1000).optional(),
 });
 
 const setAutoAck = defineQuillsRoute({
@@ -177,9 +210,9 @@ const setAutoAck = defineQuillsRoute({
   operationId: "setQuillsEmailAutoAck",
   summary: "Set the email auto-acknowledgement setting",
   description:
-    "Records the setting only. The API sends no auto-acknowledgement yet.",
+    "Configures smart delayed email auto-acknowledgement with live wait-time estimate, top KB suggestions, and loop protection (#331).",
   action: "manage_settings",
-  body: autoAckSchema,
+  body: autoAckUpdateSchema,
   response: autoAckSchema,
   responseDescription: "The auto-acknowledgement setting",
   event: ({ workspaceId }) => ({
@@ -187,10 +220,26 @@ const setAutoAck = defineQuillsRoute({
     entityType: "settings",
     entityId: workspaceId,
   }),
-  handler: async ({ db, body }) =>
-    writeSettingsKey(db, "metadata", "emailAutoAck", () => ({
+  handler: async ({ db, body }) => {
+    const existing = await readEmailAutoAck(db);
+    const merged = autoAckSchema.parse({
       enabled: body.enabled,
-    })),
+      delaySeconds: body.delaySeconds ?? existing.delaySeconds,
+      skipIfMedianUnderMinutes:
+        body.skipIfMedianUnderMinutes ?? existing.skipIfMedianUnderMinutes,
+      includeWaitEstimate:
+        body.includeWaitEstimate ?? existing.includeWaitEstimate,
+      includeKbSuggestions:
+        body.includeKbSuggestions ?? existing.includeKbSuggestions,
+      maxPerConversation:
+        body.maxPerConversation ?? existing.maxPerConversation,
+      customMessage:
+        body.customMessage !== undefined
+          ? body.customMessage
+          : existing.customMessage,
+    });
+    return writeSettingsKey(db, "metadata", "emailAutoAck", () => merged);
+  },
 });
 
 const getAwayReply = defineQuillsRoute({
@@ -373,6 +422,171 @@ const emailStatus = defineQuillsRoute({
   }),
 });
 
+export const undoSendSchema = z.object({
+  enabled: z.boolean(),
+  delaySeconds: z.number().int().min(5).max(30),
+});
+export const UNDO_SEND_DEFAULT = {
+  enabled: false,
+  delaySeconds: 10,
+} as const;
+
+export async function readUndoSend(db: Parameters<typeof readSettingsKey>[0]) {
+  const parsed = undoSendSchema.safeParse(
+    await readSettingsKey(db, "metadata", "undoSend"),
+  );
+  return parsed.success ? parsed.data : { ...UNDO_SEND_DEFAULT };
+}
+
+const getUndoSend = defineQuillsRoute({
+  method: "get",
+  path: "/support/undo-send",
+  operationId: "getQuillsUndoSendSettings",
+  summary: "Get the workspace undo-send delay setting for customer replies",
+  description:
+    "When enabled, customer replies are held for 5–30 seconds before sending so teammates can undo mistakes. Readable by any teammate so the composer knows the active window.",
+  action: "read",
+  response: undoSendSchema,
+  responseDescription: "The undo-send settings",
+  handler: ({ db }) => readUndoSend(db),
+});
+
+const setUndoSend = defineQuillsRoute({
+  method: "put",
+  path: "/support/undo-send",
+  operationId: "setQuillsUndoSendSettings",
+  summary: "Configure the workspace undo-send delay (5–30 seconds)",
+  action: "manage_settings",
+  body: undoSendSchema,
+  response: undoSendSchema,
+  responseDescription: "The updated undo-send settings",
+  event: ({ workspaceId }) => ({
+    type: "settings.undo_send_updated",
+    entityType: "settings",
+    entityId: workspaceId,
+  }),
+  handler: async ({ db, body }) =>
+    writeSettingsKey(db, "metadata", "undoSend", () => ({
+      enabled: body.enabled,
+      delaySeconds: body.delaySeconds,
+    })),
+});
+
+export const reopenPolicySchema = z.object({
+  mode: z
+    .enum(["always", "within_days", "never_link_new"])
+    .default("within_days"),
+  windowDays: z.number().int().min(1).max(90).default(14),
+  autoCloseAfterDays: z.number().int().min(1).max(30).default(5),
+  reminderBeforeCloseHours: z.number().int().min(6).max(72).default(24),
+});
+
+export async function readReopenPolicy(
+  db: Parameters<typeof readSettingsKey>[0],
+) {
+  const parsed = reopenPolicySchema.safeParse(
+    (await readSettingsKey(db, "metadata", "reopenPolicy")) ?? {},
+  );
+  return parsed.success
+    ? parsed.data
+    : {
+        mode: "within_days" as const,
+        windowDays: 14,
+        autoCloseAfterDays: 5,
+        reminderBeforeCloseHours: 24,
+      };
+}
+
+const getReopenPolicy = defineQuillsRoute({
+  method: "get",
+  path: "/support/reopen-policy",
+  operationId: "getQuillsReopenPolicy",
+  summary: "Get the ticket/conversation reopen & quiet auto-close policy",
+  action: "manage_settings",
+  response: reopenPolicySchema,
+  responseDescription: "The reopen policy",
+  handler: ({ db }) => readReopenPolicy(db),
+});
+
+const setReopenPolicy = defineQuillsRoute({
+  method: "put",
+  path: "/support/reopen-policy",
+  operationId: "setQuillsReopenPolicy",
+  summary:
+    "Configure the reopen and solution-offered quiet auto-close policy (#311)",
+  action: "manage_settings",
+  body: reopenPolicySchema,
+  response: reopenPolicySchema,
+  responseDescription: "The updated reopen policy",
+  event: ({ workspaceId }) => ({
+    type: "settings.reopen_policy_updated",
+    entityType: "settings",
+    entityId: workspaceId,
+  }),
+  handler: async ({ db, body }) =>
+    writeSettingsKey(db, "metadata", "reopenPolicy", () => body),
+});
+
+export const csatSettingsSchema = z.object({
+  enabled: z.boolean().default(true),
+  samplingRate: z.number().int().min(0).max(100).default(100),
+  cooldownDays: z.number().int().min(0).max(90).default(14),
+  delayMinutes: z.number().int().min(0).max(1440).default(15),
+  excludeTrivialUnderMessages: z.number().int().min(0).max(10).default(2),
+  lowScoreThreshold: z.number().int().min(1).max(3).default(2),
+  autoCreateFollowUpOnLow: z.boolean().default(true),
+});
+
+export async function readCsatSettings(
+  db: Parameters<typeof readSettingsKey>[0],
+) {
+  const parsed = csatSettingsSchema.safeParse(
+    (await readSettingsKey(db, "metadata", "csatSettings")) ?? {},
+  );
+  return parsed.success
+    ? parsed.data
+    : {
+        enabled: true,
+        samplingRate: 100,
+        cooldownDays: 14,
+        delayMinutes: 15,
+        excludeTrivialUnderMessages: 2,
+        lowScoreThreshold: 2,
+        autoCreateFollowUpOnLow: true,
+      };
+}
+
+const getCsatSettings = defineQuillsRoute({
+  method: "get",
+  path: "/support/csat-settings",
+  operationId: "getQuillsCsatSettings",
+  summary:
+    "Get the workspace CSAT survey rules (sampling, cooldown, follow-up)",
+  action: "manage_settings",
+  response: csatSettingsSchema,
+  responseDescription: "The CSAT settings",
+  handler: ({ db }) => readCsatSettings(db),
+});
+
+const setCsatSettings = defineQuillsRoute({
+  method: "put",
+  path: "/support/csat-settings",
+  operationId: "setQuillsCsatSettings",
+  summary:
+    "Configure CSAT survey sampling, per-customer cooldown, delay, and low-score follow-up (#312)",
+  action: "manage_settings",
+  body: csatSettingsSchema,
+  response: csatSettingsSchema,
+  responseDescription: "The updated CSAT settings",
+  event: ({ workspaceId }) => ({
+    type: "settings.csat_updated",
+    entityType: "settings",
+    entityId: workspaceId,
+  }),
+  handler: async ({ db, body }) =>
+    writeSettingsKey(db, "metadata", "csatSettings", () => body),
+});
+
 /** Teammate routes for support settings. */
 export default apiRouter<BaseVariables & { workspaceId: string }>()
   .openapi(...getOfficeHours)
@@ -385,4 +599,10 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .openapi(...setAwayReply)
   .openapi(...getSpam)
   .openapi(...setSpam)
+  .openapi(...getUndoSend)
+  .openapi(...setUndoSend)
+  .openapi(...getReopenPolicy)
+  .openapi(...setReopenPolicy)
+  .openapi(...getCsatSettings)
+  .openapi(...setCsatSettings)
   .openapi(...emailStatus);

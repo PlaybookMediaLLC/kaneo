@@ -69,6 +69,7 @@ const allowedImport = (file: string, specifier: string) => {
         // RFC 0005: Kaneo's own task and comment controllers, called as the acting teammate.
         "framework/platform-writes",
         "framework/webhook-config",
+        "framework/brand-mail",
         "framework/audience",
         "framework/signed",
         "framework/internal",
@@ -104,6 +105,14 @@ const allowedImport = (file: string, specifier: string) => {
         "framework/portal-sign-in",
         // The customer a verified host token names, on the route's own scoped transaction only.
         "widget/identify-customer",
+        // Pure HMAC single-request magic link signing/verification (#313); never the database.
+        "framework/request-magic-link",
+        // Pure forwarded-email parser (#325), HTML/CID media helper (#326), and automated-mail detector (#311/#331); never the database.
+        "inbound/forward-parser",
+        "inbound/html-media",
+        "inbound/automated",
+        // Pure office-hours next-open, wait-time formatting, and plain customer status helper (#333); never the database.
+        "support/office-hours-calc",
         "../openapi",
       ].includes(target) ||
       target.startsWith("../database/quills/schema/"))

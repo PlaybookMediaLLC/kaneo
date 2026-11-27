@@ -1,8 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
-import { count, eq } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
-import db from "../../database";
-import { workspaceUserTable } from "../../database/schema";
 import {
   type BillingInterval,
   isBillingEnabled,
@@ -10,6 +7,7 @@ import {
   productIdFor,
 } from "../config";
 import { createCheckoutSession } from "../creem-client";
+import { countWorkspaceSeats } from "./billable-seats";
 import { getOrCreateWorkspaceBilling } from "./get-workspace-billing";
 
 async function createCheckout({
@@ -41,11 +39,8 @@ async function createCheckout({
 
   let units = 1;
   if (plan === "team") {
-    const [members] = await db
-      .select({ value: count() })
-      .from(workspaceUserTable)
-      .where(eq(workspaceUserTable.workspaceId, workspaceId));
-    units = Math.max(1, members?.value ?? 1);
+    const { billableSeats } = await countWorkspaceSeats(workspaceId);
+    units = Math.max(1, billableSeats);
   }
 
   const clientUrl = process.env.KANEO_CLIENT_URL ?? "";

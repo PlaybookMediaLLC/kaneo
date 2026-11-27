@@ -105,15 +105,23 @@ export function widgetHost(findDist: () => string | null) {
   };
   return (
     new Hono()
-      // The SDK reads config.json from the host page's origin. It is public and never
-      // credentialed, while the app's CORS allowlist is for credentialed origins, so this
-      // response alone may be read by any origin. Mount this router before ./index.
+      // The SDK reads config.json and sdk.js from the host page's origin. Public and never
+      // credentialed, with zero Set-Cookie headers (#318). Mount this router before ./index.
+      .use("/:workspace/widget/*", async (c, next) => {
+        await next();
+        c.res.headers.delete("Set-Cookie");
+      })
       .use("/:workspace/widget/config.json", async (c, next) => {
         await next();
-        if (!c.res.headers.has("Access-Control-Allow-Origin"))
-          c.res.headers.set("Access-Control-Allow-Origin", "*");
+        c.res.headers.delete("Access-Control-Allow-Credentials");
+        c.res.headers.set("Access-Control-Allow-Origin", "*");
         if (!c.res.headers.has("Cross-Origin-Resource-Policy"))
           c.res.headers.set("Cross-Origin-Resource-Policy", "cross-origin");
+      })
+      .use("/:workspace/widget/sdk.js", async (c, next) => {
+        await next();
+        c.res.headers.delete("Access-Control-Allow-Credentials");
+        c.res.headers.set("Access-Control-Allow-Origin", "*");
       })
       .get("/:workspace/widget", (c) => {
         const script = asset("host.js");
@@ -126,8 +134,27 @@ export function widgetHost(findDist: () => string | null) {
         c.header("X-Content-Type-Options", "nosniff");
         c.header("Cross-Origin-Resource-Policy", "cross-origin");
         if (matchesEtag(c, etag)) return c.body(null, 304);
+        const rawPath = new URL(c.req.url).pathname;
+        const prefix = rawPath.endsWith("/")
+          ? "./"
+          : `${rawPath.split("/").pop() || "widget"}/`;
         return c.html(
-          `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Support</title><link rel="stylesheet" href="widget/host.css?v=${style.version}"><script src="widget/host.js?v=${script.version}" defer></script></head><body><div id="root"></div></body></html>`,
+          `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Support</title><link rel="stylesheet" href="${prefix}host.css?v=${style.version}"><script src="${prefix}host.js?v=${script.version}" defer></script></head><body><div id="root"></div></body></html>`,
+        );
+      })
+      .get("/:workspace/widget/", (c) => {
+        const script = asset("host.js");
+        const style = asset("host.css");
+        if (!script || !style) return unbuilt(c);
+        const etag = `"${script.version}-${style.version}"`;
+        c.header("Content-Security-Policy", PAGE_POLICY);
+        c.header("Cache-Control", "no-cache");
+        c.header("ETag", etag);
+        c.header("X-Content-Type-Options", "nosniff");
+        c.header("Cross-Origin-Resource-Policy", "cross-origin");
+        if (matchesEtag(c, etag)) return c.body(null, 304);
+        return c.html(
+          `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Support</title><link rel="stylesheet" href="./host.css?v=${style.version}"><script src="./host.js?v=${script.version}" defer></script></head><body><div id="root"></div></body></html>`,
         );
       })
       .get(

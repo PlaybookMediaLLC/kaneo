@@ -891,7 +891,8 @@
 			"defaultRoleDescriptions": {
 				"viewer": "可以查看任务并发表评论。",
 				"member": "可以创建并管理任务和项目。",
-				"admin": "拥有工作区的完全访问权限。"
+				"admin": "拥有工作区的完全访问权限。",
+				"collaborator": "Free internal seat: can view threads and add internal notes without replying externally."
 			},
 			"resources": {
 				"project": "项目",
@@ -1072,6 +1073,10 @@
 					"manage_settings": {
 						"label": "Manage Quills settings",
 						"description": "Change Quills configuration for this workspace."
+					},
+					"comment_internal": {
+						"description": "Add internal notes and @mention teammates without sending external customer replies.",
+						"label": "Comment internally"
 					}
 				}
 			},
@@ -1091,7 +1096,8 @@
 			"deleteDialog": {
 				"title": "删除角色",
 				"description": "这将永久删除角色 \"{{role}}\"，分配给该角色的成员将失去其权限。"
-			}
+			},
+			"freeSeatBadge": "Free seat"
 		},
 		"workspaceLabels": {
 			"pageTitle": "标签",
@@ -3973,7 +3979,8 @@
 			"owner": "所有者",
 			"admin": "管理员",
 			"member": "成员",
-			"viewer": "访客"
+			"viewer": "访客",
+			"collaborator": "Collaborator"
 		},
 		"members": {
 			"pageTitle": "成员",

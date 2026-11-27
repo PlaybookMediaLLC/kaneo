@@ -161,10 +161,17 @@ describe.skipIf(!url)("Shared Kaneo and Quills platform", () => {
     );
     const upgrade = migration.split("--> statement-breakpoint").at(-1)!;
     expect(upgrade).toContain("FROM public.workspace_role");
-    // 0033 then gives untouched default roles quills:view_revenue (#79): the defaults of today.
+    // 0033 then gives untouched default roles quills:view_revenue (#79) and 0047 adds
+    // quills:comment_internal (#328): the defaults of today.
     const revenue = (
       await readFile(
         resolve("drizzle/quills/0033_quills_view_revenue.sql"),
+        "utf8",
+      )
+    ).split("--> statement-breakpoint")[0]!;
+    const collaborator = (
+      await readFile(
+        resolve("drizzle/quills/0047_collaborator_role.sql"),
         "utf8",
       )
     ).split("--> statement-breakpoint")[0]!;
@@ -187,6 +194,7 @@ describe.skipIf(!url)("Shared Kaneo and Quills platform", () => {
       );
       await client.query(upgrade);
       await client.query(revenue);
+      await client.query(collaborator);
       const result = await client.query(
         "SELECT role,permission FROM public.workspace_role WHERE workspace_id=$1 AND role IN ('viewer','member','admin')",
         [a],

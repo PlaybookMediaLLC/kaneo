@@ -1,4 +1,4 @@
-import { TriangleAlert } from "lucide-react";
+import { Lock, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { clockTime } from "../../core/short-date";
@@ -8,7 +8,7 @@ import type { InboxPerson } from "./inbox-types";
 
 export interface MessageBubbleProps {
   /**
-   * other: left and gray. self: right, in the primary color. note: right, yellow, labelled "Note".
+   * other: left and gray. self: right, in the primary color. note: right, amber dashed with lock icon, labelled "Internal note".
    * "self" is the viewer's side: the team in the teammate app, the customer in the portal.
    */
   kind: "other" | "self" | "note";
@@ -19,6 +19,8 @@ export interface MessageBubbleProps {
   time: string;
   /** A delivery failure under the bubble, such as "Email failed". */
   failure?: string | null;
+  /** Optional footer strip inside/below the bubble (such as scheduled send countdown & Undo). */
+  footer?: ReactNode;
   /** False hides the avatar, such as for the customer's own messages in the portal. */
   avatar?: boolean;
 }
@@ -26,7 +28,7 @@ export interface MessageBubbleProps {
 const bubbles = {
   other: "rounded-bl-md bg-muted text-foreground",
   self: "rounded-br-md bg-primary text-primary-foreground [&_a]:text-primary-foreground",
-  note: "rounded-br-md border border-warning/30 bg-warning/10 text-foreground",
+  note: "rounded-br-md border border-l-4 border-dashed border-warning/60 bg-warning/10 text-foreground",
 } as const;
 
 /** One message of a thread, with the author's avatar, the time and the delivery state. */
@@ -36,6 +38,7 @@ export function MessageBubble({
   children,
   time,
   failure,
+  footer,
   avatar = true,
 }: MessageBubbleProps) {
   const { t, i18n } = useTranslation("quills");
@@ -63,11 +66,13 @@ export function MessageBubble({
           )}
         >
           {kind === "note" ? (
-            <p className="mb-1 text-xs font-semibold text-warning-foreground">
+            <p className="mb-1 flex items-center gap-1 text-xs font-semibold text-warning-foreground">
+              <Lock aria-hidden="true" className="size-3" />
               {t("inbox.note")}
             </p>
           ) : null}
           {children}
+          {footer}
         </div>
         <p className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground">
           {author.name ? (

@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { isTypeId, type TypeId } from "@kaneo/ids";
 import { apiRouter, z, type BaseVariables } from "../../openapi";
@@ -12,6 +12,7 @@ import {
 import { defineQuillsRoute } from "../framework/define-route";
 import { listConversations, listFilters, openQueue } from "./conversation-list";
 import { conversationItem, errors } from "./conversation-model";
+import { resolveAllowedTeamIds } from "./team-scope";
 import {
   conversationLinked,
   listTicketPage,
@@ -109,6 +110,7 @@ const listInbox = defineQuillsRoute({
   description:
     "Conversations and tickets in one page, newest activity first (a conversation's last message, a ticket's last change). `facet` maps to a conversation status (waiting = snoozed) and a ticket status category (waiting = pending). A customer ticket with a linked conversation lists as that conversation. A conversation-only filter (visitor, tag, channel, source, waitingOnly, unreadOnly or a view) lists conversations only. Pass `nextCursor` as `cursor` for the next page.",
   action: "read",
+  callerActions: true,
   query: listFilters.omit({ status: true, sort: true, cursor: true }).extend({
     facet: z.enum(["open", "waiting", "closed", "all"]).default("open"),
     kind: z.enum(["conversation", "ticket"]).optional(),
@@ -131,9 +133,17 @@ const listInbox = defineQuillsRoute({
   errors,
   handler: async ({
     db,
+    workspaceId,
     actor,
+    actions,
     query: { facet, kind, cursor: token, ...filters },
   }) => {
+    const allowedTeamIds = await resolveAllowedTeamIds(
+      db,
+      workspaceId,
+      actor,
+      actions,
+    );
     const cursor = readCursor(token);
     const conversationOnly = Boolean(
       filters.visitorPrincipalId ||
@@ -147,11 +157,16 @@ const listInbox = defineQuillsRoute({
     const conversationPage =
       kind === "ticket"
         ? { items: [], hasMore: false }
-        : await listConversations(db, actor, {
-            ...filters,
-            status: facets[facet].conversation,
-            cursor: cursor.c ?? undefined,
-          });
+        : await listConversations(
+            db,
+            actor,
+            {
+              ...filters,
+              status: facets[facet].conversation,
+              cursor: cursor.c ?? undefined,
+            },
+            allowedTeamIds,
+          );
     const ticketPage =
       kind === "conversation" || conversationOnly
         ? { items: [], hasMore: false }
@@ -166,6 +181,7 @@ const listInbox = defineQuillsRoute({
             limit: filters.limit,
             excludeConversationLinked: true,
             realOnly: true,
+            allowedTeamIds,
           });
     const left: Item[] = conversationPage.items.map((conversation) => ({
       kind: "conversation",
@@ -219,6 +235,7 @@ const inboxCounts = defineQuillsRoute({
   description:
     "Open conversations assigned to the caller and unassigned ones; open tickets by type, where the customer count includes open conversations paired with a customer ticket (a pair counts once, as in the list); and test conversations in any status. Test customers' threads, spam and archived conversations are not counted in the queues.",
   action: "read",
+  callerActions: true,
   response: z.object({
     mine: z.number(),
     unassigned: z.number(),
@@ -231,7 +248,25 @@ const inboxCounts = defineQuillsRoute({
   }),
   responseDescription: "Counts",
   errors,
-  handler: async ({ db, actor }) => {
+  handler: async ({ db, workspaceId, actor, actions }) => {
+    const allowedTeamIds = await resolveAllowedTeamIds(
+      db,
+      workspaceId,
+      actor,
+      actions,
+    );
+    const convTeamFilter =
+      allowedTeamIds === null
+        ? undefined
+        : allowedTeamIds.length === 0
+          ? sql`false`
+          : inArray(conversations.assignedTeamId, allowedTeamIds);
+    const ticketTeamFilter =
+      allowedTeamIds === null
+        ? undefined
+        : allowedTeamIds.length === 0
+          ? sql`false`
+          : inArray(tickets.assigneeTeamId, allowedTeamIds);
     const test = sql`${principal.testOwnerPrincipalId} is not null`;
     const [row] = await db
       .select({
@@ -242,7 +277,7 @@ const inboxCounts = defineQuillsRoute({
       })
       .from(conversations)
       .innerJoin(principal, eq(principal.id, conversations.visitorPrincipalId))
-      .where(or(openQueue, test));
+      .where(and(or(openQueue, test), convTeamFilter));
     const byType = await db
       .select({ type: tickets.type, count: sql<number>`count(*)::int` })
       .from(tickets)
@@ -252,6 +287,7 @@ const inboxCounts = defineQuillsRoute({
           statusIn(db, "category", "open"),
           sql`not ${conversationLinked}`,
           sql`not ${testRequester}`,
+          ticketTeamFilter,
         ),
       )
       .groupBy(tickets.type);
@@ -278,6 +314,7 @@ const inboxSegments = defineQuillsRoute({
   description:
     "Live segments by name, each with the open conversations whose visitor is a member (test, spam and archived conversations not counted).",
   action: "read",
+  callerActions: true,
   response: z.object({
     items: z.array(
       z.object({
@@ -290,7 +327,19 @@ const inboxSegments = defineQuillsRoute({
   }),
   responseDescription: "Segments",
   errors,
-  handler: async ({ db }) => {
+  handler: async ({ db, workspaceId, actor, actions }) => {
+    const allowedTeamIds = await resolveAllowedTeamIds(
+      db,
+      workspaceId,
+      actor,
+      actions,
+    );
+    const convTeamFilter =
+      allowedTeamIds === null
+        ? undefined
+        : allowedTeamIds.length === 0
+          ? sql`false`
+          : inArray(conversations.assignedTeamId, allowedTeamIds);
     // Start from the open queue (small), not from every segment membership.
     const counted = db
       .select({
@@ -305,7 +354,7 @@ const inboxSegments = defineQuillsRoute({
         userSegments,
         eq(userSegments.principalId, conversations.visitorPrincipalId),
       )
-      .where(openQueue)
+      .where(and(openQueue, convTeamFilter))
       .groupBy(userSegments.segmentId)
       .as("counted");
     const rows = await db

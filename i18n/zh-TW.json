@@ -890,7 +890,8 @@
 			"defaultRoleDescriptions": {
 				"viewer": "可以檢視任務並留言。",
 				"member": "可以建立並管理任務與專案。",
-				"admin": "擁有工作區的完整存取權限。"
+				"admin": "擁有工作區的完整存取權限。",
+				"collaborator": "Free internal seat: can view threads and add internal notes without replying externally."
 			},
 			"resources": {
 				"project": "專案",
@@ -1071,6 +1072,10 @@
 					"manage_settings": {
 						"label": "Manage Quills settings",
 						"description": "Change Quills configuration for this workspace."
+					},
+					"comment_internal": {
+						"description": "Add internal notes and @mention teammates without sending external customer replies.",
+						"label": "Comment internally"
 					}
 				}
 			},
@@ -1090,7 +1095,8 @@
 			"deleteDialog": {
 				"title": "刪除角色",
 				"description": "這會永久刪除角色「{{role}}」，被指派此角色的成員將失去其權限。"
-			}
+			},
+			"freeSeatBadge": "Free seat"
 		},
 		"workspaceLabels": {
 			"pageTitle": "標籤",
@@ -3973,7 +3979,8 @@
 			"owner": "擁有者",
 			"admin": "管理員",
 			"member": "成員",
-			"viewer": "檢視者"
+			"viewer": "檢視者",
+			"collaborator": "Collaborator"
 		},
 		"members": {
 			"pageTitle": "成員",

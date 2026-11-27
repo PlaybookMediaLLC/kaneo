@@ -123,14 +123,41 @@ const record = defineQuillsRoute({
     changed: z.boolean(),
   }),
   responseDescription: "The outcome",
-  event: (_input, result) =>
-    result.changed &&
-    result.conversationId !== null && {
-      type: "conversation.csat_submitted",
-      entityType: "conversation",
+  event: (_input, result, raw) => {
+    if (!result.changed || result.conversationId === null) return false;
+    const extra = raw as {
+      isLow?: boolean;
+      followUpTicketId?: string | null;
+    };
+    const csatEvent = {
+      type: "conversation.csat_submitted" as const,
+      entityType: "conversation" as const,
       entityId: result.conversationId,
-      payload: { rating: String(result.rating), via: "email" },
-    },
+      payload: {
+        rating: String(result.rating),
+        via: "email",
+        isLow: String(extra.isLow ?? false),
+        ...(extra.followUpTicketId
+          ? { followUpTicketId: extra.followUpTicketId }
+          : {}),
+      },
+    };
+    if (extra.followUpTicketId) {
+      return [
+        csatEvent,
+        {
+          type: "ticket.created" as const,
+          entityType: "ticket" as const,
+          entityId: extra.followUpTicketId,
+          payload: {
+            source: "low_csat",
+            conversationId: result.conversationId,
+          },
+        },
+      ];
+    }
+    return csatEvent;
+  },
   handler: async ({ db, body }) => {
     const conversation = await liveClaims(db, body.token, true);
     if (!conversation)

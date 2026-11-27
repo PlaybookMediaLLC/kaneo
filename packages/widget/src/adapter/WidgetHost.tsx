@@ -85,12 +85,17 @@ function navigationFor(target: Target):
  */
 export function WidgetHost({
   base,
+  widgetProxied = false,
   params,
 }: {
   base: string;
+  widgetProxied?: boolean;
   params: URLSearchParams;
 }) {
-  const api = useMemo(() => createApi(base), [base]);
+  const api = useMemo(
+    () => createApi(base, fetch, { widgetProxied }),
+    [base, widgetProxied],
+  );
   const bridge = useRef<ParentBridge | null>(null);
   const [config, setConfig] = useState<Config | "off" | "error" | null>(null);
   const [active, setActive] = useState(false);

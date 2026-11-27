@@ -1283,7 +1283,8 @@
 			"defaultRoleDescriptions": {
 				"viewer": "Akses hanya baca ke proyek, tugas, dan ruang kerja.",
 				"member": "Dapat membuat dan memperbarui proyek serta tugas.",
-				"admin": "Manajemen penuh proyek dan tugas serta pengaturan ruang kerja."
+				"admin": "Manajemen penuh proyek dan tugas serta pengaturan ruang kerja.",
+				"collaborator": "Free internal seat: can view threads and add internal notes without replying externally."
 			},
 			"resources": {
 				"project": "Proyek",
@@ -1464,6 +1465,10 @@
 					"manage_settings": {
 						"label": "Manage Quills settings",
 						"description": "Change Quills configuration for this workspace."
+					},
+					"comment_internal": {
+						"description": "Add internal notes and @mention teammates without sending external customer replies.",
+						"label": "Comment internally"
 					}
 				}
 			},
@@ -1483,7 +1488,8 @@
 			"deleteDialog": {
 				"title": "Hapus peran",
 				"description": "Ini akan menghapus peran \"{{role}}\" secara permanen. Anggota yang memakai peran ini akan kehilangan izinnya."
-			}
+			},
+			"freeSeatBadge": "Free seat"
 		},
 		"workspaceLabels": {
 			"pageTitle": "Label",
@@ -3973,7 +3979,8 @@
 			"owner": "Pemilik",
 			"admin": "Admin",
 			"member": "Anggota",
-			"viewer": "Lihat Saja"
+			"viewer": "Lihat Saja",
+			"collaborator": "Collaborator"
 		},
 		"members": {
 			"pageTitle": "Anggota",

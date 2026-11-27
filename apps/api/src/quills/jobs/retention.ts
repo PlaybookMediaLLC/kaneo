@@ -48,6 +48,10 @@ export async function pruneQuillsWorkspace(
     sql`DELETE FROM quills.content_translations WHERE (workspace_id,id) IN (SELECT workspace_id,id FROM quills.content_translations WHERE created_at<now()-${policy.logs}*interval '1 day' ORDER BY created_at LIMIT 1000)`,
     // Expired, canceled and pending-but-expired invites. An accepted invite grants portal access.
     sql`DELETE FROM quills.portal_invites WHERE (workspace_id,id) IN (SELECT workspace_id,id FROM quills.portal_invites WHERE status<>'accepted' AND expires_at<now()-${policy.logs}*interval '1 day' LIMIT 1000)`,
+    // Expired or revoked single-request magic links (#313).
+    sql`DELETE FROM quills.request_access_links WHERE (workspace_id,id) IN (SELECT workspace_id,id FROM quills.request_access_links WHERE least(expires_at,revoked_at)<now()-interval '30 days' ORDER BY least(expires_at,revoked_at) LIMIT 1000)`,
+    // Ephemeral webhook delivery attempt logs (#330).
+    sql`DELETE FROM quills.webhook_deliveries WHERE (workspace_id,id) IN (SELECT workspace_id,id FROM quills.webhook_deliveries WHERE created_at<now()-${policy.logs}*interval '1 day' ORDER BY created_at LIMIT 1000)`,
   ];
   let removed = 0;
   for (const statement of statements)

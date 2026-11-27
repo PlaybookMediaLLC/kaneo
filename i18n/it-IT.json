@@ -908,7 +908,8 @@
 			"defaultRoleDescriptions": {
 				"viewer": "Può visualizzare e commentare le attività.",
 				"member": "Può creare e gestire attività e progetti.",
-				"admin": "Ha accesso completo al workspace."
+				"admin": "Ha accesso completo al workspace.",
+				"collaborator": "Free internal seat: can view threads and add internal notes without replying externally."
 			},
 			"resources": {
 				"project": "Progetti",
@@ -1089,6 +1090,10 @@
 					"manage_settings": {
 						"label": "Manage Quills settings",
 						"description": "Change Quills configuration for this workspace."
+					},
+					"comment_internal": {
+						"description": "Add internal notes and @mention teammates without sending external customer replies.",
+						"label": "Comment internally"
 					}
 				}
 			},
@@ -1109,7 +1114,8 @@
 				"title": "Elimina ruolo",
 				"description": "Questo eliminerà permanentemente il ruolo \"{{role}}\". I membri assegnati a questo ruolo perderanno i suoi permessi."
 			},
-			"permissionCount_many": "{{count}} permessi"
+			"permissionCount_many": "{{count}} permessi",
+			"freeSeatBadge": "Free seat"
 		},
 		"workspaceLabels": {
 			"pageTitle": "Etichette",
@@ -4125,7 +4131,8 @@
 			"owner": "Proprietario",
 			"admin": "Amministratore",
 			"member": "Membro",
-			"viewer": "Visualizzatore"
+			"viewer": "Visualizzatore",
+			"collaborator": "Collaborator"
 		},
 		"members": {
 			"pageTitle": "Membri",

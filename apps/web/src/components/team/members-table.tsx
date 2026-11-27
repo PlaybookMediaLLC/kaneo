@@ -325,6 +325,11 @@ function MembersTable({ workspaceId, invitations, users }: Props) {
                         <SelectItem value="viewer">
                           {t("team:roles.viewer", { defaultValue: "Viewer" })}
                         </SelectItem>
+                        <SelectItem value="collaborator">
+                          {t("team:roles.collaborator", {
+                            defaultValue: "Collaborator",
+                          })}
+                        </SelectItem>
                         <SelectItem value="member">
                           {t("team:roles.member", { defaultValue: "Member" })}
                         </SelectItem>

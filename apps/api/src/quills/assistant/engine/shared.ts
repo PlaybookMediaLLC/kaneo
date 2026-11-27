@@ -88,6 +88,7 @@ export async function transcript(
           ? eq(conversationMessages.conversationId, ref.conversationId as never)
           : eq(conversationMessages.ticketId, ref.ticketId as never),
         isNull(conversationMessages.deletedAt),
+        eq(conversationMessages.sendStatus, "sent"),
         internal ? undefined : eq(conversationMessages.isInternal, false),
       ),
     )

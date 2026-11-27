@@ -24,11 +24,17 @@ export interface InboxAction {
   disabled?: boolean;
 }
 
-/** A choice of the composer's mode dropdown, such as Reply or Note. */
+/** A choice of the composer's mode switcher, such as Reply or Note. */
 export interface ComposerMode {
   value: string;
   label: string;
   icon?: LucideIcon;
-  /** Tints the box yellow, as for an internal note or a private comment. */
+  /** Tints the box amber with a dashed accent border, as for an internal note or private comment. */
   private?: boolean;
+  /** Persistent context line above the textarea so reply vs note is unmistakable without color alone. */
+  description?: string;
+  /** Explicit send button text such as "Send to customer" vs "Add note". */
+  sendLabel?: string;
+  /** Optional icon shown inside the explicit send button. */
+  sendIcon?: LucideIcon;
 }

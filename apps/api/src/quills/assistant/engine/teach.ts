@@ -161,6 +161,7 @@ const review = async (
       .where(
         and(
           eq(conversationMessages.conversationId, conversation.id),
+          eq(conversationMessages.sendStatus, "sent"),
           isNull(conversationMessages.deletedAt),
         ),
       )

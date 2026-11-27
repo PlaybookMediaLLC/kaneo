@@ -8,6 +8,7 @@ import { useListConversationViews } from "../../hooks/team/use-list-conversation
 import { useListConversations } from "../../hooks/team/use-list-conversations";
 import { useListPrincipals } from "../../hooks/team/use-list-principals";
 import { useMarkConversationRead } from "../../hooks/team/use-mark-conversation-read";
+import { useThreadPresence } from "../../hooks/team/use-thread-presence";
 import { useTeamRuntime } from "../../team/runtime";
 import { TeamStateView } from "../../team/team-state-view";
 import { DetailLayout } from "../../ui/inbox/detail-layout";
@@ -46,6 +47,12 @@ export function TeamConversationPage(props: TeamConversationPageProps) {
   const conversationId = props.params.conversationId ?? "";
   const context = readContext(props.search);
   const [saving, setSaving] = useState(false);
+  const [replyingThreadId, setReplyingThreadId] = useState<string | null>(null);
+  const [restoredDraft, setRestoredDraft] = useState<{
+    conversationId: string;
+    text: string;
+    seq: number;
+  } | null>(null);
   const param = { workspaceId, conversationId };
   const conversation = useGetConversation({ param }, team.viewer);
   // ponytail: the newest 100 messages only; page with `before` when longer threads matter.
@@ -69,6 +76,13 @@ export function TeamConversationPage(props: TeamConversationPageProps) {
     team.viewer,
   );
   const people = principals.data?.items ?? [];
+  const viewers = useThreadPresence(
+    "conversation",
+    workspaceId,
+    conversationId,
+    team.viewer,
+    replyingThreadId === conversationId ? "replying" : "viewing",
+  );
   const data = conversation.data;
   const items = useKeptOpen(list.data?.pages, conversationId, data, query);
   const { mutate: markRead } = useMarkConversationRead(team.viewer);
@@ -148,6 +162,7 @@ export function TeamConversationPage(props: TeamConversationPageProps) {
           workspaceId={workspaceId}
           conversation={data}
           people={people}
+          viewers={viewers}
           myPrincipalId={
             people.find((person) => person.userId === team.viewer.id)?.id ??
             null
@@ -174,6 +189,13 @@ export function TeamConversationPage(props: TeamConversationPageProps) {
                 customerName={customer}
                 customerAvatarUrl={data.visitorAvatarUrl}
                 people={people}
+                onRestoreDraft={(text) =>
+                  setRestoredDraft((prev) => ({
+                    conversationId,
+                    text,
+                    seq: (prev?.seq ?? 0) + 1,
+                  }))
+                }
               />
             ) : null}
           </TeamStateView>
@@ -184,6 +206,17 @@ export function TeamConversationPage(props: TeamConversationPageProps) {
             workspaceId={workspaceId}
             conversationId={conversationId}
             customerName={customer}
+            people={people}
+            viewers={viewers}
+            onReplyingChange={(isReplying) =>
+              setReplyingThreadId(isReplying ? conversationId : null)
+            }
+            restoredDraft={
+              restoredDraft?.conversationId === conversationId
+                ? restoredDraft
+                : null
+            }
+            onRestoredDraftConsumed={() => setRestoredDraft(null)}
           />
         ) : null}
       </DetailLayout>

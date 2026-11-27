@@ -17,5 +17,7 @@
 	"assistant": "Assistant",
 	"submitRequest": "Submit request",
 	"requestSubmitted": "Request submitted",
-	"requestFailed": "The request could not be submitted. Try again."
+	"requestFailed": "The request could not be submitted. Try again.",
+	"solutionOfferedBanner": "We offered a solution — did that resolve your issue?",
+	"confirmSolved": "Yes, that solved it"
 }

@@ -8,7 +8,12 @@ import {
   z,
   type BaseVariables,
 } from "../../openapi";
+import {
+  conversationMessages,
+  conversations,
+} from "../../database/quills/schema/conversation";
 import { files } from "../../database/quills/schema/files";
+import { tickets } from "../../database/quills/schema/tickets";
 import { defineQuillsRoute, type Database } from "../framework/define-route";
 import {
   createDownload,
@@ -18,6 +23,10 @@ import {
   verifyUpload,
   type VerifiedUpload,
 } from "../framework/files";
+import {
+  assertTeamVisible,
+  resolveAllowedTeamIds,
+} from "../support/team-scope";
 
 const file = z.object({
   id: z.string(),
@@ -88,7 +97,7 @@ export async function registerFile(
   values: {
     name: string;
     declaredType: string;
-    source: "agent" | "portal" | "visitor";
+    source: "agent" | "portal" | "visitor" | "email";
     uploadedById: TypeId<"principal"> | null;
   },
 ) {
@@ -144,12 +153,61 @@ const createFile = defineQuillsRoute({
     }),
 });
 
+async function assertFileVisible(
+  db: Database,
+  row: {
+    messageId: typeof files.$inferSelect.messageId;
+    postId: typeof files.$inferSelect.postId;
+    commentId: typeof files.$inferSelect.commentId;
+    uploadedById: typeof files.$inferSelect.uploadedById;
+  },
+  actorPrincipalId: string,
+  allowedTeams: readonly TypeId<"team">[] | null,
+) {
+  if (allowedTeams === null) return;
+  if (row.messageId) {
+    const [msg] = await db
+      .select({
+        conversationId: conversationMessages.conversationId,
+        ticketId: conversationMessages.ticketId,
+        sendStatus: conversationMessages.sendStatus,
+      })
+      .from(conversationMessages)
+      .where(eq(conversationMessages.id, row.messageId))
+      .limit(1);
+    if (!msg || msg.sendStatus !== "sent") {
+      throw new HTTPException(404, { message: "File not found" });
+    }
+    if (msg.conversationId) {
+      const [conv] = await db
+        .select({ assignedTeamId: conversations.assignedTeamId })
+        .from(conversations)
+        .where(eq(conversations.id, msg.conversationId))
+        .limit(1);
+      assertTeamVisible(allowedTeams, conv?.assignedTeamId ?? null, "File");
+    } else if (msg.ticketId) {
+      const [ticket] = await db
+        .select({ assignedTeamId: tickets.assignedTeamId })
+        .from(tickets)
+        .where(eq(tickets.id, msg.ticketId))
+        .limit(1);
+      assertTeamVisible(allowedTeams, ticket?.assignedTeamId ?? null, "File");
+    }
+    return;
+  }
+  // Unattached files uploaded by another teammate are not visible to team-scoped collaborators.
+  if (!row.postId && !row.commentId && row.uploadedById !== actorPrincipalId) {
+    throw new HTTPException(404, { message: "File not found" });
+  }
+}
+
 const getFile = defineQuillsRoute({
   method: "get",
   path: "/files/{fileId}",
   operationId: "getQuillsFile",
   summary: "Get a file and a short-lived download URL",
   action: "read",
+  callerActions: true,
   params: fileParams,
   response: file.extend({
     downloadUrl: z.string(),
@@ -157,14 +215,35 @@ const getFile = defineQuillsRoute({
   }),
   responseDescription: "File",
   errors: notFound,
-  handler: async ({ db, params }) => {
+  handler: async ({ db, workspaceId, actor, actions, params }) => {
+    const allowedTeams = await resolveAllowedTeamIds(
+      db,
+      workspaceId,
+      actor,
+      actions,
+    );
     const [row] = await db
-      .select({ ...fileFields, storageKey: files.storageKey })
+      .select({
+        ...fileFields,
+        storageKey: files.storageKey,
+        messageId: files.messageId,
+        postId: files.postId,
+        commentId: files.commentId,
+        uploadedById: files.uploadedById,
+      })
       .from(files)
       .where(live(params.fileId))
       .limit(1);
     if (!row) throw new HTTPException(404, { message: "File not found" });
-    const { storageKey, ...fields } = row;
+    await assertFileVisible(db, row, actor.principalId, allowedTeams);
+    const {
+      storageKey,
+      messageId: _m,
+      postId: _p,
+      commentId: _c,
+      uploadedById: _u,
+      ...fields
+    } = row;
     return {
       ...fields,
       ...(await createDownload({ ...fields, storageKey })),
@@ -178,12 +257,33 @@ const openFile = defineQuillsRoute({
   operationId: "createQuillsFilesOpened",
   summary: "Count an open of a file",
   action: "read",
+  callerActions: true,
   params: fileParams,
   response: z.object({ openCount: z.number() }),
   responseDescription: "Open count",
   errors: notFound,
   event: { none: "A usage counter, not a change to the file" },
-  handler: async ({ db, params }) => {
+  handler: async ({ db, workspaceId, actor, actions, params }) => {
+    const allowedTeams = await resolveAllowedTeamIds(
+      db,
+      workspaceId,
+      actor,
+      actions,
+    );
+    if (allowedTeams !== null) {
+      const [meta] = await db
+        .select({
+          messageId: files.messageId,
+          postId: files.postId,
+          commentId: files.commentId,
+          uploadedById: files.uploadedById,
+        })
+        .from(files)
+        .where(live(params.fileId))
+        .limit(1);
+      if (!meta) throw new HTTPException(404, { message: "File not found" });
+      await assertFileVisible(db, meta, actor.principalId, allowedTeams);
+    }
     const [row] = await db
       .update(files)
       .set({ openCount: sql`${files.openCount} + 1` })

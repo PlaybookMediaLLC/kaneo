@@ -48,3 +48,9 @@ export const setQuillsAgentAvailability = fixture({
   seed: seeded("own"),
   valid: () => ({ body: { availability: "away" } }),
 });
+export const setQuillsConversationRequester = onConversation(() => ({
+  body: { email: "real-customer@example.test", name: "Real Customer" },
+}));
+export const offerQuillsConversationSolution = onConversation(() => ({
+  body: { autoCloseAfterDays: 5 },
+}));

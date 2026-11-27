@@ -25,12 +25,18 @@ export interface CommentBoxProps {
 export function CommentBox(props: CommentBoxProps) {
   const { t } = useTranslation("quills");
   const team = useTeamRuntime();
+  const canPublic = team.permissions.create;
+  const canPrivate = Boolean(
+    team.permissions.create || team.permissions.commentInternal,
+  );
   const [text, setText] = useState("");
-  const [mode, setMode] = useState("public");
+  const [mode, setMode] = useState(canPublic ? "public" : "private");
   const input = useRef<HTMLTextAreaElement>(null);
   const create = useCreateComment(team.viewer);
-  const allowed = team.permissions.create;
+  const allowed = canPublic || canPrivate;
   const focus = (next: string) => () => {
+    if (next === "public" && !canPublic) return;
+    if (next === "private" && !canPrivate) return;
     setMode(next);
     input.current?.focus();
   };
@@ -49,26 +55,31 @@ export function CommentBox(props: CommentBoxProps) {
       box?.setSelectionRange(start + emoji.length, start + emoji.length);
     });
   };
+  const modes = props.parentId
+    ? undefined
+    : [
+        ...(canPublic
+          ? [{ value: "public", label: t("team-post.public"), icon: Globe }]
+          : []),
+        ...(canPrivate
+          ? [
+              {
+                value: "private",
+                label: t("team-post.privateNote"),
+                icon: Lock,
+                private: true,
+              },
+            ]
+          : []),
+      ];
   return (
     <div className="grid grid-cols-1 gap-1">
       <Composer
         label={props.label ?? t("team-post.writeComment")}
         value={text}
         onChange={setText}
-        modes={
-          props.parentId
-            ? undefined
-            : [
-                { value: "public", label: t("team-post.public"), icon: Globe },
-                {
-                  value: "private",
-                  label: t("team-post.privateNote"),
-                  icon: Lock,
-                  private: true,
-                },
-              ]
-        }
-        mode={mode}
+        modes={modes}
+        mode={canPublic ? mode : "private"}
         onModeChange={setMode}
         tools={<EmojiMenu onPick={insert} disabled={!allowed} />}
         sending={create.isPending}
@@ -82,7 +93,7 @@ export function CommentBox(props: CommentBoxProps) {
                 content: text.trim(),
                 ...(props.parentId
                   ? { parentId: props.parentId }
-                  : { isPrivate: mode === "private" }),
+                  : { isPrivate: !canPublic || mode === "private" }),
               },
             },
             {

@@ -13,13 +13,17 @@ import type { TypeId } from "@kaneo/ids";
 import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
 import {
   apiRouter,
+  nullableResponseTimestamp,
   pagingNumber,
   responseTimestamp,
   z,
   type BaseVariables,
 } from "../../openapi";
 import { principal } from "../../database/quills/schema/auth";
-import { conversationMessages } from "../../database/quills/schema/conversation";
+import {
+  conversationMessageMentions,
+  conversationMessages,
+} from "../../database/quills/schema/conversation";
 import { ticketActivity } from "../../database/quills/schema/ticket-activity";
 import {
   ticketConversations,
@@ -30,8 +34,14 @@ import {
   type Database,
   type QuillsActor,
 } from "../framework/define-route";
-import { findConversation } from "./conversation-model";
+import { memberUserIds } from "../framework/platform-reads";
+import { currentTeammates, findConversation } from "./conversation-model";
 import { insertReply as replyToConversation } from "./conversation-ops";
+import {
+  enqueueScheduledSendJob,
+  resolveScheduledSendAt,
+} from "./scheduled-send-ops";
+import { assertTeamVisible, resolveAllowedTeamIds } from "./team-scope";
 import { lockedLinkedTickets, lockTickets } from "./ticket-lifecycle";
 import {
   findTicket,
@@ -51,6 +61,8 @@ const messageSchema = z.object({
   conversationId: z.string().nullable(),
   senderType: z.enum(conversationMessages.senderType.enumValues),
   isInternal: z.boolean(),
+  sendStatus: z.enum(["sent", "scheduled", "recalled"]),
+  scheduledSendAt: nullableResponseTimestamp,
   author: z
     .object({ principalId: z.string(), displayName: z.string().nullable() })
     .nullable(),
@@ -88,6 +100,8 @@ async function messageViews(db: Database, rows: MessageRow[]) {
       conversationId: r.conversationId,
       senderType: r.senderType,
       isInternal: r.isInternal,
+      sendStatus: r.sendStatus,
+      scheduledSendAt: r.scheduledSendAt,
       author: r.principalId
         ? {
             principalId: r.principalId,
@@ -131,6 +145,7 @@ const listMessages = defineQuillsRoute({
   description:
     "Oldest first. A customer ticket's thread includes its conversation's messages. Internal notes need includeInternal=true. Pass the oldest message ID as `before` for the previous page.",
   action: "read",
+  callerActions: true,
   params: ticketParams,
   query: z.object({
     before: flexibleToTypeIdSchema("conversation_msg").optional(),
@@ -144,12 +159,20 @@ const listMessages = defineQuillsRoute({
   }),
   responseDescription: "One page of the thread",
   errors,
-  handler: async ({ db, params, query }) => {
-    await findTicket(db, params.ticketId);
+  handler: async ({ db, workspaceId, actor, actions, params, query }) => {
+    const allowedTeams = await resolveAllowedTeamIds(
+      db,
+      workspaceId,
+      actor,
+      actions,
+    );
+    const ticket = await findTicket(db, params.ticketId);
+    assertTeamVisible(allowedTeams, ticket.assigneeTeamId, "Ticket");
     const thread = await threadOf(db, params.ticketId);
     const visible = and(
       thread,
       isNull(conversationMessages.deletedAt),
+      ne(conversationMessages.sendStatus, "recalled"),
       query.includeInternal === "true"
         ? undefined
         : eq(conversationMessages.isInternal, false),
@@ -248,35 +271,83 @@ async function insertReply(
 
 const content = z.string().trim().min(1).max(4000);
 
+const delaySecondsSchema = z
+  .number()
+  .int()
+  .refine((v) => v === 0 || (v >= 5 && v <= 30), {
+    message: "delaySeconds must be 0 or between 5 and 30",
+  })
+  .optional();
+
 const reply = defineQuillsRoute({
   method: "post",
   path: "/tickets/{ticketId}/reply",
   operationId: "replyQuillsTicket",
   summary: "Reply to a support ticket",
   description:
-    "A customer-visible reply. The request only records it; delivery to the requester runs after commit. On a tracker, replyAll=true also posts the reply on every linked customer ticket in the same transaction.",
+    "A customer-visible reply. The request only records it; delivery to the requester runs after commit. Pass scheduledAt (or enable workspace undo-send / pass delaySeconds 5–30) to hold the reply so it can be recalled before delivery. On a tracker, replyAll=true also posts the reply on every linked customer ticket in the same transaction.",
   action: "update",
   params: ticketParams,
-  body: z.object({ content, replyAll: z.boolean().default(false) }),
+  body: z.object({
+    content,
+    replyAll: z.boolean().default(false),
+    scheduledAt: z.iso.datetime().optional(),
+    delaySeconds: delaySecondsSchema,
+  }),
   response: messageSchema,
   responseDescription: "The reply",
   errors,
   // One event names the tracker. Delivery finds the reply-all copies by the tracker message
   // (`repliedAllFromMessageId`) and mails and tells each linked requester once.
-  event: ({ params, body }, message) => ({
-    type: "ticket.replied",
-    entityType: "ticket",
-    entityId: params.ticketId,
-    payload: {
-      messageId: message.id,
-      ...(body.replyAll && { replyAll: "true" }),
-    },
-  }),
+  event: ({ params, body }, message) => {
+    if (message.sendStatus === "scheduled") {
+      return {
+        type: "message.send_scheduled" as const,
+        entityType: "conversation_message" as const,
+        entityId: message.id,
+        payload: { ticketId: params.ticketId } as Record<string, string>,
+      };
+    }
+    const payload: Record<string, string> = { messageId: message.id };
+    if (body.replyAll) payload.replyAll = "true";
+    return {
+      type: "ticket.replied" as const,
+      entityType: "ticket" as const,
+      entityId: params.ticketId,
+      payload,
+    };
+  },
   handler: async ({ db, actor, params, body }) => {
     // With reply-all, the tracker and its linked tickets are locked together, in ID order.
     const locked = await lockTickets(db, [params.ticketId], body.replyAll);
     const ticket = locked.find((t) => t.id === params.ticketId);
     if (!ticket) throw notFound("Ticket");
+    const scheduledSendAt = await resolveScheduledSendAt(db, {
+      scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : undefined,
+      delaySeconds: body.delaySeconds,
+    });
+    if (scheduledSendAt) {
+      const pair =
+        ticket.type === "customer"
+          ? await pairConversationId(db, ticket.id)
+          : null;
+      const [scheduled] = await db
+        .insert(conversationMessages)
+        .values({
+          ...(pair ? { conversationId: pair } : { ticketId: ticket.id }),
+          principalId: actor.principalId,
+          senderType: "agent",
+          content: body.content,
+          sendStatus: "scheduled",
+          scheduledSendAt,
+        })
+        .returning();
+      await enqueueScheduledSendJob(db, scheduled!.id, scheduledSendAt, {
+        ticketId: ticket.id,
+        replyAll: body.replyAll,
+      });
+      return (await messageViews(db, [scheduled!]))[0]!;
+    }
     const row = await insertReply(db, actor, ticket, body.content);
     await subscribe(db, ticket.id, actor.principalId, "replier");
     if (body.replyAll && ticket.type === "tracker")
@@ -295,12 +366,21 @@ const note = defineQuillsRoute({
   operationId: "addQuillsTicketNote",
   summary: "Add an internal note to a support ticket",
   description:
-    "Never customer-visible. shareWithConversation=true also copies the note, as an internal note, onto each conversation the ticket was opened from (not a customer pair's conversation).",
-  action: "update",
+    "Never customer-visible. shareWithConversation=true also copies the note, as an internal note, onto each conversation the ticket was opened from (not a customer pair's conversation). Each mentioned principal must be a teammate of a current workspace member.",
+  action: ["comment_internal", "update"],
+  callerActions: true,
   params: ticketParams,
   body: z.object({
     content,
     shareWithConversation: z.boolean().default(false),
+    mentionPrincipalIds: z
+      .array(flexibleToTypeIdSchema("principal"))
+      .max(20)
+      .default([])
+      .refine(
+        (ids) => new Set(ids).size === ids.length,
+        "Each principal can appear only once",
+      ),
   }),
   response: messageSchema,
   responseDescription: "The note",
@@ -311,8 +391,31 @@ const note = defineQuillsRoute({
     entityId: params.ticketId,
     payload: { messageId: message.id },
   }),
-  handler: async ({ db, actor, params, body }) => {
+  load: ({ workspaceId }) => memberUserIds(workspaceId),
+  handler: async ({
+    db,
+    workspaceId,
+    actor,
+    actions,
+    params,
+    body,
+    loaded: members,
+  }) => {
+    const allowedTeams = await resolveAllowedTeamIds(
+      db,
+      workspaceId,
+      actor,
+      actions,
+    );
     const ticket = await findTicket(db, params.ticketId, true);
+    assertTeamVisible(allowedTeams, ticket.assigneeTeamId, "Ticket");
+    const mentioned = await currentTeammates(
+      db,
+      members,
+      body.mentionPrincipalIds,
+    );
+    if (mentioned.length !== body.mentionPrincipalIds.length)
+      throw notFound("Teammate");
     const [row] = await db
       .insert(conversationMessages)
       .values({
@@ -323,6 +426,13 @@ const note = defineQuillsRoute({
         isInternal: true,
       })
       .returning();
+    if (mentioned.length)
+      await db.insert(conversationMessageMentions).values(
+        mentioned.map((teammate) => ({
+          conversationMessageId: row!.id,
+          principalId: teammate.id,
+        })),
+      );
     await db
       .update(tickets)
       .set({ updatedAt: new Date() })
@@ -360,6 +470,7 @@ const listActivity = defineQuillsRoute({
   summary: "List a support ticket's activity timeline",
   description: "Newest first, at most 200 entries.",
   action: "read",
+  callerActions: true,
   params: ticketParams,
   response: z.object({
     items: z.array(
@@ -395,8 +506,15 @@ const listActivity = defineQuillsRoute({
   }),
   responseDescription: "The ticket's activity",
   errors,
-  handler: async ({ db, params }) => {
-    await findTicket(db, params.ticketId);
+  handler: async ({ db, workspaceId, actor, actions, params }) => {
+    const allowedTeams = await resolveAllowedTeamIds(
+      db,
+      workspaceId,
+      actor,
+      actions,
+    );
+    const ticket = await findTicket(db, params.ticketId);
+    assertTeamVisible(allowedTeams, ticket.assigneeTeamId, "Ticket");
     const rows = await db
       .select({
         id: ticketActivity.id,
