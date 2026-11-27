@@ -69,6 +69,9 @@
 	},
 	"title": "Share",
 	"widget": {
+		"aiPrompt": "AI setup prompt",
+		"aiPromptCopy": "Copy AI setup prompt",
+		"aiPromptHelp": "Paste into Claude Code, Cursor, Codex, or Antigravity. It redeems this short-lived code without putting your signing secret in chat.",
 		"code": "Install code",
 		"copyAll": "Copy all",
 		"docs": "View docs →",
@@ -77,8 +80,11 @@
 		"identifyText": "Your server signs the token with the widget signing secret (Settings › Login). Without it, the widget works for anonymous visitors.",
 		"installCode": "Create install code",
 		"load": "1. Load the widget",
+		"proxy": "Optional: proxy on your own domain",
+		"proxyText": "Serve the widget through your own origin so ad blockers and strict COEP/CSP headers never block support.",
+		"serverSign": "Server-side JWT signing (Node.js)",
 		"start": "2. Start it",
-		"text": "One snippet collects feedback inside your app.",
+		"text": "One snippet collects feedback and support inside your app.",
 		"title": "Widget embed"
 	}
 }

@@ -24,4 +24,43 @@ describe("InstallCode", () => {
     ).toHaveTextContent("ABCD-1234");
     expect(api.calls("mintQuillsWidgetInstallCode")).toHaveLength(1);
   });
+
+  it("generates and copies an AI setup prompt when slug and apiBase are provided", async () => {
+    let copied = "";
+    Object.defineProperty(navigator, "clipboard", {
+      value: {
+        writeText: async (text: string) => {
+          copied = text;
+        },
+      },
+      configurable: true,
+    });
+    const api = mockApi();
+    const view = renderComponent(
+      <InstallCode
+        workspaceId="workspace_test_1"
+        slug="acme"
+        apiBase="https://kaneo.test/api"
+      />,
+    );
+    api.reply(
+      mintWidgetInstallCodeFixture.ok({
+        code: "qbi_testcode123",
+        expiresAt: "2026-11-14T12:15:00.000Z",
+      }),
+    );
+    fireEvent.click(view.getByRole("button", { name: "Create install code" }));
+    const copyPrompt = await view.findByRole("button", {
+      name: "Copy AI setup prompt",
+    });
+    fireEvent.click(copyPrompt);
+    expect(copied).toContain("qbi_testcode123");
+    expect(copied).toContain(
+      "https://kaneo.test/api/quills-public/acme/widget/install-context",
+    );
+    expect(copied).toContain(
+      "https://kaneo.test/api/quills-public/acme/widget/verify-token",
+    );
+    expect(copied).toContain("QUILLS_WIDGET_SECRET");
+  });
 });

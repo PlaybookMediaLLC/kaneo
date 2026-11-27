@@ -13,3 +13,4 @@ export * from "./session.fixture";
 export * from "./activity.fixture";
 export * from "./help/index.fixture";
 export * from "./surveys.fixture";
+export * from "./verify-token.fixture";
