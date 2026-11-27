@@ -25,6 +25,8 @@ export const addConversationNoteFixture = {
           redactedByPrincipalId: null,
           redactedByName: null,
           redactionReason: null,
+          sendStatus: "sent",
+          scheduledSendAt: null,
         },
       },
       ...overrides,

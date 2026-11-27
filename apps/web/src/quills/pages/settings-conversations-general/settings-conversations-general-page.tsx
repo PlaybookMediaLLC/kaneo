@@ -8,6 +8,10 @@ import { useGetPortalSettings } from "../../hooks/team/use-get-portal-settings";
 import { useGetWorkflowAbandonedAutoClose } from "../../hooks/team/use-get-workflow-abandoned-auto-close";
 import { useGetWorkflowCloseSpam } from "../../hooks/team/use-get-workflow-close-spam";
 import { useListSlaPolicyOptions } from "../../hooks/team/use-list-sla-policy-options";
+import {
+  useGetUndoSendSettings,
+  useSetUndoSendSettings,
+} from "../../hooks/team/use-scheduled-send";
 import { useSetDefaultSlaPolicy } from "../../hooks/team/use-set-default-sla-policy";
 import { useUpdatePortalSettings } from "../../hooks/team/use-update-portal-settings";
 import { useTeamRuntime } from "../../team/runtime";
@@ -32,6 +36,7 @@ export interface SettingsConversationsGeneralPageProps {
 
 // A Select needs a string value. No policy ID has this value.
 const none = "none";
+const UNDO_DELAY_OPTIONS = [5, 10, 15, 20, 30] as const;
 
 /** Settings › Conversations › General (settings spec B12): hours, automation, SLA and portal. */
 export function SettingsConversationsGeneralPage({
@@ -50,6 +55,7 @@ export function SettingsConversationsGeneralPage({
     useListSlaPolicyOptions(input, team.viewer),
     useGetPortalSettings(input, team.viewer),
     useGetAwayReply(input, team.viewer),
+    useGetUndoSendSettings(input, team.viewer),
   ] as const;
   const [
     hours,
@@ -61,10 +67,13 @@ export function SettingsConversationsGeneralPage({
     policies,
     portal,
     away,
+    undoSend,
   ] = queries;
   const setSla = useSetDefaultSlaPolicy(team.viewer);
+  const setUndoSend = useSetUndoSendSettings(team.viewer);
   const update = useUpdatePortalSettings(team.viewer);
   const locked = !team.permissions.manageSettings;
+  const undoConfig = undoSend.data ?? { enabled: false, delaySeconds: 10 };
   return (
     <PageFrame
       titleKey="settings-conversations.general.title"
@@ -92,6 +101,51 @@ export function SettingsConversationsGeneralPage({
           />
           <SettingsSection title={t("settings-conversations.general.service")}>
             <SettingsCard>
+              <SettingSwitchRow
+                title={t("settings-conversations.general.undoSend")}
+                description={t("settings-conversations.general.undoSendText")}
+                checked={undoConfig.enabled}
+                disabled={locked}
+                onCheckedChange={async (enabled) => {
+                  await setUndoSend.mutateAsync({
+                    ...input,
+                    json: {
+                      enabled,
+                      delaySeconds: undoConfig.delaySeconds,
+                    },
+                  });
+                }}
+              />
+              {undoConfig.enabled ? (
+                <SettingsRow
+                  title={t("settings-conversations.general.undoSendDelay")}
+                  description={t(
+                    "settings-conversations.general.undoSendDelayText",
+                  )}
+                >
+                  <SettingSelect
+                    label={t("settings-conversations.general.undoSendDelay")}
+                    value={String(undoConfig.delaySeconds)}
+                    options={UNDO_DELAY_OPTIONS.map((seconds) => ({
+                      value: String(seconds),
+                      label: t(
+                        "settings-conversations.general.undoSendSeconds",
+                        { count: seconds },
+                      ),
+                    }))}
+                    disabled={locked}
+                    onValueChange={async (next) => {
+                      await setUndoSend.mutateAsync({
+                        ...input,
+                        json: {
+                          enabled: undoConfig.enabled,
+                          delaySeconds: Number(next),
+                        },
+                      });
+                    }}
+                  />
+                </SettingsRow>
+              ) : null}
               <SettingsRow
                 title={t("settings-conversations.general.sla")}
                 description={t("settings-conversations.general.slaText")}

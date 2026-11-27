@@ -395,14 +395,14 @@ describe.skipIf(!url)("Quills webhook delivery", () => {
       "SELECT quills.runnable_workspaces('') AS id",
     );
     expect(runnable.rows.map((row) => row.id)).toContain(h.a);
-    for (let attempt = 2; attempt <= 5; attempt++) {
+    for (let attempt = 2; attempt <= 10; attempt++) {
       await h.due(h.a);
       await h.drain(h.a);
     }
-    expect(hits).toHaveLength(5);
+    expect(hits).toHaveLength(10);
     expect((await job(eventId, webhookId))!).toMatchObject({
       status: "failed",
-      attempts: 5,
+      attempts: 10,
       lastError: "HTTP 503",
     });
     const [stats] = await h.system(h.a, (db) =>
@@ -411,7 +411,7 @@ describe.skipIf(!url)("Quills webhook delivery", () => {
         .from(webhooks)
         .where(eq(webhooks.id, webhookId)),
     );
-    expect(stats!.failureCount).toBe(5);
+    expect(stats!.failureCount).toBe(10);
 
     respond = (_req, res) => res.writeHead(400).end();
     const rejected = await change("rejected");

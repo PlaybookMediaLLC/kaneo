@@ -11,6 +11,7 @@ import { primaryKey } from "drizzle-orm/pg-core";
 import {
   text,
   integer,
+  boolean,
   timestamp,
   jsonb,
   uniqueIndex,
@@ -35,6 +36,8 @@ export const companies = quillsSchema
       plan: text("plan"),
       // Monthly recurring revenue in minor units (cents), for sidebar context.
       mrrCents: integer("mrr_cents"),
+      // Churn-risk indicator for fair feedback demand weighting (#304).
+      churnRisk: boolean("churn_risk").notNull().default(false),
       // Qualification standard fields (§K2): free-text, editable from the inbox
       // sidebar for an unattached contact and from the company profile.
       size: text("size"),

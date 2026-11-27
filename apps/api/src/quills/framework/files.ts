@@ -8,10 +8,12 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { createId } from "@paralleldrive/cuid2";
 import { and, eq, inArray, like, lt } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
+import mainDb from "../../database";
 import type { Database } from "../../database/quills/client";
 import { jobLeaseTable } from "../../database/schema";
 import {
   lockStorageObjects,
+  queueStorageCleanup,
   withStorageObject,
 } from "../../storage/cleanup-queue";
 import { describeStorageError } from "../../storage/describe-storage-error";
@@ -39,6 +41,8 @@ import {
   avatarContentTypes,
   MAX_CUSTOMER_AVATAR_BYTES,
 } from "../files/customer-avatar";
+
+export { isImageContentType };
 
 // Managed Quills uploads on Kaneo's storage: server-derived keys, presigned PUT (or signed local
 // upload route when STORAGE_DRIVER=local), then a verification lease that protects the object
@@ -324,7 +328,7 @@ export async function createDownload(file: {
  * A short-lived inline GET for a verified image key that has no file row (a customer avatar). The
  * object keeps the image type that its verified upload stored. Null when storage is not configured.
  */
-export async function imageUrl(key: string) {
+export async function imageUrl(key: string, contentType?: string) {
   if (!isQuillsStorageConfigured()) return null;
   if (getStorageDriver() === "local") {
     const token = signLocalStorageToken(
@@ -340,6 +344,7 @@ export async function imageUrl(key: string) {
       Bucket: config.bucket,
       Key: key,
       ResponseContentDisposition: "inline",
+      ...(contentType ? { ResponseContentType: contentType } : {}),
     }),
     { expiresIn: config.presignTtlSeconds },
   );
@@ -350,8 +355,8 @@ export async function imageUrl(key: string) {
  * on its row before `putObject`, so the storage trigger queues cleanup when the row lets it go.
  */
 /** A signed image URL and how long a client may keep it: until a minute before it expires. */
-export async function imageRedirect(key: string) {
-  const url = await imageUrl(key);
+export async function imageRedirect(key: string, contentType?: string) {
+  const url = await imageUrl(key, contentType);
   const ttl =
     getStorageDriver() === "local" ? 300 : storage().presignTtlSeconds;
   return url && { url, maxAge: Math.max(0, ttl - 60) };
@@ -360,10 +365,13 @@ export async function imageRedirect(key: string) {
 export const exportKey = (workspaceId: string, extension: string) =>
   `${namespace(getStorageDriver() === "local" ? "" : storage().keyPrefix, workspaceId, "export")}${createId()}.${extension}`;
 
-/** Writes a file that the server generated, with a time limit. */
+export const inboundEmailFileKey = (workspaceId: string, extension: string) =>
+  `${namespace(getStorageDriver() === "local" ? "" : storage().keyPrefix, workspaceId, "file")}${createId()}.${extension}`;
+
+/** Writes a file that the server generated or received from inbound email, with a time limit. */
 export async function putObject(
   key: string,
-  body: string | Buffer | Uint8Array,
+  body: string | Uint8Array | Buffer,
   type: string,
 ) {
   if (getStorageDriver() === "local") {
@@ -595,4 +603,28 @@ async function digest(config: StorageConfig, key: string, deadline: number) {
 export async function holdVerifiedUpload(db: Database, upload: VerifiedUpload) {
   await lockStorageObjects(db, [upload.key]);
   if (Date.now() >= upload.deadline) throw expired();
+}
+
+/**
+ * Registers a short verification lease and storage cleanup queue entry for an object
+ * uploaded outside a DB transaction (such as an inbound email attachment), so rejected
+ * or rolled-back webhooks automatically reap orphaned objects.
+ */
+export async function registerInboundStorageObject(
+  workspaceId: string,
+  key: string,
+) {
+  const leaseUntil = new Date(Date.now() + 5 * 60_000);
+  await mainDb
+    .insert(jobLeaseTable)
+    .values({
+      name: `storage-verification:${key}`,
+      owner: `inbound-email:${workspaceId}`,
+      expiresAt: leaseUntil,
+    })
+    .onConflictDoUpdate({
+      target: jobLeaseTable.name,
+      set: { expiresAt: leaseUntil },
+    });
+  await queueStorageCleanup(mainDb, [key]);
 }

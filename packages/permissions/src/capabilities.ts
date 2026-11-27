@@ -8,6 +8,7 @@ export const workspaceCapabilities = {
   deleteQuills: { workspace: ["read"], quills: ["delete"] },
   manageQuillsSettings: { workspace: ["read"], quills: ["manage_settings"] },
   viewQuillsRevenue: { workspace: ["read"], quills: ["view_revenue"] },
+  commentInternalQuills: { workspace: ["read"], quills: ["comment_internal"] },
   manageProjects: { project: ["create", "update", "delete"] },
   createProjects: { project: ["create"] },
   updateProjects: { project: ["update"] },

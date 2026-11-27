@@ -6,6 +6,7 @@ import {
   settings,
   user as customer,
 } from "../../../database/quills/schema/auth";
+import { enforceWidgetAntiSpam } from "../../framework/anti-spam";
 import { mintWidgetSession, widgetEnabled } from "../../framework/audience";
 import { defineQuillsRoute } from "../../framework/define-route";
 import { newSecret } from "../../settings/widget";
@@ -24,10 +25,13 @@ const anonymousSession = defineQuillsRoute({
   description:
     "Needs the widget on; creates the widget secret when it is missing. Each call creates a new anonymous person. Identify with this token as previousToken (and as the Bearer token) moves its activity to the identified person.",
   action: "create",
-  rateLimit: { limit: 10, windowSeconds: 3600 },
+  rateLimit: { limit: 500, windowSeconds: 3600 },
   response: z.object({ sessionToken: z.string(), principalId: z.string() }),
   responseDescription: "The anonymous widget session",
-  errors: { 404: "Widget off" },
+  errors: {
+    403: "Anti-spam challenge required or failed, or origin/sender blocked",
+    404: "Widget off",
+  },
   allowKeys: ["sessionToken"],
   event: (_input, result) => ({
     type: "user.created",
@@ -35,7 +39,7 @@ const anonymousSession = defineQuillsRoute({
     entityId: result.principalId,
     payload: { type: "anonymous" },
   }),
-  handler: async ({ db }) => {
+  handler: async ({ db, workspaceId, request }) => {
     const [config] = await db
       .select({
         id: settings.id,
@@ -46,6 +50,13 @@ const anonymousSession = defineQuillsRoute({
       .limit(1);
     if (!config || !widgetEnabled(config.widgetConfig))
       throw new HTTPException(404, { message: "Workspace not found" });
+    await enforceWidgetAntiSpam(db, {
+      workspaceId,
+      widgetConfig: config.widgetConfig,
+      kind: "session",
+      ip: request.ip,
+      challenge: request.challenge,
+    });
     // A widget turned on before enabling created the secret has none: create it once. coalesce keeps
     // the secret of a concurrent request, so both sessions bind to the same one.
     const secret =

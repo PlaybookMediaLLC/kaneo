@@ -8,6 +8,7 @@ import { recordWorkspaceMemberAction } from "../audit/record-workspace-member-ac
 import { isAssignableWorkspaceRole } from "../is-assignable-workspace-role";
 import { lockWorkspace } from "../lock-workspace";
 import { revokeWorkspaceRoleChange } from "../../ws";
+import { syncWorkspaceSeats } from "../../billing/controllers/sync-seats";
 import listWorkspaceMembers from "./list-workspace-members";
 
 async function updateWorkspaceMemberRole(
@@ -63,6 +64,9 @@ async function updateWorkspaceMemberRole(
 
   if (roleChanged) {
     await revokeWorkspaceRoleChange(userId, workspaceId);
+    await syncWorkspaceSeats(workspaceId).catch((error) => {
+      console.error("Failed to sync workspace seats after role update:", error);
+    });
   }
 
   return listWorkspaceMembers(workspaceId);

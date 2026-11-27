@@ -25,6 +25,8 @@ export const replyConversationFixture = {
           redactedByPrincipalId: null,
           redactedByName: null,
           redactionReason: null,
+          sendStatus: "sent",
+          scheduledSendAt: null,
         },
         conversation: {
           id: "id_test_1",
@@ -55,6 +57,7 @@ export const replyConversationFixture = {
           csatRating: null,
           agentLastReadAt: null,
           visitorLastReadAt: null,
+          forwardParseFailed: false,
           tags: [],
         },
       },

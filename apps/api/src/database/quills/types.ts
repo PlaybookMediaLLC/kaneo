@@ -931,6 +931,10 @@ export interface ConversationAttachment {
   fileId?: string;
   family?: StoredFileFamily;
   preview?: FilePreviewMeta;
+  /** True when rendered inline inside the message body (#326). */
+  inline?: boolean;
+  /** Normalized MIME Content-ID from inbound/outbound email (#326). */
+  contentId?: string;
 }
 
 /** Mirrors `FileFamily` in the app's file-type registry (files.family). */
@@ -1274,7 +1278,15 @@ export interface ConversationMessageMetadata {
   workspaceTurn?: { runId: string; payload?: Record<string, unknown> };
 
   /** The channel this message arrived through, when not the in-app messenger. */
-  source?: "email" | "github";
+  source?: "email" | "github" | "magic_link" | "email_forward_preamble";
+  /** Structured kind for system timeline notices (follow-up, CSAT, solution lifecycle, breach update). */
+  systemKind?: string;
+  /** Source conversation ID when a closed conversation spawns a follow-up thread (#311). */
+  previousConversationId?: string;
+  /** Recorded CSAT rating on inline CSAT timeline notices (#312). */
+  rating?: number;
+  /** Optional customer comment on inline CSAT timeline notices (#312). */
+  comment?: string;
   /** Host-page context (pageUrl, browser, host keys) of a widget visitor's message. Never returned to the visitor. */
   widgetMetadata?: Record<string, string>;
   /** GitHub issue comment REST id, used to dedupe webhook retries. */

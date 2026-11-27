@@ -213,6 +213,11 @@ export interface WidgetViewProps {
   onConfirmContactEmail?: (email: string, code: string) => Promise<unknown>;
   onReadActivity?: (id: string) => Promise<unknown>;
   onArticleFeedback?: (articleId: string, helpful: boolean) => Promise<unknown>;
+  onSearchHelp?: (
+    query: string,
+    signal?: AbortSignal,
+  ) => Promise<{ queryId: string | null; articles: HelpArticle[] }>;
+  onSearchHelpClick?: (queryId: string, articleId: string) => void;
   /** The host owns loading and connectivity; offline disables mutations, not reading. */
   loadState?: "ready" | "loading" | "error";
   connection?: "online" | "offline" | "reconnecting";
@@ -220,7 +225,13 @@ export interface WidgetViewProps {
   /** Display only availability verified by the host; omit when unknown. */
   teamAvailability?: string;
   /** The team's live availability and up to four teammate avatars, from the API. */
-  team?: { online: boolean; avatars: readonly WidgetPerson[] };
+  team?: {
+    online: boolean;
+    avatars: readonly WidgetPerson[];
+    withinOfficeHours?: boolean;
+    waitEstimateLabel?: string | null;
+    nextOpenAt?: string | null;
+  };
   /** How soon the team usually replies, as a teammate set it. */
   replyTime?: "minutes" | "hours" | "day";
   /** Home's greeting and subtitle from the workspace; null keeps the default. */

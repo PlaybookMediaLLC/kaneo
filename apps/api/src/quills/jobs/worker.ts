@@ -27,6 +27,7 @@ import { runTransferJob } from "./handlers/transfer";
 import { runQuillsSweeps } from "./handlers/sweeps";
 import { runWipeJob } from "./handlers/wipe";
 import { runWorkflowJob } from "./handlers/workflow";
+import { runScheduledSendJob } from "./handlers/scheduled-send";
 import { runCrmNoteJob } from "../integrations/crm-notes";
 import {
   handOffTaskStatus,
@@ -71,13 +72,16 @@ const handlers: Record<
   "quills.domain_check": runDomainCheckJob,
   "quills.wipe": runWipeJob,
   "quills.transfer": runTransferJob,
-  // A task-sync job (RFC 0003, D12) names its Kaneo task; a board task rule job (RFC 0005) names its rule.
+  // A task-sync job (RFC 0003, D12) names its Kaneo task; a board task rule job (RFC 0005) names its rule;
+  // a scheduled/undo-send reply (#323) names `scheduledMessageId`.
   "quills.workflow": (workspaceId, job) =>
-    "taskId" in (job.payload as object)
-      ? runTaskSyncJob(workspaceId, job)
-      : "rule" in (job.payload as object)
-        ? runTaskRuleJob(workspaceId, job)
-        : runWorkflowJob(workspaceId, job),
+    "scheduledMessageId" in (job.payload as object)
+      ? runScheduledSendJob(workspaceId, job)
+      : "taskId" in (job.payload as object)
+        ? runTaskSyncJob(workspaceId, job)
+        : "rule" in (job.payload as object)
+          ? runTaskRuleJob(workspaceId, job)
+          : runWorkflowJob(workspaceId, job),
   "quills.ai": runAiJob,
 };
 
@@ -267,8 +271,10 @@ const FAST_WAKE_QUEUES: readonly QuillsQueue[] = [
   "quills.workflow",
 ];
 const MAX_CONCURRENT_WAKES = 4;
+const MAX_DELAYED_WAKE_MS = 35_000;
 let autoWakeEnabled = false;
 const wakeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const delayedWakeTimers = new Set<ReturnType<typeof setTimeout>>();
 const inFlightWakes = new Set<string>();
 const rewakePending = new Set<string>();
 const backgroundDrains = new Map<
@@ -288,6 +294,8 @@ export function disableQuillsAutoWake(): void {
   registerQuillsWaker(null);
   for (const timer of wakeTimers.values()) clearTimeout(timer);
   wakeTimers.clear();
+  for (const timer of delayedWakeTimers) clearTimeout(timer);
+  delayedWakeTimers.clear();
   rewakePending.clear();
 }
 
@@ -321,9 +329,19 @@ function startWakeDrain(workspaceId: string): void {
 /**
  * Schedules a fast debounced drain of `quills.event` / `quills.workflow` after a mutation commits,
  * cutting realtime latency from up to 10s down to ~50ms while bounding in-flight concurrency.
+ * An optional `delayMs` (up to 35s) schedules an additional wake right when a short undo-send window ends.
  */
-function scheduleQuillsWake(workspaceId: string): void {
+function scheduleQuillsWake(workspaceId: string, delayMs?: number): void {
   if (!autoWakeEnabled || !workspaceId) return;
+  if (delayMs && delayMs > 50 && delayMs <= MAX_DELAYED_WAKE_MS) {
+    const delayed = setTimeout(() => {
+      delayedWakeTimers.delete(delayed);
+      startWakeDrain(workspaceId);
+    }, delayMs + 100);
+    delayed.unref?.();
+    delayedWakeTimers.add(delayed);
+    return;
+  }
   if (inFlightWakes.has(workspaceId)) {
     rewakePending.add(workspaceId);
     return;

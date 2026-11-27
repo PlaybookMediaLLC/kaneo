@@ -87,6 +87,19 @@ export {
   type ApprovalExecutionState,
 };
 
+export interface ActionPreviewDiffField {
+  field: string;
+  before: string | number | boolean | null;
+  after: string | number | boolean | null;
+}
+
+export interface ActionPreviewDiff {
+  targetType: "conversation" | "ticket" | "connector";
+  targetId: string | null;
+  fields: ActionPreviewDiffField[];
+  recordCount: number;
+}
+
 export const assistantPendingActions = quillsSchema
   .table(
     "assistant_pending_actions",
@@ -108,6 +121,10 @@ export const assistantPendingActions = quillsSchema
       toolName: text("tool_name").notNull(),
       args: jsonb("args").$type<Record<string, unknown>>().notNull(),
       summary: text("summary").notNull(),
+      previewDiff: jsonb("preview_diff").$type<ActionPreviewDiff | null>(),
+      approvalTokenHash: text("approval_token_hash"),
+      procedureId: typeIdColumnNullable("skill")("procedure_id"),
+      error: text("error"),
       originRole: text("origin_role", {
         enum: ASSISTANT_PENDING_ACTION_ORIGIN_ROLES,
       })

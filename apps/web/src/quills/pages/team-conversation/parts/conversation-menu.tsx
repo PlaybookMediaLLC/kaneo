@@ -4,6 +4,7 @@ import {
   Archive,
   ArchiveRestore,
   Ban,
+  CheckCircle2,
   CircleSlash,
   EllipsisVertical,
   ShieldAlert,
@@ -30,6 +31,7 @@ export interface ConversationMenuProps {
   /** Whether the sender's address is blocked; null when no address was recorded. */
   ipBlocked?: boolean | null;
   disabled?: boolean;
+  onOfferSolution?: () => void;
   onSnooze: () => void;
   /** Reopens a snoozed conversation. */
   onUnsnooze: () => void;
@@ -44,7 +46,7 @@ export interface ConversationMenuProps {
 }
 
 /**
- * The kebab menu of the conversation header: snooze or unsnooze, spam, archive and blocking.
+ * The kebab menu of the conversation header: offer solution, snooze or unsnooze, spam, archive and blocking.
  * Archive is apart from the status: it only takes the conversation out of the inbox lists.
  */
 export function ConversationMenu(props: ConversationMenuProps) {
@@ -62,6 +64,12 @@ export function ConversationMenu(props: ConversationMenuProps) {
         <EllipsisVertical aria-hidden="true" />
       </MenuTrigger>
       <MenuPopup align="end">
+        {props.status === "open" && props.onOfferSolution ? (
+          <MenuItem onClick={props.onOfferSolution}>
+            <CheckCircle2 aria-hidden="true" />
+            {t("team-conversations.offerSolution")}
+          </MenuItem>
+        ) : null}
         {props.status === "open" ? (
           <MenuItem onClick={props.onSnooze}>
             <AlarmClock aria-hidden="true" />

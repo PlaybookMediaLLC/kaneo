@@ -118,6 +118,12 @@ export function useWidgetSession(
       active.current = true;
       void establish();
     },
+    /** Adopts a signed email-continuation session token (#319) as the active visitor session. */
+    resume(token: string) {
+      active.current = true;
+      const mine = ++epoch.current;
+      begin(mine, token, true, null);
+    },
     /**
      * The API answered 401 for `ended`: remove private data, then start again for the same
      * identity. A late 401 from an earlier session, or one during an identify, changes nothing.

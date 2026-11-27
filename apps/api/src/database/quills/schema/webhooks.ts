@@ -43,6 +43,8 @@ export const webhooks = quillsSchema
       lastError: text("last_error"),
       /** When the webhook was last triggered */
       lastTriggeredAt: timestamp("last_triggered_at", { withTimezone: true }),
+      /** When admins were last alerted for consecutive failures (#330) */
+      lastAlertedAt: timestamp("last_alerted_at", { withTimezone: true }),
       /** When the webhook was created */
       createdAt: timestamp("created_at", { withTimezone: true })
         .defaultNow()
@@ -66,6 +68,48 @@ export const webhooks = quillsSchema
         columns: [table.workspaceId, table.createdById],
         foreignColumns: [principal.workspaceId, principal.id],
       }).onDelete("cascade"),
+      workspacePolicy(table.workspaceId),
+    ],
+  )
+  .enableRLS();
+
+/**
+ * Webhook delivery attempt log (#330). Ephemeral operational log (pruned by retention,
+ * omitted from workspace transfer archives). Stores bounded response snippets (<= 2 KB).
+ */
+export const webhookDeliveries = quillsSchema
+  .table(
+    "webhook_deliveries",
+    {
+      workspaceId: workspaceColumn(),
+      id: typeIdWithDefault("webhook_delivery")("id").notNull(),
+      webhookId: typeIdColumn("webhook")("webhook_id").notNull(),
+      eventId: text("event_id").notNull(),
+      eventType: text("event_type").notNull(),
+      attempt: integer("attempt").notNull().default(1),
+      status: text("status", {
+        enum: ["succeeded", "failed", "retrying"],
+      }).notNull(),
+      httpStatus: integer("http_status"),
+      durationMs: integer("duration_ms"),
+      responseSnippet: text("response_snippet"),
+      error: text("error"),
+      deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+      createdAt: timestamp("created_at", { withTimezone: true })
+        .defaultNow()
+        .notNull(),
+    },
+    (table) => [
+      primaryKey({ columns: [table.workspaceId, table.id] }),
+      foreignKey({
+        columns: [table.workspaceId, table.webhookId],
+        foreignColumns: [webhooks.workspaceId, webhooks.id],
+      }).onDelete("cascade"),
+      index("webhook_deliveries_webhook_created_idx").on(
+        table.webhookId,
+        table.createdAt,
+      ),
+      index("webhook_deliveries_created_at_idx").on(table.createdAt),
       workspacePolicy(table.workspaceId),
     ],
   )

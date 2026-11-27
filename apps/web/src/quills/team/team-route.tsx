@@ -56,6 +56,7 @@ export function TeamRoute() {
               delete: permission.canDeleteQuills(),
               manageSettings: permission.canManageQuillsSettings(),
               viewRevenue: permission.canViewQuillsRevenue(),
+              commentInternal: permission.canCommentInternalQuills(),
             },
           }}
         >

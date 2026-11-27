@@ -24,3 +24,4 @@ export const removeQuillsConversationParticipant = fixture({
     principalId: ids.b.participantId,
   }),
 });
+export const listQuillsConversationFollowers = onConversation();

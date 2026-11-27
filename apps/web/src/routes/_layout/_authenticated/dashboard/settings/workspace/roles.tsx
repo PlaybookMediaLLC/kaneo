@@ -1,4 +1,8 @@
-import { DEFAULT_ROLE_NAMES, statement } from "@kaneo/permissions";
+import {
+  DEFAULT_ROLE_NAMES,
+  isFreeSeatRole,
+  statement,
+} from "@kaneo/permissions";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Plus,
@@ -102,6 +106,11 @@ const PERMISSION_LABELS: Record<
     label: "View customer revenue",
     description:
       "See company revenue and the revenue of the companies behind each request.",
+  },
+  "quills:comment_internal": {
+    label: "Add internal notes",
+    description:
+      "Write internal-only notes on conversations, tickets, and feedback without emailing customers.",
   },
   "organization:update": {
     label: "Edit workspace administration",
@@ -246,6 +255,8 @@ const RESERVED_ROLE_NAMES = [...DEFAULT_ROLE_NAMES, "owner"];
 
 const DEFAULT_ROLE_DESCRIPTIONS: Record<string, string> = {
   viewer: "Read-only access to projects, tasks, and workspace.",
+  collaborator:
+    "Free seat: read tickets and conversations and add internal notes without replying to customers.",
   member: "Can create and update projects and tasks.",
   admin: "Full project and task management plus workspace settings.",
 };
@@ -463,6 +474,11 @@ function RouteComponent() {
                                 {isDefault && (
                                   <span className="text-[10px] uppercase tracking-wide font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
                                     {t("settings:workspaceRoles.defaultBadge")}
+                                  </span>
+                                )}
+                                {isFreeSeatRole(role.role) && (
+                                  <span className="text-[10px] uppercase tracking-wide font-medium px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                                    {t("settings:workspaceRoles.freeSeatBadge")}
                                   </span>
                                 )}
                               </div>

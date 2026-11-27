@@ -19,7 +19,7 @@ describe("config.fetchServerConfig", () => {
     const cfg = await fetchServerConfig("https://feedback.acme.com", "acme");
     expect(mock).toHaveBeenCalledWith(
       `https://feedback.acme.com/api/quills-public/acme/widget/config.json?sdk=${SDK_VERSION}`,
-      { signal: undefined },
+      { signal: undefined, credentials: "omit" },
     );
     expect(cfg?.theme?.lightPrimary).toBe("#ff0000");
   });

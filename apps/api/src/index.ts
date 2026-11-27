@@ -107,6 +107,7 @@ import {
 import { boundedRequestBody } from "./utils/bounded-request-body";
 import { getInvitationDetails } from "./utils/check-registration-allowed";
 import { clientIpMiddleware } from "./utils/client-ip";
+import { customWidgetHostMiddleware } from "./utils/custom-widget-host";
 import { runCustomOAuthCallback } from "./utils/custom-oauth-sign-in";
 import { migrateApiKeyReferenceId } from "./utils/migrate-apikey-reference-id";
 import { migrateNotificationPreferencesSchema } from "./utils/migrate-notification-preferences-schema";
@@ -202,6 +203,10 @@ function buildContentDisposition(filename: string, inline: boolean) {
 export function createApp() {
   const app = new Hono<AppVariables>();
   app.use("*", clientIpMiddleware());
+  app.use(
+    "*",
+    customWidgetHostMiddleware((req) => app.fetch(req)),
+  );
 
   app.onError((err) => {
     if (err instanceof HTTPException) {

@@ -2,7 +2,8 @@ import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
 import { apiRouter, z } from "../../../openapi";
 import { defineQuillsRoute } from "../../framework/define-route";
 import {
-  searchArticles,
+  recordSearchClick,
+  searchArticlesWithMeta,
   searchBody,
   searchEvent,
   searchHit,
@@ -15,8 +16,7 @@ import {
   voteResult,
 } from "../../content/public/help-center/votes";
 
-// Widget help writes: the visitor's article vote and the knowledge-base search, which records
-// a search-term row. The AI answer route (kb-ask) belongs to P8.
+// Widget help writes: the visitor's article vote, hybrid knowledge-base search and click tracking.
 
 const feedback = defineQuillsRoute({
   audience: "widget",
@@ -53,10 +53,14 @@ const search = defineQuillsRoute({
   operationId: "searchQuillsWidgetHelp",
   summary: "Search help articles from the widget",
   description:
-    "Keyword search over public articles. A locale that is not enabled searches the default locale.",
+    "Hybrid search (FTS, prefix, pg_trgm typo tolerance and synonyms) over public articles. Returns queryId for click-through tracking.",
   action: "read",
   body: searchBody,
-  response: z.object({ locale: z.string(), articles: z.array(searchHit) }),
+  response: z.object({
+    locale: z.string(),
+    queryId: z.string().nullable(),
+    articles: z.array(searchHit),
+  }),
   responseDescription: "Matching articles, best first",
   errors: { 404: "Help center not found" },
   event: searchEvent,
@@ -64,19 +68,45 @@ const search = defineQuillsRoute({
     const viewer = await openHelpCenter(db, caller, "widget", body.locale, {
       fallback: true,
     });
+    const result = await searchArticlesWithMeta(
+      db,
+      viewer,
+      body.query,
+      body.limit,
+      body.record,
+    );
     return {
       locale: viewer.locale,
-      articles: await searchArticles(
-        db,
-        viewer,
-        body.query,
-        body.limit,
-        body.record,
-      ),
+      queryId: result.queryId,
+      articles: result.articles,
     };
+  },
+});
+
+const searchClick = defineQuillsRoute({
+  audience: "widget",
+  signIn: false,
+  rateLimit: searchRateLimit,
+  method: "post",
+  path: "/widget/kb-search/{queryId}/click",
+  operationId: "recordQuillsWidgetHelpSearchClick",
+  summary: "Record which article a widget visitor clicked from search results",
+  action: "update",
+  params: z.object({ queryId: z.uuid() }),
+  body: z.object({ articleId: flexibleToTypeIdSchema("article") }),
+  response: z.object({ recorded: z.literal(true) }),
+  responseDescription: "Click recorded",
+  errors: { 404: "Help center, search query or article not found" },
+  event: { none: "Click-through analytics update on kb_search_queries" },
+  handler: async ({ db, caller, params, body }) => {
+    const viewer = await openHelpCenter(db, caller, "widget", undefined, {
+      fallback: true,
+    });
+    return recordSearchClick(db, viewer, params.queryId, body.articleId);
   },
 });
 
 export default apiRouter()
   .openapi(...feedback)
-  .openapi(...search);
+  .openapi(...search)
+  .openapi(...searchClick);

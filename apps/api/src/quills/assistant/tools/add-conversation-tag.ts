@@ -14,6 +14,12 @@ export const addConversationTag = defineWriteTool({
   approval: "required",
   available: (context) => Boolean(context.conversationId),
   summary: (args) => `Tag the conversation with ${args.tagId}`,
+  previewDiff: (conversation, args) => ({
+    targetType: "conversation",
+    targetId: conversation?.id ?? null,
+    fields: [{ field: "tagId", before: null, after: args.tagId }],
+    recordCount: 1,
+  }),
   execute: async (db, _actor, conversation, args) => {
     const tagId = await resolveLiveTag(
       db,

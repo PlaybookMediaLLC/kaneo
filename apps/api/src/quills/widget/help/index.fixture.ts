@@ -39,3 +39,43 @@ export const setQuillsWidgetHelpArticleFeedback = help(
 export const searchQuillsWidgetHelp = help(({ a }) => ({
   body: { query: a.label, locale: "de" },
 }));
+export const recordQuillsWidgetHelpSearchClick = fixture({
+  seed: async (env) => {
+    const ids = await seed(env);
+    const { helpCenterSearchQueries } =
+      await import("../../../database/quills/schema/kb");
+    const [qa] = await env.scoped(env.a, (db) =>
+      db
+        .insert(helpCenterSearchQueries)
+        .values({
+          query: ids.a.label,
+          normalizedQuery: ids.a.label.toLowerCase(),
+          locale: "en",
+          resultsCount: 1,
+        })
+        .returning({ id: helpCenterSearchQueries.id }),
+    );
+    const [qb] = await env.scoped(env.b, (db) =>
+      db
+        .insert(helpCenterSearchQueries)
+        .values({
+          query: ids.b.label,
+          normalizedQuery: ids.b.label.toLowerCase(),
+          locale: "en",
+          resultsCount: 1,
+        })
+        .returning({ id: helpCenterSearchQueries.id }),
+    );
+    return { ...ids, queryA: qa!.id, queryB: qb!.id };
+  },
+  valid: (ids) => ({
+    bearer: ids.token,
+    params: { queryId: ids.queryA },
+    body: { articleId: ids.a.published.id },
+  }),
+  foreign: (ids) => ({
+    queryId: ids.queryB,
+    articleId: ids.b.published.id,
+  }),
+  hidden: (ids) => ids.hidden,
+});

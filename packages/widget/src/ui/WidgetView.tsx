@@ -104,6 +104,8 @@ function WidgetViewBody({
   survey,
   onAnswerSurvey,
   onDismissSurvey,
+  onSearchHelp,
+  onSearchHelpClick,
 }: WidgetViewProps) {
   const t = useT();
   const locale = useLocale();
@@ -252,8 +254,10 @@ function WidgetViewBody({
       },
     );
   };
+  const widgetRootRef = useRef<HTMLElement | null>(null);
   return (
     <section
+      ref={widgetRootRef}
       className="qb-widget"
       tabIndex={-1}
       data-theme={theme}
@@ -266,6 +270,36 @@ function WidgetViewBody({
         if (event.key === "Escape") {
           event.stopPropagation();
           close();
+          return;
+        }
+        // WCAG 2.1.2 / 2.4.3: trap Tab navigation inside the open dialog panel.
+        if (event.key === "Tab" && closable && widgetRootRef.current) {
+          const focusable = Array.from(
+            widgetRootRef.current.querySelectorAll<HTMLElement>(
+              'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            ),
+          ).filter(
+            (el) =>
+              (el.offsetParent !== null || el.getClientRects().length > 0) &&
+              !el.closest("[inert]") &&
+              getComputedStyle(el).visibility !== "hidden",
+          );
+          if (focusable.length === 0) return;
+          const first = focusable[0]!;
+          const last = focusable[focusable.length - 1]!;
+          if (event.shiftKey) {
+            if (
+              document.activeElement === first ||
+              document.activeElement === widgetRootRef.current ||
+              document.activeElement === nav.content.current
+            ) {
+              event.preventDefault();
+              last.focus();
+            }
+          } else if (document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+          }
         }
       }}
     >
@@ -345,7 +379,7 @@ function WidgetViewBody({
         connection={connection}
         onRetry={onRetryLoad}
       />
-      <div className="qb-content" ref={nav.content} tabIndex={-1}>
+      <div className="qb-content" role="main" ref={nav.content} tabIndex={-1}>
         {notice && (
           <p className="qb-notice" role="status">
             {notice}
@@ -552,6 +586,8 @@ function WidgetViewBody({
             articles={articles}
             onOpen={(id) => open("help", id)}
             filters={helpFilters}
+            onSearch={onSearchHelp}
+            onSearchClick={onSearchHelpClick}
             onFilters={(filters) => {
               setHelpFilters(filters);
               nav.resetScroll();

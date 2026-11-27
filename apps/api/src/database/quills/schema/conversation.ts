@@ -138,6 +138,10 @@ export const conversations = quillsSchema
       // resolution-rate reporting: resolved-rate = count(end_reason IN
       // ('resolved','tracked_as_feedback')) / count(all ended EXCLUDING 'spam').
       endReason: text("end_reason"),
+      mergedIntoConversationId: typeIdColumnNullable("conversation")(
+        "merged_into_conversation_id",
+      ),
+      mergedAt: timestamp("merged_at", { withTimezone: true }),
       endNote: text("end_note"),
       // Which rule or classifier filed a spam-ended conversation (the
       // deterministic signals, the AI classifier, or an agent). App-layer
@@ -173,6 +177,29 @@ export const conversations = quillsSchema
       translationDismissedAt: timestamp("translation_dismissed_at", {
         withTimezone: true,
       }),
+      // Set when a teammate-forwarded email could not be parsed cleanly (e.g.
+      // Outlook stripped the original sender email) so the inbox warns the agent
+      // to verify/override the requester (#325).
+      forwardParseFailed: boolean("forward_parse_failed")
+        .notNull()
+        .default(false),
+      // First teammate reply instant for 30-day rolling wait-time estimates (#333).
+      firstResponseAt: timestamp("first_response_at", { withTimezone: true }),
+      // Promised reply deadline calculated at arrival for proactive breach updates (#333).
+      promisedReplyAt: timestamp("promised_reply_at", { withTimezone: true }),
+      breachUpdateSentAt: timestamp("breach_update_sent_at", {
+        withTimezone: true,
+      }),
+      // Solution-offered confirmation & quiet auto-close lifecycle (#311).
+      solutionOfferedAt: timestamp("solution_offered_at", {
+        withTimezone: true,
+      }),
+      closeReminderSentAt: timestamp("close_reminder_sent_at", {
+        withTimezone: true,
+      }),
+      autoCloseAt: timestamp("auto_close_at", { withTimezone: true }),
+      // How many times this conversation was reopened after resolution (#311).
+      reopenedCount: integer("reopened_count").notNull().default(0),
       createdAt: timestamp("created_at", { withTimezone: true })
         .defaultNow()
         .notNull(),
@@ -238,6 +265,17 @@ export const conversations = quillsSchema
       index("conversations_snoozed_until_idx")
         .on(table.snoozedUntil)
         .where(sql`status = 'snoozed' AND snoozed_until IS NOT NULL`),
+      index("conversations_promised_reply_due_idx")
+        .on(table.workspaceId, table.promisedReplyAt)
+        .where(
+          sql`status = 'open' AND waiting_since IS NOT NULL AND promised_reply_at IS NOT NULL AND breach_update_sent_at IS NULL`,
+        ),
+      index("conversations_auto_close_due_idx")
+        .on(table.workspaceId, table.autoCloseAt)
+        .where(sql`status = 'open' AND auto_close_at IS NOT NULL`),
+      index("conversations_first_response_idx")
+        .on(table.workspaceId, table.createdAt)
+        .where(sql`first_response_at IS NOT NULL`),
       // Spam retention sweep (conversation.spam-retention.ts): the same shape as
       // the snooze wake above, over the spam-filed candidate set. Ordered on the
       // FILING instant, which is the clock the retention window is measured from;
@@ -364,6 +402,18 @@ export const conversationMessages = quillsSchema
         "redacted_by_principal_id",
       ),
       redactionReason: text("redaction_reason"),
+      // Delayed undo-send and scheduled-send lifecycle (#323). Customer queries and outbound
+      // delivery only see rows with send_status = 'sent'.
+      sendStatus: text("send_status", {
+        enum: ["sent", "scheduled", "recalled"],
+      })
+        .notNull()
+        .default("sent"),
+      scheduledSendAt: timestamp("scheduled_send_at", { withTimezone: true }),
+      recalledAt: timestamp("recalled_at", { withTimezone: true }),
+      recalledByPrincipalId: typeIdColumnNullable("principal")(
+        "recalled_by_principal_id",
+      ),
     },
     (table) => [
       // FK names match the constraints the SQL migration created.
@@ -420,6 +470,11 @@ export const conversationMessages = quillsSchema
         columns: [table.workspaceId, table.redactedByPrincipalId],
         foreignColumns: [principal.workspaceId, principal.id],
       }).onDelete("set null"),
+      foreignKey({
+        name: "conversation_messages_recalled_by_principal_id_fkey",
+        columns: [table.workspaceId, table.recalledByPrincipalId],
+        foreignColumns: [principal.workspaceId, principal.id],
+      }).onDelete("set null"),
       // Live feed + keyset pagination on the composite (conversationId, createdAt, id);
       // id is the tie-break so same-microsecond siblings page deterministically.
       index("conversation_messages_conversation_created_idx").on(
@@ -439,6 +494,16 @@ export const conversationMessages = quillsSchema
       index("conversation_messages_deleted_by_principal_idx")
         .on(table.deletedByPrincipalId)
         .where(sql`"deleted_by_principal_id" IS NOT NULL`),
+      index("conversation_messages_recalled_by_principal_idx")
+        .on(table.recalledByPrincipalId)
+        .where(sql`"recalled_by_principal_id" IS NOT NULL`),
+      index("conversation_messages_scheduled_send_idx")
+        .on(table.workspaceId, table.scheduledSendAt)
+        .where(sql`${table.sendStatus} = 'scheduled'`),
+      check(
+        "conversation_messages_send_status_check",
+        sql`${table.sendStatus} IN ('sent', 'scheduled', 'recalled')`,
+      ),
       // The `my_tone` transform's style-mining query (copilot-transform.ts's
       // fetchTeammateStyleExcerpts): principal_id + sender_type='agent' +
       // is_internal=false + deleted_at IS NULL, ordered by created_at DESC
@@ -969,3 +1034,106 @@ export const conversationMessageTranslationsRelations = relations(
     }),
   }),
 );
+
+/**
+ * Teammates following a conversation (e.g. a teammate who forwarded a customer email
+ * into support stays in the loop via internal updates without becoming the requester, #325).
+ */
+export const conversationFollowers = quillsSchema
+  .table(
+    "conversation_followers",
+    {
+      workspaceId: workspaceColumn(),
+      conversationId: typeIdColumn("conversation")("conversation_id").notNull(),
+      principalId: typeIdColumn("principal")("principal_id").notNull(),
+      addedByPrincipalId: typeIdColumnNullable("principal")(
+        "added_by_principal_id",
+      ),
+      createdAt: timestamp("created_at", { withTimezone: true })
+        .defaultNow()
+        .notNull(),
+    },
+    (table) => [
+      primaryKey({
+        columns: [table.workspaceId, table.conversationId, table.principalId],
+      }),
+      foreignKey({
+        name: "conversation_followers_conversation_id_fkey",
+        columns: [table.workspaceId, table.conversationId],
+        foreignColumns: [conversations.workspaceId, conversations.id],
+      }).onDelete("cascade"),
+      foreignKey({
+        name: "conversation_followers_principal_id_fkey",
+        columns: [table.workspaceId, table.principalId],
+        foreignColumns: [principal.workspaceId, principal.id],
+      }).onDelete("cascade"),
+      foreignKey({
+        name: "conversation_followers_added_by_fkey",
+        columns: [table.workspaceId, table.addedByPrincipalId],
+        foreignColumns: [principal.workspaceId, principal.id],
+      }).onDelete("set null"),
+      index("conversation_followers_conversation_id_idx").on(
+        table.workspaceId,
+        table.conversationId,
+      ),
+      index("conversation_followers_principal_id_idx").on(
+        table.workspaceId,
+        table.principalId,
+      ),
+      index("conversation_followers_added_by_idx")
+        .on(table.workspaceId, table.addedByPrincipalId)
+        .where(sql`${table.addedByPrincipalId} IS NOT NULL`),
+      workspacePolicy(table.workspaceId),
+    ],
+  )
+  .enableRLS();
+
+/**
+ * Single-resource signed magic links for email-only customers (#313).
+ * Each row stores only the SHA-256 digest of the signed token so an agent can
+ * revoke a single link or every link for a conversation instantly.
+ */
+export const requestAccessLinks = quillsSchema
+  .table(
+    "request_access_links",
+    {
+      workspaceId: workspaceColumn(),
+      id: typeIdWithDefault("request_link")("id").notNull(),
+      tokenHash: text("token_hash").notNull(),
+      resourceType: text("resource_type", {
+        enum: ["conversation", "ticket"],
+      }).notNull(),
+      resourceId: text("resource_id").notNull(),
+      principalId: typeIdColumn("principal")("principal_id").notNull(),
+      expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+      revokedAt: timestamp("revoked_at", { withTimezone: true }),
+      lastOpenedAt: timestamp("last_opened_at", { withTimezone: true }),
+      createdAt: timestamp("created_at", { withTimezone: true })
+        .defaultNow()
+        .notNull(),
+    },
+    (table) => [
+      primaryKey({ columns: [table.workspaceId, table.id] }),
+      uniqueIndex("request_access_links_token_hash_idx").on(
+        table.workspaceId,
+        table.tokenHash,
+      ),
+      index("request_access_links_resource_idx").on(
+        table.workspaceId,
+        table.resourceType,
+        table.resourceId,
+      ),
+      index("request_access_links_principal_idx").on(
+        table.workspaceId,
+        table.principalId,
+      ),
+      index("request_access_links_expires_at_idx").on(table.expiresAt),
+      foreignKey({
+        name: "request_access_links_principal_id_fkey",
+        columns: [table.workspaceId, table.principalId],
+        foreignColumns: [principal.workspaceId, principal.id],
+      }).onDelete("cascade"),
+      workspacePolicy(table.workspaceId),
+    ],
+  )
+  .enableRLS();

@@ -32,6 +32,7 @@ export const startAgentConversationFixture = {
           csatRating: null,
           agentLastReadAt: null,
           visitorLastReadAt: null,
+          forwardParseFailed: false,
           tags: [],
         },
         message: {
@@ -56,6 +57,8 @@ export const startAgentConversationFixture = {
           redactedByPrincipalId: null,
           redactedByName: null,
           redactionReason: null,
+          sendStatus: "sent",
+          scheduledSendAt: null,
         },
       },
       ...overrides,

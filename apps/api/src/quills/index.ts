@@ -38,6 +38,7 @@ import changelogTranslations from "./feedback/changelog-translations";
 import boardSettings from "./feedback/board-settings";
 import boardDelivery from "./feedback/board-delivery";
 import postTasks from "./feedback/post-tasks";
+import taskCustomerContext from "./feedback/task-customer-context";
 import postUpdates from "./feedback/post-updates";
 import demand from "./feedback/demand";
 import scores from "./feedback/scores";
@@ -135,6 +136,7 @@ export type QuillsTeammateRouters = [
   typeof boardSettings,
   typeof boardDelivery,
   typeof postTasks,
+  typeof taskCustomerContext,
   typeof postUpdates,
   typeof demand,
   typeof scores,
@@ -146,6 +148,8 @@ export type QuillsTeammateRouters = [
   typeof contextRouter,
 ];
 
+// Mount sub-routers imperatively so TypeScript does not compute a 49-deep nested
+// Hono MergeSchemaPath generic or union distribution on the default export (typed clients use QuillsTeammateRouters).
 const quillsRouter = apiRouter<BaseVariables & { workspaceId: string }>();
 quillsRouter.route("/", files);
 quillsRouter.route("/", jobs);
@@ -189,6 +193,7 @@ quillsRouter.route("/", boardSettings);
 // RFC 0005: requests become Kaneo tasks.
 quillsRouter.route("/", boardDelivery);
 quillsRouter.route("/", postTasks);
+quillsRouter.route("/", taskCustomerContext);
 // #92: one update to every channel.
 quillsRouter.route("/", postUpdates);
 quillsRouter.route("/", demand);

@@ -1,3 +1,4 @@
+import type { TypeId } from "@kaneo/ids";
 import {
   and,
   desc,
@@ -39,6 +40,7 @@ import { filterConditions, filters } from "../feedback/post-filters";
 import { loadProjects } from "../feedback/visibility";
 import { notSpam } from "../support/conversation-list";
 import { realConversation } from "../support/conversation-model";
+import { resolveAllowedTeamIds } from "../support/team-scope";
 import { testRequester } from "../support/ticket-list";
 import {
   bestFirst,
@@ -76,6 +78,7 @@ type Search = {
   depth: number;
   projects: string[];
   members: string[];
+  allowedTeamIds: TypeId<"team">[] | null;
 };
 type Row = {
   id: string;
@@ -121,6 +124,7 @@ function bestMessages(db: Database, s: Search, parent: SQL, paired = false) {
     .where(
       and(
         isNull(conversationMessages.deletedAt),
+        eq(conversationMessages.sendStatus, "sent"),
         sql`${conversationMessages.searchVector} @@ ${s.tsq}`,
         sql`${parent} is not null`,
       ),
@@ -160,6 +164,7 @@ const searchers: Record<Kind, (db: Database, s: Search) => Promise<Row[]>> = {
       .limit(s.depth);
   },
   conversation: async (db, s) => {
+    if (s.allowedTeamIds !== null && s.allowedTeamIds.length === 0) return [];
     const best = bestMessages(
       db,
       s,
@@ -190,12 +195,16 @@ const searchers: Record<Kind, (db: Database, s: Search) => Promise<Row[]>> = {
           realConversation,
           notSpam,
           or(subject.where, isNotNull(best.parentId)),
+          ...(s.allowedTeamIds !== null
+            ? [inArray(conversations.assignedTeamId, s.allowedTeamIds)]
+            : []),
         ),
       )
       .orderBy(...bestFirst(score, conversations.updatedAt, conversations.id))
       .limit(s.depth);
   },
   ticket: async (db, s) => {
+    if (s.allowedTeamIds !== null && s.allowedTeamIds.length === 0) return [];
     const best = bestMessages(
       db,
       s,
@@ -224,6 +233,9 @@ const searchers: Record<Kind, (db: Database, s: Search) => Promise<Row[]>> = {
           isNull(tickets.deletedAt),
           sql`not ${testRequester}`,
           or(title.where, isNotNull(best.parentId)),
+          ...(s.allowedTeamIds !== null
+            ? [inArray(tickets.assignedTeamId, s.allowedTeamIds)]
+            : []),
         ),
       )
       .orderBy(...bestFirst(score, tickets.updatedAt, tickets.id))
@@ -396,6 +408,7 @@ const search = defineQuillsRoute({
   description:
     "Posts, conversations, tickets, articles, changelog entries, customers, teammates and companies in one ranked list. Each kind shows only records that its own list shows the caller: a post on a board the caller cannot see, a test customer's or spam conversation and a deleted record are never found. A query under 2 characters finds nothing; `offset + limit` stops at 100.",
   action: "read",
+  callerActions: true,
   query: z.object({
     q: z.string().trim().max(200),
     kind: z.enum(KINDS).optional(),
@@ -411,15 +424,22 @@ const search = defineQuillsRoute({
   },
   response: z.object({ results: z.array(result), hasMore: z.boolean() }),
   responseDescription: "One page of results, best first",
-  handler: async ({ db, query, loaded }) => {
+  handler: async ({ db, workspaceId, actor, actions, query, loaded }) => {
     const text = query.q;
     if (text.length < MIN_LENGTH || query.offset >= MAX_DEPTH)
       return { results: [], hasMore: false };
+    const allowedTeamIds = await resolveAllowedTeamIds(
+      db,
+      workspaceId,
+      actor,
+      actions,
+    );
     const end = Math.min(query.offset + query.limit, MAX_DEPTH);
     const s: Search = {
       text,
       tsq: sql`websearch_to_tsquery('english', ${text})`,
       depth: end + 1,
+      allowedTeamIds,
       ...loaded,
     };
     const merged: Result[] = [];

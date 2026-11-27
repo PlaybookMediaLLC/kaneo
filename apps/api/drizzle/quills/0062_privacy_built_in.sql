@@ -103,6 +103,7 @@ LANGUAGE sql IMMUTABLE SET search_path = pg_catalog AS $$
       WHEN 'files' THEN ARRAY['storage_key']
       WHEN 'assistant_documents' THEN ARRAY['storage_key']
       WHEN 'export_runs' THEN ARRAY['s3_key']
+      WHEN 'brands' THEN ARRAY['logo_key','dark_logo_key']
       WHEN 'privacy_requests' THEN ARRAY['export_s3_key'] ELSE ARRAY[]::text[] END) field
     UNION ALL SELECT record->'meta'->>field FROM unnest(ARRAY['thumbKey','renditionKey']) field WHERE table_name='files'
     UNION ALL SELECT attachment->'preview'->>field
@@ -119,6 +120,7 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog AS $$
   UNION ALL SELECT t.workspace_id, quills.storage_keys('files',jsonb_build_object('storage_key',t.storage_key,'meta',t.meta)) FROM quills.files t
   UNION ALL SELECT t.workspace_id, quills.storage_keys('assistant_documents',jsonb_build_object('storage_key',t.storage_key)) FROM quills.assistant_documents t
   UNION ALL SELECT t.workspace_id, quills.storage_keys('export_runs',jsonb_build_object('s3_key',t.s3_key)) FROM quills.export_runs t
+  UNION ALL SELECT t.workspace_id, quills.storage_keys('brands',jsonb_build_object('logo_key',t.logo_key,'dark_logo_key',t.dark_logo_key)) FROM quills.brands t
   UNION ALL SELECT t.workspace_id, quills.storage_keys('privacy_requests',jsonb_build_object('export_s3_key',t.export_s3_key)) FROM quills.privacy_requests t
   UNION ALL SELECT t.workspace_id, quills.storage_keys('conversation_messages',jsonb_build_object('attachments',t.attachments)) FROM quills.conversation_messages t;
 $$;
@@ -132,6 +134,7 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
  UNION ALL SELECT quills.storage_keys('files',jsonb_build_object('storage_key',storage_key,'meta',meta)) FROM quills.files WHERE workspace_id=ws
  UNION ALL SELECT storage_key FROM quills.assistant_documents WHERE workspace_id=ws
  UNION ALL SELECT s3_key FROM quills.export_runs WHERE workspace_id=ws
+ UNION ALL SELECT quills.storage_keys('brands',jsonb_build_object('logo_key',logo_key,'dark_logo_key',dark_logo_key)) FROM quills.brands WHERE workspace_id=ws
  UNION ALL SELECT export_s3_key FROM quills.privacy_requests WHERE workspace_id=ws
  UNION ALL SELECT quills.storage_keys('conversation_messages',jsonb_build_object('attachments',attachments)) FROM quills.conversation_messages WHERE workspace_id=ws
  ) refs WHERE key IS NOT NULL AND key<>'';
@@ -146,6 +149,7 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
  UNION ALL SELECT 1 FROM quills.files WHERE storage_key=key OR meta->>'thumbKey'=key OR meta->>'renditionKey'=key
  UNION ALL SELECT 1 FROM quills.assistant_documents WHERE storage_key=key
  UNION ALL SELECT 1 FROM quills.export_runs WHERE s3_key=key
+ UNION ALL SELECT 1 FROM quills.brands WHERE logo_key=key OR dark_logo_key=key
  UNION ALL SELECT 1 FROM quills.privacy_requests WHERE export_s3_key=key
  UNION ALL SELECT 1 FROM quills.conversation_messages WHERE attachments @> jsonb_build_array(jsonb_build_object('preview',jsonb_build_object('thumbKey',key))) OR attachments @> jsonb_build_array(jsonb_build_object('preview',jsonb_build_object('renditionKey',key)))
  );

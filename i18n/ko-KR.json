@@ -1283,7 +1283,8 @@
 			"defaultRoleDescriptions": {
 				"viewer": "작업을 보고 댓글을 달 수 있습니다.",
 				"member": "작업과 프로젝트를 만들고 관리할 수 있습니다.",
-				"admin": "워크스페이스에 대한 전체 권한을 가집니다."
+				"admin": "워크스페이스에 대한 전체 권한을 가집니다.",
+				"collaborator": "Free internal seat: can view threads and add internal notes without replying externally."
 			},
 			"resources": {
 				"project": "프로젝트",
@@ -1464,6 +1465,10 @@
 					"manage_settings": {
 						"label": "Manage Quills settings",
 						"description": "Change Quills configuration for this workspace."
+					},
+					"comment_internal": {
+						"description": "Add internal notes and @mention teammates without sending external customer replies.",
+						"label": "Comment internally"
 					}
 				}
 			},
@@ -1483,7 +1488,8 @@
 			"deleteDialog": {
 				"title": "역할 삭제",
 				"description": "역할 \"{{role}}\"이(가) 영구적으로 삭제됩니다. 이 역할이 할당된 멤버는 해당 권한을 잃게 됩니다."
-			}
+			},
+			"freeSeatBadge": "Free seat"
 		},
 		"workspaceLabels": {
 			"pageTitle": "라벨",
@@ -3418,7 +3424,12 @@
 			"startDate": "시작일",
 			"noDate": "날짜 없음",
 			"dates": "날짜",
-			"project": "프로젝트"
+			"project": "프로젝트",
+			"churnRisk": "Churn risk",
+			"companiesCount": "{{count}} companies",
+			"customerContext": "Customer context",
+			"requestersCount": "{{count}} requesters",
+			"votesCount": "{{count}} votes"
 		},
 		"move": {
 			"title": "작업 이동",
@@ -3973,7 +3984,8 @@
 			"owner": "소유자",
 			"admin": "관리자",
 			"member": "멤버",
-			"viewer": "뷰어"
+			"viewer": "뷰어",
+			"collaborator": "Collaborator"
 		},
 		"members": {
 			"pageTitle": "멤버",

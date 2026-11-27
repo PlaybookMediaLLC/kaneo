@@ -1,12 +1,10 @@
-import { count, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import db from "../../database";
-import {
-  workspaceBillingTable,
-  workspaceUserTable,
-} from "../../database/schema";
+import { workspaceBillingTable } from "../../database/schema";
 import type { DbOrTx } from "../../project-access/db-or-tx";
 import { isBillingEnabled } from "../config";
 import { updateSubscriptionSeats } from "../creem-client";
+import { countWorkspaceSeats } from "./billable-seats";
 
 export async function syncWorkspaceSeats(
   workspaceId: string,
@@ -30,12 +28,8 @@ export async function syncWorkspaceSeats(
     return;
   }
 
-  const [members] = await database
-    .select({ value: count() })
-    .from(workspaceUserTable)
-    .where(eq(workspaceUserTable.workspaceId, workspaceId));
-
-  const seats = Math.max(1, members?.value ?? 1);
+  const { billableSeats } = await countWorkspaceSeats(workspaceId, database);
+  const seats = Math.max(1, billableSeats);
   if (seats === billing.seats) {
     return;
   }

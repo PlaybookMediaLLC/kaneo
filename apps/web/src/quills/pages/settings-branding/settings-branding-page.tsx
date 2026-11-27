@@ -21,6 +21,7 @@ import {
 } from "../../ui/upstream";
 import { AppearanceSection } from "./parts/appearance-section";
 import { BrandForm } from "./parts/brand-form";
+import { EmailTemplateEditor } from "./parts/email-template-editor";
 
 export interface SettingsBrandingPageProps {
   workspaceId: string;
@@ -156,6 +157,13 @@ export function SettingsBrandingPage({
                   />
                 </SettingsCard>
               </SettingsSection>
+              <EmailTemplateEditor
+                workspaceId={workspaceId}
+                brandName={
+                  branding.data.headerDisplayName ?? config.data?.name ?? ""
+                }
+                disabled={disabled}
+              />
             </>
           ) : null}
         </TeamStateView>

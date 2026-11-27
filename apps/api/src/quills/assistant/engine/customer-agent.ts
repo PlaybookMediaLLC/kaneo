@@ -33,6 +33,7 @@ import { runToolLoop, type LoopTool } from "../ai/agent";
 import { repairJson } from "../ai/repair";
 import { checkArgs } from "../connector-tools";
 import { AiError, aiConfig, embed, untrusted } from "../provider";
+import type { AiConfig } from "../ai/config";
 import { logUsage, type UsageEntry } from "../runs";
 import { readConfig } from "../settings";
 import {
@@ -123,11 +124,12 @@ async function vectorOf(
   text: string,
   usage: UsageEntry[],
   state: { failed: boolean },
+  configOverride?: AiConfig,
 ): Promise<Near | null> {
-  const model = aiConfig()?.embeddingModel;
+  const model = (configOverride ?? aiConfig())?.embeddingModel;
   if (!model || state.failed) return null;
   try {
-    const result = await embed([text], EMBED_MS);
+    const result = await embed([text], EMBED_MS, configOverride);
     usage.push({
       step: "customer_agent_search",
       callType: "embedding",
@@ -181,10 +183,10 @@ export const answerCustomer: Work = async (workspaceId, event) => {
     if (
       !conversation ||
       conversation.status !== "open" ||
+      conversation.endReason === "spam" ||
       conversation.assignedAgentPrincipalId
     )
       return null;
-
     const channelKey: "messenger" | "email" | "widget" =
       conversation.channel === "email"
         ? "email"
@@ -198,6 +200,22 @@ export const answerCustomer: Work = async (workspaceId, event) => {
     );
     if (channelSettings.mode === "off") return null;
 
+    if (conversation.visitorPrincipalId) {
+      const { principal } =
+        await import("../../../database/quills/schema/auth");
+      const { isSpamBlocked } = await import("../../framework/anti-spam");
+      const [visitor] = await db
+        .select({ blockedAt: principal.blockedAt })
+        .from(principal)
+        .where(eq(principal.id, conversation.visitorPrincipalId))
+        .limit(1);
+      if (visitor?.blockedAt) return null;
+      const blocked = await isSpamBlocked(db, {
+        principalId: conversation.visitorPrincipalId,
+        email: conversation.visitorEmail,
+      });
+      if (blocked.blocked) return null;
+    }
     const [involvement] = await db
       .select({
         id: assistantInvolvements.id,
@@ -248,6 +266,7 @@ export const answerCustomer: Work = async (workspaceId, event) => {
           and(
             eq(conversationMessages.conversationId, conversation.id),
             eq(conversationMessages.isInternal, false),
+            eq(conversationMessages.sendStatus, "sent"),
             isNull(conversationMessages.deletedAt),
           ),
         )
@@ -255,6 +274,16 @@ export const answerCustomer: Work = async (workspaceId, event) => {
         .limit(TRANSCRIPT)
     ).reverse();
     const guidance = await loadGuidance(db, "agent");
+    const { checkAiBudget, resolveWorkspaceAiConfig } =
+      await import("../budget");
+    const budgetCheck = await checkAiBudget(db);
+    const resolvedAiConfig = await resolveWorkspaceAiConfig(
+      db,
+      budgetCheck.degradedMode === "cheaper_model"
+        ? budgetCheck.cheaperModel
+        : null,
+    );
+    if (!resolvedAiConfig) return null;
     return {
       config,
       channelSettings,
@@ -266,7 +295,10 @@ export const answerCustomer: Work = async (workspaceId, event) => {
       guidance,
       recentAiReplies: recentAi?.n ?? 0,
       declineTopics: declineTopicRows as DeclineTopicRule[],
-      cardOffered: transcript.some((r) => r.metadata?.feedbackCard),
+      budgetCheck,
+      resolvedAiConfig,
+      // At most one proposed request per conversation.
+      cardOffered: transcript.some((row) => row.metadata?.feedbackCard),
     };
   });
   if (!read) return nothing;
@@ -280,7 +312,78 @@ export const answerCustomer: Work = async (workspaceId, event) => {
     transcript,
     recentAiReplies,
     declineTopics,
+    budgetCheck,
+    resolvedAiConfig,
   } = read;
+
+  if (budgetCheck.degradedMode === "pause") {
+    return async (db) => {
+      const [current] = await db
+        .select({
+          status: conversations.status,
+          assignee: conversations.assignedAgentPrincipalId,
+        })
+        .from(conversations)
+        .where(eq(conversations.id, conversation.id))
+        .for("update");
+      const [latest] = await db
+        .select({
+          id: assistantInvolvements.id,
+          status: assistantInvolvements.status,
+        })
+        .from(assistantInvolvements)
+        .where(eq(assistantInvolvements.conversationId, conversation.id))
+        .orderBy(desc(assistantInvolvements.createdAt))
+        .limit(1);
+      if (
+        current?.status !== "open" ||
+        current.assignee ||
+        (latest && latest.status !== "active")
+      ) {
+        return;
+      }
+      const now = new Date();
+      if (latest) {
+        await db
+          .update(assistantInvolvements)
+          .set({
+            status: "handed_off",
+            handoffReason: "capability_limit",
+            endedAt: now,
+          })
+          .where(eq(assistantInvolvements.id, latest.id));
+      } else {
+        await db.insert(assistantInvolvements).values({
+          conversationId: conversation.id,
+          triggeredBy: "first_touch",
+          status: "handed_off",
+          handoffReason: "capability_limit",
+          endedAt: now,
+        });
+      }
+      await systemNotice(
+        db,
+        conversation.id,
+        `${config.identity.name} is paused because the workspace AI budget cap was reached (${budgetCheck.reason ?? "budget_limit"}). Handing off to the team.`,
+        { internal: true, event: { kind: "assistant_handoff" } },
+      );
+      await db
+        .update(conversations)
+        .set({
+          waitingSince: sql`coalesce(${conversations.waitingSince}, now())`,
+        })
+        .where(eq(conversations.id, conversation.id));
+      await recordQuillsChange(db, null, {
+        type: "conversation.updated",
+        entityType: "conversation",
+        entityId: conversation.id,
+        payload: {
+          conversationId: conversation.id,
+          reason: "ai_budget_paused",
+        },
+      });
+    };
+  }
 
   const usage: UsageEntry[] = [];
   const attemptedSteps: string[] = [];
@@ -335,9 +438,13 @@ export const answerCustomer: Work = async (workspaceId, event) => {
             .returning({ id: assistantInvolvements.id })
         )[0]!.id;
 
-      // Draft mode: write answers to the isolated assistant_draft_replies table so unapproved text
-      // can NEVER appear in customer-facing conversation_messages queries.
-      if (decision.outcome === "answer" && channelSettings.mode === "draft") {
+      // Draft mode (or budget degraded draft mode): write answers to the isolated
+      // assistant_draft_replies table so unapproved text never appears in customer queries.
+      if (
+        decision.outcome === "answer" &&
+        (channelSettings.mode === "draft" ||
+          budgetCheck.degradedMode === "draft_mode")
+      ) {
         const [draft] = await db
           .insert(assistantDraftReplies)
           .values({
@@ -499,8 +606,6 @@ export const answerCustomer: Work = async (workspaceId, event) => {
     }
   }
 
-  if (!aiConfig()) return nothing;
-
   const voice = config.agent.voice;
   const knowledge = config.agent.knowledge;
   const search = (text: string, near: Near | null) =>
@@ -509,7 +614,7 @@ export const answerCustomer: Work = async (workspaceId, event) => {
     );
   const embedding = { failed: false };
   const [near, connectorMap] = await Promise.all([
-    vectorOf(question, usage, embedding),
+    vectorOf(question, usage, embedding, resolvedAiConfig),
     loadConnectorTools(workspaceId, "agent"),
   ]);
   const sources = await search(question, near);
@@ -550,7 +655,7 @@ export const answerCustomer: Work = async (workspaceId, event) => {
         if (!parsed.success) return "Failed: the arguments are not valid.";
         const found = await search(
           parsed.data.query,
-          await vectorOf(parsed.data.query, usage, embedding),
+          await vectorOf(parsed.data.query, usage, embedding, resolvedAiConfig),
         );
         attemptedSteps.push(
           `Re-searched knowledge base for "${parsed.data.query}" (${found.length} hit${found.length === 1 ? "" : "s"})`,
@@ -605,6 +710,8 @@ export const answerCustomer: Work = async (workspaceId, event) => {
   const text = await runToolLoop({
     json: true,
     tools,
+    configOverride: resolvedAiConfig,
+    role: budgetCheck.degradedMode === "cheaper_model" ? "fast" : undefined,
     maxSteps: MAX_STEPS,
     maxCallsPerStep: 3,
     toolCallConcurrency: 3,
@@ -615,6 +722,7 @@ export const answerCustomer: Work = async (workspaceId, event) => {
       usage.push({
         step: "customer_agent",
         callType: "chat_completion",
+        conversationId: conversation.id,
         usage: step,
       }),
     onDenied: () => undefined,
@@ -675,7 +783,6 @@ export const answerCustomer: Work = async (workspaceId, event) => {
     guarded.outcome === "answer" && parsed.data.feedback && !read.cardOffered
       ? { ...parsed.data.feedback, status: "proposed" as const }
       : undefined;
-
   return commitOutcome({
     outcome: guarded.outcome,
     reply: guarded.reply,

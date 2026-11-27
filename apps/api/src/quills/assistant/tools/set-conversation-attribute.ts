@@ -25,6 +25,36 @@ export const setConversationAttribute = defineWriteTool({
   available: (context) => Boolean(context.conversationId),
   summary: (args) =>
     `Set the attribute ${args.key} to ${JSON.stringify(args.value).slice(0, 200)}`,
+  previewDiff: (conversation, args) => {
+    const toScalar = (val: unknown): string | number | boolean | null => {
+      if (
+        val === null ||
+        val === undefined ||
+        typeof val === "string" ||
+        typeof val === "number" ||
+        typeof val === "boolean"
+      ) {
+        return val ?? null;
+      }
+      return JSON.stringify(val);
+    };
+    return {
+      targetType: "conversation",
+      targetId: conversation?.id ?? null,
+      fields: [
+        {
+          field: `attribute.${args.key}`,
+          before: toScalar(
+            (
+              conversation?.customAttributes as Record<string, unknown> | null
+            )?.[args.key],
+          ),
+          after: toScalar(args.value),
+        },
+      ],
+      recordCount: 1,
+    };
+  },
   execute: async (db, _actor, conversation, args) => {
     await writeAttributeValue(db, conversation.id, args.key, args.value);
     return conversationChange(conversation, "conversation.attribute_changed", {

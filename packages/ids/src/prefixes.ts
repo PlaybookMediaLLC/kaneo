@@ -50,6 +50,13 @@ export const ID_PREFIXES = {
   conversation_message_translation: "conversation_msg_translation",
   // A stored upload attached to conversation and ticket messages.
   file: "file",
+  // Signed magic-link access records for email-only customers (#313).
+  request_link: "request_link",
+  // Multi-brand and customizable email templates (#332).
+  brand: "brand",
+  email_template: "email_template",
+  // Webhook delivery log rows (#330).
+  webhook_delivery: "webhook_delivery",
 
   // Help center
   kb_category: "kb_category",

@@ -23,6 +23,7 @@ const attachments = z
 export const emailInputSchema = z.object({
   from: mailbox.optional(),
   to: z.email(),
+  cc: z.array(z.email()).max(20).optional(),
   subject: headerValue,
   html: z.string().optional(),
   react: z
@@ -58,6 +59,7 @@ export const rawEmailInputSchema = emailInputSchema
   .pick({
     from: true,
     to: true,
+    cc: true,
     subject: true,
     html: true,
     text: true,

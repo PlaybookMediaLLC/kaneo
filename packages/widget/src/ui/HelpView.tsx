@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon.js";
 import { SearchField } from "./SearchField.js";
 import { searchArticles, articleExcerpt, articleText } from "./search.js";
@@ -11,18 +11,70 @@ export function HelpView({
   onOpen,
   filters,
   onFilters,
+  onSearch,
+  onSearchClick,
 }: {
   articles: readonly HelpArticle[];
   onOpen: (id: string) => void;
   filters: HelpFilters;
   onFilters: (filters: HelpFilters) => void;
+  onSearch?: (
+    query: string,
+    signal?: AbortSignal,
+  ) => Promise<{ queryId: string | null; articles: HelpArticle[] }>;
+  onSearchClick?: (queryId: string, articleId: string) => void;
 }) {
   const t = useT();
   const { query, category } = filters;
   const search = useRef<HTMLInputElement>(null);
   const term = query.trim().toLowerCase();
+  const [remote, setRemote] = useState<{
+    term: string;
+    queryId: string | null;
+    articles: HelpArticle[];
+  } | null>(null);
+
+  const onSearchRef = useRef(onSearch);
+  onSearchRef.current = onSearch;
+
+  useEffect(() => {
+    if (!onSearchRef.current || !term) {
+      setRemote(null);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      const searchFn = onSearchRef.current;
+      if (!searchFn) return;
+      void searchFn(query.trim(), controller.signal)
+        .then((res) => {
+          if (!controller.signal.aborted) {
+            setRemote({
+              term,
+              queryId: res.queryId,
+              articles: res.articles,
+            });
+          }
+        })
+        .catch(() => {
+          // Fall back to local search when offline or aborted.
+        });
+    }, 350);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query, term]);
+
   const categories = [...new Set(articles.map((article) => article.category))];
-  const filtered = searchArticles(articles, query, category);
+  const localFiltered = searchArticles(articles, query, category);
+  const usingRemote = Boolean(term && remote && remote.term === term);
+  const filtered = usingRemote
+    ? remote!.articles.filter(
+        (article) => !category || article.category === category,
+      )
+    : localFiltered;
+
   return (
     <div className="qb-list-view">
       <h1>{t("Help & Support")}</h1>
@@ -71,7 +123,12 @@ export function HelpView({
               type="button"
               className="qb-help-row"
               key={article.id}
-              onClick={() => onOpen(article.id)}
+              onClick={() => {
+                if (usingRemote && remote?.queryId && onSearchClick) {
+                  onSearchClick(remote.queryId, article.id);
+                }
+                onOpen(article.id);
+              }}
             >
               <span className="qb-category-icon">
                 <Icon name="help" />

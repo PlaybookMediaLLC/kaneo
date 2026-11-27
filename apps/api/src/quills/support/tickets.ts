@@ -28,6 +28,7 @@ import {
   lockTickets,
 } from "./ticket-lifecycle";
 import { listTicketPage } from "./ticket-list";
+import { assertTeamVisible, resolveAllowedTeamIds } from "./team-scope";
 import {
   CATEGORIES,
   findStatus,
@@ -61,6 +62,7 @@ const listTickets = defineQuillsRoute({
   description:
     "Leaves out deleted tickets. `search` matches the title or the ticket number (`42` or `#42`). Keyset paging: pass the last ticket ID as `cursor`.",
   action: "read",
+  callerActions: true,
   query: z.object({
     type: z.enum(TICKET_KINDS).optional(),
     ticketTypeId: flexibleToTypeIdSchema("ticket_type").optional(),
@@ -86,7 +88,15 @@ const listTickets = defineQuillsRoute({
   }),
   responseDescription: "One page of tickets",
   errors,
-  handler: ({ db, actor, query }) => listTicketPage(db, actor, query),
+  handler: async ({ db, workspaceId, actor, actions, query }) => {
+    const allowedTeamIds = await resolveAllowedTeamIds(
+      db,
+      workspaceId,
+      actor,
+      actions,
+    );
+    return listTicketPage(db, actor, { ...query, allowedTeamIds });
+  },
 });
 
 const getTicket = defineQuillsRoute({
@@ -95,12 +105,22 @@ const getTicket = defineQuillsRoute({
   operationId: "getQuillsTicket",
   summary: "Get a support ticket",
   action: "read",
+  callerActions: true,
   params: ticketParams,
   response: ticketSchema,
   responseDescription: "The ticket",
   errors,
-  handler: async ({ db, params }) =>
-    ticketView(db, await findTicket(db, params.ticketId)),
+  handler: async ({ db, workspaceId, actor, actions, params }) => {
+    const allowedTeamIds = await resolveAllowedTeamIds(
+      db,
+      workspaceId,
+      actor,
+      actions,
+    );
+    const ticket = await findTicket(db, params.ticketId);
+    assertTeamVisible(allowedTeamIds, ticket.assigneeTeamId, "Ticket");
+    return ticketView(db, ticket);
+  },
 });
 
 const createTicket = defineQuillsRoute({

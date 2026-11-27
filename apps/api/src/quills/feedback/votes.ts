@@ -87,6 +87,7 @@ export async function addVote(
   voter: TypeId<"principal">,
   addedBy?: QuillsActor,
   source: BehalfSource = "other",
+  sourceSignalId?: TypeId<"feedback_signal">,
 ) {
   // The merge link cannot change while the vote moves a count (thread-counts.ts).
   await lockMergeTarget(db, postId);
@@ -109,6 +110,7 @@ export async function addVote(
         .values({
           postId: post.id,
           principalId: voter,
+          ...(sourceSignalId && { sourceSignalId }),
           ...(addedBy && {
             sourceType: source,
             addedByPrincipalId: addedBy.principalId,
@@ -131,10 +133,15 @@ export async function addVote(
       },
     });
   }
+  const voteCount = await count(db, post.id, voter, changed ? 1 : undefined);
+  if (changed) {
+    const { checkVoteBurst } = await import("./hygiene");
+    await checkVoteBurst(db, post.id);
+  }
   return {
     postId: post.id,
     changed,
-    voteCount: await count(db, post.id, voter, changed ? 1 : undefined),
+    voteCount,
   };
 }
 

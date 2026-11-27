@@ -473,7 +473,18 @@ const createEntry = defineQuillsRoute({
       .returning({ id: changelogEntries.id });
     await replaceLinks(db, row!.id, loaded, body);
     const created = await entryById(db, row!.id, loaded);
-    return { ...created, publishedNow: created.status === "published" };
+    const publishedNow = created.status === "published";
+    if (publishedNow) {
+      const { flagLinkedArticlesOnChangelogPublish } =
+        await import("../content/help-center/freshness");
+      await flagLinkedArticlesOnChangelogPublish(
+        db,
+        created.id,
+        created.title,
+        created.linkedPosts.map((p) => p.id),
+      );
+    }
+    return { ...created, publishedNow };
   },
 });
 
@@ -533,12 +544,23 @@ const updateEntry = defineQuillsRoute({
       .where(live(entryId));
     await replaceLinks(db, entryId, loaded, body);
     const updated = await entryById(db, entryId, loaded);
+    const publishedNow =
+      body.publishState !== undefined &&
+      updated.status === "published" &&
+      statusOf(current.publishedAt) !== "published";
+    if (publishedNow) {
+      const { flagLinkedArticlesOnChangelogPublish } =
+        await import("../content/help-center/freshness");
+      await flagLinkedArticlesOnChangelogPublish(
+        db,
+        updated.id,
+        updated.title,
+        updated.linkedPosts.map((p) => p.id),
+      );
+    }
     return {
       ...updated,
-      publishedNow:
-        body.publishState !== undefined &&
-        updated.status === "published" &&
-        statusOf(current.publishedAt) !== "published",
+      publishedNow,
     };
   },
 });

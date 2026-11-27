@@ -26,7 +26,10 @@ import { principal } from "./auth";
  * apps/web/src/lib/server/domains/subscriptions/notification-matrix.ts.
  */
 type NotificationMatrix = Partial<
-  Record<string, Partial<Record<"inApp" | "email" | "push", boolean>>>
+  Record<
+    string,
+    Partial<Record<"inApp" | "email" | "push" | "slackDm", boolean>>
+  >
 >;
 
 /**
@@ -109,6 +112,16 @@ export const notificationPreferences = quillsSchema
       // read-time helpers (shouldNotify) supply defaults for absent entries so
       // this column can be introduced without a backfill.
       matrix: jsonb("matrix").$type<NotificationMatrix>(),
+      /** Teammate digest cadence (#321): off, hourly, or daily */
+      digestFrequency: text("digest_frequency", {
+        enum: ["off", "hourly", "daily"],
+      })
+        .notNull()
+        .default("off"),
+      /** Side-effect ledger timestamp for the last teammate digest sent (#321) */
+      digestLastSentAt: timestamp("digest_last_sent_at", {
+        withTimezone: true,
+      }),
       createdAt: timestamp("created_at", { withTimezone: true })
         .defaultNow()
         .notNull(),
@@ -123,6 +136,9 @@ export const notificationPreferences = quillsSchema
         foreignColumns: [principal.workspaceId, principal.id],
       }).onDelete("cascade"),
       unique().on(table.workspaceId, table.principalId),
+      index("notification_preferences_digest_due_idx")
+        .on(table.digestLastSentAt)
+        .where(sql`${table.digestFrequency} <> 'off'`),
       workspacePolicy(table.workspaceId),
     ],
   )

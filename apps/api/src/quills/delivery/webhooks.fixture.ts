@@ -1,6 +1,9 @@
 import { isNull } from "drizzle-orm";
-import { webhooks } from "../../database/quills/schema/webhooks";
-import { fixture, type ContractEnv } from "../framework/contract";
+import {
+  webhookDeliveries,
+  webhooks,
+} from "../../database/quills/schema/webhooks";
+import { empty, fixture, type ContractEnv } from "../framework/contract";
 
 // Create and rotate encrypt the signing secret. A configured instance key wins.
 process.env.NOTIFICATION_SECRET_ENCRYPTION_KEY ||= "quills-contract-test-key";
@@ -8,7 +11,7 @@ process.env.NOTIFICATION_SECRET_ENCRYPTION_KEY ||= "quills-contract-test-key";
 /** A TEST-NET-3 literal: a public address that needs no DNS lookup. */
 const target = "https://203.0.113.10/hooks";
 
-/** One live webhook per workspace; earlier ones are retired so the per-workspace limit never blocks a check. */
+/** One live webhook and one delivery row per workspace. */
 async function side(env: ContractEnv, workspaceId: string) {
   return env.scoped(workspaceId, async (db, actor) => {
     await db
@@ -24,7 +27,20 @@ async function side(env: ContractEnv, workspaceId: string) {
         events: ["post.task_linked"],
       })
       .returning({ id: webhooks.id });
-    return row!.id;
+    const [delivery] = await db
+      .insert(webhookDeliveries)
+      .values({
+        webhookId: row!.id,
+        eventId: "evt_contract_1",
+        eventType: "post.task_linked",
+        attempt: 1,
+        status: "failed",
+        httpStatus: 500,
+        durationMs: 120,
+        error: "HTTP 500",
+      })
+      .returning({ id: webhookDeliveries.id });
+    return { webhookId: row!.id, deliveryId: delivery!.id };
   });
 }
 const seed = async (env: ContractEnv) => ({
@@ -35,8 +51,8 @@ type Ids = Awaited<ReturnType<typeof seed>>;
 const one = (body?: object) =>
   fixture({
     seed,
-    valid: ({ a }: Ids) => ({ params: { webhookId: a }, body }),
-    foreign: ({ b }: Ids) => ({ webhookId: b }),
+    valid: ({ a }: Ids) => ({ params: { webhookId: a.webhookId }, body }),
+    foreign: ({ b }: Ids) => ({ webhookId: b.webhookId }),
   });
 
 export const listQuillsWebhooks = fixture({ seed, valid: () => ({}) });
@@ -48,3 +64,17 @@ export const createQuillsWebhook = fixture({
 export const updateQuillsWebhook = one({ status: "disabled" });
 export const deleteQuillsWebhook = one();
 export const rotateQuillsWebhookSecret = one();
+export const listQuillsWebhookDeliveries = one();
+export const testQuillsWebhook = one();
+export const replayQuillsWebhookDelivery = fixture({
+  seed,
+  valid: ({ a }: Ids) => ({
+    params: { webhookId: a.webhookId, deliveryId: a.deliveryId },
+  }),
+  foreign: ({ b }: Ids) => ({
+    webhookId: b.webhookId,
+    deliveryId: b.deliveryId,
+  }),
+});
+export const replayQuillsFailedWebhookDeliveries = one();
+export const listQuillsEvents = empty;

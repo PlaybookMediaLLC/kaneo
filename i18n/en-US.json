@@ -1314,6 +1314,7 @@
 			"emptyTitle": "No roles yet",
 			"emptyDescription": "Default roles will appear here once they're seeded for this workspace.",
 			"defaultBadge": "Default",
+			"freeSeatBadge": "Free seat",
 			"permissionCount_one": "{{count}} permission",
 			"permissionCount_other": "{{count}} permissions",
 			"nameLabel": "Name",
@@ -1328,6 +1329,7 @@
 			"saveChanges": "Save changes",
 			"defaultRoleDescriptions": {
 				"viewer": "Can view and comment on tasks.",
+				"collaborator": "Free internal seat: can view threads and add internal notes without replying externally.",
 				"member": "Can create and manage tasks and projects.",
 				"admin": "Has full access to the workspace."
 			},
@@ -1510,6 +1512,10 @@
 					"manage_settings": {
 						"label": "Manage Quills settings",
 						"description": "Change Quills configuration for this workspace."
+					},
+					"comment_internal": {
+						"label": "Comment internally",
+						"description": "Add internal notes and @mention teammates without sending external customer replies."
 					}
 				}
 			},
@@ -3459,7 +3465,12 @@
 			"startDate": "Start date",
 			"noDate": "No date",
 			"dates": "Dates",
-			"project": "Project"
+			"project": "Project",
+			"customerContext": "Customer context",
+			"votesCount": "{{count}} votes",
+			"requestersCount": "{{count}} requesters",
+			"companiesCount": "{{count}} companies",
+			"churnRisk": "Churn risk"
 		},
 		"move": {
 			"title": "Move task",
@@ -4049,6 +4060,7 @@
 			"owner": "Owner",
 			"admin": "Admin",
 			"member": "Member",
+			"collaborator": "Collaborator",
 			"viewer": "Viewer"
 		},
 		"members": {

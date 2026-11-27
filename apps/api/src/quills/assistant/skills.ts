@@ -17,12 +17,14 @@ import { defineQuillsRoute, type Database } from "../framework/define-route";
 const MAX_SKILLS = 100;
 const params = z.object({ skillId: flexibleToTypeIdSchema("skill") });
 const assignments = z.object({ agent: z.boolean(), copilot: z.boolean() });
+const allowedToolsField = z.array(z.string().trim().min(1).max(100)).max(50);
 const skillSchema = z.object({
   id: z.string(),
   name: z.string(),
   whenToUse: z.string(),
   instructions: z.string(),
   assignments,
+  allowedTools: allowedToolsField,
   enabled: z.boolean(),
   createdAt: responseTimestamp,
   updatedAt: responseTimestamp,
@@ -33,6 +35,7 @@ const columns = {
   whenToUse: agentSkills.whenToUse,
   instructions: agentSkills.instructions,
   assignments: agentSkills.assignments,
+  allowedTools: agentSkills.allowedTools,
   enabled: agentSkills.enabled,
   createdAt: agentSkills.createdAt,
   updatedAt: agentSkills.updatedAt,
@@ -42,6 +45,7 @@ const fields = {
   whenToUse: z.string().trim().min(1).max(240),
   instructions: z.string().trim().min(1).max(8000),
   assignments,
+  allowedTools: allowedToolsField,
   enabled: z.boolean(),
 };
 const errors = {
@@ -58,6 +62,7 @@ const view = (row: Row) => ({
     agent: row.assignments?.agent === true,
     copilot: row.assignments?.copilot === true,
   },
+  allowedTools: Array.isArray(row.allowedTools) ? row.allowedTools : [],
 });
 const duplicate = uniqueConflict("Another skill has this name");
 async function nameTaken(db: Database, name: string, except?: string) {
@@ -98,6 +103,7 @@ const createSkill = defineQuillsRoute({
   body: z.object({
     ...fields,
     assignments: assignments.default({ agent: false, copilot: true }),
+    allowedTools: allowedToolsField.default([]),
     enabled: fields.enabled.default(true),
   }),
   response: skillSchema,
@@ -121,6 +127,7 @@ const createSkill = defineQuillsRoute({
         whenToUse: body.whenToUse,
         instructions: body.instructions,
         assignments: body.assignments,
+        allowedTools: body.allowedTools,
         enabled: body.enabled,
         createdByPrincipalId: actor.principalId,
       })
@@ -143,6 +150,7 @@ const updateSkill = defineQuillsRoute({
       whenToUse: fields.whenToUse.optional(),
       instructions: fields.instructions.optional(),
       assignments: assignments.optional(),
+      allowedTools: allowedToolsField.optional(),
       enabled: fields.enabled.optional(),
     })
     .refine(someField, {
@@ -165,6 +173,7 @@ const updateSkill = defineQuillsRoute({
         whenToUse: body.whenToUse,
         instructions: body.instructions,
         assignments: body.assignments,
+        allowedTools: body.allowedTools,
         enabled: body.enabled,
         updatedAt: new Date(),
       })

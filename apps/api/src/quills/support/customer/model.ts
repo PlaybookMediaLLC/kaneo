@@ -4,7 +4,9 @@
 // team-only notices, deleted rows, assignees, tags and teammate principal IDs never reach a customer.
 import {
   and,
+  asc,
   count,
+  desc,
   eq,
   gt,
   inArray,
@@ -28,6 +30,11 @@ import {
   conversations,
 } from "../../../database/quills/schema/conversation";
 import { kvStore } from "../../../database/quills/schema/kv";
+import {
+  ticketConversations,
+  tickets,
+  ticketStatuses,
+} from "../../../database/quills/schema/tickets";
 import { hashToken, type QuillsCaller } from "../../framework/audience";
 import type { Database } from "../../framework/define-route";
 import { requirePortalAccess } from "../../portal/gate";
@@ -42,6 +49,9 @@ import {
 } from "../conversation-model";
 import { embedsOf, type MessageId } from "../message-model";
 import { reopenLinkedTicketsForConversation } from "../../integrations/work-item-graph";
+import { projectCustomerStatus } from "../office-hours-calc";
+import { readCsatSettings } from "../support-settings";
+import { getWaitTimeEstimate } from "../wait-estimate";
 
 export {
   conflict,
@@ -78,9 +88,10 @@ export async function requireSurface(
     throw notFound(surface === "messenger" ? "Messenger" : "Tickets");
 }
 
-/** Messages a customer may read: not internal, not deleted, not a retired Home transcript. */
+/** Messages a customer may read: not internal, actually sent (not scheduled/recalled), not deleted, not a retired Home transcript. */
 export const customerVisible: SQL = and(
   eq(conversationMessages.isInternal, false),
+  eq(conversationMessages.sendStatus, "sent"),
   isNull(conversationMessages.deletedAt),
   isNull(conversationMessages.workspaceThreadKey),
 )!;
@@ -140,12 +151,17 @@ export const customerMessageSchema = z.object({
 export const customerConversationSchema = z.object({
   id: z.string(),
   status: z.enum(conversations.status.enumValues),
+  customerStatus: z
+    .enum(["received", "in_progress", "awaiting_requester", "resolved"])
+    .optional(),
   /** A closed conversation is read-only in the source; a new message still reopens it here. */
   isReadOnly: z.boolean(),
   subject: z.string().nullable(),
   preview: z.string().nullable(),
   lastMessageAt: responseTimestamp,
   createdAt: responseTimestamp,
+  updatedAt: nullableResponseTimestamp.optional(),
+  solutionOfferedAt: nullableResponseTimestamp.optional(),
   unreadCount: z.number(),
   csatRating: z.number().nullable(),
   csatSubmittedAt: nullableResponseTimestamp,
@@ -220,11 +236,14 @@ export async function toConversations(
   return rows.map((row) => ({
     id: row.id,
     status: row.status,
+    customerStatus: projectCustomerStatus(row),
     isReadOnly: row.status === "closed",
     subject: row.subject,
     preview: row.lastMessagePreview,
     lastMessageAt: row.lastMessageAt,
     createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    solutionOfferedAt: row.solutionOfferedAt,
     unreadCount: unread.get(row.id) ?? 0,
     csatRating: row.csatRating,
     csatSubmittedAt: row.csatSubmittedAt,
@@ -319,6 +338,7 @@ export async function cursorMessage(
         eq(conversationMessages.id, id),
         eq(conversationMessages.conversationId, conversationId),
         eq(conversationMessages.isInternal, false),
+        eq(conversationMessages.sendStatus, "sent"),
       ),
     )
     .limit(1);
@@ -398,9 +418,24 @@ export async function insertVisitorMessage(
   });
   // The stored microsecond time: a millisecond JS Date would sort before the message itself.
   const at = sql`(select ${conversationMessages.createdAt} from ${conversationMessages} where ${eq(conversationMessages.id, messageId)})`;
-  // A reply reopens a closed or snoozed conversation, except one ended as spam.
+  // A reply reopens a closed or snoozed conversation, except one ended as spam or merged.
   const reopen =
-    conversation.status !== "open" && conversation.endReason !== "spam";
+    conversation.status !== "open" &&
+    conversation.endReason !== "spam" &&
+    conversation.endReason !== "merged";
+  const wasClosed = conversation.status === "closed";
+  let promisedReplyAt: Date | null = null;
+  if (!conversation.waitingSince) {
+    const wait = await getWaitTimeEstimate(db);
+    if (wait && wait.medianMinutes > 0) {
+      // Promise a realistic upper bound (2x rolling median, clamped to 60m–48h) so breach updates fire meaningfully (#333).
+      const budgetMinutes = Math.min(
+        48 * 60,
+        Math.max(60, Math.ceil(wait.medianMinutes * 2)),
+      );
+      promisedReplyAt = new Date(Date.now() + budgetMinutes * 60_000);
+    }
+  }
   await db
     .update(conversations)
     .set({
@@ -408,8 +443,12 @@ export async function insertVisitorMessage(
       lastMessagePreview: preview(content),
       visitorLastReadAt: at,
       waitingSince: sql`coalesce(${conversations.waitingSince}, ${at})`,
-      // A customer message brings an archived conversation back to the inbox.
+      ...(promisedReplyAt ? { promisedReplyAt, breachUpdateSentAt: null } : {}),
+      // A customer message brings an archived conversation back to the inbox and clears pending solution close.
       archivedAt: null,
+      solutionOfferedAt: null,
+      autoCloseAt: null,
+      closeReminderSentAt: null,
       updatedAt: at,
       ...(reopen && {
         status: "open" as const,
@@ -418,6 +457,9 @@ export async function insertVisitorMessage(
         endReason: null,
         endNote: null,
         spamReason: null,
+        ...(wasClosed && {
+          reopenedCount: sql`${conversations.reopenedCount} + 1`,
+        }),
       }),
     })
     .where(eq(conversations.id, conversation.id));
@@ -440,19 +482,100 @@ export async function recordCsat(
   const text = comment?.trim() ? comment.trim().slice(0, 2000) : undefined;
   const firstRating = conversation.csatRating === null;
   const firstComment = text !== undefined && conversation.csatComment === null;
-  if (firstRating || firstComment)
+  const effectiveRating = conversation.csatRating ?? rating;
+  let followUpTicketId: string | null = null;
+  let isLow = false;
+
+  if (firstRating || firstComment) {
+    const now = new Date();
     await db
       .update(conversations)
       .set({
-        csatRating: conversation.csatRating ?? rating,
-        csatSubmittedAt: conversation.csatSubmittedAt ?? new Date(),
+        csatRating: effectiveRating,
+        csatSubmittedAt: conversation.csatSubmittedAt ?? now,
         ...(firstComment && { csatComment: text }),
-        updatedAt: new Date(),
+        updatedAt: now,
       })
       .where(eq(conversations.id, conversation.id));
+
+    const summary = text
+      ? `Customer rated this conversation ${effectiveRating}/5: "${text}"`
+      : `Customer rated this conversation ${effectiveRating}/5.`;
+    await db.insert(conversationMessages).values({
+      conversationId: conversation.id,
+      senderType: "system",
+      isInternal: true,
+      content: summary,
+      metadata: {
+        systemKind: "csat_submitted",
+        rating: effectiveRating,
+        ...(text ? { comment: text } : {}),
+      },
+    });
+
+    if (firstRating) {
+      const csatSettings = await readCsatSettings(db);
+      isLow = effectiveRating <= csatSettings.lowScoreThreshold;
+      if (isLow && csatSettings.autoCreateFollowUpOnLow) {
+        // Never spawn real back-office tickets for test/sandbox visitors.
+        const [visitor] = await db
+          .select({ testOwnerPrincipalId: principal.testOwnerPrincipalId })
+          .from(principal)
+          .where(eq(principal.id, conversation.visitorPrincipalId))
+          .limit(1);
+        if (!visitor?.testOwnerPrincipalId) {
+          const [defaultStatus] = await db
+            .select({ id: ticketStatuses.id })
+            .from(ticketStatuses)
+            .where(
+              and(
+                eq(ticketStatuses.category, "open"),
+                isNull(ticketStatuses.deletedAt),
+              ),
+            )
+            .orderBy(
+              desc(ticketStatuses.isDefault),
+              asc(ticketStatuses.position),
+            )
+            .limit(1);
+          if (defaultStatus) {
+            const [ticket] = await db
+              .insert(tickets)
+              .values({
+                type: "back_office",
+                title:
+                  `Follow up on low CSAT (${effectiveRating}/5): ${conversation.subject ?? "Conversation"}`.slice(
+                    0,
+                    255,
+                  ),
+                statusId: defaultStatus.id,
+                priority: "high",
+                requesterPrincipalId: conversation.visitorPrincipalId,
+                assigneePrincipalId: conversation.assignedAgentPrincipalId,
+                assigneeTeamId: conversation.assignedTeamId,
+              })
+              .returning({ id: tickets.id });
+            if (ticket) {
+              followUpTicketId = ticket.id;
+              await db
+                .insert(ticketConversations)
+                .values({
+                  ticketId: ticket.id,
+                  conversationId: conversation.id,
+                  ticketType: "back_office",
+                })
+                .onConflictDoNothing();
+            }
+          }
+        }
+      }
+    }
+  }
   return {
     changed: firstRating || firstComment,
-    rating: conversation.csatRating ?? rating,
+    rating: effectiveRating,
+    isLow,
+    followUpTicketId,
   };
 }
 

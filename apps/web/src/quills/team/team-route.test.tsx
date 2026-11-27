@@ -37,6 +37,7 @@ vi.mock("@/hooks/use-workspace-permission", () => ({
     canDeleteQuills: () => false,
     canManageQuillsSettings: () => false,
     canViewQuillsRevenue: () => true,
+    canCommentInternalQuills: () => true,
   }),
 }));
 

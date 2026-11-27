@@ -1,5 +1,8 @@
 import { and, eq } from "drizzle-orm";
-import { helpCenterArticleFeedback } from "../../../../database/quills/schema/kb";
+import {
+  helpCenterArticleFeedback,
+  helpCenterSearchQueries,
+} from "../../../../database/quills/schema/kb";
 import { fixture, type ContractEnv } from "../../../framework/contract";
 import { helpSeed, type HelpIds } from "../seed.fixture";
 
@@ -37,6 +40,45 @@ export const searchQuillsPublicHelpCenter = fixture({
   seed: helpSeed,
   // The label holds underscores: the title match must take them literally.
   valid: ({ a }) => ({ body: { query: a.label } }),
+  hidden: (ids) => ids.hidden,
+  own: () => [],
+});
+
+export const recordQuillsPublicHelpCenterSearchClick = fixture({
+  seed: async (env) => {
+    const ids = await helpSeed(env);
+    const [qa] = await env.scoped(env.a, (db) =>
+      db
+        .insert(helpCenterSearchQueries)
+        .values({
+          query: ids.a.label,
+          normalizedQuery: ids.a.label.toLowerCase(),
+          locale: "en",
+          resultsCount: 1,
+        })
+        .returning({ id: helpCenterSearchQueries.id }),
+    );
+    const [qb] = await env.scoped(env.b, (db) =>
+      db
+        .insert(helpCenterSearchQueries)
+        .values({
+          query: ids.b.label,
+          normalizedQuery: ids.b.label.toLowerCase(),
+          locale: "en",
+          resultsCount: 1,
+        })
+        .returning({ id: helpCenterSearchQueries.id }),
+    );
+    return { ...ids, queryA: qa!.id, queryB: qb!.id };
+  },
+  valid: ({ a, queryA }) => ({
+    params: { queryId: queryA },
+    body: { articleId: a.published.id },
+  }),
+  foreign: ({ b, queryB }) => ({
+    queryId: queryB,
+    articleId: b.published.id,
+  }),
   hidden: (ids) => ids.hidden,
   own: () => [],
 });

@@ -1,3 +1,4 @@
+export * from "./challenge.fixture";
 export * from "./config.fixture";
 export {
   confirmQuillsEmailChange,

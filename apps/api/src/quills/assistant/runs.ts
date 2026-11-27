@@ -156,20 +156,24 @@ export type UsageEntry = {
   usage?: Usage;
   error?: AiErrorCode;
   postId?: string;
+  conversationId?: string;
   metadata?: Record<string, string | number | boolean | string[]>;
 };
 export async function logUsage(db: Database, entries: UsageEntry[]) {
   if (!entries.length) return;
+  const { estimateCallCostUsd } = await import("./budget");
   await db.insert(aiUsageLog).values(
     entries.map((entry) => ({
       pipelineStep: entry.step.slice(0, 30),
       callType: entry.callType,
       model: (entry.usage?.model ?? "unknown").slice(0, 100),
       postId: entry.postId as never,
+      conversationId: entry.conversationId as never,
       inputTokens: entry.usage?.inputTokens ?? 0,
       outputTokens: entry.usage?.outputTokens ?? 0,
       totalTokens: entry.usage?.totalTokens ?? 0,
       costUsd: costOf(entry.usage),
+      estimatedCostUsd: estimateCallCostUsd(entry.usage),
       durationMs: entry.usage?.durationMs ?? 0,
       status: entry.error ? "error" : "success",
       error: entry.error ?? null,

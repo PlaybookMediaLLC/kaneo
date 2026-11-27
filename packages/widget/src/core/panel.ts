@@ -69,7 +69,16 @@ export function createPanel(opts: PanelOptions): PanelHandle {
   const panel = document.createElement("div");
   panel.className = "quackback-panel quackback-widget-iframe-wrapper";
   const inline = Boolean(opts.container);
-  if (inline) panel.classList.add("quackback-inline");
+  const title = frameTitle(opts.locale);
+  if (inline) {
+    panel.classList.add("quackback-inline");
+    panel.setAttribute("role", "region");
+    panel.setAttribute("aria-label", title);
+  } else {
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", title);
+    panel.setAttribute("aria-modal", "false");
+  }
   // Closed, the panel is only transparent: inert keeps its frame out of the
   // host page's tab order and the accessibility tree until it opens.
   panel.inert = !inline;
@@ -83,7 +92,7 @@ export function createPanel(opts: PanelOptions): PanelHandle {
     colorScheme: "normal",
   });
   iframe.setAttribute("src", url);
-  iframe.setAttribute("title", frameTitle(opts.locale));
+  iframe.setAttribute("title", title);
   iframe.setAttribute(
     "sandbox",
     "allow-scripts allow-forms allow-same-origin allow-popups allow-downloads",
@@ -140,6 +149,7 @@ export function createPanel(opts: PanelOptions): PanelHandle {
           ? document.activeElement
           : null;
       panel.inert = false;
+      panel.setAttribute("aria-modal", "true");
       panel.classList.remove("quackback-closing");
       backdrop.classList.remove("quackback-closing");
       void panel.offsetHeight; // force reflow
@@ -153,6 +163,7 @@ export function createPanel(opts: PanelOptions): PanelHandle {
       restoreFocus();
       clearTimeout(closeTimer);
       panel.inert = true;
+      panel.setAttribute("aria-modal", "false");
       panel.classList.remove("quackback-open");
       panel.classList.add("quackback-closing");
       backdrop.classList.remove("quackback-open");

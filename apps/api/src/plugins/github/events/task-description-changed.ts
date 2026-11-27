@@ -5,6 +5,7 @@ import { linkedTaskScope } from "../services/integration-task-scope";
 import type { PluginContext, TaskDescriptionChangedEvent } from "../../types";
 import { type GitHubConfig, hasVerifiedGitHubBinding } from "../config";
 import { findExternalLinksByTask } from "../services/link-manager";
+import { loadPiiSafeTaskCustomerContext } from "../services/customer-context";
 import {
   formatIssueBody,
   formatTaskDescriptionFromIssue,
@@ -79,7 +80,7 @@ export async function handleTaskDescriptionChanged(
     const octokit = await getVerifiedInstallationOctokit(config);
     const issueNumber = Number.parseInt(issueLink.externalId, 10);
 
-    // Format description with task ID footer
+    // Format description with task ID footer and PII-safe customer context
     await syncLatestTaskValue(
       event.taskId,
       context.projectId,
@@ -87,11 +88,15 @@ export async function handleTaskDescriptionChanged(
       "description",
       newDescNormalized,
       async (value) => {
+        const customerContext =
+          typeof db?.select === "function"
+            ? await loadPiiSafeTaskCustomerContext(event.taskId)
+            : null;
         const response = await octokit.rest.issues.update({
           owner: repositoryOwner,
           repo: repositoryName,
           issue_number: issueNumber,
-          body: formatIssueBody(value, event.taskId),
+          body: formatIssueBody(value, event.taskId, customerContext),
         });
         return response?.data?.updated_at;
       },
