@@ -278,6 +278,9 @@
 			"messenger": "Messages",
 			"tickets": "Tickets"
 		},
+		"install": "Install in your app",
+		"installAction": "Open embed & AI setup",
+		"installText": "Copy the embed snippet, server JWT helper, or a one-click prompt for your AI coding assistant.",
 		"tabsTitle": "Tabs",
 		"title": "Widget",
 		"upload": "Upload",

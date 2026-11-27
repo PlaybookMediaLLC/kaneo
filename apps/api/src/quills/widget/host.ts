@@ -76,14 +76,16 @@ export function widgetHost(findDist: () => string | null) {
       .split(",")
       .some((part) => part.trim().replace(/^W\//, "") === etag);
   };
-  const unbuilt = (c: Context) =>
-    c.json(
+  const unbuilt = (c: Context) => {
+    c.header("Cross-Origin-Resource-Policy", "cross-origin");
+    return c.json(
       {
         message: "The widget is not built on this server",
         code: "SERVICE_UNAVAILABLE",
       },
       503,
     );
+  };
   /** `?v=` with the current content hash caches for a year; any other URL for 5 minutes. */
   const file = (name: string, type: string) => (c: Context) => {
     const found = asset(name);
@@ -96,6 +98,7 @@ export function widgetHost(findDist: () => string | null) {
     c.header("ETag", etag);
     c.header("Cache-Control", cacheControl);
     c.header("X-Content-Type-Options", "nosniff");
+    c.header("Cross-Origin-Resource-Policy", "cross-origin");
     if (matchesEtag(c, etag)) return c.body(null, 304);
     c.header("Content-Type", type);
     return c.body(found.body);
@@ -112,6 +115,8 @@ export function widgetHost(findDist: () => string | null) {
         await next();
         c.res.headers.delete("Access-Control-Allow-Credentials");
         c.res.headers.set("Access-Control-Allow-Origin", "*");
+        if (!c.res.headers.has("Cross-Origin-Resource-Policy"))
+          c.res.headers.set("Cross-Origin-Resource-Policy", "cross-origin");
       })
       .use("/:workspace/widget/sdk.js", async (c, next) => {
         await next();
@@ -127,6 +132,7 @@ export function widgetHost(findDist: () => string | null) {
         c.header("Cache-Control", "no-cache");
         c.header("ETag", etag);
         c.header("X-Content-Type-Options", "nosniff");
+        c.header("Cross-Origin-Resource-Policy", "cross-origin");
         if (matchesEtag(c, etag)) return c.body(null, 304);
         const rawPath = new URL(c.req.url).pathname;
         const prefix = rawPath.endsWith("/")
@@ -145,6 +151,7 @@ export function widgetHost(findDist: () => string | null) {
         c.header("Cache-Control", "no-cache");
         c.header("ETag", etag);
         c.header("X-Content-Type-Options", "nosniff");
+        c.header("Cross-Origin-Resource-Policy", "cross-origin");
         if (matchesEtag(c, etag)) return c.body(null, 304);
         return c.html(
           `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Support</title><link rel="stylesheet" href="./host.css?v=${style.version}"><script src="./host.js?v=${script.version}" defer></script></head><body><div id="root"></div></body></html>`,

@@ -830,4 +830,276 @@ describe("sdk server-driven launcher config", () => {
     ) as HTMLButtonElement;
     expect(btn.style.left).toBe("20px");
   });
+
+  it("hideLauncher hides both the button and the greeting bubble, and showLauncher restores them", () => {
+    stubIframe();
+    window.__QUACKBACK_CONFIG__ = {
+      launcherLabel: "Support",
+      launcherGreeting: "Need help?",
+    };
+    sdk = createSDK();
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    const btn = document.querySelector(
+      "button.quackback-launcher",
+    ) as HTMLButtonElement;
+    const greetingBtn = [...document.querySelectorAll("button")].find((el) =>
+      el.textContent?.includes("Need help?"),
+    );
+    const bubble = greetingBtn?.parentElement as HTMLElement;
+    expect(btn.style.display).toBe("flex");
+    expect(bubble.style.display).toBe("flex");
+
+    sdk.dispatch("hideLauncher");
+    expect(btn.style.display).toBe("none");
+    expect(bubble.style.display).toBe("none");
+
+    sdk.dispatch("showLauncher");
+    expect(btn.style.display).toBe("flex");
+    expect(bubble.style.display).toBe("flex");
+  });
+
+  it("showLauncher creates and reveals the launcher even after init({ launcher: false })", () => {
+    stubIframe();
+    window.__QUACKBACK_CONFIG__ = {
+      launcherLabel: "Support",
+      launcherGreeting: "Welcome!",
+    };
+    sdk = createSDK();
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      launcher: false,
+    });
+    expect(document.querySelector("button.quackback-launcher")).toBeNull();
+
+    sdk.dispatch("showLauncher");
+    const btn = document.querySelector(
+      "button.quackback-launcher",
+    ) as HTMLButtonElement;
+    expect(btn).not.toBeNull();
+    expect(btn.textContent).toContain("Support");
+    expect(btn.style.opacity).toBe("1");
+  });
+
+  it("calling setLocale right after init still applies fetched server config and reveals the launcher", async () => {
+    stubIframe();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          enabled: true,
+          config: {
+            position: "left",
+            launcherLabel: "Support",
+            launcherGreeting: "Need help?",
+          },
+        }),
+      })),
+    );
+    sdk = createSDK();
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("setLocale", "fr");
+    await new Promise((r) => setTimeout(r, 0));
+    const btn = document.querySelector(
+      "button.quackback-launcher",
+    ) as HTMLButtonElement;
+    expect(btn).not.toBeNull();
+    expect(btn.textContent).toContain("Support");
+    expect(btn.style.opacity).toBe("1");
+    expect(btn.style.left).toBe("20px");
+  });
+
+  it("preserves pre-init setTheme, setLocale, and identify when init omits them", () => {
+    const { postMessage } = stubIframe();
+    sdk = createSDK();
+    sdk.dispatch("setTheme", "dark");
+    sdk.dispatch("setLocale", "fr");
+    void sdk.dispatch("identify", { ssoToken: "signed-before-init" });
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+
+    expect(sdk.getState().theme).toBe("dark");
+    expect(sdk.getState().locale).toBe("fr");
+
+    fireReady();
+
+    expect(postMessage).toHaveBeenCalledWith(
+      {
+        type: "quackback:identify",
+        data: { ssoToken: "signed-before-init" },
+      },
+      ORIGIN,
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      { type: "quackback:locale", data: "fr" },
+      ORIGIN,
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      { type: "quackback:theme", data: "dark" },
+      ORIGIN,
+    );
+  });
+
+  it("keeps the launcher hidden when hideLauncher is called before init, and keeps btn.inert after close()", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          enabled: true,
+          config: { launcherGreeting: "Hello!" },
+        }),
+      })),
+    );
+    sdk = createSDK();
+    sdk.dispatch("hideLauncher");
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    await new Promise((r) => setTimeout(r, 0));
+
+    const btn = document.querySelector(
+      "button.quackback-launcher",
+    ) as HTMLButtonElement;
+    const bubble = document.querySelector(
+      ".quackback-greeting",
+    ) as HTMLDivElement | null;
+    expect(btn.style.display).toBe("none");
+    expect(btn.inert).toBe(true);
+    expect(bubble).not.toBeNull();
+    expect(bubble!.style.display).toBe("none");
+
+    sdk.dispatch("close");
+    expect(btn.inert).toBe(true);
+
+    sdk.dispatch("showLauncher");
+    expect(btn.style.display).toBe("flex");
+    expect(btn.inert).toBe(false);
+  });
+
+  it("does not resurrect a launcher via showLauncher when the workspace widget is disabled, and settles pending identify()", async () => {
+    stubIframe();
+    let resolveConfig!: () => void;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveConfig = () =>
+              resolve({
+                ok: true,
+                json: async () => ({ enabled: false }),
+              });
+          }),
+      ),
+    );
+    sdk = createSDK();
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    fireReady();
+    const pending = sdk.dispatch("identify", {
+      ssoToken: "tok",
+    }) as Promise<{ success: boolean; user: unknown; error?: string }>;
+    resolveConfig();
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(document.querySelector("button.quackback-launcher")).toBeNull();
+    await expect(pending).resolves.toEqual({
+      success: false,
+      user: null,
+      error: "Widget disabled",
+    });
+
+    sdk.dispatch("showLauncher");
+    expect(document.querySelector("button.quackback-launcher")).toBeNull();
+  });
+
+  it("rejects an invalid launcher selector without destroying an active widget", () => {
+    sdk = createSDK();
+    const errors: Array<{ code: string; message: string }> = [];
+    sdk.dispatch("on", "error", (e: { code: string; message: string }) =>
+      errors.push(e),
+    );
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    const initialLauncher = document.querySelector("button.quackback-launcher");
+    expect(initialLauncher).not.toBeNull();
+
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      launcher: { selector: "[invalid" },
+    });
+    expect(errors).toContainEqual(
+      expect.objectContaining({ code: "INVALID_OPTIONS" }),
+    );
+    expect(document.querySelector("button.quackback-launcher")).toBe(
+      initialLauncher,
+    );
+  });
+
+  it("preserves unread count when showLauncher creates a launcher after init({ launcher: false })", async () => {
+    stubIframe();
+    sdk = createSDK();
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      launcher: false,
+    });
+    fireReady();
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        origin: ORIGIN,
+        source: document.querySelector<HTMLIFrameElement>(
+          "iframe.quackback-widget-iframe",
+        )?.contentWindow,
+        data: { type: "quackback:unread", count: 4 },
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+
+    sdk.dispatch("showLauncher");
+    const btn = document.querySelector(
+      "button.quackback-launcher",
+    ) as HTMLButtonElement;
+    expect(btn).not.toBeNull();
+    expect(btn.textContent).toContain("4");
+  });
+
+  it("resets launcher colors to defaults when switching dark->light with null lightPrimary, and updates iframe title on setLocale", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          enabled: true,
+          config: {
+            theme: {
+              lightPrimary: null,
+              lightPrimaryForeground: null,
+              darkPrimary: "#112233",
+              darkPrimaryForeground: "#fafafa",
+              themeMode: "dark",
+            },
+          },
+        }),
+      })),
+    );
+    sdk = createSDK();
+    sdk.dispatch("setLocale", "de");
+    expect(sdk.getState().locale).toBe("de");
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    await new Promise((r) => setTimeout(r, 0));
+
+    const btn = document.querySelector(
+      "button.quackback-launcher",
+    ) as HTMLButtonElement;
+    const darkBg = btn.style.backgroundColor;
+    expect(darkBg).not.toBe("");
+
+    sdk.dispatch("setTheme", "light");
+    expect(btn.style.backgroundColor).not.toBe(darkBg);
+
+    sdk.dispatch("setLocale", "fr");
+    const iframe = document.querySelector(
+      "iframe.quackback-widget-iframe",
+    ) as HTMLIFrameElement;
+    expect(iframe.getAttribute("title")).toBe("Aide");
+  });
 });

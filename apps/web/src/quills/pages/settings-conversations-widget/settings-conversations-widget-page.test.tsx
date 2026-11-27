@@ -36,6 +36,12 @@ describe("SettingsConversationsWidgetPage", () => {
         expect(
           view.getByRole("combobox", { name: "Header style" }),
         ).toHaveTextContent("Plain");
+        expect(
+          view.getByRole("link", { name: "Open embed & AI setup" }),
+        ).toHaveAttribute(
+          "href",
+          "/feedback/workspace_test_1/share#widget-embed",
+        );
       },
     },
     done: {

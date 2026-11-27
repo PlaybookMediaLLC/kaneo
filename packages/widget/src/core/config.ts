@@ -5,10 +5,10 @@ import { SDK_VERSION } from "../version.js";
 export const serverConfigSchema = z.object({
   theme: z.optional(
     z.object({
-      lightPrimary: z.optional(z.string()),
-      lightPrimaryForeground: z.optional(z.string()),
-      darkPrimary: z.optional(z.string()),
-      darkPrimaryForeground: z.optional(z.string()),
+      lightPrimary: z.nullish(z.string()),
+      lightPrimaryForeground: z.nullish(z.string()),
+      darkPrimary: z.nullish(z.string()),
+      darkPrimaryForeground: z.nullish(z.string()),
       themeMode: z.optional(z.enum(["light", "dark", "user"])),
     }),
   ),
@@ -18,7 +18,9 @@ export const serverConfigSchema = z.object({
       changelog: z.optional(z.boolean()),
       help: z.optional(z.boolean()),
       chat: z.optional(z.boolean()),
+      messenger: z.optional(z.boolean()),
       tickets: z.optional(z.boolean()),
+      home: z.optional(z.boolean()),
     }),
   ),
   imageUploadsInWidget: z.optional(z.boolean()),

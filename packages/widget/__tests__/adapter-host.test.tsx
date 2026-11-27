@@ -643,7 +643,13 @@ describe("widget host page", () => {
     ).toContainEqual({
       type: "quackback:event",
       name: "presence",
-      payload: { online: true, withinOfficeHours: true },
+      payload: {
+        online: true,
+        withinOfficeHours: true,
+        estimatedWaitMinutes: null,
+        estimatedWaitRange: null,
+        nextOpenAt: null,
+      },
     });
   });
 
