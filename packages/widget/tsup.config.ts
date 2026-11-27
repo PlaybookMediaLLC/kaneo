@@ -60,6 +60,7 @@ export default defineConfig([
   {
     entry: { capture: "src/core/capture-chunk.ts" },
     format: ["iife"],
+    env: { QUILLS_BROWSER_IIFE: "false" },
     noExternal: [/^html-to-image$/],
     minify: true,
     banner: { js: BANNER },

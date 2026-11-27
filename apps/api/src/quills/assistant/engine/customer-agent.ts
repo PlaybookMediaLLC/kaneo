@@ -165,6 +165,7 @@ export const answerCustomer: Work = async (workspaceId, event) => {
           and(
             eq(conversationMessages.conversationId, conversation.id),
             eq(conversationMessages.isInternal, false),
+            eq(conversationMessages.sendStatus, "sent"),
             isNull(conversationMessages.deletedAt),
           ),
         )

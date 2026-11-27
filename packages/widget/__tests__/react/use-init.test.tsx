@@ -243,3 +243,42 @@ it("Strict Mode leaves one instance and cancels a delayed unmount", () => {
   expect(init).not.toHaveBeenCalled();
   vi.useRealTimers();
 });
+
+it("reactively updates theme, locale, and tracking without re-initializing", () => {
+  const init = vi.spyOn(Quills, "init");
+  const setTheme = vi.spyOn(Quills, "setTheme");
+  const setLocale = vi.spyOn(Quills, "setLocale");
+  const tracking = vi.spyOn(Quills, "tracking");
+  function C({
+    theme,
+    locale,
+    allowTracking,
+  }: {
+    theme?: "auto" | "light" | "dark";
+    locale?: string;
+    allowTracking?: boolean;
+  }) {
+    useQuillsInit({
+      instanceUrl: ORIGIN,
+      workspace: "acme",
+      theme,
+      locale,
+      tracking: allowTracking,
+    });
+    return null;
+  }
+  const { rerender, unmount } = render(
+    <C theme="dark" locale="en" allowTracking={false} />,
+  );
+  expect(init).toHaveBeenCalledTimes(1);
+  expect(setTheme).not.toHaveBeenCalled();
+  expect(setLocale).not.toHaveBeenCalled();
+  expect(tracking).not.toHaveBeenCalled();
+
+  rerender(<C theme="light" locale="fr" allowTracking={true} />);
+  expect(init).toHaveBeenCalledTimes(1);
+  expect(setTheme).toHaveBeenCalledWith("light");
+  expect(setLocale).toHaveBeenCalledWith("fr");
+  expect(tracking).toHaveBeenCalledWith(true);
+  unmount();
+});

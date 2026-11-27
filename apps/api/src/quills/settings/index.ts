@@ -3,8 +3,10 @@ import { settings } from "../../database/quills/schema/auth";
 import { defineQuillsRoute } from "../framework/define-route";
 import { parseJson } from "./area";
 import branding from "./branding";
+import brands from "./brands";
 import developer from "./developer";
 import labs, { resolveFlags } from "./labs";
+import notificationDefaults from "./notification-defaults";
 import portal from "./portal";
 import presets from "./presets";
 import receipts from "./receipts";
@@ -58,8 +60,10 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .openapi(...overview)
   .route("/", portal)
   .route("/", branding)
+  .route("/", brands)
   .route("/", widget)
   .route("/", developer)
   .route("/", labs)
   .route("/", presets)
+  .route("/", notificationDefaults)
   .route("/", receipts);

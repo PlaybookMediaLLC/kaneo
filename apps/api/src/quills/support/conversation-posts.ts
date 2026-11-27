@@ -29,6 +29,7 @@ import {
   type Conversation,
 } from "./conversation-model";
 import { insertReply } from "./conversation-ops";
+import { assertTeamVisible, resolveAllowedTeamIds } from "./team-scope";
 
 // Conversation to feedback: track a conversation as a post by its visitor, or as the
 // visitor's vote, and share a post into the thread. Board visibility comes from
@@ -273,6 +274,7 @@ const linkedPosts = defineQuillsRoute({
   summary: "List the posts tracked from a conversation",
   description: "Live posts on boards the caller can see.",
   action: "read",
+  callerActions: true,
   params: conversationParams,
   response: z.object({
     items: z.array(
@@ -287,8 +289,26 @@ const linkedPosts = defineQuillsRoute({
   responseDescription: "Posts",
   errors,
   load: loadProjects,
-  handler: async ({ db, params, loaded: projects }) => {
+  handler: async ({
+    db,
+    workspaceId,
+    actor,
+    actions,
+    params,
+    loaded: projects,
+  }) => {
+    const allowedTeams = await resolveAllowedTeamIds(
+      db,
+      workspaceId,
+      actor,
+      actions,
+    );
     const conversation = await findConversation(db, params.conversationId);
+    assertTeamVisible(
+      allowedTeams,
+      conversation.assignedTeamId,
+      "Conversation",
+    );
     const items = await db
       .select({
         postId: posts.id,
@@ -321,6 +341,7 @@ const linkedConversations = defineQuillsRoute({
   summary: "List the conversations a post was tracked from",
   description: "The post must be on a board the caller can see.",
   action: "read",
+  callerActions: true,
   params: z.object({ postId: flexibleToTypeIdSchema("post") }),
   response: z.object({
     items: z.array(
@@ -334,7 +355,20 @@ const linkedConversations = defineQuillsRoute({
   responseDescription: "Conversations",
   errors,
   load: loadProjects,
-  handler: async ({ db, params, loaded: projects }) => {
+  handler: async ({
+    db,
+    workspaceId,
+    actor,
+    actions,
+    params,
+    loaded: projects,
+  }) => {
+    const allowedTeams = await resolveAllowedTeamIds(
+      db,
+      workspaceId,
+      actor,
+      actions,
+    );
     const post = await findPost(db, params.postId, projects);
     const links = await db
       .select({ externalId: postExternalLinks.externalId })
@@ -353,6 +387,12 @@ const linkedConversations = defineQuillsRoute({
         flexibleToTypeIdSchema("conversation").safeParse(link.externalId)
           .data ?? [],
     );
+    const teamFilter =
+      allowedTeams === null
+        ? undefined
+        : allowedTeams.length === 0
+          ? sql`false`
+          : inArray(conversations.assignedTeamId, allowedTeams);
     const items = ids.length
       ? await db
           .select({
@@ -361,7 +401,7 @@ const linkedConversations = defineQuillsRoute({
             status: conversations.status,
           })
           .from(conversations)
-          .where(inArray(conversations.id, ids))
+          .where(and(inArray(conversations.id, ids), teamFilter))
           .orderBy(asc(conversations.createdAt))
       : [];
     return { items };

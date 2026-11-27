@@ -37,6 +37,10 @@ export const OMITTED_TABLES = [
   "ai_knowledge_sources",
   // Platform-level OAuth/integration credentials bound to this deployment (#327).
   "integration_platform_credentials",
+  // Ephemeral signed magic-link access records bound to this instance's signing secret (#313).
+  "request_access_links",
+  // Ephemeral webhook delivery attempt logs (#330).
+  "webhook_deliveries",
 ] as const;
 
 // Secret columns stripped from exported rows so portable archives never leak plaintext or
@@ -146,6 +150,7 @@ export const STORAGE_FIELDS: Record<string, string[]> = {
   principal: ["avatar_key"],
   files: ["storage_key"],
   assistant_documents: ["storage_key"],
+  brands: ["logo_key", "dark_logo_key"],
 };
 export function storageValues(
   row: WorkspaceArchive["tables"][string][number],

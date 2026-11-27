@@ -7,6 +7,7 @@ import {
   isNotNull,
   isNull,
   lte,
+  or,
   sql,
 } from "drizzle-orm";
 import {
@@ -21,6 +22,10 @@ import {
   conversations,
 } from "../../../database/quills/schema/conversation";
 import { events } from "../../../database/quills/schema/events";
+import {
+  inAppNotifications,
+  notificationPreferences,
+} from "../../../database/quills/schema/notifications";
 import { statusIncidents } from "../../../database/quills/schema/status";
 import {
   completeMaintenanceWindow,
@@ -28,6 +33,7 @@ import {
 } from "../../content/status/maintenance";
 import { recordQuillsChange } from "../../events";
 import { requireClosable, setStatus } from "../../support/conversation-ops";
+import { readReopenPolicy } from "../../support/support-settings";
 import { queueWeeklyDigests } from "./digest";
 
 // Timed work that the earlier slices store but nothing ran. quills.runnable_workspaces (migration
@@ -397,8 +403,230 @@ export async function flagOverdueAndUnhelpfulArticles(db: Database) {
   `);
 }
 
+/**
+ * Sends one proactive apology update when an open waiting conversation passes its
+ * promised reply deadline (#333). Stamps `breach_update_sent_at` atomically so it
+ * never fires twice.
+ */
+export async function notifyPromisedReplyBreaches(db: Database) {
+  const due = await db
+    .select()
+    .from(conversations)
+    .where(
+      and(
+        eq(conversations.status, "open"),
+        isNotNull(conversations.waitingSince),
+        isNotNull(conversations.promisedReplyAt),
+        isNull(conversations.breachUpdateSentAt),
+        lte(conversations.promisedReplyAt, sql`now()`),
+      ),
+    )
+    .orderBy(asc(conversations.promisedReplyAt))
+    .limit(BATCH)
+    .for("update", { skipLocked: true });
+  for (const conversation of due) {
+    const now = new Date();
+    await db
+      .update(conversations)
+      .set({ breachUpdateSentAt: now, updatedAt: now })
+      .where(eq(conversations.id, conversation.id));
+    await db.insert(conversationMessages).values({
+      conversationId: conversation.id,
+      senderType: "system",
+      isInternal: false,
+      content:
+        "We're busier than expected right now — we haven't forgotten your request and will reply as soon as we can.",
+      metadata: { systemKind: "promised_reply_breach_update" },
+    });
+    await recordQuillsChange(db, null, {
+      type: "conversation.breach_update_sent",
+      entityType: "conversation",
+      entityId: conversation.id,
+      payload: {},
+    });
+  }
+}
+
+/**
+ * Quiet auto-close lifecycle for solution-offered conversations (#311):
+ * 1. Sends at most ONE polite reminder when `auto_close_at` is within 24h and
+ *    `close_reminder_sent_at` is NULL.
+ * 2. Quietly closes the conversation once `auto_close_at <= now()`.
+ */
+export async function processSolutionConfirmations(db: Database) {
+  const policy = await readReopenPolicy(db);
+  const reminderCutoff = new Date(
+    Date.now() + policy.reminderBeforeCloseHours * 3_600_000,
+  );
+  // 1. Send single polite reminder before auto-close
+  const remindersDue = await db
+    .select()
+    .from(conversations)
+    .where(
+      and(
+        eq(conversations.status, "open"),
+        isNotNull(conversations.solutionOfferedAt),
+        isNull(conversations.closeReminderSentAt),
+        isNotNull(conversations.autoCloseAt),
+        gt(conversations.autoCloseAt, sql`now()`),
+        lte(conversations.autoCloseAt, reminderCutoff),
+      ),
+    )
+    .orderBy(asc(conversations.autoCloseAt))
+    .limit(BATCH)
+    .for("update", { skipLocked: true });
+  for (const conversation of remindersDue) {
+    const now = new Date();
+    await db
+      .update(conversations)
+      .set({ closeReminderSentAt: now, updatedAt: now })
+      .where(eq(conversations.id, conversation.id));
+    await db.insert(conversationMessages).values({
+      conversationId: conversation.id,
+      senderType: "system",
+      isInternal: false,
+      content:
+        "Just checking in — if everything is sorted, we'll close this thread quietly soon. Simply reply any time if you still need help.",
+      metadata: { systemKind: "solution_close_reminder" },
+    });
+  }
+
+  // 2. Quietly close due conversations (respecting required-to-close attributes)
+  const closesDue = await db
+    .select()
+    .from(conversations)
+    .where(
+      and(
+        eq(conversations.status, "open"),
+        isNotNull(conversations.solutionOfferedAt),
+        isNotNull(conversations.autoCloseAt),
+        lte(conversations.autoCloseAt, sql`now()`),
+      ),
+    )
+    .orderBy(asc(conversations.autoCloseAt))
+    .limit(BATCH)
+    .for("update", { skipLocked: true });
+  for (const conversation of closesDue) {
+    const now = new Date();
+    let closable = true;
+    try {
+      await requireClosable(db, conversation);
+    } catch {
+      closable = false;
+    }
+    if (!closable) {
+      await db
+        .update(conversations)
+        .set({ autoCloseAt: null, updatedAt: now })
+        .where(eq(conversations.id, conversation.id));
+      continue;
+    }
+    await db
+      .update(conversations)
+      .set({
+        status: "closed",
+        endReason: "resolved",
+        resolvedAt: now,
+        autoCloseAt: null,
+        waitingSince: null,
+        updatedAt: now,
+      })
+      .where(eq(conversations.id, conversation.id));
+    await recordQuillsChange(db, null, {
+      type: "conversation.status_changed",
+      entityType: "conversation",
+      entityId: conversation.id,
+      payload: { status: "closed", autoClosed: "true" },
+    });
+  }
+}
+
+/**
+ * Teammate hourly / daily notification digests (#321).
+ * Locks due `notification_preferences` rows under FOR UPDATE SKIP LOCKED,
+ * stamps `digest_last_sent_at` atomically so concurrent sweeps never double-send,
+ * and records a summary digest entry when unread notifications exist.
+ */
+export async function sendTeammateDigests(db: Database) {
+  const due = await db
+    .select()
+    .from(notificationPreferences)
+    .where(
+      or(
+        and(
+          eq(notificationPreferences.digestFrequency, "hourly"),
+          or(
+            isNull(notificationPreferences.digestLastSentAt),
+            lte(
+              notificationPreferences.digestLastSentAt,
+              sql`now() - interval '1 hour'`,
+            ),
+          ),
+        ),
+        and(
+          eq(notificationPreferences.digestFrequency, "daily"),
+          or(
+            isNull(notificationPreferences.digestLastSentAt),
+            lte(
+              notificationPreferences.digestLastSentAt,
+              sql`now() - interval '24 hours'`,
+            ),
+          ),
+        ),
+      ),
+    )
+    .orderBy(sql`${notificationPreferences.digestLastSentAt} ASC NULLS FIRST`)
+    .limit(BATCH)
+    .for("update", { skipLocked: true });
+
+  const now = new Date();
+  for (const pref of due) {
+    const since =
+      pref.digestLastSentAt ??
+      new Date(
+        now.getTime() -
+          (pref.digestFrequency === "hourly" ? 3600_000 : 86_400_000),
+      );
+    await db
+      .update(notificationPreferences)
+      .set({ digestLastSentAt: sql`now()`, updatedAt: sql`now()` })
+      .where(eq(notificationPreferences.id, pref.id));
+
+    if (pref.emailMuted) continue;
+    const unread = await db
+      .select({
+        title: inAppNotifications.title,
+        type: inAppNotifications.type,
+      })
+      .from(inAppNotifications)
+      .where(
+        and(
+          eq(inAppNotifications.principalId, pref.principalId),
+          isNull(inAppNotifications.readAt),
+          isNull(inAppNotifications.archivedAt),
+          gt(inAppNotifications.createdAt, since),
+        ),
+      )
+      .limit(25);
+    if (unread.length === 0) continue;
+
+    await recordQuillsChange(db, null, {
+      type: "notification.digest_sent",
+      entityType: "notification",
+      entityId: pref.principalId,
+      payload: {
+        frequency: pref.digestFrequency,
+        count: String(unread.length),
+      },
+    });
+  }
+}
+
 const SWEEPS = [
   wakeSnoozedConversations,
+  notifyPromisedReplyBreaches,
+  processSolutionConfirmations,
+  sendTeammateDigests,
   resolveQuietAgentConversations,
   expirePendingAssistantActions,
   flagOverdueAndUnhelpfulArticles,

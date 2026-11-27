@@ -1,4 +1,6 @@
 {
+	"commentLabel": "Additional feedback (optional)",
+	"commentPlaceholder": "Tell us what went well or what we could improve…",
 	"confirm": "Send rating",
 	"done": "Thanks for your feedback",
 	"ratingLabel": "Rating {{rating}} out of 5",

@@ -17,6 +17,7 @@ import {
   findConversation,
   loadConversation,
 } from "./conversation-model";
+import { assertTeamVisible, resolveAllowedTeamIds } from "./team-scope";
 
 const listRoute = defineQuillsRoute({
   method: "get",
@@ -26,6 +27,7 @@ const listRoute = defineQuillsRoute({
   description:
     "Leaves out test conversations. Spam-ended conversations appear only with view=spam. `assignee` is mine, unassigned or a teammate principal ID; view=mentions and view=created_by_me always mean the caller.",
   action: "read",
+  callerActions: true,
   query: listFilters,
   response: z.object({
     items: z.array(conversationItem),
@@ -34,7 +36,15 @@ const listRoute = defineQuillsRoute({
   }),
   responseDescription: "One page of conversations",
   errors,
-  handler: ({ db, actor, query }) => listConversations(db, actor, query),
+  handler: async ({ db, workspaceId, actor, actions, query }) => {
+    const allowedTeams = await resolveAllowedTeamIds(
+      db,
+      workspaceId,
+      actor,
+      actions,
+    );
+    return listConversations(db, actor, query, allowedTeams);
+  },
 });
 
 const getRoute = defineQuillsRoute({
@@ -45,11 +55,22 @@ const getRoute = defineQuillsRoute({
   description:
     "Includes tags, attribute values, the stored summary and the translation state.",
   action: "read",
+  callerActions: true,
   params: conversationParams,
   response: conversationDetail,
   responseDescription: "Conversation",
   errors,
-  handler: ({ db, params }) => loadConversation(db, params.conversationId),
+  handler: async ({ db, workspaceId, actor, actions, params }) => {
+    const allowedTeams = await resolveAllowedTeamIds(
+      db,
+      workspaceId,
+      actor,
+      actions,
+    );
+    const detail = await loadConversation(db, params.conversationId);
+    assertTeamVisible(allowedTeams, detail.assignedTeamId, "Conversation");
+    return detail;
+  },
 });
 
 const TRANSCRIPT_MAX = 5000;
@@ -60,6 +81,7 @@ const transcriptRoute = defineQuillsRoute({
   summary: "Export a conversation transcript",
   description: `Markdown, oldest first, with internal notes marked. At most ${TRANSCRIPT_MAX} messages; \`truncated\` is true when more exist.`,
   action: "read",
+  callerActions: true,
   params: conversationParams,
   response: z.object({
     filename: z.string(),
@@ -69,8 +91,19 @@ const transcriptRoute = defineQuillsRoute({
   }),
   responseDescription: "Transcript",
   errors,
-  handler: async ({ db, params }) => {
+  handler: async ({ db, workspaceId, actor, actions, params }) => {
+    const allowedTeams = await resolveAllowedTeamIds(
+      db,
+      workspaceId,
+      actor,
+      actions,
+    );
     const conversation = await findConversation(db, params.conversationId);
+    assertTeamVisible(
+      allowedTeams,
+      conversation.assignedTeamId,
+      "Conversation",
+    );
     const rows = await db
       .select({
         senderType: conversationMessages.senderType,
@@ -84,6 +117,7 @@ const transcriptRoute = defineQuillsRoute({
       .where(
         and(
           eq(conversationMessages.conversationId, conversation.id),
+          eq(conversationMessages.sendStatus, "sent"),
           isNull(conversationMessages.deletedAt),
         ),
       )
@@ -132,6 +166,7 @@ const filesRoute = defineQuillsRoute({
   summary: "List the files attached in a conversation",
   description: `Every attachment of the live messages, internal notes included, newest first. At most ${FILES_MAX}.`,
   action: "read",
+  callerActions: true,
   params: conversationParams,
   response: z.object({
     items: z.array(
@@ -148,8 +183,19 @@ const filesRoute = defineQuillsRoute({
   }),
   responseDescription: "Files",
   errors,
-  handler: async ({ db, params }) => {
+  handler: async ({ db, workspaceId, actor, actions, params }) => {
+    const allowedTeams = await resolveAllowedTeamIds(
+      db,
+      workspaceId,
+      actor,
+      actions,
+    );
     const conversation = await findConversation(db, params.conversationId);
+    assertTeamVisible(
+      allowedTeams,
+      conversation.assignedTeamId,
+      "Conversation",
+    );
     const rows = await db
       .select({
         messageId: conversationMessages.id,
@@ -161,6 +207,7 @@ const filesRoute = defineQuillsRoute({
       .where(
         and(
           eq(conversationMessages.conversationId, conversation.id),
+          eq(conversationMessages.sendStatus, "sent"),
           isNull(conversationMessages.deletedAt),
           isNotNull(conversationMessages.attachments),
           sql`jsonb_array_length(${conversationMessages.attachments}) > 0`,

@@ -3,9 +3,12 @@ import {
   desc,
   eq,
   gt,
+  gte,
   inArray,
+  isNotNull,
   isNull,
   lte,
+  ne,
   notExists,
   or,
   sql,
@@ -13,9 +16,11 @@ import {
 import { alias } from "drizzle-orm/pg-core";
 import { HTTPException } from "hono/http-exception";
 import {
+  renderBrandedEmail,
   sendConversationMessageEmail,
   sendCsatRequestEmail,
   sendNoteMentionEmail,
+  sendRawEmail,
   type EmailAttachment,
   type SealedEmail,
   type SendingIdentity,
@@ -34,11 +39,15 @@ import {
   channelAccounts,
   emailSendingDomains,
 } from "../../../database/quills/schema/channel-accounts";
+import { inAppNotifications } from "../../../database/quills/schema/notifications";
 import { emailLog } from "../../../database/quills/schema/email-log";
+import { hookDeliveries } from "../../../database/quills/schema/hook-deliveries";
 import {
   conversationMessageMentions,
   conversationMessages,
+  conversationParticipants,
   conversations,
+  requestAccessLinks,
 } from "../../../database/quills/schema/conversation";
 import { postComments, posts } from "../../../database/quills/schema/posts";
 import { ticketSubscriptions } from "../../../database/quills/schema/ticket-subscriptions";
@@ -47,9 +56,15 @@ import {
   ticketLinks,
   tickets,
 } from "../../../database/quills/schema/tickets";
+import { webhooks } from "../../../database/quills/schema/webhooks";
 import { realEmail } from "../../directory/customer";
 import { portalAccount } from "../../framework/platform-reads";
+import {
+  canMintRequestLinkToken,
+  mintRequestLinkToken,
+} from "../../framework/request-magic-link";
 import { outboundMessageId, replyAddress } from "../../framework/signed";
+import { renderOutboundMessageHtml } from "../../inbound/html-media";
 import {
   csatRatingUrls,
   mintCsatToken,
@@ -62,10 +77,21 @@ import {
 } from "../../portal/feedback/viewer";
 import type { DeliveryEvent, Subscribers } from "../fanout";
 import { wants } from "../preferences";
-import { loadMailAttachments, messageFiles } from "./mail-attachments";
+import { loadMailMedia, messageFiles } from "./mail-attachments";
+import { createHash } from "node:crypto";
+import {
+  helpCenterArticles,
+  helpCenterCategories,
+} from "../../../database/quills/schema/kb";
+import { rateBucket } from "../../../database/quills/schema/kv";
 import { portalPaths } from "../../portal/paths";
 import { portalOn } from "../../settings/area";
 import { requireSurface } from "../../support/customer/model";
+import {
+  readCsatSettings,
+  readEmailAutoAck,
+} from "../../support/support-settings";
+import { getWaitTimeEstimate } from "../../support/wait-estimate";
 
 // Support delivery: the customer's copy of a teammate reply on an email conversation, mention and
 // ticket-watcher notices for teammates, and the send-time decision for customer post mail.
@@ -103,6 +129,72 @@ export async function customerConversationLink(
   return portalOn(row?.portalConfig ?? null)
     ? portalPaths.conversation(workspaceId, conversation.id)
     : undefined;
+}
+
+/**
+ * Mints a signed, single-conversation magic link (`/portal/{ws}/r/{token}`) for an email-only
+ * customer so they can view & reply in the browser without a password (#313).
+ */
+export async function mintConversationMagicLink(
+  db: Database,
+  workspaceId: string,
+  conversation: Pick<
+    typeof conversations.$inferSelect,
+    "id" | "visitorPrincipalId"
+  >,
+): Promise<string | undefined> {
+  if (!canMintRequestLinkToken()) return undefined;
+  const minted = mintRequestLinkToken({
+    workspaceId,
+    resourceType: "conversation",
+    resourceId: conversation.id,
+    principalId: conversation.visitorPrincipalId,
+  });
+  await db.insert(requestAccessLinks).values({
+    tokenHash: minted.tokenHash,
+    resourceType: "conversation",
+    resourceId: conversation.id,
+    principalId: conversation.visitorPrincipalId,
+    expiresAt: minted.expiresAt,
+  });
+  return portalPaths.requestLink(workspaceId, minted.token);
+}
+
+/** Active, unblocked CC participant email addresses for an email conversation (#325). */
+async function participantCcAddresses(
+  db: Database,
+  conversationId: (typeof conversations.$inferSelect)["id"],
+  excludeEmail: string,
+): Promise<string[]> {
+  const rows = await db
+    .select({
+      accountEmail: customer.email,
+      contactEmail: principal.contactEmail,
+      blockedAt: principal.blockedAt,
+    })
+    .from(conversationParticipants)
+    .innerJoin(
+      principal,
+      eq(principal.id, conversationParticipants.principalId),
+    )
+    .leftJoin(customer, eq(customer.id, principal.userId))
+    .where(eq(conversationParticipants.conversationId, conversationId))
+    .limit(25);
+  const exclude = excludeEmail.trim().toLowerCase();
+  const seen = new Set<string>([exclude]);
+  const cc: string[] = [];
+  for (const row of rows) {
+    if (row.blockedAt) continue;
+    const addr =
+      realEmail(row.accountEmail) ?? realEmail(row.contactEmail) ?? null;
+    if (!addr) continue;
+    const lower = addr.trim().toLowerCase();
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      cc.push(lower);
+    }
+  }
+  return cc.slice(0, 20);
 }
 const teammateConversationUrl = (workspaceId: string, conversationId: string) =>
   portalPaths.teammateConversation(workspaceId, conversationId);
@@ -198,6 +290,7 @@ async function agentReply(db: Database, event: DeliveryEvent, target?: string) {
       and(
         eq(conversationMessages.id, messageId),
         isNull(conversationMessages.deletedAt),
+        eq(conversationMessages.sendStatus, "sent"),
       ),
     );
   if (
@@ -365,6 +458,7 @@ async function threading(
           conversationId as typeof conversations.$inferSelect.id,
         ),
         eq(conversationMessages.isInternal, false),
+        eq(conversationMessages.sendStatus, "sent"),
         isNull(conversationMessages.deletedAt),
         // Compared in PostgreSQL, so microsecond timestamps keep their order.
         message
@@ -420,22 +514,36 @@ const replyMail: NonNullable<Subscribers["mail"]> = async (
   const from = await sendingIdentity(db, conversation);
   const thread = await threading(db, workspace, conversation.id, message);
   const stored = await messageFiles(db, message.id);
-  const ctaUrl = await customerConversationLink(db, workspace.id, conversation);
+  const cc = await participantCcAddresses(db, conversation.id, to);
+  // Never embed a requester-bound bearer magic link when CC recipients also receive this email (#313/#325).
+  const ctaUrl =
+    (await customerConversationLink(db, workspace.id, conversation)) ??
+    (cc.length === 0
+      ? await mintConversationMagicLink(db, workspace.id, conversation)
+      : undefined);
   let attachments: EmailAttachment[] = [];
+  let bodyHtml: string | undefined;
   return {
     type: "conversation_reply",
     emailType: "ConversationReplyEmail",
     to,
     conversationId: conversation.id,
     prepare: async () => {
-      attachments = await loadMailAttachments(stored);
+      const media = await loadMailMedia(workspace.id, stored);
+      attachments = media.attachments;
+      bodyHtml =
+        media.inlineImages.length > 0
+          ? renderOutboundMessageHtml(message.content, media.inlineImages)
+          : undefined;
     },
     send: (address) =>
       sendConversationMessageEmail({
         // Sealed: the address read from the conversation and its visitor at send time.
         to: address as SealedEmail,
+        ...(cc.length > 0 ? { cc } : {}),
         direction: "agent_reply",
         attachments,
+        ...(bodyHtml ? { bodyHtml } : {}),
         senderName: message.author ?? workspace.name,
         messagePreview: clip(message.content, 500),
         ctaUrl,
@@ -486,6 +594,7 @@ async function portalReplyMail(
                 eq(newer.conversationId, conversationMessages.conversationId),
                 eq(newer.senderType, "agent"),
                 eq(newer.isInternal, false),
+                eq(newer.sendStatus, "sent"),
                 isNull(newer.deletedAt),
                 gt(newer.createdAt, conversationMessages.createdAt),
               ),
@@ -861,16 +970,34 @@ export async function trackerTargets(
   return rows.map((row) => row.id);
 }
 
+/** Deterministic sampling bucket (0..99) from conversation ID so retries agree. */
+export function csatSampledIn(conversationId: string, samplingRate: number) {
+  if (samplingRate <= 0) return false;
+  if (samplingRate >= 100) return true;
+  const hash = createHash("sha256").update(conversationId).digest();
+  const bucket = ((hash[0]! << 8) | hash[1]!) % 100;
+  return bucket < samplingRate;
+}
+
 /**
  * The email conversation that a `conversation.status_changed` event closed, while its customer may
- * still be asked for a rating: closed, not spam, not rated, and not closed by the customer.
+ * still be asked for a rating (#312): enabled, closed, not spam, not rated, not closed by the
+ * customer, passes deterministic sampling, meets trivial-conversation threshold, and respects the
+ * per-customer cooldown stamped atomically on `principal.survey_sent_at`.
  */
-async function csatConversation(db: Database, event: DeliveryEvent) {
+async function csatConversation(
+  db: Database,
+  event: DeliveryEvent,
+  options?: { stampCooldown?: boolean },
+) {
   if (
     event.entityType !== "conversation" ||
     payloadOf(event).status !== "closed"
   )
     return undefined;
+  const cfg = await readCsatSettings(db);
+  if (!cfg.enabled) return undefined;
+
   const [conversation] = await db
     .select()
     .from(conversations)
@@ -888,6 +1015,26 @@ async function csatConversation(db: Database, event: DeliveryEvent) {
     event.actorId === conversation.visitorPrincipalId
   )
     return undefined;
+
+  if (!csatSampledIn(conversation.id, cfg.samplingRate)) return undefined;
+
+  if (cfg.excludeTrivialUnderMessages > 0) {
+    const [countRow] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(conversationMessages)
+      .where(
+        and(
+          eq(conversationMessages.conversationId, conversation.id),
+          eq(conversationMessages.isInternal, false),
+          eq(conversationMessages.sendStatus, "sent"),
+          isNull(conversationMessages.deletedAt),
+          ne(conversationMessages.senderType, "system"),
+        ),
+      );
+    if ((countRow?.count ?? 0) < cfg.excludeTrivialUnderMessages)
+      return undefined;
+  }
+
   // As in the source: a conversation asked once (in the mail log) is not asked again.
   const [asked] = await db
     .select({ id: emailLog.id })
@@ -899,18 +1046,529 @@ async function csatConversation(db: Database, event: DeliveryEvent) {
       ),
     )
     .limit(1);
-  return asked ? undefined : conversation;
+  if (asked) return undefined;
+
+  // Validate workspace and deliverable recipient BEFORE stamping cooldown so undeliverable rows never burn cooldown.
+  const workspace = options?.stampCooldown ? await workspaceOf(db) : undefined;
+  const to = options?.stampCooldown
+    ? await visitorAddress(db, conversation)
+    : undefined;
+  if (options?.stampCooldown && (!workspace || !to)) return undefined;
+
+  // Per-customer cooldown check (and atomic stamp at send time under FOR UPDATE lock).
+  // Allow retrying a previously failed send for this exact conversation even after its cooldown stamp.
+  if (cfg.cooldownDays > 0 || options?.stampCooldown) {
+    const [failedRetry] = options?.stampCooldown
+      ? await db
+          .select({ jobId: hookDeliveries.jobId })
+          .from(hookDeliveries)
+          .where(
+            and(
+              eq(hookDeliveries.jobId, `mail:csat:${conversation.id}`),
+              eq(hookDeliveries.outcome, "failed"),
+            ),
+          )
+          .limit(1)
+      : [];
+    const query = db
+      .select({ id: principal.id, surveySentAt: principal.surveySentAt })
+      .from(principal)
+      .where(eq(principal.id, conversation.visitorPrincipalId))
+      .limit(1);
+    const [visitor] = await (options?.stampCooldown
+      ? query.for("update")
+      : query);
+    if (!visitor) return undefined;
+    if (!failedRetry && cfg.cooldownDays > 0 && visitor.surveySentAt) {
+      const elapsedMs = Date.now() - visitor.surveySentAt.getTime();
+      if (elapsedMs < cfg.cooldownDays * 24 * 60 * 60 * 1000) return undefined;
+    }
+    if (options?.stampCooldown) {
+      await db
+        .update(principal)
+        .set({ surveySentAt: new Date() })
+        .where(eq(principal.id, visitor.id));
+    }
+  }
+
+  return { conversation, workspace, to };
+}
+
+const AUTO_ACK_HEADERS: Record<string, string> = {
+  "Auto-Submitted": "auto-replied",
+  Precedence: "auto_reply",
+  "X-Auto-Response-Suppress": "All",
+};
+
+const STOP_WORDS = new Set([
+  "the",
+  "and",
+  "for",
+  "with",
+  "that",
+  "this",
+  "from",
+  "your",
+  "have",
+  "are",
+  "was",
+  "were",
+  "can",
+  "not",
+  "you",
+  "our",
+  "please",
+  "thanks",
+  "hello",
+  "help",
+]);
+
+/** Up to 3 published, public (non-segment-gated) KB articles matching the inbound email text. */
+async function suggestPublicKbArticles(
+  db: Database,
+  workspaceId: string,
+  text: string,
+): Promise<{ title: string; url: string }[]> {
+  const tokens = [
+    ...new Set(
+      text
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]+/g, " ")
+        .split(/\s+/)
+        .filter((t) => t.length >= 3 && !STOP_WORDS.has(t)),
+    ),
+  ].slice(0, 8);
+  if (tokens.length === 0) return [];
+  const orQuery = tokens.join(" | ");
+  const rows = await db
+    .select({
+      title: helpCenterArticles.title,
+      urlId: helpCenterArticles.urlId,
+      slug: helpCenterArticles.slug,
+    })
+    .from(helpCenterArticles)
+    .innerJoin(
+      helpCenterCategories,
+      eq(helpCenterCategories.id, helpCenterArticles.categoryId),
+    )
+    .where(
+      and(
+        isNotNull(helpCenterArticles.publishedAt),
+        isNull(helpCenterArticles.deletedAt),
+        sql`${helpCenterArticles.segmentIds} = '[]'::jsonb`,
+        eq(helpCenterCategories.isPublic, true),
+        isNull(helpCenterCategories.deletedAt),
+        sql`${helpCenterCategories.segmentIds} = '[]'::jsonb`,
+        sql`${helpCenterArticles.searchVector} @@ to_tsquery('english', ${orQuery})`,
+      ),
+    )
+    .orderBy(
+      desc(
+        sql`ts_rank(${helpCenterArticles.searchVector}, to_tsquery('english', ${orQuery}))`,
+      ),
+    )
+    .limit(3);
+  return rows.map((row) => ({
+    title: row.title,
+    url: portalPaths.helpCenterArticle(
+      workspaceId,
+      "en",
+      `${row.urlId}-${row.slug}`,
+    ),
+  }));
+}
+
+/** True when `address` belongs to this workspace's own inbound/sending addresses (loop guard). */
+async function isOwnSupportAddress(
+  db: Database,
+  address: string,
+  from: SendingIdentity | undefined,
+): Promise<boolean> {
+  const normalized = address.trim().toLowerCase();
+  if (!normalized) return true;
+  if (from && normalized === from.trim().toLowerCase()) return true;
+  const envFrom = process.env.EMAIL_FROM?.trim().toLowerCase();
+  if (envFrom) {
+    const match = envFrom.match(/<([^>]+)>/);
+    const bare = (match?.[1] ?? envFrom).trim().toLowerCase();
+    if (normalized === bare) return true;
+  }
+  const inboundDomain = process.env.EMAIL_INBOUND_DOMAIN?.trim().toLowerCase();
+  if (inboundDomain) {
+    const at = normalized.lastIndexOf("@");
+    if (at !== -1 && normalized.slice(at + 1) === inboundDomain) return true;
+  }
+  const [ownChannel] = await db
+    .select({ id: channelAccounts.id })
+    .from(channelAccounts)
+    .where(
+      and(
+        isNull(channelAccounts.deletedAt),
+        sql`lower(${channelAccounts.address}) = ${normalized}`,
+      ),
+    )
+    .limit(1);
+  return Boolean(ownChannel);
+}
+
+/**
+ * Evaluates whether an inbound email message should trigger a smart auto-acknowledgement (#331).
+ * At fan-out (`atSendTime: false`), checks config and automated-mail flag. At send time
+ * (`atSendTime: true`), additionally skips if a teammate already replied, if the workspace's
+ * rolling median wait is below `skipIfMedianUnderMinutes`, or if conversation/customer caps hit.
+ */
+async function autoAckCandidate(
+  db: Database,
+  event: DeliveryEvent,
+  options?: { atSendTime?: boolean },
+) {
+  if (
+    event.type !== "conversation.email_received" ||
+    event.entityType !== "conversation_message"
+  )
+    return undefined;
+  const cfg = await readEmailAutoAck(db);
+  if (!cfg.enabled) return undefined;
+
+  const [message] = await db
+    .select({
+      id: conversationMessages.id,
+      conversationId: conversationMessages.conversationId,
+      senderType: conversationMessages.senderType,
+      content: conversationMessages.content,
+      metadata: conversationMessages.metadata,
+      createdAt: conversationMessages.createdAt,
+    })
+    .from(conversationMessages)
+    .where(
+      and(
+        eq(conversationMessages.id, event.entityId as MessageId),
+        eq(conversationMessages.senderType, "visitor"),
+        isNull(conversationMessages.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!message?.conversationId) return undefined;
+
+  const meta = (message.metadata ?? {}) as Record<string, unknown>;
+  if (meta.automated === true || meta.forwardedByEmail) return undefined;
+
+  const [conversation] = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.id, message.conversationId))
+    .limit(1);
+  if (
+    !conversation ||
+    conversation.channel !== "email" ||
+    conversation.status === "closed" ||
+    conversation.endReason === "spam" ||
+    conversation.forwardParseFailed
+  )
+    return undefined;
+
+  if (options?.atSendTime) {
+    // Skip if any teammate has already sent a customer-visible reply after this email.
+    const [replied] = await db
+      .select({ id: conversationMessages.id })
+      .from(conversationMessages)
+      .where(
+        and(
+          eq(conversationMessages.conversationId, conversation.id),
+          eq(conversationMessages.senderType, "agent"),
+          eq(conversationMessages.isInternal, false),
+          eq(conversationMessages.sendStatus, "sent"),
+          isNull(conversationMessages.deletedAt),
+          gte(conversationMessages.createdAt, message.createdAt),
+        ),
+      )
+      .limit(1);
+    if (replied) return undefined;
+
+    const workspace = await workspaceOf(db);
+    const to = await visitorAddress(db, conversation);
+    if (!workspace || !to) return undefined;
+
+    const from = await sendingIdentity(db, conversation);
+    if (await isOwnSupportAddress(db, to, from)) return undefined;
+
+    // Skip if median response time is already fast enough that auto-ack is noise.
+    const waitEstimate = await getWaitTimeEstimate(db);
+    if (
+      cfg.skipIfMedianUnderMinutes > 0 &&
+      waitEstimate !== null &&
+      waitEstimate.medianMinutes < cfg.skipIfMedianUnderMinutes
+    )
+      return undefined;
+
+    // Skip re-incrementing caps when retrying a transiently failed auto-ack send for this exact message.
+    const [failedRetry] = await db
+      .select({ jobId: hookDeliveries.jobId })
+      .from(hookDeliveries)
+      .where(
+        and(
+          eq(hookDeliveries.jobId, `mail:auto-ack:${message.id}`),
+          eq(hookDeliveries.outcome, "failed"),
+        ),
+      )
+      .limit(1);
+
+    if (!failedRetry) {
+      // Atomic per-conversation cap (`maxPerConversation`) via rate_bucket.
+      const [convBucket] = await db
+        .insert(rateBucket)
+        .values({
+          workspaceKey: "_",
+          key: `auto-ack:conv:${conversation.id}`,
+          count: 1,
+          windowExpiresAt: sql`now() + interval '30 days'`,
+        })
+        .onConflictDoUpdate({
+          target: [
+            rateBucket.workspaceId,
+            rateBucket.workspaceKey,
+            rateBucket.key,
+          ],
+          set: {
+            count: sql`CASE WHEN ${rateBucket.windowExpiresAt} <= now() THEN 1 ELSE ${rateBucket.count} + 1 END`,
+            windowExpiresAt: sql`CASE WHEN ${rateBucket.windowExpiresAt} <= now() THEN excluded.window_expires_at ELSE ${rateBucket.windowExpiresAt} END`,
+          },
+        })
+        .returning({ count: rateBucket.count });
+      if ((convBucket?.count ?? 0) > cfg.maxPerConversation) return undefined;
+
+      // Per-customer hourly cap (max 10/hour) via rate_bucket.
+      const [bucket] = await db
+        .insert(rateBucket)
+        .values({
+          workspaceKey: "_",
+          key: `auto-ack:customer:${conversation.visitorPrincipalId}`,
+          count: 1,
+          windowExpiresAt: sql`now() + interval '1 hour'`,
+        })
+        .onConflictDoUpdate({
+          target: [
+            rateBucket.workspaceId,
+            rateBucket.workspaceKey,
+            rateBucket.key,
+          ],
+          set: {
+            count: sql`CASE WHEN ${rateBucket.windowExpiresAt} <= now() THEN 1 ELSE ${rateBucket.count} + 1 END`,
+            windowExpiresAt: sql`CASE WHEN ${rateBucket.windowExpiresAt} <= now() THEN excluded.window_expires_at ELSE ${rateBucket.windowExpiresAt} END`,
+          },
+        })
+        .returning({ count: rateBucket.count });
+      if ((bucket?.count ?? 0) > 10) return undefined;
+    }
+
+    return { message, conversation, cfg, waitEstimate, workspace, to, from };
+  }
+
+  return {
+    message,
+    conversation,
+    cfg,
+    waitEstimate: null,
+    workspace: undefined,
+    to: undefined,
+    from: undefined,
+  };
 }
 
 /** Support entries for jobs/fanout.ts#subscribers. */
 export const supportSubscribers: Partial<Record<string, Subscribers>> = {
   "message.created": {
-    recipients: noRecipients,
+    recipients: async (db, event) => {
+      if (event.entityType !== "conversation_message")
+        return { principalIds: [] };
+      const [msg] = await db
+        .select({
+          senderType: conversationMessages.senderType,
+          isInternal: conversationMessages.isInternal,
+          assignedAgentPrincipalId: conversations.assignedAgentPrincipalId,
+        })
+        .from(conversationMessages)
+        .innerJoin(
+          conversations,
+          eq(conversations.id, conversationMessages.conversationId),
+        )
+        .where(
+          and(
+            eq(conversationMessages.id, event.entityId as MessageId),
+            isNull(conversationMessages.deletedAt),
+          ),
+        )
+        .limit(1);
+      // Only notify the assigned teammate on customer replies — never broadcast to the whole workspace (#321).
+      if (
+        !msg ||
+        msg.senderType !== "visitor" ||
+        msg.isInternal ||
+        !msg.assignedAgentPrincipalId
+      )
+        return { principalIds: [] };
+      return { principalIds: [msg.assignedAgentPrincipalId] };
+    },
+    notification: async (db, event) => {
+      if (event.entityType !== "conversation_message") return undefined;
+      const [msg] = await db
+        .select({
+          senderType: conversationMessages.senderType,
+          content: conversationMessages.content,
+          subject: conversations.subject,
+        })
+        .from(conversationMessages)
+        .innerJoin(
+          conversations,
+          eq(conversations.id, conversationMessages.conversationId),
+        )
+        .where(
+          and(
+            eq(conversationMessages.id, event.entityId as MessageId),
+            eq(conversationMessages.senderType, "visitor"),
+            isNull(conversationMessages.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (!msg) return undefined;
+      return {
+        type: "customer_reply_assigned",
+        title: clip(`Customer replied: ${msg.subject ?? "Conversation"}`, 255),
+        body: clip(msg.content, 150),
+      };
+    },
     // Decided at fan-out, so a visitor message, a note or a widget visitor's reply queues no mail
     // job. A portal reply's job waits, and runs only if the customer has not read it by then.
     direct: async (db, event) => Boolean(await customerReply(db, event)),
     directDelay: replyDelay,
     mail: replyMail,
+  },
+  "conversation.assigned": {
+    recipients: async (db, event) => {
+      if (event.entityType !== "conversation") return { principalIds: [] };
+      const payload = payloadOf(event);
+      if (payload.cleared === "true") return { principalIds: [] };
+      const convId = event.entityId as typeof conversations.$inferSelect.id;
+      if (payload.field === "team") {
+        const [conv] = await db
+          .select({ assignedTeamId: conversations.assignedTeamId })
+          .from(conversations)
+          .where(eq(conversations.id, convId))
+          .limit(1);
+        if (!conv?.assignedTeamId) return { principalIds: [] };
+        const { teamMembers } =
+          await import("../../../database/quills/schema/teams");
+        const rows = await db
+          .select({ principalId: teamMembers.principalId })
+          .from(teamMembers)
+          .where(eq(teamMembers.teamId, conv.assignedTeamId))
+          .limit(50);
+        return { principalIds: rows.map((r) => r.principalId) };
+      }
+      if (payload.field && payload.field !== "agent") {
+        return { principalIds: [] };
+      }
+      const [conv] = await db
+        .select({
+          assignedAgentPrincipalId: conversations.assignedAgentPrincipalId,
+        })
+        .from(conversations)
+        .where(eq(conversations.id, convId))
+        .limit(1);
+      return conv?.assignedAgentPrincipalId
+        ? { principalIds: [conv.assignedAgentPrincipalId] }
+        : { principalIds: [] };
+    },
+    notification: async (db, event) => {
+      const payload = payloadOf(event);
+      if (payload.cleared === "true") return undefined;
+      const [conv] = await db
+        .select({ subject: conversations.subject })
+        .from(conversations)
+        .where(
+          eq(
+            conversations.id,
+            event.entityId as typeof conversations.$inferSelect.id,
+          ),
+        )
+        .limit(1);
+      if (!conv) return undefined;
+      if (payload.field === "team") {
+        return {
+          type: "conversation_routed_team",
+          title: clip(
+            `Routed to your team: ${conv.subject ?? "Conversation"}`,
+            255,
+          ),
+        };
+      }
+      if (payload.field && payload.field !== "agent") return undefined;
+      return {
+        type: "conversation_assigned",
+        title: clip(`Assigned to you: ${conv.subject ?? "Conversation"}`, 255),
+      };
+    },
+  },
+  "conversation.email_received": {
+    recipients: noRecipients,
+    direct: async (db, event) => Boolean(await autoAckCandidate(db, event)),
+    directDelay: async (db) => (await readEmailAutoAck(db)).delaySeconds,
+    mail: async (db, event) => {
+      const candidate = await autoAckCandidate(db, event, { atSendTime: true });
+      if (!candidate?.workspace || !candidate.to) return undefined;
+      const { message, conversation, cfg, waitEstimate, workspace, to, from } =
+        candidate;
+
+      const thread = await threading(db, workspace, conversation.id);
+      const ctaUrl =
+        (await customerConversationLink(db, workspace.id, conversation)) ??
+        (await mintConversationMagicLink(db, workspace.id, conversation));
+
+      const parts: string[] = [
+        cfg.customMessage?.trim() ||
+          `Thanks for reaching out to ${workspace.name}. We've received your message and a teammate will reply as soon as possible.`,
+      ];
+      if (cfg.includeWaitEstimate && waitEstimate?.label) {
+        parts.push(`Estimated response time: ${waitEstimate.label}.`);
+      }
+      if (cfg.includeKbSuggestions) {
+        const articles = await suggestPublicKbArticles(
+          db,
+          workspace.id,
+          `${conversation.subject ?? ""} ${message.content.slice(0, 300)}`,
+        );
+        if (articles.length > 0) {
+          parts.push(
+            `While you wait, these help articles might answer your question:\n${articles.map((a) => `- ${a.title}: ${a.url}`).join("\n")}`,
+          );
+        }
+      }
+      const bodyText = parts.join("\n\n");
+
+      return {
+        type: "email_auto_ack",
+        emailType: "ConversationAutoAckEmail",
+        to,
+        conversationId: conversation.id,
+        ledgerKey: `mail:auto-ack:${message.id}`,
+        send: (address) =>
+          sendConversationMessageEmail({
+            to: address as SealedEmail,
+            direction: "agent_reply",
+            senderName: workspace.name,
+            messagePreview: bodyText,
+            ctaUrl,
+            workspaceName: workspace.name,
+            channel: "email",
+            correspondence: true,
+            conversationSubject: conversation.subject,
+            conversationId: conversation.id,
+            from,
+            extraHeaders: AUTO_ACK_HEADERS,
+            ...thread,
+          }),
+      };
+    },
   },
   "message.note_created": {
     recipients: mentioned,
@@ -964,16 +1622,18 @@ export const supportSubscribers: Partial<Record<string, Subscribers>> = {
     notification: watcherNotice((ref) => `New reply on ticket ${ref}`),
     mail: replyMail,
   },
-  // The CSAT rating request when an email conversation closes (the source's close mail carries
-  // the rating links). One per conversation: its ledger key names the conversation, not the event.
+  // The CSAT rating request when an email conversation closes (#312): respects sampling rate,
+  // delay, trivial-conversation filter, and per-customer cooldown on `principal.survey_sent_at`.
   "conversation.status_changed": {
     recipients: noRecipients,
     direct: async (db, event) => Boolean(await csatConversation(db, event)),
+    directDelay: async (db) => (await readCsatSettings(db)).delayMinutes * 60,
     mail: async (db, event) => {
-      const conversation = await csatConversation(db, event);
-      const workspace = conversation && (await workspaceOf(db));
-      const to = conversation && (await visitorAddress(db, conversation));
-      if (!conversation || !workspace || !to) return undefined;
+      const ready = await csatConversation(db, event, {
+        stampCooldown: true,
+      });
+      if (!ready?.workspace || !ready.to) return undefined;
+      const { conversation, workspace, to } = ready;
       // ponytail: a replay of a finished delivery mints a token it never sends; it expires in 30 days.
       const token = await mintCsatToken(
         db,
@@ -1004,8 +1664,122 @@ export const supportSubscribers: Partial<Record<string, Subscribers>> = {
     notification: watcherNotice((ref) => `Ticket ${ref} changed status`),
   },
   "ticket.note_added": {
-    recipients: watchers,
+    recipients: async (db, event) => {
+      const watcherResult = await watchers(db, event);
+      const messageId = payloadOf(event).messageId as MessageId | undefined;
+      if (!messageId) return watcherResult;
+      const mentionRows = await db
+        .select({ principalId: conversationMessageMentions.principalId })
+        .from(conversationMessageMentions)
+        .innerJoin(
+          conversationMessages,
+          eq(
+            conversationMessages.id,
+            conversationMessageMentions.conversationMessageId,
+          ),
+        )
+        .where(
+          and(
+            eq(conversationMessageMentions.conversationMessageId, messageId),
+            isNull(conversationMessages.deletedAt),
+          ),
+        );
+      return {
+        principalIds: [
+          ...new Set([
+            ...watcherResult.principalIds,
+            ...mentionRows.map((row) => row.principalId),
+          ]),
+        ],
+      };
+    },
     notification: watcherNotice((ref) => `New internal note on ticket ${ref}`),
+  },
+  // Alert workspace admins with manage_settings when a webhook hits consecutive failure threshold (#330).
+  "webhook.failing": {
+    requiredActions: ["manage_settings"],
+    recipients: async (db) => {
+      const rows = await db
+        .select({ id: principal.id })
+        .from(principal)
+        .where(isNotNull(principal.kaneoUserId))
+        .limit(200);
+      return { principalIds: rows.map((row) => row.id) };
+    },
+    notification: async (db, event) => {
+      const [hook] = await db
+        .select({ url: webhooks.url, failureCount: webhooks.failureCount })
+        .from(webhooks)
+        .where(
+          and(
+            eq(webhooks.id, event.entityId as typeof webhooks.$inferSelect.id),
+            isNull(webhooks.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (!hook) return undefined;
+      const count = payloadOf(event).failureCount ?? String(hook.failureCount);
+      const err = payloadOf(event).lastError ?? "Delivery failed";
+      return {
+        type: "webhook_failing",
+        title: clip(`Webhook failing (${count} consecutive errors)`, 255),
+        body: clip(`${hook.url} — ${err}`, 500),
+      };
+    },
+  },
+  // Teammate hourly/daily unread notification summary email (#321).
+  "notification.digest_sent": {
+    recipients: async (_db, event) => ({
+      principalIds: event.entityId ? [event.entityId as PrincipalId] : [],
+    }),
+    mail: async (db, event, principalId) => {
+      const targetPrincipalId = (principalId ??
+        event.entityId) as PrincipalId | null;
+      const workspace = await workspaceOf(db);
+      if (!targetPrincipalId || !workspace) return undefined;
+      const unread = await db
+        .select({ title: inAppNotifications.title })
+        .from(inAppNotifications)
+        .where(
+          and(
+            eq(inAppNotifications.principalId, targetPrincipalId),
+            isNull(inAppNotifications.readAt),
+            isNull(inAppNotifications.archivedAt),
+          ),
+        )
+        .orderBy(desc(inAppNotifications.createdAt))
+        .limit(25);
+      if (unread.length === 0) return undefined;
+      const frequency = payloadOf(event).frequency ?? "daily";
+      const summaryLines = unread.map((item) => `• ${item.title}`).join("\n");
+      const rendered = renderBrandedEmail({
+        brand: { name: workspace.name },
+        subject: `${workspace.name}: Your ${frequency} digest (${unread.length} unread)`,
+        mode: "blocks",
+        blocks: [
+          {
+            id: "digest-heading",
+            type: "header",
+            content: `You have ${unread.length} unread notification${unread.length === 1 ? "" : "s"}`,
+          },
+          { id: "digest-summary", type: "text", content: summaryLines },
+        ],
+      });
+      const from = (process.env.EMAIL_FROM?.trim() ||
+        "noreply@kaneo.app") as SendingIdentity;
+      return {
+        type: "notification_digest",
+        emailType: "TeammateDigestEmail",
+        send: (to) =>
+          sendRawEmail({
+            from,
+            to,
+            subject: rendered.subject,
+            html: rendered.html,
+            text: rendered.text,
+          }),
+      };
+    },
   },
 };
 

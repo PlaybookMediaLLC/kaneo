@@ -56,6 +56,11 @@ const reads = (overrides: Record<string, unknown> = {}) => ({
   markQuillsConversationRead: markConversationReadFixture.ok(),
   replyQuillsConversation: replyConversationFixture.ok(),
   sendQuillsConversationTyping: sendConversationTypingFixture.ok(),
+  listQuillsConversationViewers: { viewers: [] },
+  setQuillsConversationViewer: {
+    ok: true,
+    expiresAt: "2026-11-01T10:00:25.000Z",
+  },
   ...overrides,
 });
 

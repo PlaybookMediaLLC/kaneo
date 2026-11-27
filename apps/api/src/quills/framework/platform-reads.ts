@@ -24,6 +24,7 @@ import type { QuillsAction } from "../with-quills-request";
 import { listAccessibleProjectIds } from "../../project-access/list-accessible-project-ids";
 import { requireWorkspaceEntitlement } from "../../billing/controllers/require-entitlement";
 import { taskIsCompleted } from "../../task/task-is-completed";
+export { clearWidgetHostCache } from "../../utils/widget-host-cache";
 
 // The only module that reads public tables for Quills routes. Every read filters on workspaceId.
 
@@ -85,6 +86,35 @@ export async function workspaceMembers(workspaceId: string) {
     })
     .from(workspaceUserTable)
     .where(eq(workspaceUserTable.workspaceId, workspaceId));
+}
+
+/**
+ * Resolves a verified workspace teammate by email address for inbound email forwarding (#325).
+ * Returns null if the user is not a current member of `workspaceId` or their email is unverified.
+ */
+export async function findWorkspaceTeammateByEmail(
+  workspaceId: string,
+  email: string,
+): Promise<{ userId: string; name: string } | null> {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) return null;
+  const [row] = await platformDb
+    .select({
+      userId: userTable.id,
+      name: userTable.name,
+    })
+    .from(workspaceUserTable)
+    .innerJoin(userTable, eq(userTable.id, workspaceUserTable.userId))
+    .where(
+      and(
+        eq(workspaceUserTable.workspaceId, workspaceId),
+        sql`lower(${userTable.email}) = ${normalized}`,
+        eq(userTable.emailVerified, true),
+        sql`coalesce(${userTable.banned}, false) = false`,
+      ),
+    )
+    .limit(1);
+  return row ?? null;
 }
 
 /** The Kaneo user IDs of this workspace's current members. */

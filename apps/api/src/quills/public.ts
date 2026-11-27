@@ -2,6 +2,7 @@ import { apiRouter } from "../openapi";
 import { connectorOAuthCallback } from "./assistant/connectors";
 import avatarImage from "./files/avatar-image";
 import customerFiles from "./files/customer";
+import publicMedia from "./files/public-media";
 import inboundEmail from "./inbound/email";
 import emailEvents from "./inbound/events";
 import integrationWebhooks from "./integrations/inbound";
@@ -49,12 +50,13 @@ export type QuillsPublicRouters = [
   typeof widgetSupport,
   typeof customerFiles,
   typeof avatarImage,
+  typeof publicMedia,
   typeof track,
   typeof portalSurveys,
   typeof widgetSurveys,
 ];
 
-// Mount sub-routers imperatively so TypeScript does not compute a 22-deep nested
+// Mount sub-routers imperatively so TypeScript does not compute a 23-deep nested
 // Hono MergeSchemaPath generic on the default export (typed clients use QuillsPublicRouters).
 const quillsPublicRouter = apiRouter();
 quillsPublicRouter.route("/", widgetHost);
@@ -76,6 +78,7 @@ quillsPublicRouter.route("/", portalSupport);
 quillsPublicRouter.route("/", widgetSupport);
 quillsPublicRouter.route("/", customerFiles);
 quillsPublicRouter.route("/", avatarImage);
+quillsPublicRouter.route("/", publicMedia);
 quillsPublicRouter.route("/", track);
 quillsPublicRouter.route("/", portalSurveys);
 quillsPublicRouter.route("/", widgetSurveys);

@@ -788,6 +788,8 @@ export const principal = quillsSchema
         "merged_into_principal_id",
       ),
       mergedAt: timestamp("merged_at", { withTimezone: true }),
+      // Last CSAT survey email sent to this customer for per-customer cooldown enforcement (#312).
+      surveySentAt: timestamp("survey_sent_at", { withTimezone: true }),
     },
     (table) => [
       foreignKey({

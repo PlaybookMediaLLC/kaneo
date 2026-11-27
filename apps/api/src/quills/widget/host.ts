@@ -106,14 +106,16 @@ export function widgetHost(
       .split(",")
       .some((part) => part.trim().replace(/^W\//, "") === etag);
   };
-  const unbuilt = (c: Context) =>
-    c.json(
+  const unbuilt = (c: Context) => {
+    c.header("Cross-Origin-Resource-Policy", "cross-origin");
+    return c.json(
       {
         message: "The widget is not built on this server",
         code: "SERVICE_UNAVAILABLE",
       },
       503,
     );
+  };
   /** `?v=` with the current content hash caches for a year; any other URL for 5 minutes. */
   const file =
     (name: string, type: string, compress = true) =>
@@ -128,6 +130,7 @@ export function widgetHost(
       c.header("ETag", etag);
       c.header("Cache-Control", cacheControl);
       c.header("X-Content-Type-Options", "nosniff");
+      c.header("Cross-Origin-Resource-Policy", "cross-origin");
       if (compress) c.header("Vary", "Accept-Encoding");
       if (matchesEtag(c, etag)) return c.body(null, 304);
       c.header("Content-Type", type);
@@ -144,45 +147,63 @@ export function widgetHost(
       }
       return c.body(found.body as unknown as ArrayBuffer);
     };
+  const renderWidgetPage = async (c: Context, trailingSlash: boolean) => {
+    const script = asset("host.js");
+    const style = asset("host.css");
+    if (!script || !style) return unbuilt(c);
+    const workspace = c.req.param("workspace");
+    const allowedOrigins =
+      resolveAllowedOrigins && workspace
+        ? await resolveAllowedOrigins(workspace).catch(() => [])
+        : [];
+    const policy =
+      allowedOrigins.length > 0
+        ? buildWidgetPagePolicy(allowedOrigins)
+        : PAGE_POLICY;
+    const policyHash =
+      allowedOrigins.length > 0
+        ? `-${createHash("sha256").update(policy).digest("hex").slice(0, 8)}`
+        : "";
+    const etag = `"${script.version}-${style.version}${policyHash}"`;
+    if (!c.res.headers.has("Content-Security-Policy")) {
+      c.header("Content-Security-Policy", policy);
+    }
+    c.header("Cache-Control", "no-cache");
+    c.header("ETag", etag);
+    c.header("X-Content-Type-Options", "nosniff");
+    c.header("Cross-Origin-Resource-Policy", "cross-origin");
+    if (matchesEtag(c, etag)) return c.body(null, 304);
+    const rawPath = new URL(c.req.url).pathname;
+    const prefix =
+      trailingSlash || rawPath.endsWith("/")
+        ? "./"
+        : `${rawPath.split("/").pop() || "widget"}/`;
+    return c.html(
+      `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Support</title><link rel="stylesheet" href="${prefix}host.css?v=${style.version}"><script src="${prefix}host.js?v=${script.version}" defer></script></head><body><div id="root"></div></body></html>`,
+    );
+  };
   return (
     new Hono()
-      // The SDK reads config.json from the host page's origin. It is public and never
-      // credentialed, while the app's CORS allowlist is for credentialed origins, so this
-      // response alone may be read by allowed origins. Mount this router before ./index.
+      // The SDK reads config.json and sdk.js from the host page's origin. Public and never
+      // credentialed, with zero Set-Cookie headers (#318). Mount this router before ./index.
+      .use("/:workspace/widget/*", async (c, next) => {
+        await next();
+        c.res.headers.delete("Set-Cookie");
+      })
       .use("/:workspace/widget/config.json", async (c, next) => {
         await next();
-        if (!c.res.headers.has("Access-Control-Allow-Origin"))
-          c.res.headers.set("Access-Control-Allow-Origin", "*");
+        c.res.headers.delete("Access-Control-Allow-Credentials");
+        c.res.headers.set("Access-Control-Allow-Origin", "*");
+        if (!c.res.headers.has("Cross-Origin-Resource-Policy"))
+          c.res.headers.set("Cross-Origin-Resource-Policy", "cross-origin");
       })
-      .get("/:workspace/widget", async (c) => {
-        const script = asset("host.js");
-        const style = asset("host.css");
-        if (!script || !style) return unbuilt(c);
-        const allowedOrigins = resolveAllowedOrigins
-          ? await resolveAllowedOrigins(c.req.param("workspace")).catch(
-              () => [],
-            )
-          : [];
-        const policy =
-          allowedOrigins.length > 0
-            ? buildWidgetPagePolicy(allowedOrigins)
-            : PAGE_POLICY;
-        const policyHash =
-          allowedOrigins.length > 0
-            ? `-${createHash("sha256").update(policy).digest("hex").slice(0, 8)}`
-            : "";
-        const etag = `"${script.version}-${style.version}${policyHash}"`;
-        if (!c.res.headers.has("Content-Security-Policy")) {
-          c.header("Content-Security-Policy", policy);
-        }
-        c.header("Cache-Control", "no-cache");
-        c.header("ETag", etag);
-        c.header("X-Content-Type-Options", "nosniff");
-        if (matchesEtag(c, etag)) return c.body(null, 304);
-        return c.html(
-          `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Support</title><link rel="stylesheet" href="widget/host.css?v=${style.version}"><script src="widget/host.js?v=${script.version}" defer></script></head><body><div id="root"></div></body></html>`,
-        );
+      .use("/:workspace/widget/sdk.js", async (c, next) => {
+        await next();
+        c.res.headers.delete("Access-Control-Allow-Credentials");
+        c.res.headers.set("Access-Control-Allow-Origin", "*");
       })
+      .get("/:workspace/widget", (c) => renderWidgetPage(c, false))
+      .get("/:workspace/widget/", (c) => renderWidgetPage(c, true))
       .get(
         "/:workspace/widget/host.js",
         file("host.js", "text/javascript; charset=utf-8"),

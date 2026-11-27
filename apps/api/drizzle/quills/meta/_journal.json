@@ -327,71 +327,113 @@
 		{
 			"idx": 46,
 			"version": "7",
-			"when": 1795762995544,
-			"tag": "0046_spam_blocks",
+			"when": 1795762584485,
+			"tag": "0046_scheduled_send_messages",
 			"breakpoints": true
 		},
 		{
 			"idx": 47,
 			"version": "7",
-			"when": 1795763836297,
-			"tag": "0047_safe_ai_actions",
+			"when": 1795763271671,
+			"tag": "0047_collaborator_role",
 			"breakpoints": true
 		},
 		{
 			"idx": 48,
 			"version": "7",
-			"when": 1795764224505,
-			"tag": "0048_contact_identities_and_merges",
+			"when": 1795764757495,
+			"tag": "0048_wave2_magic_links_and_forwarding",
 			"breakpoints": true
 		},
 		{
 			"idx": 49,
 			"version": "7",
-			"when": 1795764266389,
-			"tag": "0049_reversible_support_merges",
+			"when": 1795765643317,
+			"tag": "0049_wave3_lifecycle_wait_csat",
 			"breakpoints": true
 		},
 		{
 			"idx": 50,
 			"version": "7",
-			"when": 1795765091605,
-			"tag": "0050_ai_budgets_and_resolutions",
+			"when": 1795767050556,
+			"tag": "0050_wave4_widget_notify_webhooks_brands",
 			"breakpoints": true
 		},
 		{
 			"idx": 51,
 			"version": "7",
-			"when": 1795765130786,
-			"tag": "0051_kb_freshness",
+			"when": 1795775003256,
+			"tag": "0051_review_hardening",
 			"breakpoints": true
 		},
 		{
 			"idx": 52,
 			"version": "7",
-			"when": 1795765162190,
-			"tag": "0052_kb_search_hybrid_and_synonyms",
+			"when": 1795820001000,
+			"tag": "0052_spam_blocks",
 			"breakpoints": true
 		},
 		{
 			"idx": 53,
 			"version": "7",
-			"when": 1795765261542,
-			"tag": "0053_feedback_hygiene",
+			"when": 1795820002000,
+			"tag": "0053_safe_ai_actions",
 			"breakpoints": true
 		},
 		{
 			"idx": 54,
 			"version": "7",
-			"when": 1795766437408,
-			"tag": "0054_full_exports_and_schedules",
+			"when": 1795820003000,
+			"tag": "0054_contact_identities_and_merges",
 			"breakpoints": true
 		},
 		{
 			"idx": 55,
 			"version": "7",
-			"when": 1795820000000,
-			"tag": "0055_m10_review_hardening",
+			"when": 1795820004000,
+			"tag": "0055_reversible_support_merges",
+			"breakpoints": true
+		},
+		{
+			"idx": 56,
+			"version": "7",
+			"when": 1795820005000,
+			"tag": "0056_ai_budgets_and_resolutions",
+			"breakpoints": true
+		},
+		{
+			"idx": 57,
+			"version": "7",
+			"when": 1795820006000,
+			"tag": "0057_kb_freshness",
+			"breakpoints": true
+		},
+		{
+			"idx": 58,
+			"version": "7",
+			"when": 1795820007000,
+			"tag": "0058_kb_search_hybrid_and_synonyms",
+			"breakpoints": true
+		},
+		{
+			"idx": 59,
+			"version": "7",
+			"when": 1795820008000,
+			"tag": "0059_feedback_hygiene",
+			"breakpoints": true
+		},
+		{
+			"idx": 60,
+			"version": "7",
+			"when": 1795820009000,
+			"tag": "0060_full_exports_and_schedules",
+			"breakpoints": true
+		},
+		{
+			"idx": 61,
+			"version": "7",
+			"when": 1795820010000,
+			"tag": "0061_m10_review_hardening",
 			"breakpoints": true
 		}
 	]

@@ -21,7 +21,9 @@ export const customDomains = quillsSchema
     "custom_domains",
     {
       workspaceId: workspaceColumn(),
-      kind: text("kind", { enum: ["portal", "help_center"] }).notNull(),
+      kind: text("kind", {
+        enum: ["portal", "help_center", "widget"],
+      }).notNull(),
       /** Lower-case ASCII (punycode), no trailing dot. */
       domain: text("domain").notNull(),
       /** Published by the owner in a TXT record. A new domain gets a new value. */
@@ -41,7 +43,7 @@ export const customDomains = quillsSchema
       uniqueIndex("custom_domains_domain_unique").on(table.domain),
       check(
         "custom_domains_kind_check",
-        sql`${table.kind} IN ('portal', 'help_center')`,
+        sql`${table.kind} IN ('portal', 'help_center', 'widget')`,
       ),
       check(
         "custom_domains_domain_normalized_check",

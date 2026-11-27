@@ -6,6 +6,7 @@ import {
   verificationRecordName,
 } from "../../../database/quills/schema/custom-domains";
 import type { JobQueueRow } from "../../../database/quills/schema/job-queue";
+import { clearWidgetHostCache } from "../../../utils/widget-host-cache";
 import { recordQuillsChange } from "../../events";
 import { loadEvent } from "../fanout";
 import { eventPayloadSchema, finishQuillsJob } from "../queue";
@@ -47,7 +48,7 @@ export async function runDomainCheckJob(workspaceId: string, job: JobQueueRow) {
     const kind = (event?.payload as { kind?: unknown } | undefined)?.kind;
     if (
       event?.type !== "custom_domain.verification_requested" ||
-      (kind !== "portal" && kind !== "help_center")
+      (kind !== "portal" && kind !== "help_center" && kind !== "widget")
     )
       return undefined;
     const [row] = await db
@@ -69,6 +70,7 @@ export async function runDomainCheckJob(workspaceId: string, job: JobQueueRow) {
   const outcome =
     target &&
     (await checkVerificationRecord(target.domain, target.verificationValue));
+  let changedWidgetDomain: string | undefined;
   await withQuillsSystemWorkspace(workspaceId, async (db) => {
     if (target && outcome) {
       // The same claim only: a domain set again since the read has a new value and stays inactive.
@@ -90,14 +92,17 @@ export async function runDomainCheckJob(workspaceId: string, job: JobQueueRow) {
           ),
         )
         .returning({ domain: customDomains.domain });
-      if (changed)
+      if (changed) {
+        if (target.kind === "widget") changedWidgetDomain = changed.domain;
         await recordQuillsChange(db, null, {
           type: "custom_domain.checked",
           entityType: "custom_domain",
           entityId: changed.domain,
           payload: { kind: target.kind, outcome },
         });
+      }
     }
     await finishQuillsJob(db, job.id, job.leaseToken!);
   });
+  if (changedWidgetDomain) clearWidgetHostCache(changedWidgetDomain);
 }

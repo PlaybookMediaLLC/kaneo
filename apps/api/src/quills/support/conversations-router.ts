@@ -14,6 +14,8 @@ import { conversationMergeRouter } from "./support-merge";
 import views from "./conversation-views";
 import conversations from "./conversations";
 import inbox from "./inbox";
+import requestAccessLinks from "./request-access-links";
+import threadPresence from "./thread-presence";
 
 /** Teammate routes for support conversations, messages, state, tags, attributes, views, the inbox and the paired ticket. */
 export default apiRouter<BaseVariables & { workspaceId: string }>()
@@ -32,4 +34,6 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", posts)
   .route("/", ticket)
   .route("/", ipBlocks)
-  .route("/", spamBlocks);
+  .route("/", spamBlocks)
+  .route("/", requestAccessLinks)
+  .route("/", threadPresence);

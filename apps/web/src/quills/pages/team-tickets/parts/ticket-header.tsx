@@ -1,6 +1,8 @@
 import { useTranslation } from "react-i18next";
 import type { GetTicketResponse } from "../../../api/team/get-ticket";
+import type { ThreadViewer } from "../../../hooks/team/use-thread-presence";
 import { DetailHeader } from "../../../ui/inbox/detail-header";
+import { ThreadViewersAvatars } from "../../../ui/inbox/thread-viewers-avatars";
 import { PersonAvatar } from "../../../ui/person-avatar";
 import type { Teammate, TicketStatus } from "../ticket-scope";
 import { TicketAssignee } from "./ticket-assignee";
@@ -12,6 +14,7 @@ export interface TicketHeaderProps {
   ticket?: GetTicketResponse;
   statuses: readonly TicketStatus[];
   people: readonly Teammate[];
+  viewers?: readonly ThreadViewer[];
   onBack: () => void;
   onPrevious: () => void;
   onNext: () => void;
@@ -22,6 +25,7 @@ export function TicketHeader({
   ticket,
   statuses,
   people,
+  viewers,
   onBack,
   onPrevious,
   onNext,
@@ -37,6 +41,9 @@ export function TicketHeader({
       actions={
         ticket ? (
           <>
+            {viewers?.length ? (
+              <ThreadViewersAvatars viewers={viewers} />
+            ) : null}
             <TicketAssignee ticket={ticket} people={people} />
             <TicketStatusButton ticket={ticket} statuses={statuses} />
             <TicketMenu

@@ -15,6 +15,7 @@ import type { EmailAttachment } from "./attachment";
 export interface ResendSendRequest {
   from: string;
   to: string;
+  cc?: string[];
   subject: string;
   html?: string;
   text?: string;
@@ -90,6 +91,7 @@ export function buildResendPayload(
   return {
     from: request.from,
     to: request.to,
+    ...(request.cc && request.cc.length > 0 ? { cc: request.cc } : {}),
     subject: request.subject,
     // Every send through the ladder carries html; the SDK's type requires a body.
     html: request.html ?? "",
@@ -103,6 +105,9 @@ export function buildResendPayload(
             filename: attachment.filename,
             contentType: attachment.contentType,
             content: Buffer.from(attachment.content),
+            ...(attachment.contentId
+              ? { contentId: attachment.contentId }
+              : {}),
           })),
         }
       : {}),

@@ -92,3 +92,4 @@ export * from "./content-translations";
 export * from "./spam-blocks";
 export * from "./contact-identities";
 export * from "./support-merges";
+export * from "./brands";

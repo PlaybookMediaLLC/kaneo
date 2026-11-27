@@ -69,7 +69,12 @@ export function NotificationSettings({
         },
       ],
     },
+    { titleKey: "team.notifications.slackDm", rows: rows("slackDm") },
+    { titleKey: "team.notifications.push", rows: rows("push") },
   ];
+  const digestFrequency =
+    (shown as { digestFrequency?: "off" | "hourly" | "daily" } | undefined)
+      ?.digestFrequency ?? "off";
   return (
     <div className="grid gap-4">
       <div className="flex items-center gap-1">
@@ -109,6 +114,31 @@ export function NotificationSettings({
             ))}
           </fieldset>
         ))}
+        <div className="grid gap-1.5">
+          <Label
+            htmlFor={`${id}-digest`}
+            className="text-xs font-medium text-muted-foreground"
+          >
+            {t("team.notifications.digest")}
+          </Label>
+          <select
+            id={`${id}-digest`}
+            value={digestFrequency}
+            disabled={update.isPending || Boolean(shown?.emailMuted)}
+            onChange={(e) =>
+              save({
+                digestFrequency: e.target.value as "off" | "hourly" | "daily",
+              })
+            }
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
+          >
+            <option value="off">{t("team.notifications.digestOff")}</option>
+            <option value="hourly">
+              {t("team.notifications.digestHourly")}
+            </option>
+            <option value="daily">{t("team.notifications.digestDaily")}</option>
+          </select>
+        </div>
         {update.isError ? (
           <p role="alert" className="text-xs text-destructive-foreground">
             {t("team.notifications.saveFailed")}

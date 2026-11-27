@@ -47,6 +47,8 @@ export interface LauncherHandle {
   setLocale(locale: string | undefined): void;
   /** Fade the button in. Called after initial colors are set to avoid a color flash. */
   reveal(): void;
+  /** Hide or show both the button and any proactive greeting/announcement bubble. */
+  setHidden(hidden: boolean): void;
   remove(): void;
 }
 
@@ -77,6 +79,7 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
   // Unread counts only need attention while the widget is closed.
   let unreadCount = 0;
   let isOpen = false;
+  let isHidden = false;
   let revealed = false;
   // Visible button label — when set, it doubles as the accessible name.
   let labelText = "";
@@ -197,7 +200,7 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
   // Proactive greeting bubble — WCAG 2.2 AA: role="status", dismissible via >=24px button & Escape.
   const side = opts.placement === "left" ? "left" : "right";
   const bubble = document.createElement("div");
-  bubble.className = "quackback-bubble";
+  bubble.className = "quackback-greeting quackback-bubble";
   bubble.setAttribute("role", "status");
   bubble.setAttribute("aria-live", "polite");
   Object.assign(bubble.style, {
@@ -267,7 +270,9 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
   const renderGreeting = () => {
     bubbleText.textContent = announcement?.text ?? greetingText ?? "";
     const show =
-      !isOpen && (!!announcement || (!!greetingText && !greetingDismissed()));
+      !isHidden &&
+      !isOpen &&
+      (!!announcement || (!!greetingText && !greetingDismissed()));
     bubble.style.display = show ? "flex" : "none";
   };
   const dismissGreeting = () => {
@@ -398,21 +403,21 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     setOpen(open) {
       isOpen = open;
       btn.style.visibility = open ? "hidden" : "visible";
-      btn.inert = !revealed || open;
+      btn.inert = !revealed || open || isHidden;
       btn.setAttribute("aria-expanded", open ? "true" : "false");
       syncAriaLabel();
       renderBadge();
       renderGreeting();
     },
     setColors(colors) {
-      if (colors.backgroundColor) {
-        bg = colors.backgroundColor;
-        btn.style.backgroundColor = bg;
-      }
-      if (colors.foregroundColor || colors.backgroundColor) {
-        fg = ensureAccessibleForeground(bg, colors.foregroundColor ?? fg, 4.5);
-        btn.style.color = fg;
-      }
+      bg = colors.backgroundColor || DEFAULT_BG;
+      btn.style.backgroundColor = bg;
+      fg = ensureAccessibleForeground(
+        bg,
+        colors.foregroundColor || DEFAULT_FG,
+        4.5,
+      );
+      btn.style.color = fg;
     },
     setUnread(count) {
       unreadCount = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
@@ -453,8 +458,14 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     },
     reveal() {
       revealed = true;
-      btn.inert = isOpen;
+      btn.inert = isOpen || isHidden;
       btn.style.opacity = "1";
+    },
+    setHidden(hidden) {
+      isHidden = hidden;
+      btn.style.display = hidden ? "none" : "flex";
+      btn.inert = !revealed || isOpen || hidden;
+      renderGreeting();
     },
     remove() {
       if (occlusionRaf) {

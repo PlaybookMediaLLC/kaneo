@@ -18,6 +18,13 @@ export const emailAttachmentSchema = z.object({
     .min(1)
     .regex(/^[^\r\n\0]*$/),
   content: z.instanceof(Uint8Array),
+  contentId: z
+    .string()
+    .min(1)
+    .max(255)
+    .regex(/^[^\r\n\0<>]*$/)
+    .optional(),
+  disposition: z.enum(["inline", "attachment"]).optional(),
 });
 
 export type EmailAttachment = z.infer<typeof emailAttachmentSchema>;

@@ -52,6 +52,10 @@ export async function pruneQuillsWorkspace(
     sql`DELETE FROM quills.spam_blocks WHERE (workspace_id,id) IN (SELECT workspace_id,id FROM quills.spam_blocks WHERE expires_at IS NOT NULL AND expires_at<=now() LIMIT 1000)`,
     // Stale widget/agent presence heartbeats (#319).
     sql`DELETE FROM quills.presence_stream WHERE (workspace_id,workspace_key,principal_id,stream_id) IN (SELECT workspace_id,workspace_key,principal_id,stream_id FROM quills.presence_stream WHERE heartbeat_at<now()-interval '1 hour' LIMIT 1000)`,
+    // Expired or revoked single-request magic links (#313).
+    sql`DELETE FROM quills.request_access_links WHERE (workspace_id,id) IN (SELECT workspace_id,id FROM quills.request_access_links WHERE least(expires_at,revoked_at)<now()-interval '30 days' ORDER BY least(expires_at,revoked_at) LIMIT 1000)`,
+    // Ephemeral webhook delivery attempt logs (#330).
+    sql`DELETE FROM quills.webhook_deliveries WHERE (workspace_id,id) IN (SELECT workspace_id,id FROM quills.webhook_deliveries WHERE created_at<now()-${policy.logs}*interval '1 day' ORDER BY created_at LIMIT 1000)`,
   ];
   let removed = 0;
   for (const statement of statements)

@@ -61,7 +61,11 @@ async function solvePow(
  * A client for /api/quills-public/{workspace}. It holds the widget session Bearer token in
  * memory only: never in storage, URLs or logs (RFC 0001).
  */
-export function createApi(base: string, fetchImpl: typeof fetch = fetch) {
+export function createApi(
+  base: string,
+  fetchImpl: typeof fetch = fetch,
+  options?: { widgetProxied?: boolean },
+) {
   let token: string | null = null;
   async function request<T>(
     method: string,
@@ -74,9 +78,13 @@ export function createApi(base: string, fetchImpl: typeof fetch = fetch) {
     isChallengeRetry = false,
   ): Promise<T> {
     const auth = bearer ?? token;
+    const normalizedPath =
+      options?.widgetProxied && path.startsWith("/widget/")
+        ? path.slice("/widget".length)
+        : path;
     let res: Response;
     try {
-      res = await fetchImpl(`${base}${path}`, {
+      res = await fetchImpl(`${base}${normalizedPath}`, {
         method,
         signal,
         // The widget authenticates with its Bearer token only, never with Kaneo cookies.

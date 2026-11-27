@@ -908,7 +908,8 @@
 			"defaultRoleDescriptions": {
 				"viewer": "Pode visualizar e comentar em tarefas.",
 				"member": "Pode criar e gerenciar tarefas e projetos.",
-				"admin": "Tem acesso total ao espaço de trabalho."
+				"admin": "Tem acesso total ao espaço de trabalho.",
+				"collaborator": "Free internal seat: can view threads and add internal notes without replying externally."
 			},
 			"resources": {
 				"project": "Projetos",
@@ -1089,6 +1090,10 @@
 					"manage_settings": {
 						"label": "Manage Quills settings",
 						"description": "Change Quills configuration for this workspace."
+					},
+					"comment_internal": {
+						"description": "Add internal notes and @mention teammates without sending external customer replies.",
+						"label": "Comment internally"
 					}
 				}
 			},
@@ -1109,7 +1114,8 @@
 				"title": "Excluir função",
 				"description": "Isso excluirá permanentemente a função \"{{role}}\". Os membros atribuídos a esta função perderão suas permissões."
 			},
-			"permissionCount_many": "{{count}} permissões"
+			"permissionCount_many": "{{count}} permissões",
+			"freeSeatBadge": "Free seat"
 		},
 		"workspaceLabels": {
 			"pageTitle": "Etiquetas",
@@ -4130,7 +4136,8 @@
 			"owner": "Proprietário",
 			"admin": "Administrador",
 			"member": "Membro",
-			"viewer": "Visualizador"
+			"viewer": "Visualizador",
+			"collaborator": "Collaborator"
 		},
 		"members": {
 			"pageTitle": "Membros",

@@ -53,6 +53,7 @@ import { Route as PortalWorkspaceIdHcIndexRouteImport } from './routes/portal/$w
 import { Route as PortalWorkspaceIdHcSplatRouteImport } from './routes/portal/$workspaceId/hc/$'
 import { Route as PortalWorkspaceIdInviteInviteIdRouteImport } from './routes/portal/$workspaceId/invite/$inviteId'
 import { Route as PortalWorkspaceIdPostsPostIdRouteImport } from './routes/portal/$workspaceId/posts/$postId'
+import { Route as PortalWorkspaceIdRTokenRouteImport } from './routes/portal/$workspaceId/r/$token'
 import { Route as PortalWorkspaceIdStatusIndexRouteImport } from './routes/portal/$workspaceId/status/index'
 import { Route as PortalWorkspaceIdStatusIncidentIdRouteImport } from './routes/portal/$workspaceId/status/$incidentId'
 import { Route as PortalWorkspaceIdSupportIndexRouteImport } from './routes/portal/$workspaceId/support/index'
@@ -395,6 +396,11 @@ const PortalWorkspaceIdPostsPostIdRoute =
     path: '/posts/$postId',
     getParentRoute: () => PortalWorkspaceIdRoute,
   } as any)
+const PortalWorkspaceIdRTokenRoute = PortalWorkspaceIdRTokenRouteImport.update({
+  id: '/r/$token',
+  path: '/r/$token',
+  getParentRoute: () => PortalWorkspaceIdRoute,
+} as any)
 const PortalWorkspaceIdStatusIndexRoute =
   PortalWorkspaceIdStatusIndexRouteImport.update({
     id: '/status/',
@@ -1117,6 +1123,7 @@ export interface FileRoutesByFullPath {
   '/portal/$workspaceId/hc/$': typeof PortalWorkspaceIdHcSplatRoute
   '/portal/$workspaceId/invite/$inviteId': typeof PortalWorkspaceIdInviteInviteIdRoute
   '/portal/$workspaceId/posts/$postId': typeof PortalWorkspaceIdPostsPostIdRoute
+  '/portal/$workspaceId/r/$token': typeof PortalWorkspaceIdRTokenRoute
   '/portal/$workspaceId/status/$incidentId': typeof PortalWorkspaceIdStatusIncidentIdRoute
   '/portal/$workspaceId/support/tickets': typeof PortalWorkspaceIdSupportTicketsRoute
   '/dashboard/': typeof LayoutAuthenticatedDashboardIndexRoute
@@ -1258,6 +1265,7 @@ export interface FileRoutesByTo {
   '/portal/$workspaceId/hc/$': typeof PortalWorkspaceIdHcSplatRoute
   '/portal/$workspaceId/invite/$inviteId': typeof PortalWorkspaceIdInviteInviteIdRoute
   '/portal/$workspaceId/posts/$postId': typeof PortalWorkspaceIdPostsPostIdRoute
+  '/portal/$workspaceId/r/$token': typeof PortalWorkspaceIdRTokenRoute
   '/portal/$workspaceId/status/$incidentId': typeof PortalWorkspaceIdStatusIncidentIdRoute
   '/portal/$workspaceId/support/tickets': typeof PortalWorkspaceIdSupportTicketsRoute
   '/dashboard': typeof LayoutAuthenticatedDashboardIndexRoute
@@ -1404,6 +1412,7 @@ export interface FileRoutesById {
   '/portal/$workspaceId/hc/$': typeof PortalWorkspaceIdHcSplatRoute
   '/portal/$workspaceId/invite/$inviteId': typeof PortalWorkspaceIdInviteInviteIdRoute
   '/portal/$workspaceId/posts/$postId': typeof PortalWorkspaceIdPostsPostIdRoute
+  '/portal/$workspaceId/r/$token': typeof PortalWorkspaceIdRTokenRoute
   '/portal/$workspaceId/status/$incidentId': typeof PortalWorkspaceIdStatusIncidentIdRoute
   '/portal/$workspaceId/support/tickets': typeof PortalWorkspaceIdSupportTicketsRoute
   '/_layout/_authenticated/dashboard/': typeof LayoutAuthenticatedDashboardIndexRoute
@@ -1551,6 +1560,7 @@ export interface FileRouteTypes {
     | '/portal/$workspaceId/hc/$'
     | '/portal/$workspaceId/invite/$inviteId'
     | '/portal/$workspaceId/posts/$postId'
+    | '/portal/$workspaceId/r/$token'
     | '/portal/$workspaceId/status/$incidentId'
     | '/portal/$workspaceId/support/tickets'
     | '/dashboard/'
@@ -1692,6 +1702,7 @@ export interface FileRouteTypes {
     | '/portal/$workspaceId/hc/$'
     | '/portal/$workspaceId/invite/$inviteId'
     | '/portal/$workspaceId/posts/$postId'
+    | '/portal/$workspaceId/r/$token'
     | '/portal/$workspaceId/status/$incidentId'
     | '/portal/$workspaceId/support/tickets'
     | '/dashboard'
@@ -1837,6 +1848,7 @@ export interface FileRouteTypes {
     | '/portal/$workspaceId/hc/$'
     | '/portal/$workspaceId/invite/$inviteId'
     | '/portal/$workspaceId/posts/$postId'
+    | '/portal/$workspaceId/r/$token'
     | '/portal/$workspaceId/status/$incidentId'
     | '/portal/$workspaceId/support/tickets'
     | '/_layout/_authenticated/dashboard/'
@@ -2266,6 +2278,13 @@ declare module '@tanstack/react-router' {
       path: '/posts/$postId'
       fullPath: '/portal/$workspaceId/posts/$postId'
       preLoaderRoute: typeof PortalWorkspaceIdPostsPostIdRouteImport
+      parentRoute: typeof PortalWorkspaceIdRoute
+    }
+    '/portal/$workspaceId/r/$token': {
+      id: '/portal/$workspaceId/r/$token'
+      path: '/r/$token'
+      fullPath: '/portal/$workspaceId/r/$token'
+      preLoaderRoute: typeof PortalWorkspaceIdRTokenRouteImport
       parentRoute: typeof PortalWorkspaceIdRoute
     }
     '/portal/$workspaceId/status/': {
@@ -3441,6 +3460,7 @@ interface PortalWorkspaceIdRouteChildren {
   PortalWorkspaceIdHcSplatRoute: typeof PortalWorkspaceIdHcSplatRoute
   PortalWorkspaceIdInviteInviteIdRoute: typeof PortalWorkspaceIdInviteInviteIdRoute
   PortalWorkspaceIdPostsPostIdRoute: typeof PortalWorkspaceIdPostsPostIdRoute
+  PortalWorkspaceIdRTokenRoute: typeof PortalWorkspaceIdRTokenRoute
   PortalWorkspaceIdStatusIncidentIdRoute: typeof PortalWorkspaceIdStatusIncidentIdRoute
   PortalWorkspaceIdSupportTicketsRoute: typeof PortalWorkspaceIdSupportTicketsRoute
   PortalWorkspaceIdChangelogIndexRoute: typeof PortalWorkspaceIdChangelogIndexRoute
@@ -3469,6 +3489,7 @@ const PortalWorkspaceIdRouteChildren: PortalWorkspaceIdRouteChildren = {
   PortalWorkspaceIdHcSplatRoute: PortalWorkspaceIdHcSplatRoute,
   PortalWorkspaceIdInviteInviteIdRoute: PortalWorkspaceIdInviteInviteIdRoute,
   PortalWorkspaceIdPostsPostIdRoute: PortalWorkspaceIdPostsPostIdRoute,
+  PortalWorkspaceIdRTokenRoute: PortalWorkspaceIdRTokenRoute,
   PortalWorkspaceIdStatusIncidentIdRoute:
     PortalWorkspaceIdStatusIncidentIdRoute,
   PortalWorkspaceIdSupportTicketsRoute: PortalWorkspaceIdSupportTicketsRoute,

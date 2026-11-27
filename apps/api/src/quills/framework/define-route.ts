@@ -238,7 +238,7 @@ export type QuillsRouteDeclaration<
   summary: string;
   description?: string;
   /** Teammate: the checked Quills action. Other audiences: recorded for the ledger, not checked. */
-  action: QuillsAction;
+  action: QuillsAction | readonly QuillsAction[];
   /**
    * Teammate: give the handler `actions`, every Quills action that the caller holds. Use it when the
    * declared action is the minimum and another person's record needs more. Without it, `actions` is empty.
@@ -1130,6 +1130,8 @@ export function buildQuillsRoute<
         return c.body(null, 302, {
           Location: target.url,
           "Cache-Control": `private, max-age=${target.maxAge}`,
+          "Referrer-Policy": "no-referrer",
+          "X-Content-Type-Options": "nosniff",
         });
       }
       if (d.raw) {

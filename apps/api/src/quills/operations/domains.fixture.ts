@@ -7,7 +7,7 @@ const freshDomain = (env: ContractEnv) =>
 
 /** Gives workspace A a domain of this kind, replacing the one it had. */
 const seedDomain =
-  (kind: "portal" | "help_center") => async (env: ContractEnv) => {
+  (kind: "portal" | "help_center" | "widget") => async (env: ContractEnv) => {
     const values = {
       domain: freshDomain(env),
       verificationValue: "contract",
@@ -33,6 +33,7 @@ const set = fixture({
 export const listQuillsCustomDomains = empty;
 export const setQuillsPortalDomain = set;
 export const setQuillsHelpCenterDomain = set;
+export const setQuillsWidgetDomain = set;
 export const removeQuillsPortalDomain = fixture({
   seed: seedDomain("portal"),
   valid: () => ({}),
@@ -41,11 +42,19 @@ export const removeQuillsHelpCenterDomain = fixture({
   seed: seedDomain("help_center"),
   valid: () => ({}),
 });
+export const removeQuillsWidgetDomain = fixture({
+  seed: seedDomain("widget"),
+  valid: () => ({}),
+});
 export const verifyQuillsPortalDomain = fixture({
   seed: seedDomain("portal"),
   valid: () => ({}),
 });
 export const verifyQuillsHelpCenterDomain = fixture({
   seed: seedDomain("help_center"),
+  valid: () => ({}),
+});
+export const verifyQuillsWidgetDomain = fixture({
+  seed: seedDomain("widget"),
   valid: () => ({}),
 });

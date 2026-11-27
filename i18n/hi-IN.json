@@ -900,7 +900,8 @@
 			"defaultRoleDescriptions": {
 				"viewer": "कार्य देख और टिप्पणी कर सकते हैं।",
 				"member": "कार्य और प्रोजेक्ट बना और प्रबंधित कर सकते हैं।",
-				"admin": "वर्कस्पेस तक पूर्ण पहुँच है।"
+				"admin": "वर्कस्पेस तक पूर्ण पहुँच है।",
+				"collaborator": "Free internal seat: can view threads and add internal notes without replying externally."
 			},
 			"resources": {
 				"project": "प्रोजेक्ट",
@@ -1081,6 +1082,10 @@
 					"manage_settings": {
 						"label": "Manage Quills settings",
 						"description": "Change Quills configuration for this workspace."
+					},
+					"comment_internal": {
+						"description": "Add internal notes and @mention teammates without sending external customer replies.",
+						"label": "Comment internally"
 					}
 				}
 			},
@@ -1100,7 +1105,8 @@
 			"deleteDialog": {
 				"title": "भूमिका हटाएँ",
 				"description": "यह भूमिका \"{{role}}\" को स्थायी रूप से हटा देगा। इस भूमिका वाले सदस्य इसकी अनुमतियाँ खो देंगे।"
-			}
+			},
+			"freeSeatBadge": "Free seat"
 		},
 		"workspaceLabels": {
 			"pageTitle": "लेबल",
@@ -4054,7 +4060,8 @@
 			"owner": "मालिक",
 			"admin": "व्यवस्थापक",
 			"member": "सदस्य",
-			"viewer": "दर्शक"
+			"viewer": "दर्शक",
+			"collaborator": "Collaborator"
 		},
 		"members": {
 			"pageTitle": "सदस्य",

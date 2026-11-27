@@ -5,29 +5,20 @@
 declare const process: { env: { QUILLS_BROWSER_IIFE?: string } };
 
 type ToCanvasFn = typeof import("html-to-image").toCanvas;
+type CaptureGlobal = {
+  toCanvas?: ToCanvasFn;
+  capturePage?: (own: (element: Element) => boolean) => Promise<Blob>;
+};
 
 declare global {
   interface Window {
-    __QUILLS_CAPTURE__?: { toCanvas: ToCanvasFn };
+    __QUILLS_CAPTURE__?: CaptureGlobal;
   }
 }
 
 /** Fields whose content never leaves the page. A host can mark any element with data-private. */
-export const PRIVATE_FIELDS = [
-  'input[type="password" i]',
-  'input[type="email" i]',
-  'input[type="tel" i]',
-  '[autocomplete*="email" i]',
-  '[autocomplete*="tel" i]',
-  "[data-private]",
-  '[autocomplete*="cc-" i]',
-  'input[name*="card" i]',
-  'input[name*="cvc" i]',
-  'input[name*="cvv" i]',
-  'input[id*="card" i]',
-  // Frames (for example a payment form) cannot be read; their area is covered.
-  "iframe",
-].join(",");
+export const PRIVATE_FIELDS =
+  'input[type="password" i],input[type="email" i],input[type="tel" i],[autocomplete*="email" i],[autocomplete*="tel" i],[data-private],[autocomplete*="cc-" i],input[name*="card" i],input[name*="cvc" i],input[name*="cvv" i],input[id*="card" i],iframe';
 
 /** The longest side of the image, as in the widget's image editor. */
 const MAX_SIDE = 2048;
@@ -35,20 +26,20 @@ const MASK = "#171717";
 const TRANSPARENT_PIXEL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
-let pendingLoad: Promise<ToCanvasFn> | null = null;
+let pendingLoad: Promise<CaptureGlobal> | null = null;
 
-function loadCaptureScript(url: string): Promise<ToCanvasFn> {
-  if (window.__QUILLS_CAPTURE__?.toCanvas) {
-    return Promise.resolve(window.__QUILLS_CAPTURE__.toCanvas);
+function loadCaptureScript(url: string): Promise<CaptureGlobal> {
+  if (window.__QUILLS_CAPTURE__?.capturePage) {
+    return Promise.resolve(window.__QUILLS_CAPTURE__);
   }
   if (pendingLoad) return pendingLoad;
-  pendingLoad = new Promise<ToCanvasFn>((resolve, reject) => {
+  pendingLoad = new Promise<CaptureGlobal>((resolve, reject) => {
     const script = document.createElement("script");
     script.src = url;
     script.async = true;
     script.onload = () => {
-      const fn = window.__QUILLS_CAPTURE__?.toCanvas;
-      if (fn) resolve(fn);
+      const cap = window.__QUILLS_CAPTURE__;
+      if (cap?.capturePage) resolve(cap);
       else {
         pendingLoad = null;
         reject(new Error("Screenshot capture helper did not initialize."));
@@ -62,20 +53,6 @@ function loadCaptureScript(url: string): Promise<ToCanvasFn> {
     (document.head ?? document.documentElement).appendChild(script);
   });
   return pendingLoad;
-}
-
-async function resolveToCanvas(captureScriptUrl?: string): Promise<ToCanvasFn> {
-  if (window.__QUILLS_CAPTURE__?.toCanvas) {
-    return window.__QUILLS_CAPTURE__.toCanvas;
-  }
-  if (process.env.QUILLS_BROWSER_IIFE === "true") {
-    if (!captureScriptUrl) {
-      throw new Error("Screenshot capture URL is not configured.");
-    }
-    return loadCaptureScript(captureScriptUrl);
-  }
-  const mod = await import("html-to-image");
-  return mod.toCanvas;
 }
 
 function pageBackground() {
@@ -95,7 +72,16 @@ export async function capturePage(
   own: (element: Element) => boolean,
   captureScriptUrl?: string,
 ): Promise<Blob> {
-  const toCanvas = await resolveToCanvas(captureScriptUrl);
+  if (process.env.QUILLS_BROWSER_IIFE === "true") {
+    if (!captureScriptUrl) {
+      throw new Error("Screenshot capture URL is not configured.");
+    }
+    const helper = await loadCaptureScript(captureScriptUrl);
+    return helper.capturePage!(own);
+  }
+  const toCanvas =
+    window.__QUILLS_CAPTURE__?.toCanvas ??
+    (await import("html-to-image")).toCanvas;
   const width = window.innerWidth;
   const height = window.innerHeight;
   const ratio = Math.min(

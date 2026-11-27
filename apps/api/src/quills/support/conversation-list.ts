@@ -25,6 +25,7 @@ import {
 import type { Database, QuillsActor } from "../framework/define-route";
 import {
   findConversation,
+  notFound,
   priorities,
   realConversation,
   selectConversations,
@@ -123,6 +124,7 @@ function conditions(
   db: Database,
   actor: QuillsActor,
   filters: Omit<ListFilters, "sort" | "cursor" | "limit">,
+  allowedTeamIds?: readonly NonNullable<ListFilters["teamId"]>[] | null,
 ): SQL {
   const search = filters.search && escapeLike(filters.search);
   return and(
@@ -210,7 +212,7 @@ function conditions(
       : undefined,
     // The first live message is an agent message by the caller. The ordered limit reads one row per conversation.
     filters.view === "created_by_me"
-      ? sql`(select (m.sender_type = 'agent' and m.principal_id = ${sql.param(actor.principalId, conversationMessages.principalId)}) from ${conversationMessages} m where m.conversation_id = ${conversations.id} and m.deleted_at is null order by m.created_at, m.id limit 1)`
+      ? sql`(select (m.sender_type = 'agent' and m.principal_id = ${sql.param(actor.principalId, conversationMessages.principalId)}) from ${conversationMessages} m where m.conversation_id = ${conversations.id} and m.deleted_at is null and m.send_status = 'sent' order by m.created_at, m.id limit 1)`
       : undefined,
     search
       ? or(
@@ -223,12 +225,16 @@ function conditions(
               .where(
                 and(
                   sql`${conversationMessages.conversationId} = ${conversations.id}`,
+                  eq(conversationMessages.sendStatus, "sent"),
                   isNull(conversationMessages.deletedAt),
                   sql`${conversationMessages.content} ilike ${search}`,
                 ),
               ),
           ),
         )
+      : undefined,
+    allowedTeamIds
+      ? inArray(conversations.assignedTeamId, allowedTeamIds)
       : undefined,
   )!;
 }
@@ -238,13 +244,22 @@ export async function listConversations(
   db: Database,
   actor: QuillsActor,
   filters: ListFilters,
+  allowedTeamIds?: readonly NonNullable<ListFilters["teamId"]>[] | null,
 ) {
-  if (filters.cursor) await findConversation(db, filters.cursor);
+  if (filters.cursor) {
+    const cur = await findConversation(db, filters.cursor);
+    if (
+      allowedTeamIds &&
+      (!cur.assignedTeamId || !allowedTeamIds.includes(cur.assignedTeamId))
+    ) {
+      throw notFound("Conversation");
+    }
+  }
   const { keys, ascending } = sorts[filters.sort];
   const rows = await selectConversations(
     db,
     and(
-      conditions(db, actor, filters),
+      conditions(db, actor, filters, allowedTeamIds),
       filters.cursor ? afterCursor(filters.sort, filters.cursor) : undefined,
     ),
   )

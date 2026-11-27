@@ -27,8 +27,8 @@ export type RuntimeIdentity =
   | { anonymous: true };
 
 export interface RuntimeInitOptions {
-  instanceUrl: string;
-  workspace: string;
+  instanceUrl?: string;
+  workspace?: string;
   placement?: "left" | "right";
   defaultBoard?: string;
   container?: string;
@@ -41,242 +41,178 @@ export interface RuntimeInitOptions {
   locale?: string;
   identity?: RuntimeIdentity;
   tracking?: boolean;
+  /** Custom widget domain or reverse-proxy base URL (e.g. "https://support.acme.com/widget" or "/support-widget") (#318). */
+  baseUrl?: string;
+  /** Optional support email for graceful fallback link when the widget fails to load (#318). */
+  fallbackEmail?: string;
+  /** Milliseconds to wait for the widget iframe before triggering fallback/onLoadError (default 3000) (#318). */
+  loadTimeoutMs?: number;
 }
 
 type SafeResult<T> =
   | { success: true; data: T }
   | { success: false; error: Error };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0;
-}
-
-function isPixels(value: unknown): value is number {
-  return (
-    typeof value === "number" &&
-    Number.isFinite(value) &&
-    value >= 0 &&
-    value <= 400
-  );
-}
-
-function parseTheme(value: unknown): SafeResult<ThemeOption> {
-  if (value === "auto" || value === "light" || value === "dark") {
-    return { success: true, data: value };
-  }
-  return {
-    success: false,
-    error: new Error("Quills: theme must be auto, light or dark"),
-  };
-}
-
-export const themeSchema = {
-  safeParse: parseTheme,
-  parse(value: unknown): ThemeOption {
-    const result = parseTheme(value);
-    if (!result.success) throw result.error;
-    return result.data;
+const isRec = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === "object" && !Array.isArray(v);
+const isStr = (v: unknown): v is string => typeof v === "string";
+const isNonEmpty = (v: unknown): v is string => isStr(v) && v.length > 0;
+const isPx = (v: unknown): v is number =>
+  typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 400;
+const ok = <T>(data: T): SafeResult<T> => ({ success: true, data });
+const err = (msg: string): SafeResult<never> => ({
+  success: false,
+  error: new Error(`Quills: ${msg}`),
+});
+const makeSchema = <T>(safeParse: (v: unknown) => SafeResult<T>) => ({
+  safeParse,
+  parse(v: unknown): T {
+    const r = safeParse(v);
+    if (!r.success) throw r.error;
+    return r.data;
   },
-};
+});
 
-function parseIdentity(value: unknown): SafeResult<RuntimeIdentity> {
-  if (!isRecord(value)) {
-    return {
-      success: false,
-      error: new Error("Quills: identity must be an object"),
-    };
-  }
-  if (isNonEmptyString(value.ssoToken)) {
-    return { success: true, data: { ssoToken: value.ssoToken } };
-  }
-  if (value.anonymous === true) {
-    return { success: true, data: { anonymous: true } };
-  }
+const parseTheme = (v: unknown): SafeResult<ThemeOption> =>
+  v === "auto" || v === "light" || v === "dark"
+    ? ok(v)
+    : err("theme must be auto, light or dark");
+
+export const themeSchema = makeSchema(parseTheme);
+
+function parseIdentity(v: unknown): SafeResult<RuntimeIdentity> {
+  if (!isRec(v)) return err("identity must be an object");
+  if (isNonEmpty(v.ssoToken)) return ok({ ssoToken: v.ssoToken });
+  if (v.anonymous === true) return ok({ anonymous: true });
   if (
-    isNonEmptyString(value.id) &&
-    isNonEmptyString(value.email) &&
-    (value.name === undefined || typeof value.name === "string") &&
-    (value.avatarURL === undefined || typeof value.avatarURL === "string")
+    isNonEmpty(v.id) &&
+    isNonEmpty(v.email) &&
+    (v.name === undefined || isStr(v.name)) &&
+    (v.avatarURL === undefined || isStr(v.avatarURL))
   ) {
-    return {
-      success: true,
-      data: { ...value } as RuntimeIdentity,
-    };
+    return ok({ ...v } as RuntimeIdentity);
   }
-  return {
-    success: false,
-    error: new Error("Quills: invalid identity payload"),
-  };
+  return err("invalid identity payload");
 }
 
-export const identitySchema = {
-  safeParse: parseIdentity,
-  parse(value: unknown): RuntimeIdentity {
-    const result = parseIdentity(value);
-    if (!result.success) throw result.error;
-    return result.data;
-  },
-};
+export const identitySchema = makeSchema(parseIdentity);
 
-function parseInitOptions(value: unknown): SafeResult<RuntimeInitOptions> {
-  if (!isRecord(value)) {
-    return {
-      success: false,
-      error: new Error("Quills: init options must be an object"),
-    };
+function parseInitOptions(v: unknown): SafeResult<RuntimeInitOptions> {
+  if (!isRec(v)) return err("init options must be an object");
+  const out: RuntimeInitOptions = {};
+  if (v.instanceUrl !== undefined) {
+    if (!isStr(v.instanceUrl) || !isSafeHttpUrl(v.instanceUrl))
+      return err("instanceUrl must be an http(s) URL");
+    out.instanceUrl = v.instanceUrl;
   }
-  if (
-    typeof value.instanceUrl !== "string" ||
-    !isSafeHttpUrl(value.instanceUrl)
-  ) {
-    return {
-      success: false,
-      error: new Error("Quills: instanceUrl must be an http(s) URL"),
-    };
+  if (v.workspace !== undefined) {
+    if (!isStr(v.workspace) || !isWorkspaceRef(v.workspace))
+      return err("workspace must be a workspace ID or slug");
+    out.workspace = v.workspace;
   }
-  if (typeof value.workspace !== "string" || !isWorkspaceRef(value.workspace)) {
-    return {
-      success: false,
-      error: new Error("Quills: workspace must be a workspace ID or slug"),
-    };
-  }
-  const out: RuntimeInitOptions = {
-    instanceUrl: value.instanceUrl,
-    workspace: value.workspace,
-  };
-  if (value.placement !== undefined) {
-    if (value.placement !== "left" && value.placement !== "right") {
-      return { success: false, error: new Error("Quills: invalid placement") };
-    }
-    out.placement = value.placement;
-  }
-  if (value.defaultBoard !== undefined) {
-    if (typeof value.defaultBoard !== "string") {
-      return {
-        success: false,
-        error: new Error("Quills: invalid defaultBoard"),
-      };
-    }
-    out.defaultBoard = value.defaultBoard;
-  }
-  if (value.container !== undefined) {
-    if (!isNonEmptyString(value.container)) {
-      return { success: false, error: new Error("Quills: invalid container") };
-    }
-    out.container = value.container;
-  }
-  if (value.launcher !== undefined) {
-    if (typeof value.launcher === "boolean") {
-      out.launcher = value.launcher;
-    } else if (
-      isRecord(value.launcher) &&
-      isNonEmptyString(value.launcher.selector)
-    ) {
-      out.launcher = { selector: value.launcher.selector };
-    } else {
-      return {
-        success: false,
-        error: new Error("Quills: invalid launcher option"),
-      };
-    }
-  }
-  if (value.theme !== undefined) {
-    const parsed = parseTheme(value.theme);
-    if (!parsed.success) return parsed;
-    out.theme = parsed.data;
-  }
-  if (value.announcements !== undefined) {
+  if (v.baseUrl !== undefined) {
     if (
-      value.announcements !== "whisper" &&
-      value.announcements !== "full" &&
-      value.announcements !== "none"
-    ) {
-      return {
-        success: false,
-        error: new Error("Quills: invalid announcements mode"),
-      };
-    }
-    out.announcements = value.announcements;
+      !isStr(v.baseUrl) ||
+      !(
+        isSafeHttpUrl(v.baseUrl) ||
+        (v.baseUrl.startsWith("/") && !v.baseUrl.startsWith("//"))
+      )
+    )
+      return err("baseUrl must be an http(s) URL or root-relative path");
+    out.baseUrl = v.baseUrl;
   }
-  if (value.pageUrl !== undefined) {
+  if (!(out.baseUrl || (out.instanceUrl && out.workspace)))
+    return err("provide baseUrl or both instanceUrl and workspace");
+  if (v.fallbackEmail !== undefined) {
     if (
-      value.pageUrl !== "path" &&
-      value.pageUrl !== "origin" &&
-      value.pageUrl !== "none"
-    ) {
-      return {
-        success: false,
-        error: new Error("Quills: invalid pageUrl mode"),
-      };
-    }
-    out.pageUrl = value.pageUrl;
+      !isStr(v.fallbackEmail) ||
+      v.fallbackEmail.length < 3 ||
+      v.fallbackEmail.length > 320 ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.fallbackEmail.trim())
+    )
+      return err("fallbackEmail must be a valid email address");
+    out.fallbackEmail = v.fallbackEmail;
   }
-  if (value.preload !== undefined) {
-    if (value.preload !== "interaction" && value.preload !== "idle") {
-      return {
-        success: false,
-        error: new Error("Quills: invalid preload mode"),
-      };
-    }
-    out.preload = value.preload;
+  if (v.loadTimeoutMs !== undefined) {
+    if (
+      typeof v.loadTimeoutMs !== "number" ||
+      !Number.isFinite(v.loadTimeoutMs) ||
+      v.loadTimeoutMs < 250 ||
+      v.loadTimeoutMs > 30000
+    )
+      return err("invalid loadTimeoutMs");
+    out.loadTimeoutMs = v.loadTimeoutMs;
   }
-  if (value.offset !== undefined) {
-    if (!isRecord(value.offset)) {
-      return { success: false, error: new Error("Quills: invalid offset") };
-    }
+  if (v.placement !== undefined) {
+    if (v.placement !== "left" && v.placement !== "right")
+      return err("invalid placement");
+    out.placement = v.placement;
+  }
+  if (v.defaultBoard !== undefined) {
+    if (!isStr(v.defaultBoard)) return err("invalid defaultBoard");
+    out.defaultBoard = v.defaultBoard;
+  }
+  if (v.container !== undefined) {
+    if (!isNonEmpty(v.container)) return err("invalid container");
+    out.container = v.container;
+  }
+  if (v.launcher !== undefined) {
+    if (typeof v.launcher === "boolean") out.launcher = v.launcher;
+    else if (isRec(v.launcher) && isNonEmpty(v.launcher.selector))
+      out.launcher = { selector: v.launcher.selector };
+    else return err("invalid launcher option");
+  }
+  if (v.theme !== undefined) {
+    const r = parseTheme(v.theme);
+    if (!r.success) return r;
+    out.theme = r.data;
+  }
+  if (v.announcements !== undefined) {
+    if (
+      v.announcements !== "whisper" &&
+      v.announcements !== "full" &&
+      v.announcements !== "none"
+    )
+      return err("invalid announcements mode");
+    out.announcements = v.announcements;
+  }
+  if (v.pageUrl !== undefined) {
+    if (v.pageUrl !== "path" && v.pageUrl !== "origin" && v.pageUrl !== "none")
+      return err("invalid pageUrl mode");
+    out.pageUrl = v.pageUrl;
+  }
+  if (v.preload !== undefined) {
+    if (v.preload !== "interaction" && v.preload !== "idle")
+      return err("invalid preload mode");
+    out.preload = v.preload;
+  }
+  if (v.offset !== undefined) {
+    if (!isRec(v.offset)) return err("invalid offset");
     const offset: { bottom?: number; side?: number } = {};
-    if (value.offset.bottom !== undefined) {
-      if (!isPixels(value.offset.bottom)) {
-        return {
-          success: false,
-          error: new Error("Quills: invalid offset.bottom"),
-        };
-      }
-      offset.bottom = value.offset.bottom;
+    if (v.offset.bottom !== undefined) {
+      if (!isPx(v.offset.bottom)) return err("invalid offset.bottom");
+      offset.bottom = v.offset.bottom;
     }
-    if (value.offset.side !== undefined) {
-      if (!isPixels(value.offset.side)) {
-        return {
-          success: false,
-          error: new Error("Quills: invalid offset.side"),
-        };
-      }
-      offset.side = value.offset.side;
+    if (v.offset.side !== undefined) {
+      if (!isPx(v.offset.side)) return err("invalid offset.side");
+      offset.side = v.offset.side;
     }
     out.offset = offset;
   }
-  if (value.locale !== undefined) {
-    if (typeof value.locale !== "string") {
-      return { success: false, error: new Error("Quills: invalid locale") };
-    }
-    out.locale = value.locale;
+  if (v.locale !== undefined) {
+    if (!isStr(v.locale)) return err("invalid locale");
+    out.locale = v.locale;
   }
-  if (value.identity !== undefined) {
-    const parsed = parseIdentity(value.identity);
-    if (!parsed.success) return parsed;
-    out.identity = parsed.data;
+  if (v.identity !== undefined) {
+    const r = parseIdentity(v.identity);
+    if (!r.success) return r;
+    out.identity = r.data;
   }
-  if (value.tracking !== undefined) {
-    if (typeof value.tracking !== "boolean") {
-      return {
-        success: false,
-        error: new Error("Quills: invalid tracking option"),
-      };
-    }
-    out.tracking = value.tracking;
+  if (v.tracking !== undefined) {
+    if (typeof v.tracking !== "boolean") return err("invalid tracking option");
+    out.tracking = v.tracking;
   }
-  return { success: true, data: out };
+  return ok(out);
 }
 
-export const initOptionsSchema = {
-  safeParse: parseInitOptions,
-  parse(value: unknown): RuntimeInitOptions {
-    const result = parseInitOptions(value);
-    if (!result.success) throw result.error;
-    return result.data;
-  },
-};
+export const initOptionsSchema = makeSchema(parseInitOptions);

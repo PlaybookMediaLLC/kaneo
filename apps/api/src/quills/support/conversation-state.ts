@@ -1,7 +1,10 @@
-import { and, eq, isNull, ne } from "drizzle-orm";
+import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
 import { apiRouter, z, type BaseVariables } from "../../openapi";
-import { principal } from "../../database/quills/schema/auth";
+import {
+  principal,
+  user as customerUser,
+} from "../../database/quills/schema/auth";
 import { conversations } from "../../database/quills/schema/conversation";
 import { defineQuillsRoute, type Database } from "../framework/define-route";
 import { memberUserIds } from "../framework/platform-reads";
@@ -15,9 +18,11 @@ import {
   loadConversation,
   priorities,
   statuses,
+  systemNotice,
   type Conversation,
   type ConversationId,
 } from "./conversation-model";
+import { readReopenPolicy } from "./support-settings";
 import {
   assignAgent,
   assignTeam,
@@ -405,6 +410,128 @@ const availabilityRoute = defineQuillsRoute({
   },
 });
 
+const setRequesterRoute = defineQuillsRoute({
+  ...common,
+  method: "patch",
+  path: "/conversations/{conversationId}/requester",
+  operationId: "setQuillsConversationRequester",
+  summary: "Override the customer requester on a conversation",
+  description:
+    "Reassigns a conversation's requester by email (creating the customer profile if needed) and clears any forward-parse warning (#325).",
+  body: z.object({
+    email: z.email().max(320),
+    name: z.string().trim().min(1).max(200).optional(),
+  }),
+  event: ({ params }, result) =>
+    result.changed && {
+      type: "conversation.requester_changed",
+      entityType: "conversation",
+      entityId: params.conversationId,
+      payload: { visitorPrincipalId: result.visitorPrincipalId },
+    },
+  handler: ({ db, params, body }) =>
+    apply(db, params.conversationId, async (conversation) => {
+      const address = body.email.trim().toLowerCase();
+      const displayName = (body.name ?? address.split("@")[0]!).slice(0, 200);
+      const findUser = async () =>
+        (
+          await db
+            .select({ id: customerUser.id })
+            .from(customerUser)
+            .where(sql`lower(${customerUser.email}) = ${address}`)
+            .limit(1)
+        )[0];
+      if (!(await findUser())) {
+        await db
+          .insert(customerUser)
+          .values({
+            name: displayName,
+            email: address,
+            emailVerified: false,
+          })
+          .onConflictDoNothing();
+      }
+      const identity = (await findUser())!;
+      await db
+        .insert(principal)
+        .values({
+          userId: identity.id,
+          role: "user",
+          type: "user",
+          displayName,
+          createdAt: new Date(),
+        })
+        .onConflictDoNothing();
+      const [nextVisitor] = await db
+        .select({ id: principal.id })
+        .from(principal)
+        .where(eq(principal.userId, identity.id))
+        .limit(1);
+      if (!nextVisitor) return false;
+      const changed =
+        conversation.visitorPrincipalId !== nextVisitor.id ||
+        conversation.visitorEmail !== address ||
+        conversation.forwardParseFailed;
+      if (!changed) return false;
+      await db
+        .update(conversations)
+        .set({
+          visitorPrincipalId: nextVisitor.id,
+          visitorEmail: address,
+          forwardParseFailed: false,
+          updatedAt: new Date(),
+        })
+        .where(eq(conversations.id, conversation.id));
+      return true;
+    }),
+});
+
+const offerSolutionRoute = defineQuillsRoute({
+  ...common,
+  method: "post",
+  path: "/conversations/{conversationId}/offer-solution",
+  operationId: "offerQuillsConversationSolution",
+  summary:
+    "Offer a solution and start the quiet auto-close confirmation window (#311)",
+  description:
+    "Keeps the conversation open in solution-offered state, schedules one polite reminder before quiet auto-close, and avoids prematurely closing a ticket before the customer confirms.",
+  body: z
+    .object({
+      autoCloseAfterDays: z.number().int().min(1).max(30).optional(),
+    })
+    .default({}),
+  event: ({ params }, result) =>
+    result.changed && {
+      type: "conversation.solution_offered",
+      entityType: "conversation",
+      entityId: params.conversationId,
+      payload: {},
+    },
+  handler: ({ db, params, body }) =>
+    apply(db, params.conversationId, async (conversation) => {
+      if (conversation.status === "closed") return false;
+      const policy = await readReopenPolicy(db);
+      const days = body.autoCloseAfterDays ?? policy.autoCloseAfterDays;
+      const now = new Date();
+      const autoCloseAt = new Date(now.getTime() + days * 86_400_000);
+      await db
+        .update(conversations)
+        .set({
+          solutionOfferedAt: now,
+          closeReminderSentAt: null,
+          autoCloseAt,
+          updatedAt: now,
+        })
+        .where(eq(conversations.id, conversation.id));
+      await systemNotice(
+        db,
+        conversation.id,
+        `Solution offered — waiting for customer confirmation (auto-closes quietly in ${days} days if resolved).`,
+      );
+      return true;
+    }),
+});
+
 export default apiRouter<BaseVariables & { workspaceId: string }>()
   .openapi(...setStatusRoute)
   .openapi(...snoozeRoute)
@@ -418,4 +545,6 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .openapi(...contactEmailRoute)
   .openapi(...translationRoute)
   .openapi(...dismissRoute)
-  .openapi(...availabilityRoute);
+  .openapi(...availabilityRoute)
+  .openapi(...setRequesterRoute)
+  .openapi(...offerSolutionRoute);

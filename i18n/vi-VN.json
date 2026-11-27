@@ -891,7 +891,8 @@
 			"defaultRoleDescriptions": {
 				"viewer": "Có thể xem và bình luận công việc.",
 				"member": "Có thể tạo và quản lý công việc, dự án.",
-				"admin": "Có toàn quyền truy cập không gian làm việc."
+				"admin": "Có toàn quyền truy cập không gian làm việc.",
+				"collaborator": "Free internal seat: can view threads and add internal notes without replying externally."
 			},
 			"resources": {
 				"project": "Dự án",
@@ -1072,6 +1073,10 @@
 					"manage_settings": {
 						"label": "Manage Quills settings",
 						"description": "Change Quills configuration for this workspace."
+					},
+					"comment_internal": {
+						"description": "Add internal notes and @mention teammates without sending external customer replies.",
+						"label": "Comment internally"
 					}
 				}
 			},
@@ -1091,7 +1096,8 @@
 			"deleteDialog": {
 				"title": "Xóa vai trò",
 				"description": "Thao tác này sẽ xóa vĩnh viễn vai trò \"{{role}}\". Các thành viên được gán vai trò này sẽ mất các quyền của nó."
-			}
+			},
+			"freeSeatBadge": "Free seat"
 		},
 		"workspaceLabels": {
 			"pageTitle": "Nhãn",
@@ -3978,7 +3984,8 @@
 			"owner": "Chủ sở hữu",
 			"admin": "Quản trị viên",
 			"member": "Thành viên",
-			"viewer": "Người xem"
+			"viewer": "Người xem",
+			"collaborator": "Collaborator"
 		},
 		"members": {
 			"pageTitle": "Thành viên",

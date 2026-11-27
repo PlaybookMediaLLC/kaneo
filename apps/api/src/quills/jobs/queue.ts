@@ -159,12 +159,21 @@ export async function finishQuillsJob(
     .for("update");
   if (!job) throw new Error("Quills job lease lost");
   const retry = Boolean(error && !permanent && job.attempts < job.maxAttempts);
+  // 10-attempt ~24h schedule for reliable webhooks (#330); compact backoff for other jobs.
+  const LONG_BACKOFF = [
+    10, 30, 120, 600, 1800, 3600, 7200, 14400, 28800, 28800,
+  ];
+  const delaySeconds =
+    job.maxAttempts >= 8
+      ? (LONG_BACKOFF[Math.min(job.attempts - 1, LONG_BACKOFF.length - 1)] ??
+        28800)
+      : Math.min(3600, 2 ** job.attempts * 10);
   await db
     .update(jobQueue)
     .set({
       status: retry ? "pending" : error ? "failed" : "succeeded",
       lastError: error ?? null,
-      runAt: sql`now()+${Math.min(3600, 2 ** job.attempts * 10)}*interval '1 second'`,
+      runAt: sql`now()+${delaySeconds}*interval '1 second'`,
       finishedAt: retry ? null : new Date(),
       leaseToken: null,
       lockedUntil: null,

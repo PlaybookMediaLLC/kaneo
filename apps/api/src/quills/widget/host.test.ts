@@ -66,6 +66,9 @@ describe("widget host page and bundles", () => {
     expect(policy).toContain("frame-ancestors http: https:");
     expect(policy).not.toContain("unsafe");
     expect(res.headers.get("cache-control")).toBe("no-cache");
+    expect(res.headers.get("cross-origin-resource-policy")).toBe(
+      "cross-origin",
+    );
     const html = await res.text();
     expect(html).toMatch(/src="widget\/host\.js\?v=[0-9a-f]{16}"/);
     expect(html).toMatch(/href="widget\/host\.css\?v=[0-9a-f]{16}"/);
@@ -82,12 +85,18 @@ describe("widget host page and bundles", () => {
     expect(pinned.headers.get("cache-control")).toBe(
       "public, max-age=31536000, immutable",
     );
+    expect(pinned.headers.get("cross-origin-resource-policy")).toBe(
+      "cross-origin",
+    );
     expect(pinned.headers.get("content-type")).toContain("text/javascript");
     expect(await pinned.text()).toBe("console.log('host')");
     const stale = await app.request("/quills-public/acme/widget/host.js?v=old");
     expect(stale.headers.get("cache-control")).toBe("public, max-age=300");
     const sdk = await app.request("/quills-public/acme/widget/sdk.js");
     expect(sdk.headers.get("cache-control")).toBe("public, max-age=300");
+    expect(sdk.headers.get("cross-origin-resource-policy")).toBe(
+      "cross-origin",
+    );
     expect(await sdk.text()).toBe("window.QuillsBundle=1");
     expect(
       (await app.request("/quills-public/acme/widget/host.css")).headers.get(

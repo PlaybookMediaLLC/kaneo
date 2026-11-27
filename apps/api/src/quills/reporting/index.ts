@@ -5,6 +5,7 @@ import fullExport from "../transfer/runs/full-export";
 import importRuns from "../transfer/runs/import-runs";
 import adminOverview from "./admin-overview";
 import analytics from "./analytics";
+import reopens from "./reopens";
 import teamCounts from "./team-counts";
 import visitorAnalytics from "./visitor-analytics";
 
@@ -12,6 +13,7 @@ import visitorAnalytics from "./visitor-analytics";
 export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", analytics)
   .route("/", adminOverview)
+  .route("/", reopens)
   .route("/", visitorAnalytics)
   .route("/", teamCounts)
   .route("/", dataRuns)

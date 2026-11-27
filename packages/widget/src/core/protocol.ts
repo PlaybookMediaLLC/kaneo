@@ -128,62 +128,45 @@ export type OutboundMessage =
   | { type: "quackback:capture"; id: string }
   | EventMessage;
 
-const VIEWS = new Set<string>([
-  "home",
-  "new-post",
-  "changelog",
-  "help",
-  "chat",
-  "messages",
-  "tickets",
-  "notifications",
-]);
+const VIEWS = new Set<string>(WIDGET_VIEWS);
 const SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/;
+const NO = { success: false as const };
+const ok = (data: OutboundMessage) => ({ success: true as const, data });
+const ev = <K extends EventMessage["name"]>(
+  name: K,
+  payload: EventMap[K],
+): EventMessage => ({ type: "quackback:event", name, payload }) as EventMessage;
 
-function isRec(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
+const isRec = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === "object" && !Array.isArray(v);
+const isStr = (v: unknown): v is string => typeof v === "string";
+const isBool = (v: unknown): v is boolean => typeof v === "boolean";
+const isCount = (v: unknown): v is number =>
+  typeof v === "number" && Number.isInteger(v) && v >= 0;
 
-function isCount(value: unknown): value is number {
-  return typeof value === "number" && Number.isInteger(value) && value >= 0;
-}
-
-function parseUser(value: unknown): WidgetUser | null {
-  if (!isRec(value)) return null;
+function parseUser(v: unknown): WidgetUser | null {
   if (
-    typeof value.id !== "string" ||
-    value.id.length === 0 ||
-    typeof value.name !== "string" ||
-    typeof value.email !== "string"
-  ) {
+    !isRec(v) ||
+    !isStr(v.id) ||
+    !v.id ||
+    !isStr(v.name) ||
+    !isStr(v.email) ||
+    (v.avatarUrl !== undefined && v.avatarUrl !== null && !isStr(v.avatarUrl))
+  )
     return null;
-  }
-  if (
-    value.avatarUrl !== undefined &&
-    value.avatarUrl !== null &&
-    typeof value.avatarUrl !== "string"
-  ) {
-    return null;
-  }
   return {
-    id: value.id,
-    name: value.name,
-    email: value.email,
-    ...(value.avatarUrl !== undefined ? { avatarUrl: value.avatarUrl } : {}),
+    id: v.id,
+    name: v.name,
+    email: v.email,
+    ...(v.avatarUrl !== undefined ? { avatarUrl: v.avatarUrl } : {}),
   };
 }
 
-function parseWarnings(value: unknown): IdentifyWarning[] | null {
-  if (!Array.isArray(value)) return null;
+function parseWarnings(v: unknown): IdentifyWarning[] | null {
+  if (!Array.isArray(v)) return null;
   const list: IdentifyWarning[] = [];
-  for (const item of value) {
-    if (
-      !isRec(item) ||
-      typeof item.code !== "string" ||
-      typeof item.field !== "string"
-    ) {
-      return null;
-    }
+  for (const item of v) {
+    if (!isRec(item) || !isStr(item.code) || !isStr(item.field)) return null;
     list.push({ code: item.code, field: item.field });
   }
   return list;
@@ -193,141 +176,95 @@ function parseEventPayload(name: string, p: unknown): EventMessage | null {
   if (!isRec(p)) return null;
   switch (name) {
     case "ready":
-      return { type: "quackback:event", name: "ready", payload: {} };
+      return ev("ready", {});
     case "close":
-      return { type: "quackback:event", name: "close", payload: {} };
+      return ev("close", {});
     case "open": {
-      if (
-        p.view !== undefined &&
-        (typeof p.view !== "string" || !VIEWS.has(p.view))
-      )
+      if (p.view !== undefined && (!isStr(p.view) || !VIEWS.has(p.view)))
         return null;
+      const out: EventMap["open"] = {};
+      if (p.view !== undefined) out.view = p.view as WidgetViewName;
       for (const k of [
         "postId",
         "articleId",
         "entryId",
         "conversationId",
       ] as const) {
-        if (p[k] !== undefined && typeof p[k] !== "string") return null;
+        if (p[k] !== undefined) {
+          if (!isStr(p[k])) return null;
+          out[k] = p[k];
+        }
       }
-      return {
-        type: "quackback:event",
-        name: "open",
-        payload: {
-          ...(p.view !== undefined ? { view: p.view as WidgetViewName } : {}),
-          ...(p.postId !== undefined ? { postId: p.postId as string } : {}),
-          ...(p.articleId !== undefined
-            ? { articleId: p.articleId as string }
-            : {}),
-          ...(p.entryId !== undefined ? { entryId: p.entryId as string } : {}),
-          ...(p.conversationId !== undefined
-            ? { conversationId: p.conversationId as string }
-            : {}),
-        },
-      };
+      return ev("open", out);
     }
-    case "post:created": {
+    case "post:created":
       if (
-        typeof p.id !== "string" ||
-        typeof p.title !== "string" ||
+        !isStr(p.id) ||
+        !isStr(p.title) ||
         !isRec(p.board) ||
-        typeof p.board.id !== "string" ||
-        typeof p.board.name !== "string" ||
-        typeof p.board.slug !== "string" ||
-        (p.statusId !== null && typeof p.statusId !== "string")
+        !isStr(p.board.id) ||
+        !isStr(p.board.name) ||
+        !isStr(p.board.slug) ||
+        (p.statusId !== null && !isStr(p.statusId))
       )
         return null;
-      return {
-        type: "quackback:event",
-        name: "post:created",
-        payload: {
-          id: p.id,
-          title: p.title,
-          board: { id: p.board.id, name: p.board.name, slug: p.board.slug },
-          statusId: p.statusId,
-        },
-      };
-    }
-    case "vote": {
+      return ev("post:created", {
+        id: p.id,
+        title: p.title,
+        board: { id: p.board.id, name: p.board.name, slug: p.board.slug },
+        statusId: p.statusId,
+      });
+    case "vote":
       if (
-        typeof p.postId !== "string" ||
-        typeof p.voted !== "boolean" ||
+        !isStr(p.postId) ||
+        !isBool(p.voted) ||
         (p.voteCount !== undefined && !isCount(p.voteCount))
       )
         return null;
-      return {
-        type: "quackback:event",
-        name: "vote",
-        payload: {
-          postId: p.postId,
-          voted: p.voted,
-          ...(p.voteCount !== undefined ? { voteCount: p.voteCount } : {}),
-        },
-      };
-    }
-    case "comment:created": {
+      return ev("vote", {
+        postId: p.postId,
+        voted: p.voted,
+        ...(p.voteCount !== undefined ? { voteCount: p.voteCount } : {}),
+      });
+    case "comment:created":
       if (
-        typeof p.postId !== "string" ||
-        typeof p.commentId !== "string" ||
-        (p.parentId !== null && typeof p.parentId !== "string")
+        !isStr(p.postId) ||
+        !isStr(p.commentId) ||
+        (p.parentId !== null && !isStr(p.parentId))
       )
         return null;
-      return {
-        type: "quackback:event",
-        name: "comment:created",
-        payload: {
-          postId: p.postId,
-          commentId: p.commentId,
-          parentId: p.parentId,
-        },
-      };
-    }
+      return ev("comment:created", {
+        postId: p.postId,
+        commentId: p.commentId,
+        parentId: p.parentId,
+      });
     case "identify": {
-      if (typeof p.success !== "boolean" || typeof p.anonymous !== "boolean")
-        return null;
+      if (!isBool(p.success) || !isBool(p.anonymous)) return null;
       const user = p.user === null ? null : parseUser(p.user);
       if (p.user !== null && !user) return null;
-      if (p.error !== undefined && typeof p.error !== "string") return null;
+      if (p.error !== undefined && !isStr(p.error)) return null;
       const warnings =
         p.warnings === undefined ? undefined : parseWarnings(p.warnings);
       if (warnings === null) return null;
-      return {
-        type: "quackback:event",
-        name: "identify",
-        payload: {
-          success: p.success,
-          user,
-          anonymous: p.anonymous,
-          ...(p.error !== undefined ? { error: p.error } : {}),
-          ...(warnings !== undefined ? { warnings } : {}),
-        },
-      };
+      return ev("identify", {
+        success: p.success,
+        user,
+        anonymous: p.anonymous,
+        ...(p.error !== undefined ? { error: p.error } : {}),
+        ...(warnings !== undefined ? { warnings } : {}),
+      });
     }
     case "email-submitted":
-      if (typeof p.email !== "string") return null;
-      return {
-        type: "quackback:event",
-        name: "email-submitted",
-        payload: { email: p.email },
-      };
+      return isStr(p.email) ? ev("email-submitted", { email: p.email }) : null;
     case "unread":
-      if (!isCount(p.count)) return null;
-      return {
-        type: "quackback:event",
-        name: "unread",
-        payload: { count: p.count },
-      };
+      return isCount(p.count) ? ev("unread", { count: p.count }) : null;
     case "presence":
-      if (
-        typeof p.online !== "boolean" ||
-        typeof p.withinOfficeHours !== "boolean"
-      )
-        return null;
-      return {
-        type: "quackback:event",
-        name: "presence",
-        payload: { online: p.online, withinOfficeHours: p.withinOfficeHours },
-      };
+      return isBool(p.online) && isBool(p.withinOfficeHours)
+        ? ev("presence", {
+            online: p.online,
+            withinOfficeHours: p.withinOfficeHours,
+          })
+        : null;
     default:
       return null;
   }
@@ -337,94 +274,77 @@ export const outboundMessageSchema = {
   safeParse(
     raw: unknown,
   ): { success: true; data: OutboundMessage } | { success: false } {
-    if (!isRec(raw) || typeof raw.type !== "string") return { success: false };
+    if (!isRec(raw) || !isStr(raw.type)) return NO;
     switch (raw.type) {
       case "quackback:ready":
-        return { success: true, data: { type: "quackback:ready" } };
+        return ok({ type: "quackback:ready" });
       case "quackback:close":
-        return { success: true, data: { type: "quackback:close" } };
+        return ok({ type: "quackback:close" });
       case "quackback:navigate":
-        return typeof raw.url === "string"
-          ? {
-              success: true,
-              data: { type: "quackback:navigate", url: raw.url },
-            }
-          : { success: false };
+        return isStr(raw.url)
+          ? ok({ type: "quackback:navigate", url: raw.url })
+          : NO;
       case "quackback:expand":
-        return typeof raw.expanded === "boolean"
-          ? {
-              success: true,
-              data: { type: "quackback:expand", expanded: raw.expanded },
-            }
-          : { success: false };
+        return isBool(raw.expanded)
+          ? ok({ type: "quackback:expand", expanded: raw.expanded })
+          : NO;
       case "quackback:identify-result": {
-        if (typeof raw.success !== "boolean") return { success: false };
+        if (!isBool(raw.success)) return NO;
         let user: WidgetUser | null | undefined;
         if (raw.user === null) user = null;
         else if (raw.user !== undefined) {
           const parsed = parseUser(raw.user);
-          if (!parsed) return { success: false };
+          if (!parsed) return NO;
           user = parsed;
         }
-        if (raw.error !== undefined && typeof raw.error !== "string")
-          return { success: false };
+        if (raw.error !== undefined && !isStr(raw.error)) return NO;
         const warnings =
           raw.warnings === undefined ? undefined : parseWarnings(raw.warnings);
-        if (warnings === null) return { success: false };
-        return {
-          success: true,
-          data: {
-            type: "quackback:identify-result",
-            success: raw.success,
-            ...(raw.user !== undefined ? { user } : {}),
-            ...(raw.error !== undefined ? { error: raw.error } : {}),
-            ...(warnings !== undefined ? { warnings } : {}),
-          },
-        };
+        if (warnings === null) return NO;
+        return ok({
+          type: "quackback:identify-result",
+          success: raw.success,
+          ...(raw.user !== undefined ? { user } : {}),
+          ...(raw.error !== undefined ? { error: raw.error } : {}),
+          ...(warnings !== undefined ? { warnings } : {}),
+        });
       }
       case "quackback:auth-change": {
         const user = raw.user === null ? null : parseUser(raw.user);
-        if (raw.user !== null && !user) return { success: false };
-        return { success: true, data: { type: "quackback:auth-change", user } };
+        return raw.user !== null && !user
+          ? NO
+          : ok({ type: "quackback:auth-change", user });
       }
       case "quackback:unread":
         return isCount(raw.count)
-          ? {
-              success: true,
-              data: { type: "quackback:unread", count: raw.count },
-            }
-          : { success: false };
+          ? ok({ type: "quackback:unread", count: raw.count })
+          : NO;
       case "quackback:announce":
-        if (
-          typeof raw.entryId !== "string" ||
-          !SAFE_ID.test(raw.entryId) ||
-          typeof raw.title !== "string" ||
-          raw.title.length < 1 ||
-          raw.title.length > 300 ||
-          typeof raw.open !== "boolean"
-        ) {
-          return { success: false };
-        }
-        return {
-          success: true,
-          data: {
-            type: "quackback:announce",
-            entryId: raw.entryId,
-            title: raw.title,
-            open: raw.open,
-          },
-        };
+        return isStr(raw.entryId) &&
+          SAFE_ID.test(raw.entryId) &&
+          isStr(raw.title) &&
+          raw.title.length >= 1 &&
+          raw.title.length <= 300 &&
+          isBool(raw.open)
+          ? ok({
+              type: "quackback:announce",
+              entryId: raw.entryId,
+              title: raw.title,
+              open: raw.open,
+            })
+          : NO;
       case "quackback:capture":
-        return typeof raw.id === "string" && SAFE_ID.test(raw.id)
-          ? { success: true, data: { type: "quackback:capture", id: raw.id } }
-          : { success: false };
+        return isStr(raw.id) && SAFE_ID.test(raw.id)
+          ? ok({ type: "quackback:capture", id: raw.id })
+          : NO;
       case "quackback:event": {
-        if (typeof raw.name !== "string") return { success: false };
-        const evt = parseEventPayload(raw.name, raw.payload);
-        return evt ? { success: true, data: evt } : { success: false };
+        const evt = isStr(raw.name)
+          ? parseEventPayload(raw.name, raw.payload)
+          : null;
+        return evt ? ok(evt) : NO;
       }
       default:
-        return { success: false };
+        return NO;
     }
   },
 };

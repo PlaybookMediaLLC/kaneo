@@ -38,6 +38,42 @@ export const updateQuillsConversationMessage = fixture({
   }),
 });
 export const deleteQuillsConversationMessage = visitorMessage;
+const scheduledMessage = fixture({
+  seed: async (env, caller) => {
+    const ids = await seeded("own")(env, caller);
+    const future = new Date(Date.now() + 60_000);
+    const makeScheduled = async (ws: string, convId: string, userId?: string) =>
+      env.scoped(
+        ws,
+        async (db, actor) => {
+          const { conversationMessages } =
+            await import("../../database/quills/schema/conversation");
+          const [row] = await db
+            .insert(conversationMessages)
+            .values({
+              conversationId: convId as never,
+              principalId: actor.principalId,
+              senderType: "agent",
+              content: "Scheduled draft",
+              sendStatus: "scheduled",
+              scheduledSendAt: future,
+            })
+            .returning({ id: conversationMessages.id });
+          return row!.id;
+        },
+        userId,
+      );
+    const [aScheduledId, bScheduledId] = await Promise.all([
+      makeScheduled(env.a, ids.a.conversationId, caller),
+      makeScheduled(env.b, ids.b.conversationId),
+    ]);
+    return { ...ids, aScheduledId, bScheduledId };
+  },
+  valid: (ids) => ({ params: { messageId: ids.aScheduledId } }),
+  foreign: (ids) => ({ messageId: ids.bScheduledId }),
+});
+export const recallQuillsScheduledMessage = scheduledMessage;
+export const sendQuillsScheduledMessageNow = scheduledMessage;
 export const setQuillsMessageReaction = { ...visitorMessage, valid: withEmoji };
 export const removeQuillsMessageReaction = {
   ...visitorMessage,

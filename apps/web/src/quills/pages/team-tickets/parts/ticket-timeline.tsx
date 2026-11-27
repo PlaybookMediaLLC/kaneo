@@ -1,14 +1,23 @@
 import { useTranslation } from "react-i18next";
+import {
+  useRecallScheduledMessage,
+  useSendScheduledMessageNow,
+} from "../../../hooks/team/use-scheduled-send";
+import { useTeamRuntime } from "../../../team/runtime";
 import { DateSeparator } from "../../../ui/inbox/date-separator";
 import type { InboxPerson } from "../../../ui/inbox/inbox-types";
 import { MessageBubble } from "../../../ui/inbox/message-bubble";
+import { ScheduledSendFooter } from "../../../ui/inbox/scheduled-send-footer";
 import { SystemEvent } from "../../../ui/inbox/system-event";
+import type { Teammate } from "../ticket-scope";
 import { activityText, type TimelineEntry } from "../timeline";
 
 export interface TicketTimelineProps {
   entries: readonly TimelineEntry[];
   /** The requester, for the customer messages. */
   requester: InboxPerson;
+  people?: readonly Teammate[];
+  onRestoreDraft?: (content: string) => void;
 }
 
 const day = (at: string) => new Date(at).toDateString();
@@ -17,8 +26,17 @@ const day = (at: string) => new Date(at).toDateString();
  * The thread of a ticket, oldest first, with a separator for each day: customer messages on
  * the left, team replies and notes on the right, and changes as centered lines.
  */
-export function TicketTimeline({ entries, requester }: TicketTimelineProps) {
+export function TicketTimeline({
+  entries,
+  requester,
+  people = [],
+  onRestoreDraft,
+}: TicketTimelineProps) {
   const { t } = useTranslation("quills");
+  const team = useTeamRuntime();
+  const recall = useRecallScheduledMessage(team.viewer);
+  const sendNow = useSendScheduledMessageNow(team.viewer);
+  const me = people.find((person) => person.userId === team.viewer.id);
   if (!entries.length)
     return <SystemEvent>{t("team-tickets.noMessages")}</SystemEvent>;
   return (
@@ -59,6 +77,60 @@ export function TicketTimeline({ entries, requester }: TicketTimelineProps) {
                       }
                 }
                 time={entry.at}
+                footer={
+                  message.sendStatus === "scheduled" &&
+                  message.scheduledSendAt ? (
+                    <ScheduledSendFooter
+                      scheduledSendAt={message.scheduledSendAt}
+                      recalling={
+                        recall.isPending &&
+                        recall.variables?.param.messageId === message.id
+                      }
+                      sendingNow={
+                        sendNow.isPending &&
+                        sendNow.variables?.param.messageId === message.id
+                      }
+                      canManage={
+                        team.permissions.update &&
+                        (message.author?.principalId === me?.id ||
+                          team.permissions.manageSettings)
+                      }
+                      error={
+                        (recall.error &&
+                          recall.variables?.param.messageId === message.id) ||
+                        (sendNow.error &&
+                          sendNow.variables?.param.messageId === message.id)
+                          ? t("core.problem.failed")
+                          : null
+                      }
+                      onUndo={() => {
+                        recall.reset();
+                        sendNow.reset();
+                        recall.mutate(
+                          {
+                            param: {
+                              workspaceId: team.workspaceId,
+                              messageId: message.id,
+                            },
+                          },
+                          {
+                            onSuccess: (res) => onRestoreDraft?.(res.content),
+                          },
+                        );
+                      }}
+                      onSendNow={() => {
+                        recall.reset();
+                        sendNow.reset();
+                        sendNow.mutate({
+                          param: {
+                            workspaceId: team.workspaceId,
+                            messageId: message.id,
+                          },
+                        });
+                      }}
+                    />
+                  ) : null
+                }
               >
                 <p className="whitespace-pre-wrap">{message.content}</p>
               </MessageBubble>

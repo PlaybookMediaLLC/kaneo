@@ -12,7 +12,19 @@
 		"oauthText": "Let apps register themselves as OAuth clients.",
 		"personalKeys": "Personal API keys",
 		"personalKeysText": "Let people create personal API keys for this workspace.",
-		"title": "API"
+		"title": "API",
+		"webhooks": {
+			"empty": "No webhooks configured for this workspace.",
+			"emptyDeliveries": "No delivery attempts recorded yet.",
+			"load": "Inspect webhook deliveries",
+			"refresh": "Refresh deliveries",
+			"replay": "Replay",
+			"replayFailed": "Replay failed",
+			"sendTest": "Send test",
+			"text": "Inspect recent webhook attempts, send a signed test event, or replay failed deliveries.",
+			"title": "Webhook deliveries",
+			"viewDeliveries": "View deliveries"
+		}
 	},
 	"data": {
 		"board": "Board",

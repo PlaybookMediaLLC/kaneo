@@ -57,6 +57,23 @@
 	"searchShortcut": "⌘K",
 	"share": "Share",
 	"shareFailed": "Sharing is not available. Copy the link instead.",
+	"magicLink": {
+		"defaultSubject": "Support request",
+		"expiredDescription": "This request link has expired or been revoked. Open your latest support email or sign in to the portal to continue.",
+		"expiredTitle": "Link no longer active",
+		"replyPlaceholder": "Write a reply…",
+		"sendReply": "Send reply",
+		"you": "You"
+	},
+	"otp": {
+		"changeEmail": "Use another email",
+		"codePlaceholder": "6-digit code",
+		"emailPlaceholder": "you@company.com",
+		"sendCode": "Email me a 6-digit code",
+		"sentHint": "Enter the 6-digit code sent to {{email}}.",
+		"title": "Sign in without a password",
+		"verify": "Verify and continue"
+	},
 	"signIn": "Sign in",
 	"signInRequired": "Sign in to continue.",
 	"signInOff": "Customer sign-in is off for this portal.",

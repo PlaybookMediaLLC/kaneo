@@ -900,7 +900,8 @@
 			"defaultRoleDescriptions": {
 				"viewer": "Tapşırıqlara baxa və şərh yaza bilər.",
 				"member": "Tapşırıqlar və layihələr yarada, onları idarə edə bilər.",
-				"admin": "İş sahəsinə tam giriş hüququ var."
+				"admin": "İş sahəsinə tam giriş hüququ var.",
+				"collaborator": "Free internal seat: can view threads and add internal notes without replying externally."
 			},
 			"resources": {
 				"project": "Layihələr",
@@ -1081,6 +1082,10 @@
 					"manage_settings": {
 						"label": "Manage Quills settings",
 						"description": "Change Quills configuration for this workspace."
+					},
+					"comment_internal": {
+						"description": "Add internal notes and @mention teammates without sending external customer replies.",
+						"label": "Comment internally"
 					}
 				}
 			},
@@ -1100,7 +1105,8 @@
 			"deleteDialog": {
 				"title": "Rolu sil",
 				"description": "Bu, \"{{role}}\" rolunu həmişəlik siləcək. Bu rolun təyin olunduğu üzvlər onun icazələrini itirəcək."
-			}
+			},
+			"freeSeatBadge": "Free seat"
 		},
 		"workspaceLabels": {
 			"pageTitle": "Etiketlər",
@@ -4054,7 +4060,8 @@
 			"owner": "Sahib",
 			"admin": "İnzibatçı",
 			"member": "Üzv",
-			"viewer": "Baxışçı"
+			"viewer": "Baxışçı",
+			"collaborator": "Collaborator"
 		},
 		"members": {
 			"pageTitle": "Üzvlər",

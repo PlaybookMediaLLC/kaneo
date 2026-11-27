@@ -156,6 +156,8 @@ export type Subscribers = {
     /** Check this one message only (a copy mail job). */
     only?: string,
   ) => Promise<string[]>;
+  /** Teammate actions required to receive this notification/mail (defaults to `["read"]`). */
+  requiredActions?: readonly import("../with-quills-request").QuillsAction[];
   /**
    * Customers among the recipients are mailed too (no in-app notice). The mail handler decides at
    * send time whether the customer may still see the post (handlers/support-mail.ts), or asks
@@ -731,6 +733,7 @@ export async function fanOut(workspaceId: string, eventId: string) {
   const readers = await quillsReaders(
     workspaceId,
     plan.teammates.map((teammate) => teammate.userId!),
+    plan.entry?.requiredActions ?? ["read"],
   );
   const permittedTeammates = plan.teammates.filter((teammate) =>
     readers.has(teammate.userId!),
@@ -786,7 +789,7 @@ export async function fanOut(workspaceId: string, eventId: string) {
       queue: "quills.webhook",
       payload: { eventId, webhookId },
       dedupeKey: `${eventId}:${webhookId}`,
-      maxAttempts: 5,
+      maxAttempts: 10,
     });
   for (const principalId of recipients) {
     if (plan.entry?.notification)

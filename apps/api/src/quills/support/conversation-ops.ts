@@ -42,7 +42,15 @@ const awake = { status: "open" as const, snoozedUntil: null };
  */
 export const reopened = (conversation: Conversation, status: Status) =>
   conversation.status === "closed" && status !== "closed"
-    ? { endReason: null, endNote: null, spamReason: null }
+    ? {
+        endReason: null,
+        endNote: null,
+        spamReason: null,
+        solutionOfferedAt: null,
+        autoCloseAt: null,
+        closeReminderSentAt: null,
+        reopenedCount: (conversation.reopenedCount ?? 0) + 1,
+      }
     : {};
 
 async function update(
@@ -149,6 +157,9 @@ export async function snooze(
     status: "snoozed",
     snoozedUntil: until,
     resolvedAt: null,
+    solutionOfferedAt: null,
+    autoCloseAt: null,
+    closeReminderSentAt: null,
   });
   const name = await principalName(db, actor.principalId);
   await systemNotice(
@@ -338,6 +349,10 @@ export async function insertReply(
       lastMessageAt: message!.createdAt,
       lastMessagePreview: preview(label),
       agentLastReadAt: message!.createdAt,
+      firstResponseAt: conversation.firstResponseAt ?? message!.createdAt,
+      solutionOfferedAt: null,
+      autoCloseAt: null,
+      closeReminderSentAt: null,
       ...(claim && {
         assignedAgentPrincipalId:
           conversation.assignedAgentPrincipalId ?? actor.principalId,

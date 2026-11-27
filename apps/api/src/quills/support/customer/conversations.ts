@@ -55,6 +55,7 @@ import {
 } from "./model";
 import { sendAwayReply } from "../away-reply";
 import { rememberSender } from "../ip-blocks";
+import { readReopenPolicy } from "../support-settings";
 import { posts } from "../../../database/quills/schema/posts";
 import { HTTPException } from "hono/http-exception";
 
@@ -300,6 +301,7 @@ export function conversationRoutes(audience: Customer) {
             isNull(files.deletedAt),
             eq(conversationMessages.conversationId, conversation.id),
             eq(conversationMessages.isInternal, false),
+            eq(conversationMessages.sendStatus, "sent"),
             isNull(conversationMessages.deletedAt),
           ),
         )
@@ -516,6 +518,31 @@ export function conversationRoutes(audience: Customer) {
         params.conversationId,
         true,
       );
+      let shouldSpawnFollowUp = false;
+      if (
+        conversation.status === "closed" &&
+        conversation.endReason !== "spam"
+      ) {
+        const policy = await readReopenPolicy(db);
+        if (policy.mode === "never_link_new") {
+          shouldSpawnFollowUp = true;
+        } else if (policy.mode === "within_days") {
+          const closedAt =
+            conversation.resolvedAt ??
+            conversation.updatedAt ??
+            conversation.lastMessageAt;
+          if (closedAt) {
+            const ageMs = Date.now() - closedAt.getTime();
+            if (ageMs > policy.windowDays * 24 * 60 * 60 * 1000) {
+              shouldSpawnFollowUp = true;
+            }
+          }
+        }
+      }
+
+      const targetConversationId = shouldSpawnFollowUp
+        ? createId("conversation")
+        : conversation.id;
       const receipt = await claimReceipt(
         db,
         me,
@@ -523,15 +550,42 @@ export function conversationRoutes(audience: Customer) {
         body.idempotencyKey,
         receiptText(body),
         {
-          conversationId: conversation.id,
+          conversationId: targetConversationId,
           messageId: createId("conversation_message"),
         },
       );
       if (receipt.claimed) {
+        let target = conversation;
+        if (receipt.conversationId !== conversation.id) {
+          const [created] = await db
+            .insert(conversations)
+            .values({
+              id: receipt.conversationId,
+              visitorPrincipalId: me,
+              channel: conversation.channel,
+              source: widget ? "widget" : "portal",
+              status: "open",
+              subject: conversation.subject
+                ? `Follow-up: ${conversation.subject}`.slice(0, 140)
+                : body.content.slice(0, 140),
+            })
+            .returning();
+          target = created!;
+          await db.insert(conversationMessages).values({
+            conversationId: target.id,
+            senderType: "system",
+            isInternal: true,
+            content: `Follow-up to closed conversation ${conversation.id}.`,
+            metadata: {
+              systemKind: "follow_up_created",
+              previousConversationId: conversation.id,
+            },
+          });
+        }
         await insertVisitorMessage(
           db,
           me,
-          conversation,
+          target,
           receipt.messageId,
           body.content,
           metadataOf(body),
@@ -551,7 +605,7 @@ export function conversationRoutes(audience: Customer) {
               isNull(assistantInvolvements.reopenedAfterResolutionAt),
             ),
           );
-        await sendAwayReply(db, conversation.id);
+        await sendAwayReply(db, target.id);
         await attachMessageFiles(
           db,
           me,
@@ -563,10 +617,77 @@ export function conversationRoutes(audience: Customer) {
       return loadSent(
         db,
         me,
-        conversation.id,
+        receipt.conversationId,
         receipt.messageId,
         !receipt.claimed,
       );
+    },
+  });
+
+  const confirmResolution = defineQuillsRoute({
+    audience,
+    ...writer,
+    method: "post",
+    path: `${base}/conversations/{conversationId}/confirm-resolution`,
+    operationId: name(
+      "confirmQuillsWidgetConversationResolution",
+      "confirmQuillsMyConversationResolution",
+    ),
+    summary: `Confirm a conversation is solved as ${who}`,
+    description:
+      "Allows the customer to confirm that an offered solution resolved their issue, closing the conversation cleanly (#311).",
+    action: "update",
+    rateLimit: { limit: 30, windowSeconds: 600 },
+    params: conversationParams,
+    response: z.object({ conversation: customerConversationSchema }),
+    responseDescription: "The closed conversation",
+    errors,
+    event: ({ params }, _result, raw) =>
+      Boolean((raw as { changed?: boolean } | null)?.changed) && {
+        type: "conversation.status_changed",
+        entityType: "conversation",
+        entityId: params.conversationId,
+        payload: { status: "closed", confirmedByCustomer: "true" },
+      },
+    handler: async ({ db, caller, params }) => {
+      await requireSurface(db, audience, caller, "messenger");
+      const me = caller.principalId!;
+      const conversation = await ownConversation(
+        db,
+        me,
+        params.conversationId,
+        true,
+      );
+      const changed = conversation.status !== "closed";
+      if (changed) {
+        const now = new Date();
+        await db
+          .update(conversations)
+          .set({
+            status: "closed",
+            endReason: "resolved",
+            resolvedAt: now,
+            waitingSince: null,
+            snoozedUntil: null,
+            solutionOfferedAt: null,
+            autoCloseAt: null,
+            closeReminderSentAt: null,
+            updatedAt: now,
+          })
+          .where(eq(conversations.id, conversation.id));
+        await db.insert(conversationMessages).values({
+          conversationId: conversation.id,
+          senderType: "system",
+          isInternal: false,
+          content: "Customer confirmed the solution",
+          metadata: { systemKind: "solution_confirmed" },
+        });
+      }
+      const fresh = await ownConversation(db, me, conversation.id);
+      return {
+        changed,
+        conversation: (await toConversations(db, me, [fresh]))[0]!,
+      };
     },
   });
 
@@ -692,13 +813,40 @@ export function conversationRoutes(audience: Customer) {
     response: z.object({ rating: z.number(), changed: z.boolean() }),
     responseDescription: "The stored rating",
     errors,
-    event: ({ params }, result) =>
-      result.changed && {
-        type: "conversation.csat_submitted",
-        entityType: "conversation",
+    event: ({ params }, result, raw) => {
+      if (!result.changed) return false;
+      const extra = (raw ?? {}) as {
+        isLow?: boolean;
+        followUpTicketId?: string | null;
+      };
+      const csatEvent = {
+        type: "conversation.csat_submitted" as const,
+        entityType: "conversation" as const,
         entityId: params.conversationId,
-        payload: { rating: String(result.rating) },
-      },
+        payload: {
+          rating: String(result.rating),
+          isLow: String(extra.isLow ?? false),
+          ...(extra.followUpTicketId
+            ? { followUpTicketId: extra.followUpTicketId }
+            : {}),
+        },
+      };
+      if (extra.followUpTicketId) {
+        return [
+          csatEvent,
+          {
+            type: "ticket.created" as const,
+            entityType: "ticket" as const,
+            entityId: extra.followUpTicketId,
+            payload: {
+              source: "low_csat",
+              conversationId: params.conversationId,
+            },
+          },
+        ];
+      }
+      return csatEvent;
+    },
     handler: async ({ db, caller, params, body }) => {
       await requireSurface(db, audience, caller, "messenger");
       const conversation = await ownConversation(
@@ -884,6 +1032,7 @@ export function conversationRoutes(audience: Customer) {
     .openapi(...listMessages)
     .openapi(...file)
     .openapi(...send)
+    .openapi(...confirmResolution)
     .openapi(...markRead)
     .openapi(...typing)
     .openapi(...csat)

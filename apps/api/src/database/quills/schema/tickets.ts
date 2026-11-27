@@ -184,6 +184,14 @@ export const tickets = quillsSchema
       // conversations.sla_applied; the TTR clock only — FRT/NRT/TTC stay
       // conversation-side), or null. ticket-sla.service.ts owns the shape.
       slaApplied: jsonb("sla_applied").$type<Record<string, unknown>>(),
+      // Solution-offered confirmation & quiet auto-close lifecycle (#311).
+      solutionOfferedAt: timestamp("solution_offered_at", {
+        withTimezone: true,
+      }),
+      closeReminderSentAt: timestamp("close_reminder_sent_at", {
+        withTimezone: true,
+      }),
+      autoCloseAt: timestamp("auto_close_at", { withTimezone: true }),
       // Soft delete; set-null'd actor history survives.
       deletedAt: timestamp("deleted_at", { withTimezone: true }),
     },
@@ -231,6 +239,9 @@ export const tickets = quillsSchema
       index("tickets_assignee_team_idx")
         .on(table.assigneeTeamId)
         .where(sql`"assignee_team_id" IS NOT NULL`),
+      index("tickets_auto_close_due_idx")
+        .on(table.workspaceId, table.autoCloseAt)
+        .where(sql`auto_close_at IS NOT NULL AND deleted_at IS NULL`),
       index("tickets_requester_principal_id_idx").on(
         table.requesterPrincipalId,
       ),

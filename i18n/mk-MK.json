@@ -1292,7 +1292,8 @@
 			"defaultRoleDescriptions": {
 				"viewer": "Може да гледа и коментира задачи.",
 				"member": "Може да креира и управува со задачи и проекти.",
-				"admin": "Има целосен пристап до работниот простор."
+				"admin": "Има целосен пристап до работниот простор.",
+				"collaborator": "Free internal seat: can view threads and add internal notes without replying externally."
 			},
 			"resources": {
 				"project": "Проекти",
@@ -1473,6 +1474,10 @@
 					"manage_settings": {
 						"label": "Manage Quills settings",
 						"description": "Change Quills configuration for this workspace."
+					},
+					"comment_internal": {
+						"description": "Add internal notes and @mention teammates without sending external customer replies.",
+						"label": "Comment internally"
 					}
 				}
 			},
@@ -1492,7 +1497,8 @@
 			"deleteDialog": {
 				"title": "Избриши улога",
 				"description": "Ова трајно ќе ја избрише улогата \"{{role}}\". Членовите со оваа улога ќе ги изгубат нејзините дозволи."
-			}
+			},
+			"freeSeatBadge": "Free seat"
 		},
 		"workspaceLabels": {
 			"pageTitle": "Ознаки",
@@ -4054,7 +4060,8 @@
 			"owner": "Сопственик",
 			"admin": "Администратор",
 			"member": "Член",
-			"viewer": "Прегледувач"
+			"viewer": "Прегледувач",
+			"collaborator": "Collaborator"
 		},
 		"members": {
 			"pageTitle": "Членови",

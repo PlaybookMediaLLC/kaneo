@@ -70,6 +70,10 @@ export interface SDK {
 
 export function createSDK(): SDK {
   let config: RuntimeInitOptions | null = null;
+  // Monotonic token incremented on every init and destroy so in-flight async
+  // work (config fetch, reveal fallback, idle preload) stays valid across
+  // non-destructive config updates like setLocale() or showLauncher().
+  let initGeneration = 0;
   let launcher: LauncherHandle | null = null;
   let panel: PanelHandle | null = null;
   let bridge: Bridge | null = null;
@@ -77,6 +81,10 @@ export function createSDK(): SDK {
   let identifying = false;
   let configAbort: AbortController | null = null;
   let revealTimer: number | null = null;
+  let loadTimer: number | null = null;
+  let loadErrorCb: ((error: { code: string; message: string }) => void) | null =
+    null;
+  let fallbackLink: HTMLAnchorElement | null = null;
   let metadata: Record<string, string> | null = null;
   // `pendingIdentify` can be an Identity, `{anonymous: true}`, or `null` (logout).
   // `pendingIdentifyPresent` distinguishes "nothing queued" from "logout queued".
@@ -101,7 +109,12 @@ export function createSDK(): SDK {
   let unreadCount = 0;
   /** The host's theme choice (init `theme` or setTheme); null follows the workspace setting. */
   let hostTheme: Theme | null = null;
+  let pendingLocale: string | null = null;
   let serverTheme: ServerConfig["theme"];
+  let lastServerConfig: ServerConfig | null = null;
+  let launcherHidden = false;
+  let serverDisabled = false;
+  let revealElapsed = false;
   /** A host element bound with `launcher: { selector }`, and its click handler. */
   let bound: { el: Element; onClick: () => void } | null = null;
   /** identify() promises: the one sent to the iframe, and the one queued behind it. */
@@ -116,7 +129,7 @@ export function createSDK(): SDK {
       open: panelOpen,
       placement,
       theme: hostTheme ?? serverThemeMode(),
-      locale: config?.locale ?? null,
+      locale: config?.locale ?? pendingLocale ?? null,
       unreadCount,
       user: currentUser,
       identified: currentUser !== null,
@@ -125,6 +138,38 @@ export function createSDK(): SDK {
   const changed = () => emitter.emit("statechange", state());
   const fail = (code: string, message: string) =>
     emitter.emit("error", { code, message });
+  function clearLoadFallback(): void {
+    if (loadTimer !== null) {
+      window.clearTimeout(loadTimer);
+      loadTimer = null;
+    }
+    if (fallbackLink) {
+      fallbackLink.remove();
+      fallbackLink = null;
+    }
+  }
+  function triggerLoadError(code: string, message: string): void {
+    fail(code, message);
+    loadErrorCb?.({ code, message });
+    if (
+      config?.fallbackEmail &&
+      !fallbackLink &&
+      typeof document !== "undefined"
+    ) {
+      const a = document.createElement("a");
+      a.href = `mailto:${config.fallbackEmail}`;
+      a.textContent = "Email us instead";
+      a.setAttribute("data-quills-fallback", "true");
+      a.style.cssText =
+        "position:fixed;bottom:20px;right:20px;z-index:2147483000;padding:10px 16px;border-radius:999px;background:#111827;color:#fff;font:500 14px/1.2 system-ui,-apple-system,sans-serif;text-decoration:none;box-shadow:0 4px 14px rgba(0,0,0,.18)";
+      if (placement === "left") {
+        a.style.right = "";
+        a.style.left = "20px";
+      }
+      document.body.appendChild(a);
+      fallbackLink = a;
+    }
+  }
   function serverThemeMode(): Theme {
     const mode = serverTheme?.themeMode ?? "user";
     return mode === "user" ? "auto" : mode;
@@ -135,7 +180,12 @@ export function createSDK(): SDK {
   }
 
   function iframeOrigin(): string {
-    return new URL(config!.instanceUrl).origin;
+    const base = widgetBase(
+      config!.instanceUrl,
+      config!.workspace,
+      config!.baseUrl,
+    );
+    return new URL(base, window.location.href).origin;
   }
 
   /**
@@ -167,9 +217,9 @@ export function createSDK(): SDK {
         image = await capturePage(
           (element) =>
             !!element.closest(
-              ".quackback-launcher, .quackback-panel, .quackback-backdrop",
+              ".quackback-launcher, .quackback-greeting, .quackback-panel, .quackback-backdrop",
             ),
-          `${widgetBase(config.instanceUrl, config.workspace)}/capture.js`,
+          `${widgetBase(config.instanceUrl, config.workspace, config.baseUrl)}/capture.js`,
         );
       } catch {
         image = null;
@@ -199,6 +249,7 @@ export function createSDK(): SDK {
           pendingOpen = null;
         }
         sendMobileState();
+        clearLoadFallback();
         emitter.emit("ready", {});
         break;
       case "quackback:close":
@@ -302,9 +353,9 @@ export function createSDK(): SDK {
         opts?: { timeout: number },
       ) => number;
     };
-    const initToken = config;
+    const gen = initGeneration;
     const run = () => {
-      if (!config || config !== initToken) return;
+      if (!config || initGeneration !== gen) return;
       panelPreload = null;
       if (config && !panel) ensurePanel();
     };
@@ -340,8 +391,13 @@ export function createSDK(): SDK {
     const container = config!.container
       ? (document.querySelector(config!.container) ?? undefined)
       : undefined;
+    const base = widgetBase(
+      config!.instanceUrl,
+      config!.workspace,
+      config!.baseUrl,
+    );
     panel = createPanel({
-      widgetUrl: widgetBase(config!.instanceUrl, config!.workspace),
+      widgetUrl: config!.baseUrl ? `${base}/` : base,
       placement,
       defaultBoard: config!.defaultBoard,
       container,
@@ -350,6 +406,23 @@ export function createSDK(): SDK {
       locale: config!.locale,
       onBackdropClick: () => dispatch("close"),
     });
+    if (
+      !ready &&
+      loadTimer === null &&
+      (loadErrorCb || config!.fallbackEmail)
+    ) {
+      const timeoutMs = config!.loadTimeoutMs ?? 3000;
+      const gen = initGeneration;
+      loadTimer = window.setTimeout(() => {
+        loadTimer = null;
+        if (config && initGeneration === gen && !ready) {
+          triggerLoadError(
+            "LOAD_TIMEOUT",
+            `Widget did not load within ${timeoutMs}ms`,
+          );
+        }
+      }, timeoutMs);
+    }
     bridge = createBridge({
       getIframe: () => panel?.iframe ?? null,
       origin: iframeOrigin(),
@@ -358,7 +431,14 @@ export function createSDK(): SDK {
     mobileMql = window.matchMedia("(max-width: 760px)");
     const mql = mobileMql;
     mql.addEventListener("change", sendMobileState);
-    mobileCleanup = () => mql.removeEventListener("change", sendMobileState);
+    const onPopState = () => {
+      if (panelOpen || config?.container) sendContext();
+    };
+    window.addEventListener("popstate", onPopState);
+    mobileCleanup = () => {
+      mql.removeEventListener("change", sendMobileState);
+      window.removeEventListener("popstate", onPopState);
+    };
     return panel;
   }
 
@@ -404,12 +484,12 @@ export function createSDK(): SDK {
       typeof window.matchMedia === "function" &&
       window.matchMedia("(prefers-color-scheme: dark)").matches;
     const dark = themeMode === "dark" || (themeMode === "user" && prefersDark);
-    const backgroundColor = dark
-      ? (t.darkPrimary ?? t.lightPrimary)
-      : t.lightPrimary;
-    const foregroundColor = dark
-      ? (t.darkPrimaryForeground ?? t.lightPrimaryForeground)
-      : t.lightPrimaryForeground;
+    const backgroundColor =
+      (dark ? (t.darkPrimary ?? t.lightPrimary) : t.lightPrimary) ?? undefined;
+    const foregroundColor =
+      (dark
+        ? (t.darkPrimaryForeground ?? t.lightPrimaryForeground)
+        : t.lightPrimaryForeground) ?? undefined;
     launcher.setColors({ backgroundColor, foregroundColor });
   }
 
@@ -418,11 +498,9 @@ export function createSDK(): SDK {
   // flash before the brand color lands.
   const LAUNCHER_REVEAL_FALLBACK_MS = 1800;
   /** Only the current initialization may apply server-controlled state. */
-  function applyServerConfig(
-    serverConfig: ServerConfig,
-    initToken: RuntimeInitOptions,
-  ): void {
-    if (config !== initToken) return;
+  function applyServerConfig(serverConfig: ServerConfig, gen: number): void {
+    if (!config || initGeneration !== gen) return;
+    lastServerConfig = serverConfig;
     applyServerTheme(serverConfig);
     launcher?.setGreeting(serverConfig.launcherGreeting);
     launcher?.setLabel(serverConfig.launcherLabel);
@@ -434,9 +512,9 @@ export function createSDK(): SDK {
     // Host-page pageview tracking is instance-controlled: it starts only when
     // the server config enables visitor analytics, and only if this init is
     // still the live one. The durable device id is a separate opt-in on top.
-    if (serverConfig.visitorAnalytics === true) {
+    if (serverConfig.visitorAnalytics === true && config.instanceUrl) {
       analyticsConfig = {
-        instanceUrl: initToken.instanceUrl,
+        instanceUrl: config.instanceUrl,
         deviceTracking: serverConfig.visitorDeviceTracking === true,
       };
       startTracking();
@@ -473,11 +551,24 @@ export function createSDK(): SDK {
   }
 
   let configLoaded = false;
-  let initEpoch = 0;
 
-  function loadServerConfig(epoch: number): void {
+  function queryEl(selector: string): Element | null {
+    try {
+      return document.querySelector(selector);
+    } catch {
+      return null;
+    }
+  }
+
+  function loadServerConfig(gen: number): void {
     const active = config;
-    if (configLoaded || configAbort || !active || epoch !== initEpoch) return;
+    if (configLoaded || configAbort || !active || initGeneration !== gen)
+      return;
+    const reveal = () => {
+      if (initGeneration !== gen) return;
+      revealElapsed = true;
+      launcher?.reveal();
+    };
     const baked = window.__QUACKBACK_CONFIG__;
     const bakedMatches =
       !window.__QUACKBACK_URL__ ||
@@ -485,14 +576,10 @@ export function createSDK(): SDK {
     if (baked !== undefined && bakedMatches) {
       configLoaded = true;
       const parsed = serverConfigSchema.safeParse(baked);
-      applyServerConfig(parsed.success ? parsed.data : {}, active);
-      launcher?.reveal();
+      applyServerConfig(parsed.success ? parsed.data : {}, gen);
+      reveal();
       return;
     }
-    const targetLauncher = launcher;
-    const reveal = () => {
-      if (epoch === initEpoch) targetLauncher?.reveal();
-    };
     const controller = new AbortController();
     configAbort = controller;
     const fallback = window.setTimeout(reveal, LAUNCHER_REVEAL_FALLBACK_MS);
@@ -501,14 +588,16 @@ export function createSDK(): SDK {
       active.instanceUrl,
       active.workspace,
       controller.signal,
+      active.baseUrl,
     )
       .then((serverConfig) => {
-        if (epoch !== initEpoch || !config) return;
+        if (initGeneration !== gen || !config) return;
         configLoaded = true;
-        if (serverConfig) return applyServerConfig(serverConfig, config);
+        if (serverConfig) return applyServerConfig(serverConfig, gen);
         // The widget is off or the workspace does not exist: remove the launcher and cancel
         // any idle panel preload, but keep `config` so an explicit host `open()` still shows
         // the unavailable panel.
+        serverDisabled = true;
         if (bound) {
           bound.el.removeEventListener("click", bound.onClick);
           bound.el.removeAttribute("data-quills-unread");
@@ -524,6 +613,17 @@ export function createSDK(): SDK {
           bridge?.dispose();
           bridge = null;
           ready = false;
+          identifying = false;
+          for (const settle of [sentResult, queuedResult])
+            settle?.({
+              success: false,
+              user: null,
+              error: "Widget disabled",
+            });
+          sentResult = null;
+          queuedResult = null;
+          pendingIdentify = null;
+          pendingIdentifyPresent = false;
         }
         launcher?.remove();
         launcher = null;
@@ -531,14 +631,14 @@ export function createSDK(): SDK {
       })
       .finally(() => {
         window.clearTimeout(fallback);
-        if (epoch !== initEpoch) return;
+        if (initGeneration !== gen) return;
         configAbort = null;
         revealTimer = null;
         reveal();
       });
   }
 
-  function createLauncherIfNeeded(): void {
+  function createLauncherIfNeeded(): LauncherHandle | null {
     if (
       launcher ||
       bound ||
@@ -546,45 +646,75 @@ export function createSDK(): SDK {
       config.launcher === false ||
       config.container
     )
-      return;
+      return launcher;
     if (typeof config.launcher === "object") {
       // The host's own element opens the widget, with the unread count as a data attribute.
-      const el = document.querySelector(config.launcher.selector);
-      if (!el)
-        return fail(
+      const el = queryEl(config.launcher.selector);
+      if (!el) {
+        fail(
           "LAUNCHER_NOT_FOUND",
           `No element matches ${config.launcher.selector}`,
         );
+        return null;
+      }
       const onClick = () => dispatch("toggle");
       el.addEventListener("click", onClick);
+      if (unreadCount > 0)
+        el.setAttribute("data-quills-unread", String(unreadCount));
       bound = { el, onClick };
-      return;
+      return null;
     }
-    const epoch = initEpoch;
+    const gen = initGeneration;
     launcher = createLauncher({
       placement,
       offset: config.offset,
       locale: config.locale,
       onClick: () => dispatch("toggle"),
-      onIntent: () => loadServerConfig(epoch),
+      onIntent: () => loadServerConfig(gen),
     });
+    if (launcherHidden) launcher.setHidden(true);
+    return launcher;
   }
 
   function dispatch(cmd: Command, a?: unknown, b?: unknown): unknown {
     switch (cmd) {
       case "init": {
         const next = initOptionsSchema.parse(a);
-        if (next.container && !document.querySelector(next.container))
+        if (next.container && !queryEl(next.container))
           return fail(
             "CONTAINER_NOT_FOUND",
             `No element matches ${next.container}`,
           );
+        if (typeof next.launcher === "object") {
+          try {
+            document.querySelector(next.launcher.selector);
+          } catch {
+            return fail(
+              "INVALID_OPTIONS",
+              `Invalid launcher selector: ${next.launcher.selector}`,
+            );
+          }
+        }
         // Validate before destroy so a bad re-init leaves the working instance intact.
         if (config) dispatch("destroy");
-        initEpoch += 1;
-        config = next;
+        const gen = ++initGeneration;
         configLoaded = false;
-        hostTheme = next.theme ?? null;
+        serverDisabled = false;
+        revealElapsed = false;
+        const resolvedLocale = next.locale ?? pendingLocale ?? undefined;
+        pendingLocale = resolvedLocale ?? null;
+        config = resolvedLocale ? { ...next, locale: resolvedLocale } : next;
+        loadErrorCb =
+          a &&
+          typeof a === "object" &&
+          typeof (a as { onLoadError?: unknown }).onLoadError === "function"
+            ? (
+                a as {
+                  onLoadError: (e: { code: string; message: string }) => void;
+                }
+              ).onLoadError
+            : null;
+        if (next.theme !== undefined) hostTheme = next.theme;
         announcedOpen = false;
         // Only an explicit option changes the host's choice, so a withdrawal
         // made before init, or before a re-init, is never silently undone.
@@ -592,7 +722,11 @@ export function createSDK(): SDK {
         if (!hostTracking) clearDeviceId();
         placement = next.placement ?? "right";
         createLauncherIfNeeded();
-        sendIdentity(config.identity ?? { anonymous: true });
+        if (config.identity !== undefined) {
+          sendIdentity(config.identity);
+        } else if (!pendingIdentifyPresent && !identifying) {
+          sendIdentity({ anonymous: true });
+        }
         // Facade-first (#316): by default (`preload: "interaction"`), make zero network requests
         // and mount no iframe until the visitor interacts or the host calls `open()`.
         // Inline containers and explicit `preload: "idle"` opt-ins still boot proactively.
@@ -601,14 +735,15 @@ export function createSDK(): SDK {
           !window.__QUACKBACK_URL__ ||
           window.__QUACKBACK_URL__ === next.instanceUrl;
         if (next.container) {
-          loadServerConfig(initEpoch);
+          loadServerConfig(gen);
           dispatch("open");
         } else if (next.preload === "idle") {
           schedulePanelPreload();
-          loadServerConfig(initEpoch);
+          loadServerConfig(gen);
         } else if (baked !== undefined && bakedMatches) {
-          loadServerConfig(initEpoch);
+          loadServerConfig(gen);
         } else {
+          revealElapsed = true;
           launcher?.reveal();
         }
         return;
@@ -628,7 +763,7 @@ export function createSDK(): SDK {
         if (!config) return fail("NOT_READY", "Call init before open");
         const opts = (a as OpenOptions) ?? {};
         // Warm server config on first open if facade deferred it until interaction.
-        loadServerConfig(initEpoch);
+        loadServerConfig(initGeneration);
         // The page may have changed since the last open in a single-page app.
         sendContext();
         if (ready && bridge) bridge.send("quackback:open", opts);
@@ -688,18 +823,40 @@ export function createSDK(): SDK {
       case "setLocale": {
         if (typeof a !== "string" || !a || a.length > 35)
           return fail("INVALID_OPTIONS", "The locale must be a language tag");
+        pendingLocale = a;
         if (config) config = { ...config, locale: a };
         if (ready && bridge) bridge.send("quackback:locale", a);
         launcher?.setLocale(a);
+        panel?.setLocale(a);
         changed();
         return;
       }
       case "showLauncher":
-        if (!launcher) createLauncherIfNeeded();
-        else launcher.el.style.display = "flex";
+        launcherHidden = false;
+        if (serverDisabled) return;
+        if (!launcher) {
+          if (config?.launcher === false)
+            config = { ...config, launcher: true };
+          const created = createLauncherIfNeeded();
+          if (created) {
+            if (unreadCount > 0) created.setUnread(unreadCount);
+            if (panelOpen) created.setOpen(true);
+            if (lastServerConfig) {
+              applyServerTheme(lastServerConfig);
+              created.setGreeting(lastServerConfig.launcherGreeting);
+              created.setLabel(lastServerConfig.launcherLabel);
+              created.reveal();
+            } else if (!configAbort || revealElapsed) {
+              created.reveal();
+            }
+          }
+        } else {
+          launcher.setHidden(false);
+        }
         return;
       case "hideLauncher":
-        if (launcher) launcher.el.style.display = "none";
+        launcherHidden = true;
+        launcher?.setHidden(true);
         return;
       case "on":
         return emitter.on(a as EventName, b as EventHandler<EventName>);
@@ -741,12 +898,21 @@ export function createSDK(): SDK {
         queuedResult = null;
         unreadCount = 0;
         hostTheme = null;
+        pendingLocale = null;
         serverTheme = undefined;
+        lastServerConfig = null;
+        launcherHidden = false;
+        serverDisabled = false;
+        revealElapsed = false;
+        initGeneration += 1;
+        configLoaded = false;
         config = null;
         configAbort?.abort();
         configAbort = null;
         if (revealTimer !== null) window.clearTimeout(revealTimer);
         revealTimer = null;
+        clearLoadFallback();
+        loadErrorCb = null;
         cancelPanelPreload();
         panel?.destroy();
         launcher?.remove();
@@ -769,7 +935,6 @@ export function createSDK(): SDK {
         panelOpen = false;
         currentUser = null;
         placement = "right";
-        config = null;
         changed();
         return;
     }

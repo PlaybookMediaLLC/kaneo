@@ -891,7 +891,8 @@
 			"defaultRoleDescriptions": {
 				"viewer": "タスクの閲覧とコメントができます。",
 				"member": "タスクとプロジェクトの作成・管理ができます。",
-				"admin": "ワークスペースへのフルアクセス権を持ちます。"
+				"admin": "ワークスペースへのフルアクセス権を持ちます。",
+				"collaborator": "Free internal seat: can view threads and add internal notes without replying externally."
 			},
 			"resources": {
 				"project": "プロジェクト",
@@ -1072,6 +1073,10 @@
 					"manage_settings": {
 						"label": "Manage Quills settings",
 						"description": "Change Quills configuration for this workspace."
+					},
+					"comment_internal": {
+						"description": "Add internal notes and @mention teammates without sending external customer replies.",
+						"label": "Comment internally"
 					}
 				}
 			},
@@ -1091,7 +1096,8 @@
 			"deleteDialog": {
 				"title": "ロールを削除",
 				"description": "これによりロール「{{role}}」は完全に削除されます。このロールが割り当てられていたメンバーは権限を失います。"
-			}
+			},
+			"freeSeatBadge": "Free seat"
 		},
 		"workspaceLabels": {
 			"pageTitle": "ラベル",
@@ -3978,7 +3984,8 @@
 			"owner": "オーナー",
 			"admin": "管理者",
 			"member": "メンバー",
-			"viewer": "閲覧者"
+			"viewer": "閲覧者",
+			"collaborator": "Collaborator"
 		},
 		"members": {
 			"pageTitle": "メンバー",
