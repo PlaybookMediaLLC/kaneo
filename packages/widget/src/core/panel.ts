@@ -21,6 +21,8 @@ export interface PanelHandle {
   setExpanded(expanded: boolean): void;
   /** Move the panel between bottom corners (rewrites the side-specific CSS). */
   setPlacement(side: "left" | "right"): void;
+  /** Update the iframe's accessible title when the host changes locale. */
+  setLocale(locale: string | undefined): void;
   /** The loaded iframe owns its close control; keep a host fallback until then. */
   markReady(): void;
   destroy(): void;
@@ -88,7 +90,15 @@ export function createPanel(opts: PanelOptions): PanelHandle {
   );
   iframe.setAttribute("allow", "clipboard-write");
   if (typeof window !== "undefined" && window.crossOriginIsolated) {
-    iframe.setAttribute("credentialless", "");
+    try {
+      if (
+        new URL(url, window.location.href).origin !== window.location.origin
+      ) {
+        iframe.setAttribute("credentialless", "");
+      }
+    } catch {
+      iframe.setAttribute("credentialless", "");
+    }
   }
   iframe.className = "quackback-widget-iframe";
   panel.appendChild(iframe);
@@ -157,6 +167,9 @@ export function createPanel(opts: PanelOptions): PanelHandle {
     },
     setPlacement(side) {
       ensureStyles(side);
+    },
+    setLocale(locale) {
+      iframe.setAttribute("title", frameTitle(locale));
     },
     markReady() {
       if (document.activeElement === fallbackClose) iframe.focus();

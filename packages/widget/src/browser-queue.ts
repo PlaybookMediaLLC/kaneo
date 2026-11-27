@@ -18,6 +18,7 @@
  */
 import { createSDK } from "./core/sdk.js";
 import type { ServerConfig } from "./core/config.js";
+import { isWorkspaceRef } from "./core/options.js";
 
 declare global {
   interface Window {
@@ -34,7 +35,16 @@ const w = window;
 const scriptEl =
   (document.currentScript as HTMLScriptElement | null) ??
   (document.querySelector(
-    'script[data-quills-workspace], script[data-workspace][src*="sdk.js"], script[src*="/widget/sdk.js"]',
+    "script[data-quills-workspace]",
+  ) as HTMLScriptElement | null) ??
+  (document.querySelector(
+    'script[src*="/api/quills-public/"][src*="/widget/sdk.js"]',
+  ) as HTMLScriptElement | null) ??
+  (document.querySelector(
+    'script[data-workspace][src*="sdk.js"]',
+  ) as HTMLScriptElement | null) ??
+  (document.querySelector(
+    'script[src*="/widget/sdk.js"]',
   ) as HTMLScriptElement | null);
 // Kaneo serves this bundle at {instanceUrl}/api/quills-public/{workspace}/widget/sdk.js, so a
 // script-tag install carries both values in its own URL. Hosts behind a custom proxy path or
@@ -50,25 +60,23 @@ const rawDataUrl = (
 ).trim();
 let dataUrl: string | undefined;
 if (rawDataUrl) {
-  if (rawDataUrl.startsWith("/")) {
-    try {
-      const resolved = new URL(rawDataUrl, w.location.href);
-      if (resolved.protocol === "https:" || resolved.protocol === "http:") {
-        dataUrl = resolved.href.replace(/\/+$/, "");
-      }
-    } catch {
-      dataUrl = undefined;
+  try {
+    const resolved = rawDataUrl.startsWith("/")
+      ? new URL(rawDataUrl, w.location.href)
+      : new URL(rawDataUrl);
+    if (resolved.protocol === "https:" || resolved.protocol === "http:") {
+      dataUrl = `${resolved.origin}${resolved.pathname.replace(/\/+$/, "")}`;
     }
-  } else {
-    dataUrl = rawDataUrl.replace(/\/+$/, "");
+  } catch {
+    dataUrl = undefined;
   }
 }
-const dataWorkspace =
-  (
-    scriptEl?.dataset.quillsWorkspace ||
-    scriptEl?.dataset.workspace ||
-    ""
-  ).trim() || undefined;
+const rawWorkspace = (
+  scriptEl?.dataset.quillsWorkspace ||
+  scriptEl?.dataset.workspace ||
+  ""
+).trim();
+const dataWorkspace = isWorkspaceRef(rawWorkspace) ? rawWorkspace : undefined;
 let scriptOrigin: string | undefined;
 if (!dataUrl && !served && dataWorkspace && scriptEl?.src) {
   try {

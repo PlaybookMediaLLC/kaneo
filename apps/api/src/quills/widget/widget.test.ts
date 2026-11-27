@@ -396,5 +396,44 @@ describe.skipIf(!url)("Quills widget identity", () => {
       },
     });
     expect(foreign.status).toBe(403);
+
+    // Prototype keys, invalid company domains, and large companies arrays are handled safely.
+    const edge = await call("POST", "/widget/verify-token", {
+      body: {
+        ssoToken: signIdentity(
+          {
+            sub,
+            email,
+            traits: { toString: "custom" },
+            companies: [
+              { id: "org_1", name: "Acme Inc", domain: "https://acme.test" },
+              ...Array.from({ length: 80 }, (_, i) => ({
+                id: `extra_${i}`,
+                name: `Extra ${i}`,
+              })),
+            ],
+            exp: exp(),
+          },
+          secret,
+        ),
+      },
+    });
+    expect(edge.status).toBe(200);
+    expect(edge.body.claims.company).toEqual({
+      id: "org_1",
+      name: "Acme Inc",
+      domain: null,
+    });
+    expect(edge.body.warnings).toEqual(
+      expect.arrayContaining([
+        { code: "ATTRIBUTE_IGNORED", field: "toString" },
+        { code: "COMPANY_DOMAIN_IGNORED", field: "companies[0].domain" },
+      ]),
+    );
+    expect(
+      edge.body.warnings.filter(
+        (w: { code: string }) => w.code === "COMPANY_IGNORED",
+      ),
+    ).toHaveLength(50);
   });
 });

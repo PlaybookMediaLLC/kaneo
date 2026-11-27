@@ -24,7 +24,7 @@ const verifyToken = defineQuillsRoute({
   operationId: "verifyQuillsWidgetToken",
   summary: "Verify a host-signed widget identity token without creating a user",
   description:
-    "Dry-run check for a host app's HS256 ssoToken. Validates signature, expiry, required claims (sub and email) and optional attributes, manual segments and company claims without creating a customer or session.",
+    "Dry-run check for a host app's HS256 ssoToken. Validates signature, expiry, required claims (sub and email) and optional attributes, manual segments and company claims without reading or writing customer rows (does not check blocked accounts or existing email collisions).",
   action: "read",
   rateLimit: { limit: 30, windowSeconds: 15 * 60 },
   body: z.object({

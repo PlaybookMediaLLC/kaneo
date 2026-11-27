@@ -60,15 +60,47 @@ export function socialLinks(
   };
 }
 
+function normalizeApiBase(apiBase: string): string {
+  const trimmed = apiBase.trim().replace(/\/+$/, "");
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      const path = parsed.pathname.replace(/\/+$/, "");
+      const withApi = path.endsWith("/api") ? path : `${path}/api`;
+      return `${parsed.origin}${withApi}`;
+    }
+  } catch {
+    // Fall through to safe stripped form for non-URL test strings.
+  }
+  const clean = trimmed.replace(/[\r\n\0]/g, "");
+  return clean.endsWith("/api") ? clean : `${clean}/api`;
+}
+
+function escapeHtmlAttr(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+function sanitizeInline(value: string): string {
+  return value.replace(/[\r\n\t`"'\\]/g, "").trim();
+}
+
 /** The script-tag embed of the widget (packages/widget/README.md), in three steps. */
 export function widgetSnippets(apiBase: string, workspace: string) {
-  const base = apiBase.replace(/\/+$/, "");
+  const base = normalizeApiBase(apiBase);
   const encoded = encodeURIComponent(workspace);
   const sdk = `${base}/quills-public/${encoded}/widget/sdk.js`;
   return {
     load: [
       "<script>window.Quills=window.Quills||function(){(window.Quills.q=window.Quills.q||[]).push(arguments)};</script>",
-      `<script src="${sdk}" defer></script>`,
+      `<script src="${escapeHtmlAttr(sdk)}" defer></script>`,
     ].join("\n"),
     start: [
       "<script>",
@@ -111,7 +143,7 @@ export function widgetSnippets(apiBase: string, workspace: string) {
       "    beforeFiles: [",
       "      {",
       '        source: "/api/quills-public/:path*",',
-      `        destination: "${base}/quills-public/:path*",`,
+      `        destination: ${JSON.stringify(`${base}/quills-public/:path*`)},`,
       "      },",
       "    ],",
       "    afterFiles: [],",
@@ -131,26 +163,24 @@ export function aiInstallPrompt(
   workspace: string,
   code: string,
 ) {
-  const base = apiBase.replace(/\/+$/, "");
+  const base = normalizeApiBase(apiBase);
+  const instanceOrigin = base.replace(/\/api$/, "");
   const encoded = encodeURIComponent(workspace);
+  const safeWorkspace = sanitizeInline(workspace) || encoded;
   const publicBase = `${base}/quills-public/${encoded}/widget`;
   return [
-    `Integrate the Quills support & feedback widget into this app for workspace "${workspace}".`,
+    `Integrate the Quills support & feedback widget into this app for workspace ${JSON.stringify(safeWorkspace)}.`,
     "",
     "1. Redeem the short-lived install pairing code (works twice, expires in 15 minutes):",
-    `   curl -fsS -X POST "${publicBase}/install-context" \\`,
-    '     -H "Content-Type: application/json" \\',
-    `     -d '{"code":"${code}"}'`,
+    `   curl -fsS -X POST ${shellQuote(`${publicBase}/install-context`)} \\`,
+    "     -H 'Content-Type: application/json' \\",
+    `     -d ${shellQuote(JSON.stringify({ code }))}`,
     "   This enables the widget and returns JSON with `signingSecret`, `tabs`, `portalEnabled`,",
     "   `widgetSignIn`, `userAttributes`, and `manualSegments`.",
     "",
     "2. Store secrets safely (CRITICAL):",
     "   - Put `signingSecret` ONLY in a server-side env var `QUILLS_WIDGET_SECRET` (e.g. `.env.local`, gitignored).",
-    "   - Put non-secret public settings in `NEXT_PUBLIC_QUILLS_URL` / `VITE_QUILLS_URL` (`" +
-      base.replace(/\/api$/, "") +
-      "`) and `NEXT_PUBLIC_QUILLS_WORKSPACE` / `VITE_QUILLS_WORKSPACE` (`" +
-      workspace +
-      "`).",
+    `   - Put non-secret public settings in \`NEXT_PUBLIC_QUILLS_URL\` / \`VITE_QUILLS_URL\` (${JSON.stringify(instanceOrigin)}, origin without \`/api\`) and \`NEXT_PUBLIC_QUILLS_WORKSPACE\` / \`VITE_QUILLS_WORKSPACE\` (${JSON.stringify(safeWorkspace)}).`,
     "   - NEVER expose `QUILLS_WIDGET_SECRET` in client code, `NEXT_PUBLIC_*` / `VITE_*`, git commits, or logs.",
     "",
     "3. Add a server-side token route (e.g. `GET /api/support/token`):",
@@ -162,7 +192,7 @@ export function aiInstallPrompt(
     "   - Return `Cache-Control: private, no-store` JSON `{ token }`.",
     "",
     "4. Mount the client widget cleanly in the root app layout:",
-    `   - Prefer a same-origin rewrite \`/api/quills-public/:path*\` -> \`${base}/quills-public/:path*\` (in Next.js, place it in \`rewrites().beforeFiles\` so catch-all \`/api/[...unmatched]\` routes don't intercept it) and load \`/api/quills-public/${encoded}/widget/sdk.js\`; otherwise load \`${publicBase}/sdk.js\` directly.`,
+    `   - Prefer a same-origin rewrite \`/api/quills-public/:path*\` -> ${JSON.stringify(`${base}/quills-public/:path*`)} (in Next.js, place it in \`rewrites().beforeFiles\` so catch-all \`/api/[...unmatched]\` routes don't intercept it) and load \`/api/quills-public/${encoded}/widget/sdk.js\`; otherwise load ${JSON.stringify(`${publicBase}/sdk.js`)} directly.`,
     "   - Initialize the queue stub `window.Quills = window.Quills || function(){ (window.Quills.q = window.Quills.q || []).push(arguments) }` and call `Quills('init', { theme, locale, tracking })` before loading the script.",
     "   - Exclude embedded/headless iframe routes (e.g. `/embed/*`, `/preview/*`); on client-side navigation into excluded routes call `Quills('close')` and `Quills('hideLauncher')`, and `Quills('showLauncher')` when leaving them.",
     "   - Sync theme (`Quills('setTheme', 'light' | 'dark' | 'auto')`), locale (`Quills('setLocale', locale)`), and analytics consent (`Quills('tracking', granted)`) if the app has them.",

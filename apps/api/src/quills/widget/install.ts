@@ -107,26 +107,24 @@ const redeem = defineQuillsRoute({
         widgetConfig: JSON.stringify(nextWidgetConfig),
       })
       .where(eq(settings.id, row.id));
-    const [attrs, segs] = await Promise.all([
-      db
-        .select({
-          key: userAttributeDefinitions.key,
-          label: userAttributeDefinitions.label,
-          type: userAttributeDefinitions.type,
-        })
-        .from(userAttributeDefinitions)
-        .orderBy(asc(userAttributeDefinitions.key))
-        .limit(50),
-      db
-        .select({
-          slug: segments.slug,
-          name: segments.name,
-        })
-        .from(segments)
-        .where(and(eq(segments.type, "manual"), isNull(segments.deletedAt)))
-        .orderBy(asc(segments.slug))
-        .limit(50),
-    ]);
+    const attrs = await db
+      .select({
+        key: userAttributeDefinitions.key,
+        label: userAttributeDefinitions.label,
+        type: userAttributeDefinitions.type,
+      })
+      .from(userAttributeDefinitions)
+      .orderBy(asc(userAttributeDefinitions.key))
+      .limit(50);
+    const segs = await db
+      .select({
+        slug: segments.slug,
+        name: segments.name,
+      })
+      .from(segments)
+      .where(and(eq(segments.type, "manual"), isNull(segments.deletedAt)))
+      .orderBy(asc(segments.slug))
+      .limit(50);
     const portalEnabled = portalOn(row.portalConfig);
     const signIn = readPortalSignIn(row.portalConfig);
     return {

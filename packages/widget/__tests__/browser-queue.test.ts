@@ -460,4 +460,40 @@ describe("browser-queue", () => {
       });
     }
   });
+
+  it("prefers data-quills-workspace over an earlier third-party sdk.js script tag and ignores invalid data-workspace", async () => {
+    const dispatched = mockSDK();
+    const vendor = document.createElement("script");
+    vendor.type = "application/octet-stream";
+    vendor.src = "https://vendor.example.com/sdk.js";
+    vendor.dataset.workspace = "vendor";
+    const quills = document.createElement("script");
+    quills.type = "application/octet-stream";
+    quills.src = "https://app.example.com/support/sdk.js";
+    quills.dataset.quillsWorkspace = "acme";
+    document.head.appendChild(vendor);
+    document.head.appendChild(quills);
+    Object.defineProperty(document, "currentScript", {
+      value: null,
+      configurable: true,
+    });
+    try {
+      await import("../src/browser-queue");
+      await new Promise((r) => setTimeout(r, 0));
+      expect(dispatched).toEqual([
+        [
+          "init",
+          { instanceUrl: "https://app.example.com", workspace: "acme" },
+          undefined,
+        ],
+      ]);
+    } finally {
+      vendor.remove();
+      quills.remove();
+      Object.defineProperty(document, "currentScript", {
+        value: null,
+        configurable: true,
+      });
+    }
+  });
 });

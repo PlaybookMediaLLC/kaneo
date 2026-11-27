@@ -1,5 +1,5 @@
 import { resolveApiBaseUrl } from "@kaneo/libs";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useGetPortalSettings } from "../../hooks/team/use-get-portal-settings";
 import { useListCustomDomains } from "../../hooks/team/use-list-custom-domains";
@@ -51,11 +51,21 @@ export function TeamSharePage({ workspaceId }: TeamSharePageProps) {
   const url = portalUrl(workspaceId, origin, domains.data?.domains);
   const api = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
   const data = settings.data;
+  const hasData = Boolean(data);
   const name = data?.name ?? "";
+  const scrolledRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!data || window.location.hash !== "#widget-embed") return;
+    const hash = window.location.hash;
+    if (hash !== "#widget-embed") {
+      scrolledRef.current = null;
+      return;
+    }
+    if (!hasData) return;
+    const key = `${workspaceId}:${hash}`;
+    if (scrolledRef.current === key) return;
+    scrolledRef.current = key;
     document.getElementById("widget-embed")?.scrollIntoView?.();
-  }, [data, workspaceId]);
+  }, [hasData, workspaceId]);
   return (
     <PageFrame titleKey="team-share.title" variant="app" landmark={false}>
       <SettingsPage
@@ -127,8 +137,8 @@ export function TeamSharePage({ workspaceId }: TeamSharePageProps) {
                 >
                   <WidgetEmbed
                     workspaceId={workspaceId}
-                    slug={data.slug}
-                    apiBase={api.startsWith("/") ? `${origin}${api}` : api}
+                    slug={data.slug || workspaceId}
+                    apiBase={new URL(api, origin).href.replace(/\/+$/, "")}
                     canMintCode={manage}
                   />
                 </SettingsSection>

@@ -76,14 +76,16 @@ export function widgetHost(findDist: () => string | null) {
       .split(",")
       .some((part) => part.trim().replace(/^W\//, "") === etag);
   };
-  const unbuilt = (c: Context) =>
-    c.json(
+  const unbuilt = (c: Context) => {
+    c.header("Cross-Origin-Resource-Policy", "cross-origin");
+    return c.json(
       {
         message: "The widget is not built on this server",
         code: "SERVICE_UNAVAILABLE",
       },
       503,
     );
+  };
   /** `?v=` with the current content hash caches for a year; any other URL for 5 minutes. */
   const file = (name: string, type: string) => (c: Context) => {
     const found = asset(name);

@@ -1061,4 +1061,45 @@ describe("sdk server-driven launcher config", () => {
     expect(btn).not.toBeNull();
     expect(btn.textContent).toContain("4");
   });
+
+  it("resets launcher colors to defaults when switching dark->light with null lightPrimary, and updates iframe title on setLocale", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          enabled: true,
+          config: {
+            theme: {
+              lightPrimary: null,
+              lightPrimaryForeground: null,
+              darkPrimary: "#112233",
+              darkPrimaryForeground: "#fafafa",
+              themeMode: "dark",
+            },
+          },
+        }),
+      })),
+    );
+    sdk = createSDK();
+    sdk.dispatch("setLocale", "de");
+    expect(sdk.getState().locale).toBe("de");
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    await new Promise((r) => setTimeout(r, 0));
+
+    const btn = document.querySelector(
+      "button.quackback-launcher",
+    ) as HTMLButtonElement;
+    const darkBg = btn.style.backgroundColor;
+    expect(darkBg).not.toBe("");
+
+    sdk.dispatch("setTheme", "light");
+    expect(btn.style.backgroundColor).not.toBe(darkBg);
+
+    sdk.dispatch("setLocale", "fr");
+    const iframe = document.querySelector(
+      "iframe.quackback-widget-iframe",
+    ) as HTMLIFrameElement;
+    expect(iframe.getAttribute("title")).toBe("Aide");
+  });
 });

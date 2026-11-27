@@ -100,7 +100,10 @@ export async function claimedAttributes(
     const coerced = coerce(values.get(key)!, type);
     if (coerced !== undefined) set[key] = coerced;
   }
-  return { set, ignored: [...values.keys()].filter((key) => !(key in set)) };
+  return {
+    set,
+    ignored: [...values.keys()].filter((key) => !Object.hasOwn(set, key)),
+  };
 }
 
 function parseSegmentSlugs(claim: unknown) {
@@ -184,6 +187,8 @@ export async function reconcileClaimedSegments(
   return slugs.filter((slug) => !known.has(slug));
 }
 
+const MAX_COMPANY_WARNINGS = 50;
+
 const companyClaim = (value: unknown) => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const { id, name, domain } = value as Record<string, unknown>;
@@ -194,16 +199,21 @@ const companyClaim = (value: unknown) => {
         ? id.trim()
         : "";
   if (!external || external.length > 255) return null;
+  const rawDomain = typeof domain === "string" ? domain.trim() : "";
+  const validDomain =
+    rawDomain && /^[a-z0-9.-]{1,253}$/i.test(rawDomain)
+      ? rawDomain.toLowerCase()
+      : null;
   return {
     externalId: external,
     name:
       typeof name === "string" && name.trim()
         ? name.trim().slice(0, 200)
         : external,
-    domain:
-      typeof domain === "string" && /^[a-z0-9.-]{1,253}$/i.test(domain.trim())
-        ? domain.trim().toLowerCase()
-        : null,
+    domain: validDomain,
+    invalidDomain:
+      domain != null &&
+      (typeof domain !== "string" || Boolean(rawDomain && !validDomain)),
   };
 };
 
@@ -236,10 +246,12 @@ async function lookupCompanyAndDomain(
 function parseCompaniesClaim(claim: unknown) {
   if (!Array.isArray(claim) || !claim.length)
     return { company: null, warnings: [] as IdentifyWarning[] };
-  const warnings: IdentifyWarning[] = claim.slice(1).map((_, index) => ({
-    code: "COMPANY_IGNORED" as const,
-    field: `companies[${index + 1}]`,
-  }));
+  const warnings: IdentifyWarning[] = claim
+    .slice(1, 1 + MAX_COMPANY_WARNINGS)
+    .map((_, index) => ({
+      code: "COMPANY_IGNORED" as const,
+      field: `companies[${index + 1}]`,
+    }));
   const company = companyClaim(claim[0]);
   if (!company)
     return {
@@ -249,6 +261,12 @@ function parseCompaniesClaim(claim: unknown) {
         ...warnings,
       ],
     };
+  if (company.invalidDomain) {
+    warnings.unshift({
+      code: "COMPANY_DOMAIN_IGNORED",
+      field: "companies[0].domain",
+    });
+  }
   return { company, warnings };
 }
 

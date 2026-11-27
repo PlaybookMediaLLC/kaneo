@@ -13,8 +13,10 @@ export interface UseQuillsInitOptions extends Omit<InitOptions, "identity"> {
 /**
  * Boots the Quills widget when the host component mounts, and tears it
  * down on unmount. Identity changes (by structural equality via JSON key) fire
- * a follow-up `identify` call. Instance URL, workspace, enablement, and delay changes restart initialization. Other
- * options are read when startup runs. Identity removal selects anonymous mode.
+ * a follow-up `identify` call, and `theme`, `locale`, and `tracking` changes
+ * sync live without remounting. Instance URL, workspace, enablement, and delay
+ * changes restart initialization. Other options are read when startup runs.
+ * Identity removal selects anonymous mode.
  */
 export function useQuillsInit(options: UseQuillsInitOptions): void {
   const {

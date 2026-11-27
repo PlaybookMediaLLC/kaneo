@@ -296,14 +296,10 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
       renderGreeting();
     },
     setColors(colors) {
-      if (colors.backgroundColor) {
-        bg = colors.backgroundColor;
-        btn.style.backgroundColor = bg;
-      }
-      if (colors.foregroundColor) {
-        fg = colors.foregroundColor;
-        btn.style.color = fg;
-      }
+      bg = colors.backgroundColor || DEFAULT_BG;
+      btn.style.backgroundColor = bg;
+      fg = colors.foregroundColor || DEFAULT_FG;
+      btn.style.color = fg;
     },
     setUnread(count) {
       unreadCount = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;

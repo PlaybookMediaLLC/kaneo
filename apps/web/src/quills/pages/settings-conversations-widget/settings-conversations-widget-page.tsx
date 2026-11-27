@@ -137,7 +137,7 @@ export function SettingsConversationsWidgetPage({
                     <Link
                       to={teamHref(workspaceId, "/share")}
                       hash="widget-embed"
-                      className="inline-flex h-8 items-center rounded-md border border-border px-3 text-xs font-medium text-foreground hover:bg-muted"
+                      className="inline-flex h-8 items-center whitespace-nowrap rounded-md border border-border px-3 text-xs font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       {t("settings-conversations.widget.installAction")}
                     </Link>

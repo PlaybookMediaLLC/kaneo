@@ -29,7 +29,7 @@ Integrate Kaneo's embeddable Quills widget into a host web app cleanly, securely
 ## 2. Secret hygiene (non-negotiable)
 
 - Store `signingSecret` **only** in a server-side environment variable (`QUILLS_WIDGET_SECRET`) inside a gitignored file (e.g. `.env.local`).
-- Store non-secret public settings in `NEXT_PUBLIC_QUILLS_URL` / `VITE_QUILLS_URL` and `NEXT_PUBLIC_QUILLS_WORKSPACE` / `VITE_QUILLS_WORKSPACE`.
+- Store non-secret public settings in `NEXT_PUBLIC_QUILLS_URL` / `VITE_QUILLS_URL` (instance origin without `/api`, e.g. `https://support.example.com`) and `NEXT_PUBLIC_QUILLS_WORKSPACE` / `VITE_QUILLS_WORKSPACE` (workspace slug). Use `QUILLS_API_URL` (ending in `/api`) for server-side reverse-proxy rewrites.
 - Never place `QUILLS_WIDGET_SECRET` in `NEXT_PUBLIC_*`, `VITE_*`, `PUBLIC_*`, client components, git commits, or printed stdout/logs.
 - Never call `Quills("identify", { id, email })` with unsigned claims — the widget refuses unsigned identity client-side and requires a server-signed HS256 JWT.
 

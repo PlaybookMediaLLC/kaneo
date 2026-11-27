@@ -114,7 +114,10 @@ export async function GET(request: Request) {
 ```go
 func SignQuillsToken(sub, email, name, secret string) (string, error) {
 	now := time.Now().Unix()
-	header, _ := json.Marshal(map[string]string{"alg": "HS256", "typ": "JWT"})
+	header, err := json.Marshal(map[string]string{"alg": "HS256", "typ": "JWT"})
+	if err != nil {
+		return "", err
+	}
 	claims := map[string]any{
 		"sub":   sub,
 		"email": email,
@@ -124,7 +127,10 @@ func SignQuillsToken(sub, email, name, secret string) (string, error) {
 	if name != "" {
 		claims["name"] = name
 	}
-	payload, _ := json.Marshal(claims)
+	payload, err := json.Marshal(claims)
+	if err != nil {
+		return "", err
+	}
 	enc := base64.RawURLEncoding
 	unsigned := enc.EncodeToString(header) + "." + enc.EncodeToString(payload)
 	mac := hmac.New(sha256.New, []byte(secret))
@@ -149,18 +155,18 @@ If you use the typed React package `@quills/widget/react`, `useQuillsInit` react
 
 ### Same-origin reverse proxy (recommended for Next.js / Nginx / Cloudflare)
 
-Proxying `/api/quills-public/:path*` through your own domain ensures ad blockers never block support, avoids cross-origin preflights, and works cleanly across all browsers even under strict `Cross-Origin-Embedder-Policy` (`credentialless` or `require-corp`) headers:
+Proxying `/api/quills-public/:path*` through your own domain ensures ad blockers never block support, avoids cross-origin preflights, and keeps the iframe same-origin under `Cross-Origin-Embedder-Policy` headers:
 
 ```ts
 // next.config.ts — use beforeFiles so catch-all /api/[...unmatched] routes don't intercept it
 async rewrites() {
-  const quillsUrl = process.env.QUILLS_API_URL; // e.g. https://support.yourcompany.com/api
+  const quillsApi = process.env.QUILLS_API_URL?.replace(/\/+$/, ""); // e.g. https://support.yourcompany.com/api
   return {
-    beforeFiles: quillsUrl
+    beforeFiles: quillsApi
       ? [
           {
             source: "/api/quills-public/:path*",
-            destination: `${quillsUrl}/quills-public/:path*`,
+            destination: `${quillsApi}/quills-public/:path*`,
           },
         ]
       : [],
@@ -174,7 +180,7 @@ Then load `<script src="/api/quills-public/YOUR_WORKSPACE_SLUG/widget/sdk.js" de
 
 ### Direct cross-origin embedding
 
-Kaneo sends `Cross-Origin-Resource-Policy: cross-origin` on `sdk.js`, `config.json`, and the widget iframe assets, and automatically adds the `credentialless` iframe attribute when `window.crossOriginIsolated` is true — so Chromium-based browsers can embed the widget directly even on `COEP: credentialless` or `COEP: require-corp` pages. Because Firefox and Safari do not support `<iframe credentialless>`, pages sending `COEP: require-corp` in those browsers should use the same-origin reverse proxy above. If your app sends a strict `Content-Security-Policy`, allow:
+Kaneo sends `Cross-Origin-Resource-Policy: cross-origin` on `sdk.js`, `config.json`, and the widget iframe assets, and automatically adds the `credentialless` attribute to cross-origin iframes when `window.crossOriginIsolated` is true — so Chromium-based browsers can embed the widget directly even on `COEP: credentialless` or `COEP: require-corp` pages (note: `credentialless` iframes clear `window.opener` on popups, so one-click portal sign-in handoff requires either same-origin proxying or non-isolated pages; Firefox and Safari under `COEP: require-corp` should use the same-origin proxy above). If your app sends a strict `Content-Security-Policy`, allow:
 
 - `style-src 'unsafe-inline'` for the widget launcher and panel shell styles
 - `script-src`, `frame-src`, and `connect-src` for your Kaneo origin (not required if using the same-origin proxy above)
@@ -198,4 +204,4 @@ Kaneo sends `Cross-Origin-Resource-Policy: cross-origin` on `sdk.js`, `config.js
      -d '{"ssoToken":"YOUR_SIGNED_JWT"}'
    ```
 
-   Confirm HTTP `200`, `"valid": true`, and `"warnings": []`. Any undefined custom attribute or unknown manual segment slug is reported in `warnings`.
+   Confirm HTTP `200`, `"valid": true`, and `"warnings": []`. Any undefined custom attribute, unknown manual segment slug, or invalid/taken company domain is reported in `warnings`. (This dry-run validates signature, expiry, claims, and workspace mappings without touching customer rows, so it does not check blocked-account status or email collisions.)

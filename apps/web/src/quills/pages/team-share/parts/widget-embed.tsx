@@ -60,36 +60,40 @@ export function WidgetEmbed({
         </p>
         <CodeBlock label={t("team-share.widget.proxy")} code={code.proxy} />
       </div>
-      <div className="flex flex-wrap items-start gap-3">
-        <Button
-          className="rounded-full"
-          onClick={() =>
-            void tellCopy(
-              copyToClipboard(
-                [code.load, code.start, code.identify].join("\n"),
-              ),
-              t,
-            )
-          }
-        >
-          {t("team-share.widget.copyAll")}
-        </Button>
+      <div className="grid gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            className="rounded-full"
+            onClick={() =>
+              void tellCopy(
+                copyToClipboard(
+                  [code.load, code.start, code.identify].join("\n"),
+                ),
+                t,
+              )
+            }
+          >
+            {t("team-share.widget.copyAll")}
+          </Button>
+          <a
+            href={brandText("https://kaneo.app/docs/quills/widget")}
+            target="_blank"
+            rel="noreferrer"
+            className="text-sm text-muted-foreground hover:text-foreground"
+          >
+            {t("team-share.widget.docs")}
+          </a>
+        </div>
         {canMintCode ? (
-          <InstallCode
-            key={workspaceId}
-            workspaceId={workspaceId}
-            slug={slug}
-            apiBase={apiBase}
-          />
+          <div className="min-w-0">
+            <InstallCode
+              key={workspaceId}
+              workspaceId={workspaceId}
+              slug={slug}
+              apiBase={apiBase}
+            />
+          </div>
         ) : null}
-        <a
-          href={brandText("https://kaneo.app/docs/quills/widget")}
-          target="_blank"
-          rel="noreferrer"
-          className="self-center text-sm text-muted-foreground hover:text-foreground"
-        >
-          {t("team-share.widget.docs")}
-        </a>
       </div>
     </div>
   );

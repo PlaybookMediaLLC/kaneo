@@ -110,6 +110,7 @@ export function createSDK(): SDK {
   let lastServerConfig: ServerConfig | null = null;
   let launcherHidden = false;
   let serverDisabled = false;
+  let revealElapsed = false;
   /** A host element bound with `launcher: { selector }`, and its click handler. */
   let bound: { el: Element; onClick: () => void } | null = null;
   /** identify() promises: the one sent to the iframe, and the one queued behind it. */
@@ -124,7 +125,7 @@ export function createSDK(): SDK {
       open: panelOpen,
       placement,
       theme: hostTheme ?? serverThemeMode(),
-      locale: config?.locale ?? null,
+      locale: config?.locale ?? pendingLocale ?? null,
       unreadCount,
       user: currentUser,
       identified: currentUser !== null,
@@ -551,7 +552,9 @@ export function createSDK(): SDK {
         if (config) dispatch("destroy");
         const gen = ++initGeneration;
         serverDisabled = false;
+        revealElapsed = false;
         const resolvedLocale = next.locale ?? pendingLocale ?? undefined;
+        pendingLocale = resolvedLocale ?? null;
         config = resolvedLocale ? { ...next, locale: resolvedLocale } : next;
         if (next.theme !== undefined) hostTheme = next.theme;
         announcedOpen = false;
@@ -574,7 +577,9 @@ export function createSDK(): SDK {
           sendIdentity({ anonymous: true });
         }
         const reveal = () => {
-          if (initGeneration === gen) launcher?.reveal();
+          if (initGeneration !== gen) return;
+          revealElapsed = true;
+          launcher?.reveal();
         };
         const baked = window.__QUACKBACK_CONFIG__;
         const bakedMatches =
@@ -720,6 +725,7 @@ export function createSDK(): SDK {
         if (config) config = { ...config, locale: a };
         if (ready && bridge) bridge.send("quackback:locale", a);
         launcher?.setLocale(a);
+        panel?.setLocale(a);
         changed();
         return;
       }
@@ -738,7 +744,7 @@ export function createSDK(): SDK {
               created.setGreeting(lastServerConfig.launcherGreeting);
               created.setLabel(lastServerConfig.launcherLabel);
               created.reveal();
-            } else if (!configAbort) {
+            } else if (!configAbort || revealElapsed) {
               created.reveal();
             }
           }
@@ -795,6 +801,7 @@ export function createSDK(): SDK {
         lastServerConfig = null;
         launcherHidden = false;
         serverDisabled = false;
+        revealElapsed = false;
         initGeneration += 1;
         config = null;
         configAbort?.abort();
