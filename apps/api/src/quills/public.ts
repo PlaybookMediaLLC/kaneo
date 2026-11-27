@@ -21,6 +21,7 @@ import widgetSurveys from "./widget/surveys";
 import widgetHelp from "./widget/help/index";
 import widgetKbAsk from "./widget/kb-ask";
 import widgetSupport from "./widget/support/index";
+import portalPrivacy from "./privacy/portal-export";
 
 // Portal, widget and public Quills routes. src/index.ts mounts this router at /quills-public
 // before Kaneo's session middleware: each route resolves its own caller in framework/audience.ts
@@ -52,28 +53,32 @@ export type QuillsPublicRouters = [
   typeof track,
   typeof portalSurveys,
   typeof widgetSurveys,
+  typeof portalPrivacy,
 ];
 
-export default apiRouter()
-  .route("/", widgetHost)
-  .route("/", integrationWebhooks)
-  .route("/", oauthCallback)
-  .route("/", connectorOAuthCallback)
-  .route("/", inboundEmail)
-  .route("/", emailEvents)
-  .route("/", jobWake)
-  .route("/", portalTokenSignIn)
-  .route("/", portal)
-  .route("/", widget)
-  .route("/", portalFeedback)
-  .route("/", widgetFeedback)
-  .route("/", widgetHelp)
-  .route("/", contentPublic)
-  .route("/", widgetKbAsk)
-  .route("/", portalSupport)
-  .route("/", widgetSupport)
-  .route("/", customerFiles)
-  .route("/", avatarImage)
-  .route("/", track)
-  .route("/", portalSurveys)
-  .route("/", widgetSurveys);
+const quillsPublicRouter = apiRouter();
+quillsPublicRouter.route("/", widgetHost);
+quillsPublicRouter.route("/", integrationWebhooks);
+quillsPublicRouter.route("/", oauthCallback);
+quillsPublicRouter.route("/", connectorOAuthCallback);
+quillsPublicRouter.route("/", inboundEmail);
+quillsPublicRouter.route("/", emailEvents);
+quillsPublicRouter.route("/", jobWake);
+quillsPublicRouter.route("/", portalTokenSignIn);
+quillsPublicRouter.route("/", portal);
+quillsPublicRouter.route("/", widget);
+quillsPublicRouter.route("/", portalFeedback);
+quillsPublicRouter.route("/", widgetFeedback);
+quillsPublicRouter.route("/", widgetHelp);
+quillsPublicRouter.route("/", contentPublic);
+quillsPublicRouter.route("/", widgetKbAsk);
+quillsPublicRouter.route("/", portalSupport);
+quillsPublicRouter.route("/", widgetSupport);
+quillsPublicRouter.route("/", customerFiles);
+quillsPublicRouter.route("/", avatarImage);
+quillsPublicRouter.route("/", track);
+quillsPublicRouter.route("/", portalSurveys);
+quillsPublicRouter.route("/", widgetSurveys);
+quillsPublicRouter.route("/", portalPrivacy);
+
+export default quillsPublicRouter;

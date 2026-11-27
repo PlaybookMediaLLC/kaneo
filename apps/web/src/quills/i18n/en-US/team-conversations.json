@@ -116,6 +116,11 @@
 		"noAccess": "You do not have permission to make this change.",
 		"rateLimited": "There were too many changes. Wait a moment and try again."
 	},
+	"redactAction": "Redact",
+	"redactTitle": "Redact this message and its attachments?",
+	"redactText": "Scrubs the message text, attachments, translations, and cached summaries/embeddings permanently while keeping the thread intact.",
+	"redacted": "Message redacted.",
+	"redactedBadge": "Redacted by {{name}} on {{date}}",
 	"properties": {
 		"panel": "Customer and details",
 		"priority": "Priority",

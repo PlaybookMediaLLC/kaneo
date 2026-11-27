@@ -7,6 +7,7 @@ import { startWebhookWorker } from "./admin/webhooks/start-webhook-worker";
 import integrationSync from "./integration-sync";
 import { syncWorkspaceAccess } from "./ws/workspace-access";
 import { drainPasswordResetDeliveries } from "./utils/password-reset-delivery";
+import { localStorageRoutes } from "./storage/local-driver";
 import "./instrument";
 
 import { createHash } from "node:crypto";
@@ -322,6 +323,8 @@ export function createApp() {
   api.get("/health", (c) => {
     return c.json({ status: "ok" });
   });
+
+  api.route("/storage/local", localStorageRoutes);
 
   api.openapi(
     createRoute({

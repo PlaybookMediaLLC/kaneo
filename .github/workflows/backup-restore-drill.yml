@@ -1,0 +1,65 @@
+name: Self-Hosting Backup, Restore & Expand-Only Drill
+
+on:
+  pull_request:
+    paths:
+      - "compose*.yml"
+      - "charts/kaneo/**"
+      - "scripts/kaneo-ctl.sh"
+      - "scripts/ci/check-expand-only.mjs"
+      - "apps/api/drizzle/**"
+      - "apps/api/src/storage/local-driver.ts"
+      - "apps/api/src/database/quills/migrate.ts"
+  schedule:
+    - cron: "0 4 * * 0"
+  workflow_dispatch:
+
+jobs:
+  expand-only-and-self-host:
+    name: Expand-Only Migrations & Local Storage / Rollback Checks
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.7-pg16-bookworm
+        env:
+          POSTGRES_USER: kaneo
+          POSTGRES_PASSWORD: kaneo-drill-password
+          POSTGRES_DB: kaneo_drill
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U kaneo -d kaneo_drill"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Lint shell operations script
+        run: bash -n scripts/kaneo-ctl.sh
+
+      - name: Check new migrations are expand-only
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            FILES=$(git diff --name-only --diff-filter=A "origin/${{ github.base_ref }}...HEAD" -- 'apps/api/drizzle/*.sql' 'apps/api/drizzle/quills/*.sql')
+            if [ -n "$FILES" ]; then
+              node scripts/ci/check-expand-only.mjs $FILES
+            fi
+          fi
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run self-hosting, local storage, doctor, and rollback migration suite
+        env:
+          QUILLS_TEST_DATABASE_URL: postgres://kaneo:kaneo-drill-password@127.0.0.1:5432/kaneo_drill
+        run: pnpm --filter @kaneo/api exec vp test run src/storage/self-hosting.test.ts

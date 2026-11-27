@@ -90,6 +90,7 @@ function WidgetViewBody({
   feedbackFields,
   onReplyMessage,
   onConfirmFeedbackCard,
+  onHandoffConversation,
   onReadConversation,
   onOpenFile,
   onReadUpdate,
@@ -488,6 +489,11 @@ function WidgetViewBody({
               onConfirmFeedbackCard
                 ? (messageId, card) =>
                     onConfirmFeedbackCard(conversation.id, messageId, card)
+                : undefined
+            }
+            onHandoff={
+              onHandoffConversation
+                ? () => onHandoffConversation(conversation.id)
                 : undefined
             }
           />

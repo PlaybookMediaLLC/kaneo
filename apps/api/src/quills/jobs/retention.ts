@@ -6,6 +6,7 @@ import {
   type Database,
 } from "../../database/quills/client";
 import { refreshVisitorAnalytics } from "../../database/quills/visitor-rollup";
+import { enforceWorkspaceRetentionPolicies } from "../privacy/retention-policies";
 import { pruneAnonymousVisitors } from "./anonymous-visitors";
 const days = z.coerce.number().int().min(1).max(3650);
 export const retentionSchema = z.object({
@@ -52,6 +53,7 @@ export async function pruneQuillsWorkspace(
   let removed = 0;
   for (const statement of statements)
     removed += (await tx.execute(statement)).rowCount ?? 0;
+  removed += await enforceWorkspaceRetentionPolicies(tx);
   return removed + (await pruneAnonymousVisitors(tx));
 }
 

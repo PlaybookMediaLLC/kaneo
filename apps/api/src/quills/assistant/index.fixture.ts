@@ -5,6 +5,7 @@ export * from "./analytics.fixture";
 export * from "./connectors.fixture";
 export * from "./copilot.fixture";
 export * from "./documents.fixture";
+export * from "./guardrails.fixture";
 export * from "./guidance.fixture";
 export * from "./help-center-ai.fixture";
 export * from "./pending-actions.fixture";

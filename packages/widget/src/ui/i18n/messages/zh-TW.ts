@@ -256,6 +256,11 @@ const zh_TW: Catalog = {
   Remove: "移除",
   "Picture updated": "頭像已更新",
   "Could not save the picture.": "無法儲存頭像。",
+  Sources: "來源",
+  "Talk to a person": "聯絡真人客服",
+  "Connecting you with the team…": "正在為您轉接團隊…",
+  "Could not connect to a person. Please try again.":
+    "無法聯絡真人客服，請再試一次。",
 };
 
 export default zh_TW;

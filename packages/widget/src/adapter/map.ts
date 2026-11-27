@@ -74,6 +74,11 @@ export interface ApiMessage {
   /** A file with a fileId downloads through the conversation file route. */
   attachments?: ReadonlyArray<{ fileId: string | null; name: string }>;
   fromAssistant?: boolean;
+  citations?: ReadonlyArray<{
+    title: string;
+    url: string;
+    sourceType: "article" | "web";
+  }>;
   feedbackCard?: {
     title: string;
     body: string;
@@ -189,6 +194,7 @@ export function toMessage(
     fromVisitor: message.fromVisitor,
     ...(files.length ? { files } : {}),
     ...(message.fromAssistant && { fromAssistant: true }),
+    ...(message.citations?.length ? { citations: message.citations } : {}),
     ...(message.feedbackCard && {
       feedbackCard: {
         title: message.feedbackCard.title,

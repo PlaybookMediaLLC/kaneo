@@ -273,6 +273,11 @@ export const en = {
   Remove: "Remove",
   "Picture updated": "Picture updated",
   "Could not save the picture.": "Could not save the picture.",
+  Sources: "Sources",
+  "Talk to a person": "Talk to a person",
+  "Connecting you with the team…": "Connecting you with the team…",
+  "Could not connect to a person. Please try again.":
+    "Could not connect to a person. Please try again.",
 } as const;
 
 export type MessageKey = keyof typeof en;

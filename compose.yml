@@ -16,11 +16,26 @@ services:
       retries: 5
 
   kaneo:
-    image: ghcr.io/usekaneo/kaneo:latest
+    # Pin KANEO_VERSION in .env (e.g. KANEO_VERSION=v2.4.0) so upgrades and rollbacks are deterministic.
+    image: ghcr.io/playbookmediallc/kaneo:${KANEO_VERSION:-latest}
     ports:
       - "5173:5173"
     env_file:
       - .env
+    environment:
+      # Single-host default: zero-S3 local filesystem uploads persisted on the uploads_data volume.
+      # Set STORAGE_DRIVER=s3 and S3_* variables in .env when scaling horizontally.
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      LOCAL_STORAGE_DIR: /data/uploads
+    volumes:
+      - uploads_data:/data/uploads
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       postgres:
         condition: service_healthy
@@ -34,9 +49,10 @@ services:
 
 #  Optional for HA Setup
 #  redis:
-#    image: valkey/valkey
+#    image: valkey/valkey:8-alpine
 #    ports:
 #      - "6379:6379"
 
 volumes:
   postgres_data:
+  uploads_data:

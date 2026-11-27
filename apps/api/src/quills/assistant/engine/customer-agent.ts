@@ -1,6 +1,22 @@
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import {
+  buildHandoffSummary,
+  DEFAULT_CONFIDENCE_THRESHOLD,
+  DEFAULT_HANDOFF_REPLY,
+  evaluateRetrievalGate,
+  guardCustomerAgentReply,
+  isExplicitHumanRequest,
+  matchDeclineTopic,
+  type DeclineTopicRule,
+  type GroundedSource,
+} from "@quills/ai/customer-agent";
+import { and, count, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { withQuillsSystemWorkspace } from "../../../database/quills/client";
+import {
+  agentDeclineTopics,
+  assistantDraftReplies,
+  type AgentChannelMode,
+} from "../../../database/quills/schema/agent-guardrails";
 import {
   ASSISTANT_MODEL_HANDOFF_REASONS,
   assistantInvolvements,
@@ -32,22 +48,21 @@ import {
   type Source,
 } from "./retrieval";
 import { guidanceLines, loadGuidance } from "./agent-guidance";
-import { failedUsage, nothing, type Work } from "./shared";
+import { failedUsage, nothing, type Work, type Write } from "./shared";
 
-// The customer agent (gap G-31): while a teammate turns it on, it answers a widget or portal
-// conversation from the help center and documents. It hands off to the team with a private note
-// when it cannot help or the customer asks for a person, and it can propose one feedback request
-// per conversation, which the customer confirms. A conversation that a teammate owns, or that the
-// agent already handed off or resolved, is left to the team.
-//
-// It runs on the AI SDK tool loop (ai/agent.ts). Its knowledge is searched by words and by meaning
-// (retrieval.ts) before the first call, and it can search again with other words, or call a read
-// tool of a connector assigned to it whose policy is "always" (no teammate is there to approve).
-// The guidance rules and skills that a teammate assigned to it shape its answer.
+// The customer agent (#299):
+// - Enforces per-channel mode (`off | draft | auto`), confidence threshold, and 5 AI replies/hour cap.
+// - Explicit human requests and `always_handoff` decline topics escalate immediately with zero LLM call.
+// - Hard retrieval gate blocks answering when zero qualifying sources exist.
+// - Post-LLM citation/confidence/quote-only guard guarantees every shipped answer is cited, confident,
+//   and verbatim-quoted on `quote_only` topics (pricing, refunds, policies, contract terms).
+// - `draft` mode writes to isolated `quills.assistant_draft_replies` so unapproved drafts never leak.
 
 const answer = z.object({
   reply: z.string().max(3000),
   handoff: z.enum(ASSISTANT_MODEL_HANDOFF_REASONS).nullable(),
+  confidence: z.number().min(0).max(1).default(0.8),
+  quotedExcerpt: z.string().max(600).nullable().optional(),
   feedback: z
     .object({
       title: z.string().trim().min(3).max(120),
@@ -58,15 +73,52 @@ const answer = z.object({
 });
 const TRANSCRIPT = 12;
 const MAX_STEPS = 3;
+const MAX_AI_REPLIES_PER_HOUR = 5;
 const query = z.object({ query: z.string().trim().min(1).max(200) });
 
 /** A search embedding waits at most this long; search by words does not need it. */
 const EMBED_MS = 8_000;
 
-/**
- * The text's vector for search by meaning, or null without embeddings or when the call fails.
- * After one failure the turn searches by words only, so a slow provider costs one wait.
- */
+type ChannelSettings = {
+  mode: AgentChannelMode;
+  confidenceThreshold: number;
+};
+
+function resolveChannelSettings(
+  rawConfig: unknown,
+  channelKey: "messenger" | "email" | "widget",
+  legacyEnabled: boolean,
+): ChannelSettings {
+  const stored = (
+    rawConfig as {
+      agents?: {
+        agent?: {
+          channels?: Partial<
+            Record<
+              string,
+              { mode?: AgentChannelMode; confidenceThreshold?: number }
+            >
+          >;
+        };
+      };
+    } | null
+  )?.agents?.agent?.channels?.[channelKey];
+  if (stored?.mode) {
+    return {
+      mode: stored.mode,
+      confidenceThreshold:
+        typeof stored.confidenceThreshold === "number"
+          ? stored.confidenceThreshold
+          : DEFAULT_CONFIDENCE_THRESHOLD,
+    };
+  }
+  // Backward compatibility: workspaces without explicit channel mode inherit legacy agent.enabled.
+  return {
+    mode: legacyEnabled ? "auto" : "off",
+    confidenceThreshold: DEFAULT_CONFIDENCE_THRESHOLD,
+  };
+}
+
 async function vectorOf(
   text: string,
   usage: UsageEntry[],
@@ -83,7 +135,6 @@ async function vectorOf(
     });
     return { values: result.vectors[0]!, model };
   } catch (error) {
-    // Search by words still works; the answer is worth more than the better search.
     if (!(error instanceof AiError)) throw error;
     state.failed = true;
     usage.push(failedUsage("customer_agent_search", "embedding", error));
@@ -91,9 +142,17 @@ async function vectorOf(
   }
 }
 
+const toGrounded = (source: Source): GroundedSource => ({
+  id: source.id,
+  type: source.type,
+  title: source.title,
+  excerpt: source.excerpt,
+  url: source.url ?? "",
+  score: source.score,
+});
+
 /** conversation.created and message.created: answers the customer's newest message. */
 export const answerCustomer: Work = async (workspaceId, event) => {
-  if (!aiConfig()) return nothing;
   const payload = event.payload as Record<string, string>;
   const messageId =
     event.type === "conversation.created" ? payload.messageId : event.entityId;
@@ -103,9 +162,10 @@ export const answerCustomer: Work = async (workspaceId, event) => {
       .from(settings)
       .limit(1);
     const config = readConfig(row!.config);
-    if (!config.agent.enabled || !messageId) return null;
+    if (!messageId) return null;
     const [message] = await db
       .select({
+        id: conversationMessages.id,
         conversationId: conversationMessages.conversationId,
         senderType: conversationMessages.senderType,
         content: conversationMessages.content,
@@ -120,11 +180,24 @@ export const answerCustomer: Work = async (workspaceId, event) => {
       .where(eq(conversations.id, message.conversationId));
     if (
       !conversation ||
-      conversation.channel !== "messenger" ||
       conversation.status !== "open" ||
       conversation.assignedAgentPrincipalId
     )
       return null;
+
+    const channelKey: "messenger" | "email" | "widget" =
+      conversation.channel === "email"
+        ? "email"
+        : conversation.source === "widget"
+          ? "widget"
+          : "messenger";
+    const channelSettings = resolveChannelSettings(
+      row!.config,
+      channelKey,
+      config.agent.enabled,
+    );
+    if (channelSettings.mode === "off") return null;
+
     const [involvement] = await db
       .select({
         id: assistantInvolvements.id,
@@ -135,6 +208,34 @@ export const answerCustomer: Work = async (workspaceId, event) => {
       .orderBy(desc(assistantInvolvements.createdAt))
       .limit(1);
     if (involvement && involvement.status !== "active") return null;
+
+    // Count AI replies sent to this customer across conversations in the past hour (5/hr cap).
+    const oneHourAgo = new Date(Date.now() - 3_600_000);
+    const [recentAi] = await db
+      .select({ n: count() })
+      .from(conversationMessages)
+      .innerJoin(
+        conversations,
+        eq(conversations.id, conversationMessages.conversationId),
+      )
+      .where(
+        and(
+          eq(conversations.visitorPrincipalId, conversation.visitorPrincipalId),
+          sql`coalesce(${conversationMessages.metadata}->>'assistantReply', 'false') = 'true'`,
+          gte(conversationMessages.createdAt, oneHourAgo),
+        ),
+      );
+
+    const declineTopicRows = await db
+      .select({
+        slug: agentDeclineTopics.slug,
+        label: agentDeclineTopics.label,
+        policy: agentDeclineTopics.policy,
+        examples: agentDeclineTopics.examples,
+        enabled: agentDeclineTopics.enabled,
+      })
+      .from(agentDeclineTopics);
+
     const transcript = (
       await db
         .select({
@@ -156,36 +257,285 @@ export const answerCustomer: Work = async (workspaceId, event) => {
     const guidance = await loadGuidance(db, "agent");
     return {
       config,
+      channelSettings,
       conversation,
       involvement,
+      triggerMessageId: message.id,
       question: message.content,
       transcript,
       guidance,
-      // At most one proposed request per conversation.
-      cardOffered: transcript.some((row) => row.metadata?.feedbackCard),
+      recentAiReplies: recentAi?.n ?? 0,
+      declineTopics: declineTopicRows as DeclineTopicRule[],
+      cardOffered: transcript.some((r) => r.metadata?.feedbackCard),
     };
   });
   if (!read) return nothing;
-  const { config, conversation, involvement, question, transcript } = read;
+  const {
+    config,
+    channelSettings,
+    conversation,
+    involvement,
+    triggerMessageId,
+    question,
+    transcript,
+    recentAiReplies,
+    declineTopics,
+  } = read;
+
+  const usage: UsageEntry[] = [];
+  const attemptedSteps: string[] = [];
+
+  const commitOutcome =
+    (decision: {
+      outcome: "answer" | "handoff";
+      reply: string;
+      citations: ConversationMessageCitation[];
+      confidence: number | null;
+      handoffReason?: string;
+      card?: { title: string; body: string; status: "proposed" };
+      sourcesConsulted: Array<{ id: string; title: string; url: string }>;
+    }): Write =>
+    async (db) => {
+      if (usage.length > 0) await logUsage(db, usage);
+      const [current] = await db
+        .select({
+          status: conversations.status,
+          assignee: conversations.assignedAgentPrincipalId,
+        })
+        .from(conversations)
+        .where(eq(conversations.id, conversation.id))
+        .for("update");
+      const [latest] = await db
+        .select({
+          id: assistantInvolvements.id,
+          status: assistantInvolvements.status,
+        })
+        .from(assistantInvolvements)
+        .where(eq(assistantInvolvements.conversationId, conversation.id))
+        .orderBy(desc(assistantInvolvements.createdAt))
+        .limit(1);
+      if (
+        current?.status !== "open" ||
+        current.assignee ||
+        latest?.id !== involvement?.id ||
+        (latest && latest.status !== "active")
+      )
+        return;
+
+      const now = new Date();
+      const involvementId =
+        involvement?.id ??
+        (
+          await db
+            .insert(assistantInvolvements)
+            .values({
+              conversationId: conversation.id,
+              triggeredBy: "first_touch",
+            })
+            .returning({ id: assistantInvolvements.id })
+        )[0]!.id;
+
+      // Draft mode: write answers to the isolated assistant_draft_replies table so unapproved text
+      // can NEVER appear in customer-facing conversation_messages queries.
+      if (decision.outcome === "answer" && channelSettings.mode === "draft") {
+        const [draft] = await db
+          .insert(assistantDraftReplies)
+          .values({
+            conversationId: conversation.id,
+            triggerMessageId,
+            content: decision.reply,
+            citations: decision.citations,
+            confidence: decision.confidence ?? 0,
+            status: "pending",
+          })
+          .returning({ id: assistantDraftReplies.id });
+        await db
+          .update(assistantInvolvements)
+          .set({
+            lastAssistantAnswerAt: now,
+            sources: decision.citations.map(({ type, id, title }) => ({
+              type,
+              id,
+              title,
+            })) as never,
+          })
+          .where(eq(assistantInvolvements.id, involvementId));
+        await recordQuillsChange(db, null, {
+          type: "assistant_draft.created",
+          entityType: "assistant_draft_reply",
+          entityId: draft!.id,
+          payload: { conversationId: conversation.id },
+        });
+        return;
+      }
+
+      const text = decision.reply.trim();
+      if (text) {
+        const [message] = await db
+          .insert(conversationMessages)
+          .values({
+            conversationId: conversation.id,
+            principalId: null,
+            senderType: "agent",
+            content: text,
+            citations: decision.citations.length ? decision.citations : null,
+            metadata: {
+              assistantReply: true,
+              ...(decision.card && { feedbackCard: decision.card }),
+            },
+          })
+          .returning({
+            id: conversationMessages.id,
+            createdAt: conversationMessages.createdAt,
+          });
+        await db
+          .update(conversations)
+          .set({
+            lastMessageAt: message!.createdAt,
+            lastMessagePreview: preview(text),
+            updatedAt: message!.createdAt,
+          })
+          .where(eq(conversations.id, conversation.id));
+        await recordQuillsChange(db, null, {
+          type: "message.created",
+          entityType: "conversation_message",
+          entityId: message!.id,
+          payload: { conversationId: conversation.id, source: "assistant" },
+        });
+      }
+
+      await db
+        .update(assistantInvolvements)
+        .set({
+          lastAssistantAnswerAt: now,
+          sources: decision.citations.map(({ type, id, title }) => ({
+            type,
+            id,
+            title,
+          })) as never,
+          ...(decision.outcome === "handoff" && {
+            status: "handed_off" as const,
+            handoffReason: (decision.handoffReason ?? "cannot_answer") as never,
+            endedAt: now,
+          }),
+        })
+        .where(eq(assistantInvolvements.id, involvementId));
+
+      if (decision.outcome === "handoff") {
+        const { note } = buildHandoffSummary({
+          agentName: config.identity.name,
+          customerQuestion: question,
+          reason: decision.handoffReason ?? "cannot_answer",
+          confidence: decision.confidence,
+          attemptedSteps,
+          sourcesConsulted: decision.sourcesConsulted,
+        });
+        await systemNotice(db, conversation.id, note, {
+          internal: true,
+          event: { kind: "assistant_handoff" },
+        });
+        await systemNotice(db, conversation.id, "A teammate will reply here.", {
+          event: { kind: "assistant_handoff" },
+        });
+        await db
+          .update(conversations)
+          .set({
+            waitingSince: sql`coalesce(${conversations.waitingSince}, now())`,
+          })
+          .where(eq(conversations.id, conversation.id));
+        await recordQuillsChange(db, null, {
+          type: "conversation.handed_off",
+          entityType: "conversation",
+          entityId: conversation.id,
+          payload: { reason: decision.handoffReason ?? "cannot_answer" },
+        });
+      }
+    };
+
+  // Pre-LLM Guard 1: Per-customer hourly AI reply cap (5/hr).
+  if (recentAiReplies >= MAX_AI_REPLIES_PER_HOUR) {
+    attemptedSteps.push(
+      `Customer reached hourly AI reply limit (${MAX_AI_REPLIES_PER_HOUR}/hr)`,
+    );
+    return commitOutcome({
+      outcome: "handoff",
+      reply:
+        "I've connected you with our team so a teammate can help directly.",
+      citations: [],
+      confidence: null,
+      handoffReason: "rate_limit",
+      sourcesConsulted: [],
+    });
+  }
+
+  // Pre-LLM Guard 2: Explicit request for a human -> immediate deterministic handoff.
+  if (isExplicitHumanRequest(question)) {
+    attemptedSteps.push("Customer explicitly requested a human teammate");
+    return commitOutcome({
+      outcome: "handoff",
+      reply: "I've connected you with our team.",
+      citations: [],
+      confidence: null,
+      handoffReason: "customer_requested",
+      sourcesConsulted: [],
+    });
+  }
+
+  // Pre-LLM Guard 3: Declined topic policy (`always_handoff` escalates without calling LLM).
+  const declineMatch = matchDeclineTopic(question, declineTopics);
+  if (declineMatch.matched) {
+    attemptedSteps.push(
+      `Matched restricted topic "${declineMatch.topic.label}" (${declineMatch.topic.policy})`,
+    );
+    if (declineMatch.topic.policy === "always_handoff") {
+      return commitOutcome({
+        outcome: "handoff",
+        reply: DEFAULT_HANDOFF_REPLY,
+        citations: [],
+        confidence: null,
+        handoffReason: "restricted_topic",
+        sourcesConsulted: [],
+      });
+    }
+  }
+
+  if (!aiConfig()) return nothing;
+
   const voice = config.agent.voice;
   const knowledge = config.agent.knowledge;
-  const usage: UsageEntry[] = [];
   const search = (text: string, near: Near | null) =>
     withQuillsSystemWorkspace(workspaceId, (db) =>
       publicSources(db, knowledge, text, near),
     );
   const embedding = { failed: false };
-  // Load read-only connector tools in parallel with embedding the initial question.
   const [near, connectorMap] = await Promise.all([
     vectorOf(question, usage, embedding),
     loadConnectorTools(workspaceId, "agent"),
   ]);
   const sources = await search(question, near);
-  const seen = new Map<string, Source>(
-    sources.map((source) => [source.id, source]),
+  attemptedSteps.push(
+    `Searched knowledge base (${sources.length} candidate source${sources.length === 1 ? "" : "s"})`,
   );
-  // Fixed before the first call: read tools an admin turned on by name for the agent
-  // (connector-tools.ts `offer`). A customer cannot approve, and no teammate is here.
+
+  // Pre-LLM Guard 4: Hard retrieval gate — never ask the LLM to answer from memory!
+  const gate = evaluateRetrievalGate(sources.map(toGrounded));
+  if (!gate.allowed && connectorMap.size === 0) {
+    attemptedSteps.push(
+      "Retrieval gate blocked answering: zero qualifying sources",
+    );
+    return commitOutcome({
+      outcome: "handoff",
+      reply: DEFAULT_HANDOFF_REPLY,
+      citations: [],
+      confidence: 0,
+      handoffReason: "cannot_answer",
+      sourcesConsulted: [],
+    });
+  }
+
+  const seen = new Map<string, GroundedSource>(
+    sources.map((source) => [source.id, toGrounded(source)]),
+  );
   const connectorTools = [...connectorMap.values()];
   const budget = connectorBudget();
   const repeats = new Map<string, number>();
@@ -202,8 +552,10 @@ export const answerCustomer: Work = async (workspaceId, event) => {
           parsed.data.query,
           await vectorOf(parsed.data.query, usage, embedding),
         );
-        for (const source of found) seen.set(source.id, source);
-        // Crawled pages are third-party text: inside the data fence, as in the first prompt.
+        attemptedSteps.push(
+          `Re-searched knowledge base for "${parsed.data.query}" (${found.length} hit${found.length === 1 ? "" : "s"})`,
+        );
+        for (const source of found) seen.set(source.id, toGrounded(source));
         return untrusted("sources", formatSources(found));
       },
     },
@@ -239,7 +591,7 @@ export const answerCustomer: Work = async (workspaceId, event) => {
       },
     })),
   ];
-  // A failed turn still logs what it used, so a retry counts toward the monthly limit.
+
   const failed = async (error: unknown): Promise<never> => {
     await withQuillsSystemWorkspace(workspaceId, (db) =>
       logUsage(db, [
@@ -249,6 +601,7 @@ export const answerCustomer: Work = async (workspaceId, event) => {
     );
     throw error;
   };
+
   const text = await runToolLoop({
     json: true,
     tools,
@@ -273,11 +626,14 @@ export const answerCustomer: Work = async (workspaceId, event) => {
           config.agent.productDescription &&
             `The product: ${config.agent.productDescription}`,
           voice.additionalInstructions,
-          "Answer only from the sources. When they do not answer the question, use search_knowledge with other words once before you give up. When the sources still do not answer it, or the customer asks for a person, is frustrated, repeats themselves or asks for something you cannot do, set handoff to the reason and keep reply to one short sentence that a teammate will follow up.",
+          "Answer ONLY from the provided sources and always include every cited source ID in sourceIds. Never invent facts or answer from memory. When sources do not answer the question, or the customer asks for a person, is frustrated, repeats themselves, or asks for something you cannot do, set handoff to the reason.",
+          declineMatch.matched
+            ? `STRICT QUOTE-ONLY POLICY (${declineMatch.topic.label}): You MUST quote the exact wording verbatim from a provided source in quotedExcerpt and never paraphrase or extrapolate. If no source states the exact answer verbatim, set handoff to "cannot_answer".`
+            : "",
           read.cardOffered
             ? "Set feedback to null."
             : "When the customer asks for a new feature or reports a product problem, set feedback to a short request title and body in their words; otherwise null.",
-          'Answer with one JSON object: {"reply": string, "handoff": reason or null, "feedback": {"title": string, "body": string} or null, "sourceIds": string[]}.',
+          'Answer with one JSON object: {"reply": string, "handoff": reason or null, "confidence": number (0..1), "quotedExcerpt": string or null, "feedback": {"title": string, "body": string} or null, "sourceIds": string[]}.',
           ...guidanceLines(read.guidance),
         ]
           .filter(Boolean)
@@ -298,129 +654,40 @@ export const answerCustomer: Work = async (workspaceId, event) => {
       },
     ],
   }).catch(failed);
-  // The answer is JSON; one repair (a fence, text around it), then it must fit the schema.
+
   const repaired = text && repairJson(text);
   const parsed = answer.safeParse(repaired && JSON.parse(repaired));
   if (!parsed.success) return failed(new AiError("bad_response"));
-  const reply = { value: parsed.data };
-  const citations: ConversationMessageCitation[] = [...seen.values()]
-    .filter((source) => reply.value.sourceIds.includes(source.id))
-    .map((source) => ({
-      type: source.type,
-      id: source.id,
-      title: source.title,
-      url: "",
-    }));
+
+  // Post-LLM Guard: enforce citations, confidence threshold, and quote-only verbatim policy.
+  const guarded = guardCustomerAgentReply({
+    output: parsed.data,
+    retrievedSources: seen,
+    confidenceThreshold: channelSettings.confidenceThreshold,
+    declineMatch,
+  });
+
+  if (guarded.outcome === "handoff") {
+    attemptedSteps.push(`Post-check escalated (${guarded.guardTriggered})`);
+  }
+
   const card =
-    reply.value.feedback && !read.cardOffered
-      ? { ...reply.value.feedback, status: "proposed" as const }
+    guarded.outcome === "answer" && parsed.data.feedback && !read.cardOffered
+      ? { ...parsed.data.feedback, status: "proposed" as const }
       : undefined;
-  return async (db) => {
-    await logUsage(db, usage);
-    // A teammate may have taken or closed the conversation while the model answered.
-    const [current] = await db
-      .select({
-        status: conversations.status,
-        assignee: conversations.assignedAgentPrincipalId,
-      })
-      .from(conversations)
-      .where(eq(conversations.id, conversation.id))
-      .for("update");
-    const [latest] = await db
-      .select({
-        id: assistantInvolvements.id,
-        status: assistantInvolvements.status,
-      })
-      .from(assistantInvolvements)
-      .where(eq(assistantInvolvements.conversationId, conversation.id))
-      .orderBy(desc(assistantInvolvements.createdAt))
-      .limit(1);
-    if (
-      current?.status !== "open" ||
-      current.assignee ||
-      latest?.id !== involvement?.id ||
-      (latest && latest.status !== "active")
-    )
-      return;
-    const now = new Date();
-    const involvementId =
-      involvement?.id ??
-      (
-        await db
-          .insert(assistantInvolvements)
-          .values({
-            conversationId: conversation.id,
-            triggeredBy: "first_touch",
-          })
-          .returning({ id: assistantInvolvements.id })
-      )[0]!.id;
-    const text = reply.value.reply.trim();
-    if (text) {
-      const [message] = await db
-        .insert(conversationMessages)
-        .values({
-          conversationId: conversation.id,
-          principalId: null,
-          senderType: "agent",
-          content: text,
-          citations: citations.length ? citations : null,
-          metadata: {
-            assistantReply: true,
-            ...(card && { feedbackCard: card }),
-          },
-        })
-        .returning({
-          id: conversationMessages.id,
-          createdAt: conversationMessages.createdAt,
-        });
-      await db
-        .update(conversations)
-        .set({
-          lastMessageAt: message!.createdAt,
-          lastMessagePreview: preview(text),
-          updatedAt: message!.createdAt,
-        })
-        .where(eq(conversations.id, conversation.id));
-      await recordQuillsChange(db, null, {
-        type: "message.created",
-        entityType: "conversation_message",
-        entityId: message!.id,
-        payload: { conversationId: conversation.id, source: "assistant" },
-      });
-    }
-    await db
-      .update(assistantInvolvements)
-      .set({
-        lastAssistantAnswerAt: now,
-        sources: citations.map(({ type, id, title }) => ({
-          type,
-          id,
-          title,
-        })) as never,
-        ...(reply.value.handoff && {
-          status: "handed_off" as const,
-          handoffReason: reply.value.handoff,
-          endedAt: now,
-        }),
-      })
-      .where(eq(assistantInvolvements.id, involvementId));
-    if (reply.value.handoff) {
-      // The private handoff note: why, and what the customer asked, for the teammate who takes over.
-      await systemNotice(
-        db,
-        conversation.id,
-        `${config.identity.name} handed this conversation to the team (${reply.value.handoff.replace(/_/g, " ")}). The customer asked: "${question.slice(0, 500)}"`,
-        { internal: true, event: { kind: "assistant_handoff" } },
-      );
-      await systemNotice(db, conversation.id, "A teammate will reply here.", {
-        event: { kind: "assistant_handoff" },
-      });
-      await db
-        .update(conversations)
-        .set({
-          waitingSince: sql`coalesce(${conversations.waitingSince}, now())`,
-        })
-        .where(eq(conversations.id, conversation.id));
-    }
-  };
+
+  return commitOutcome({
+    outcome: guarded.outcome,
+    reply: guarded.reply,
+    citations: guarded.citations,
+    confidence: guarded.confidence,
+    handoffReason:
+      guarded.outcome === "handoff" ? guarded.handoffReason : undefined,
+    card,
+    sourcesConsulted: [...seen.values()].map((s) => ({
+      id: s.id,
+      title: s.title,
+      url: s.url,
+    })),
+  });
 };

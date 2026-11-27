@@ -144,7 +144,45 @@
 		"public": "Public",
 		"title": "Privacy & Access",
 		"visibility": "Portal visibility",
-		"visibilityText": "A private portal shows only to the people that you allow."
+		"visibilityText": "A private portal shows only to the people that you allow.",
+		"retentionTitle": "Data retention schedules",
+		"retentionChannel": "Channel",
+		"retentionChannelText": "Apply a default retention schedule to all channels or override a specific channel.",
+		"retentionAction": "When expired",
+		"retentionActionText": "Delete removes eligible threads while keeping aggregate support totals. Anonymize scrubs personal data while keeping thread structure.",
+		"closedAfterDays": "Closed conversations (days)",
+		"spamAfterDays": "Spam conversations (days)",
+		"softDeletedAfterDays": "Soft-deleted items (days)",
+		"aiLogsAfterDays": "AI tool & translation logs (days)",
+		"daysHint": "Leave blank to retain indefinitely (1–3650 days).",
+		"saveRetention": "Save retention schedule",
+		"manageRetention": "Manage schedules & requests",
+		"retentionSaved": "Retention schedule saved.",
+		"retentionRemoved": "Retention schedule removed.",
+		"retentionFailed": "Could not update the retention schedule.",
+		"removePolicy": "Remove retention schedule",
+		"retentionNote": "Aggregate support and SLA totals are archived before retention purges conversations.",
+		"policySummary": "{{action}} · Closed: {{closed}}d · Spam: {{spam}}d · AI logs: {{aiLogs}}d",
+		"channels": {
+			"all": "All channels (default)",
+			"messenger": "Messenger",
+			"email": "Email",
+			"widget": "Widget",
+			"ticket": "Tickets"
+		},
+		"actions": {
+			"delete": "Delete",
+			"anonymize": "Anonymize"
+		},
+		"requestsTitle": "Privacy requests & receipts",
+		"noRequests": "No erasure or data access requests yet.",
+		"downloadExport": "Download ZIP",
+		"downloadFailed": "This export is no longer available.",
+		"requestTypes": {
+			"erasure": "Customer erasure",
+			"access": "Data access export"
+		},
+		"requestMeta": "{{status}} · {{date}} · {{conversations}} conversations · {{files}} files"
 	},
 	"scoring": {
 		"add": "Add factor",

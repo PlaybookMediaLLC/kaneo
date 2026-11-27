@@ -174,6 +174,14 @@ export const writes = (api: Api) => ({
       { postId },
       signal,
     ),
+  /** Immediately hand off the conversation to a human teammate (zero LLM call, #299). */
+  handoffConversation: (conversationId: string, signal?: AbortSignal) =>
+    api.request<{ handedOff: true; message: ApiMessage }>(
+      "POST",
+      `/widget/conversations/${id(conversationId)}/handoff`,
+      undefined,
+      signal,
+    ),
   markRead: (
     conversationId: string,
     throughMessageId: string,

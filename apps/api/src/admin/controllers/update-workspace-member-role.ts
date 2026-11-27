@@ -7,6 +7,7 @@ import type { AdminAuditRequest } from "../audit/admin-audit-request";
 import { recordWorkspaceMemberAction } from "../audit/record-workspace-member-action";
 import { isAssignableWorkspaceRole } from "../is-assignable-workspace-role";
 import { lockWorkspace } from "../lock-workspace";
+import { revokeWorkspaceRoleChange } from "../../ws";
 import listWorkspaceMembers from "./list-workspace-members";
 
 async function updateWorkspaceMemberRole(
@@ -18,6 +19,7 @@ async function updateWorkspaceMemberRole(
   audit: AdminAuditRequest,
 ) {
   const { workspaceId, userId, role } = request;
+  let roleChanged = false;
 
   await db.transaction(async (tx) => {
     const members = await lockWorkspace(tx, workspaceId);
@@ -49,6 +51,7 @@ async function updateWorkspaceMemberRole(
         ),
       );
     if (member.role !== role) {
+      roleChanged = true;
       await recordWorkspaceMemberAction(tx, audit, {
         action: "workspace.member_role_changed",
         workspaceId,
@@ -57,6 +60,10 @@ async function updateWorkspaceMemberRole(
       });
     }
   });
+
+  if (roleChanged) {
+    await revokeWorkspaceRoleChange(userId, workspaceId);
+  }
 
   return listWorkspaceMembers(workspaceId);
 }

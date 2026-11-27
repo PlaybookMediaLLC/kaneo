@@ -63,7 +63,7 @@ postgresql:
 # Kaneo application configuration (combined API + web frontend)
 kaneo:
   image:
-    repository: ghcr.io/usekaneo/kaneo
+    repository: ghcr.io/playbookmediallc/kaneo
     # Defaults to Chart.appVersion when empty.
     tag: ""
     pullPolicy: IfNotPresent

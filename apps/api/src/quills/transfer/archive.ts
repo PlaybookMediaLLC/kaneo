@@ -33,6 +33,11 @@ export const OMITTED_TABLES = [
   "ai_knowledge_suggestions",
   "ai_knowledge_questions",
   "ai_knowledge_sources",
+  // #329: ephemeral export keys and compliance receipts stay on the source instance like export_runs.
+  "privacy_requests",
+  // #299: runtime eval runs and unapproved draft suggestions are instance-local transient state.
+  "ai_eval_runs",
+  "assistant_draft_replies",
 ] as const;
 export const portableTables = Object.values(schema)
   .filter((value) => is(value, PgTable))

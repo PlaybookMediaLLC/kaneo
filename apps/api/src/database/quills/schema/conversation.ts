@@ -358,6 +358,12 @@ export const conversationMessages = quillsSchema
       deletedByPrincipalId: typeIdColumnNullable("principal")(
         "deleted_by_principal_id",
       ),
+      // Surgical PII/secret redaction (#329): clears content/attachments/embeddings while keeping the thread.
+      redactedAt: timestamp("redacted_at", { withTimezone: true }),
+      redactedByPrincipalId: typeIdColumnNullable("principal")(
+        "redacted_by_principal_id",
+      ),
+      redactionReason: text("redaction_reason"),
     },
     (table) => [
       // FK names match the constraints the SQL migration created.
@@ -407,6 +413,11 @@ export const conversationMessages = quillsSchema
       foreignKey({
         name: "conversation_messages_deleted_by_principal_id_fkey",
         columns: [table.workspaceId, table.deletedByPrincipalId],
+        foreignColumns: [principal.workspaceId, principal.id],
+      }).onDelete("set null"),
+      foreignKey({
+        name: "conversation_messages_redacted_by_principal_id_fkey",
+        columns: [table.workspaceId, table.redactedByPrincipalId],
         foreignColumns: [principal.workspaceId, principal.id],
       }).onDelete("set null"),
       // Live feed + keyset pagination on the composite (conversationId, createdAt, id);

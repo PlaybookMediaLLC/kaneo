@@ -22,6 +22,7 @@ type PRClosedPayload = {
     state: string;
     merged: boolean;
     merged_at: string | null;
+    merge_commit_sha?: string | null;
     head: {
       ref: string;
     };
@@ -77,6 +78,11 @@ export async function handlePullRequestClosed(payload: PRClosedPayload) {
               state: "closed",
               merged: pull_request.merged,
               mergedAt: pull_request.merged_at,
+              // #298: Track merge commit SHA so verified release webhooks can match
+              // shipped PRs without ever notifying customers on PR merge alone.
+              ...(pull_request.merge_commit_sha
+                ? { mergeCommitSha: pull_request.merge_commit_sha }
+                : {}),
             },
           },
           database,

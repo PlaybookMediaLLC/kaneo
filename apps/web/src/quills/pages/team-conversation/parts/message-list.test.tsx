@@ -66,6 +66,10 @@ const message = (
   flaggedAt: null,
   createdAt: "2026-11-01T10:00:00.000Z",
   editedAt: null,
+  redactedAt: null,
+  redactedByPrincipalId: null,
+  redactedByName: null,
+  redactionReason: null,
   ...values,
 });
 

@@ -280,6 +280,11 @@ const fr: Catalog = {
   Remove: "Retirer",
   "Picture updated": "Photo mise à jour",
   "Could not save the picture.": "Impossible d’enregistrer la photo.",
+  Sources: "Sources",
+  "Talk to a person": "Parler à une personne",
+  "Connecting you with the team…": "Mise en relation avec l’équipe…",
+  "Could not connect to a person. Please try again.":
+    "Impossible de contacter une personne. Veuillez réessayer.",
 };
 
 export default fr;

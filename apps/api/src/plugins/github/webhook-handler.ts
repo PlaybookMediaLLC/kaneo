@@ -9,6 +9,11 @@ import { handleLabelCreated } from "./webhooks/label-created";
 import { handlePullRequestClosed } from "./webhooks/pull-request-closed";
 import { handlePullRequestOpened } from "./webhooks/pull-request-opened";
 import { handlePush } from "./webhooks/push";
+import {
+  handleDeploymentStatus,
+  handleReleasePublished,
+  handleTagPush,
+} from "./webhooks/release-verified";
 
 export async function handleGitHubWebhook(
   body: string,
@@ -36,7 +41,9 @@ export async function handleGitHubWebhook(
         | "pull_request"
         | "push"
         | "label"
-        | "issue_comment",
+        | "issue_comment"
+        | "release"
+        | "deployment_status",
       signature,
       payload: body,
     });
@@ -143,9 +150,41 @@ export function setupWebhookHandlers() {
     console.log("[GitHub Webhook] Handling push");
     try {
       await handlePush(payload as Parameters<typeof handlePush>[0]);
+      if (
+        typeof (payload as { ref?: unknown }).ref === "string" &&
+        (payload as { ref: string }).ref.startsWith("refs/tags/")
+      ) {
+        await handleTagPush(payload as Parameters<typeof handleTagPush>[0]);
+      }
       console.log("[GitHub Webhook] push handled successfully");
     } catch (error) {
       console.error("[GitHub Webhook] push handler error:", error);
+      throw error;
+    }
+  });
+
+  githubApp.webhooks.on("release.published", async ({ payload }) => {
+    console.log("[GitHub Webhook] Handling release.published");
+    try {
+      await handleReleasePublished(
+        payload as Parameters<typeof handleReleasePublished>[0],
+      );
+      console.log("[GitHub Webhook] release.published handled successfully");
+    } catch (error) {
+      console.error("[GitHub Webhook] release.published handler error:", error);
+      throw error;
+    }
+  });
+
+  githubApp.webhooks.on("deployment_status", async ({ payload }) => {
+    console.log("[GitHub Webhook] Handling deployment_status");
+    try {
+      await handleDeploymentStatus(
+        payload as Parameters<typeof handleDeploymentStatus>[0],
+      );
+      console.log("[GitHub Webhook] deployment_status handled successfully");
+    } catch (error) {
+      console.error("[GitHub Webhook] deployment_status handler error:", error);
       throw error;
     }
   });

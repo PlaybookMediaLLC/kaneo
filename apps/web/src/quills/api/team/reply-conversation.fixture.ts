@@ -21,6 +21,10 @@ export const replyConversationFixture = {
           flaggedAt: null,
           createdAt: "2026-01-01T00:00:00.000Z",
           editedAt: null,
+          redactedAt: null,
+          redactedByPrincipalId: null,
+          redactedByName: null,
+          redactionReason: null,
         },
         conversation: {
           id: "id_test_1",

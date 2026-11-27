@@ -1,0 +1,32 @@
+name: AI Customer Agent Eval
+
+on:
+  pull_request:
+    paths:
+      - "packages/quills-ai/**"
+      - "apps/api/src/quills/assistant/**"
+      - "apps/api/src/quills/ai-eval/**"
+      - ".github/workflows/ai-eval.yml"
+  push:
+    branches: [staging, main]
+    paths:
+      - "packages/quills-ai/**"
+      - "apps/api/src/quills/assistant/**"
+      - "apps/api/src/quills/ai-eval/**"
+
+jobs:
+  replay-eval:
+    name: Grounding, decline-policy & handoff replay eval
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build and test @quills/ai pure guardrails
+        run: pnpm --filter @quills/ai build && pnpm --filter @quills/ai test
+      - name: Run deterministic AI customer agent replay eval
+        run: pnpm --filter @kaneo/api exec vp test run src/quills/ai-eval/replay.eval.test.ts

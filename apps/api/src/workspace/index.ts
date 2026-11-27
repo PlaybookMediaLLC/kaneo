@@ -18,6 +18,7 @@ import getWorkspaceCtrl from "./controllers/get-workspace";
 import getWorkspaceMembersCtrl from "./controllers/get-workspace-members";
 import listWorkspacesCtrl from "./controllers/list-workspaces";
 import updateMemberProjectAccessCtrl from "./controllers/update-member-project-access";
+import oidcMappingRoutes from "./oidc-mappings";
 import {
   memberProjectAccessListSchema,
   memberProjectAccessSchema,
@@ -230,6 +231,7 @@ const workspace = apiRouter<BaseVariables & { workspaceId: string }>()
       }),
       200,
     );
-  });
+  })
+  .route("/", oidcMappingRoutes);
 
 export default workspace;

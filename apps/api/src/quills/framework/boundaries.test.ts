@@ -36,7 +36,7 @@ const routePaths = new Set(
  */
 const allowedImport = (file: string, specifier: string) => {
   if (
-    /^(drizzle-orm|hono\/http-exception|@kaneo\/(ids|ids\/zod|branding)|@quills\/ai\/(learning|teach|capability|capabilities))$/.test(
+    /^(drizzle-orm|hono\/http-exception|@kaneo\/(ids|ids\/zod|branding)|@quills\/ai\/(learning|teach|capability|capabilities|customer-agent))$/.test(
       specifier,
     )
   )

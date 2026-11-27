@@ -44,6 +44,9 @@ import scores from "./feedback/scores";
 import scoring from "./feedback/scoring";
 // RFC 0004: the AI chip of the request detail.
 import postSummary from "./feedback/post-summary";
+import assistantGuardrails from "./assistant/guardrails";
+import privacy from "./privacy/index";
+import releases from "./releases/routes";
 import { brandText } from "@kaneo/branding";
 import { apiRouter, z, type BaseVariables } from "../openapi";
 import { settings } from "../database/quills/schema/auth";
@@ -137,56 +140,66 @@ export type QuillsTeammateRouters = [
   typeof scores,
   typeof scoring,
   typeof postSummary,
+  typeof assistantGuardrails,
+  typeof privacy,
+  typeof releases,
   typeof contextRouter,
 ];
 
-export default apiRouter<BaseVariables & { workspaceId: string }>()
-  .route("/", files)
-  .route("/", jobs)
-  .route("/", links)
-  .route("/", sharedTeams)
-  .route("/", directory)
-  .route("/", quillsSettings)
-  .route("/", websiteBranding)
-  .route("/", feedback)
-  .route("/", delivery)
-  .route("/", taxonomy)
-  .route("/", portalAccessSettings)
-  .route("/", portalSignInSettings)
-  .route("/", content)
-  .route("/", integrations)
-  .route("/", operations)
-  .route("/", supportTickets)
-  .route("/", supportConversations)
-  .route("/", supportAssistant)
-  .route("/", workspaceSearch)
-  .route("/", supportTyping)
-  .route("/", supportPresence)
-  .route("/", supportLinkPreview)
-  .route("/", supportReadBatch)
-  .route("/", testConversations)
-  .route("/", portalInvites)
-  .route("/", profileTeamContext)
-  .route("/", reporting)
-  .route("/", automation)
-  .route("/", assistant)
-  .route("/", apps)
-  .route("/", agentChannels)
-  .route("/", surveys)
-  // RFC 0003 lane L5.
-  .route("/", changelogAi)
-  .route("/", changelogEngagement)
-  .route("/", changelogTranslations)
-  // RFC 0003, lane L3.
-  .route("/", boardSettings)
-  // RFC 0005: requests become Kaneo tasks.
-  .route("/", boardDelivery)
-  .route("/", postTasks)
-  // #92: one update to every channel.
-  .route("/", postUpdates)
-  .route("/", demand)
-  .route("/", scores)
-  .route("/", scoring)
-  // RFC 0004: the AI chip of the request detail.
-  .route("/", postSummary)
-  .route("/", contextRouter);
+const quillsRouter = apiRouter<BaseVariables & { workspaceId: string }>();
+quillsRouter.route("/", files);
+quillsRouter.route("/", jobs);
+quillsRouter.route("/", links);
+quillsRouter.route("/", sharedTeams);
+quillsRouter.route("/", directory);
+quillsRouter.route("/", quillsSettings);
+quillsRouter.route("/", websiteBranding);
+quillsRouter.route("/", feedback);
+quillsRouter.route("/", delivery);
+quillsRouter.route("/", taxonomy);
+quillsRouter.route("/", portalAccessSettings);
+quillsRouter.route("/", portalSignInSettings);
+quillsRouter.route("/", content);
+quillsRouter.route("/", integrations);
+quillsRouter.route("/", operations);
+quillsRouter.route("/", supportTickets);
+quillsRouter.route("/", supportConversations);
+quillsRouter.route("/", supportAssistant);
+quillsRouter.route("/", workspaceSearch);
+quillsRouter.route("/", supportTyping);
+quillsRouter.route("/", supportPresence);
+quillsRouter.route("/", supportLinkPreview);
+quillsRouter.route("/", supportReadBatch);
+quillsRouter.route("/", testConversations);
+quillsRouter.route("/", portalInvites);
+quillsRouter.route("/", profileTeamContext);
+quillsRouter.route("/", reporting);
+quillsRouter.route("/", automation);
+quillsRouter.route("/", assistant);
+quillsRouter.route("/", assistantGuardrails);
+quillsRouter.route("/", apps);
+quillsRouter.route("/", agentChannels);
+quillsRouter.route("/", surveys);
+// RFC 0003 lane L5.
+quillsRouter.route("/", changelogAi);
+quillsRouter.route("/", changelogEngagement);
+quillsRouter.route("/", changelogTranslations);
+// RFC 0003, lane L3.
+quillsRouter.route("/", boardSettings);
+// RFC 0005: requests become Kaneo tasks.
+quillsRouter.route("/", boardDelivery);
+quillsRouter.route("/", postTasks);
+// #92: one update to every channel.
+quillsRouter.route("/", postUpdates);
+quillsRouter.route("/", demand);
+quillsRouter.route("/", scores);
+quillsRouter.route("/", scoring);
+// RFC 0004: the AI chip of the request detail.
+quillsRouter.route("/", postSummary);
+// #329: Privacy built in (erasure, redaction, retention schedules, DSAR exports).
+quillsRouter.route("/", privacy);
+// #298: Verified release loop (drafts, human approval, deduplicated notifications).
+quillsRouter.route("/", releases);
+quillsRouter.route("/", contextRouter);
+
+export default quillsRouter;

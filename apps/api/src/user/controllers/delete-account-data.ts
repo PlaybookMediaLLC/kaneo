@@ -137,6 +137,20 @@ export async function deleteAccountData(userId: string, database: DbOrTx = db) {
     await revokeWorkspaceConnections(userId, workspaceId, { force: true });
   }
 
+  // Erase any linked Quills customer_identity profiles (non-teammate portal customers) owned by
+  // this account across workspaces (#329). Only runs when using the global DB (not a mocked unit DB).
+  if (database === db) {
+    const { eraseKaneoUserCustomerIdentities } =
+      await import("./erase-quills-customer-identities");
+    await eraseKaneoUserCustomerIdentities(userId).catch((error) => {
+      console.error(
+        "Quills customer identity erasure after account deletion failed:",
+        userId,
+        error,
+      );
+    });
+  }
+
   return plan;
 }
 

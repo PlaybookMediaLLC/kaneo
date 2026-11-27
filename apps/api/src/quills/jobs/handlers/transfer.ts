@@ -402,5 +402,10 @@ export async function runTransferJob(workspaceId: string, job: JobQueueRow) {
       event.entityId as TypeId<"import_run">,
       event.payload,
     );
+  if (event?.type === "privacy.access_requested") {
+    const { runPrivacyAccessJob } =
+      await import("../../privacy/subject-bundle");
+    return runPrivacyAccessJob(workspaceId, job);
+  }
   await settle(workspaceId, job, async () => {});
 }

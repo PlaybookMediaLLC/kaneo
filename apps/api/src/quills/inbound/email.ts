@@ -18,6 +18,7 @@ import { commentByMail } from "./post-reply";
 import { preview } from "../support/conversation-model";
 import { trustedEmailAuth } from "./email-auth";
 import { reopened } from "../support/conversation-ops";
+import { reopenLinkedTicketsForConversation } from "../integrations/work-item-graph";
 
 // POST /quills-public/signed/chat/email/inbound: mail that Resend received for a workspace address
 // on EMAIL_INBOUND_DOMAIN (`<workspace slug>@domain` or `<slug>+tag@domain`). framework/signed.ts
@@ -242,6 +243,7 @@ const inbound = defineQuillsRoute({
     const threadColumns = {
       id: conversations.id,
       status: conversations.status,
+      endReason: conversations.endReason,
       visitorPrincipalId: conversations.visitorPrincipalId,
       waitingSince: conversations.waitingSince,
     };
@@ -312,6 +314,7 @@ const inbound = defineQuillsRoute({
           .returning({
             id: conversations.id,
             status: conversations.status,
+            endReason: conversations.endReason,
             visitorPrincipalId: conversations.visitorPrincipalId,
             waitingSince: conversations.waitingSince,
           })
@@ -362,6 +365,10 @@ const inbound = defineQuillsRoute({
         updatedAt: message.createdAt,
       })
       .where(eq(conversations.id, conversation.id));
+    // #298: A customer email reply reopens any solved/closed linked ticket (except spam-closed threads).
+    if (conversation.endReason !== "spam") {
+      await reopenLinkedTicketsForConversation(db, conversation.id, visitor);
+    }
     return { status: "received" as const, messageId: message.id };
   },
 });

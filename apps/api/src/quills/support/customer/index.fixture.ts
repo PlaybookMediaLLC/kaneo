@@ -158,6 +158,12 @@ export const [
 export const [submitQuillsWidgetCsat, submitQuillsCsat] = both((audience) =>
   onConversation(audience, () => ({ body: { rating: 4, comment: "Quick" } })),
 );
+export const [
+  handoffQuillsWidgetConversation,
+  handoffQuillsPortalConversation,
+] = both((audience) =>
+  onConversation(audience, () => ({ body: { reason: "Need a human" } })),
+);
 
 /** A post by `author` (the workspace actor when absent), as a card's confirmation names. */
 const postIn = (env: ContractEnv, workspaceId: string, author?: string) =>

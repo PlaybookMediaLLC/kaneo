@@ -65,6 +65,10 @@ export const messageSchema = z.object({
   flaggedAt: nullableResponseTimestamp,
   createdAt: responseTimestamp,
   editedAt: nullableResponseTimestamp,
+  redactedAt: nullableResponseTimestamp,
+  redactedByPrincipalId: z.string().nullable(),
+  redactedByName: z.string().nullable(),
+  redactionReason: z.string().nullable(),
 });
 export const reactionsSchema = reactions;
 
@@ -86,6 +90,9 @@ export const selectMessages = (db: Database, where: SQL | undefined) =>
       attachments: conversationMessages.attachments,
       createdAt: conversationMessages.createdAt,
       editedAt: conversationMessages.editedAt,
+      redactedAt: conversationMessages.redactedAt,
+      redactedByPrincipalId: conversationMessages.redactedByPrincipalId,
+      redactionReason: conversationMessages.redactionReason,
     })
     .from(conversationMessages)
     .leftJoin(principal, eq(principal.id, conversationMessages.principalId))
@@ -157,6 +164,26 @@ export async function toMessages(
         )
     : [];
   const flagMap = new Map(flags.map((flag) => [flag.id, flag.flaggedAt]));
+  const redactorIds = [
+    ...new Set(
+      rows
+        .map((row) => row.redactedByPrincipalId)
+        .filter((id): id is NonNullable<typeof id> => Boolean(id)),
+    ),
+  ];
+  const redactors = redactorIds.length
+    ? await db
+        .select({
+          id: principal.id,
+          name: sql<
+            string | null
+          >`coalesce(${user.name}, ${principal.displayName})`,
+        })
+        .from(principal)
+        .leftJoin(user, eq(user.id, principal.userId))
+        .where(inArray(principal.id, redactorIds))
+    : [];
+  const redactorMap = new Map(redactors.map((r) => [r.id, r.name]));
   return rows.map(({ contentJson, metadata, attachments, ...row }) => ({
     ...row,
     conversationId: row.conversationId!,
@@ -180,6 +207,9 @@ export async function toMessages(
     })),
     reactions: reactionMap.get(row.id) ?? [],
     flaggedAt: flagMap.get(row.id) ?? null,
+    redactedByName: row.redactedByPrincipalId
+      ? (redactorMap.get(row.redactedByPrincipalId) ?? null)
+      : null,
   }));
 }
 

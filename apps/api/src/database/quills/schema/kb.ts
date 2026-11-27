@@ -1,5 +1,5 @@
 import { quillsSchema, workspaceColumn, workspacePolicy } from "../tenancy";
-import { foreignKey, primaryKey } from "drizzle-orm/pg-core";
+import { check, foreignKey, primaryKey } from "drizzle-orm/pg-core";
 import {
   text,
   timestamp,
@@ -164,6 +164,13 @@ export const helpCenterArticles = quillsSchema
       embeddingUpdatedAt: timestamp("embedding_updated_at", {
         withTimezone: true,
       }),
+      // Provenance for learned help-center draft articles (#299): never auto-published.
+      sourceConversationId: typeIdColumnNullable("conversation")(
+        "source_conversation_id",
+      ),
+      sourceType: text("source_type", { enum: ["manual", "learned"] })
+        .notNull()
+        .default("manual"),
       createdAt: timestamp("created_at", { withTimezone: true })
         .defaultNow()
         .notNull(),
@@ -207,6 +214,10 @@ export const helpCenterArticles = quillsSchema
         columns: [table.workspaceId, table.principalId],
         foreignColumns: [principal.workspaceId, principal.id],
       }).onDelete("restrict"),
+      check(
+        "kb_articles_source_type_check",
+        sql`${table.sourceType} IN ('manual','learned')`,
+      ),
       workspacePolicy(table.workspaceId),
     ],
   )

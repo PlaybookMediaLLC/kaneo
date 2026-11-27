@@ -6,6 +6,7 @@ import {
   revokeSessionConnections,
   revokeUserConnections,
   revokeWorkspaceConnections,
+  revokeWorkspaceRoleChange,
 } from "./ws";
 import { apiKey } from "@better-auth/api-key";
 import {
@@ -659,6 +660,7 @@ export const auth = betterAuth({
           if (isOwnerRole(member.role)) {
             await handleOwnerPromoted(member.organizationId, member.userId);
           }
+          await revokeWorkspaceRoleChange(member.userId, member.organizationId);
         },
         afterAddMember: async ({ member }) => {
           if (member?.organizationId) {
