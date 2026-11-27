@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   foreignKey,
   index,
@@ -83,6 +84,12 @@ export const verifiedReleases = quillsSchema
         table.workspaceId,
         table.status,
       ),
+      index("verified_releases_changelog_fk_idx")
+        .on(table.workspaceId, table.changelogEntryId)
+        .where(sql`"changelog_entry_id" IS NOT NULL`),
+      index("verified_releases_approved_by_principal_fk_idx")
+        .on(table.workspaceId, table.approvedByPrincipalId)
+        .where(sql`"approved_by_principal_id" IS NOT NULL`),
       foreignKey({
         name: "verified_releases_changelog_fk",
         columns: [table.workspaceId, table.changelogEntryId],
@@ -126,6 +133,9 @@ export const ticketPosts = quillsSchema
         table.postId,
       ),
       index("ticket_posts_ws_post_idx").on(table.workspaceId, table.postId),
+      index("ticket_posts_created_by_principal_fk_idx")
+        .on(table.workspaceId, table.createdByPrincipalId)
+        .where(sql`"created_by_principal_id" IS NOT NULL`),
       foreignKey({
         name: "ticket_posts_ticket_fk",
         columns: [table.workspaceId, table.ticketId],

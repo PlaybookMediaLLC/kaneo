@@ -184,6 +184,15 @@ export const assistantDraftReplies = quillsSchema
         table.conversationId,
         table.status,
       ),
+      index("assistant_draft_replies_trigger_message_fk_idx")
+        .on(table.workspaceId, table.triggerMessageId)
+        .where(sql`"trigger_message_id" IS NOT NULL`),
+      index("assistant_draft_replies_sent_message_fk_idx")
+        .on(table.workspaceId, table.sentMessageId)
+        .where(sql`"sent_message_id" IS NOT NULL`),
+      index("assistant_draft_replies_reviewed_by_principal_fk_idx")
+        .on(table.workspaceId, table.reviewedByPrincipalId)
+        .where(sql`"reviewed_by_principal_id" IS NOT NULL`),
       check(
         "assistant_draft_replies_status_check",
         sql`${table.status} IN ('pending','sent','dismissed')`,

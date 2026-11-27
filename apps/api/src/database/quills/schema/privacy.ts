@@ -93,6 +93,9 @@ export const retentionPolicies = quillsSchema
         columns: [table.workspaceId, table.updatedByPrincipalId],
         foreignColumns: [principal.workspaceId, principal.id],
       }).onDelete("set null"),
+      index("retention_policies_updated_by_principal_fk_idx")
+        .on(table.workspaceId, table.updatedByPrincipalId)
+        .where(sql`"updated_by_principal_id" IS NOT NULL`),
       check(
         "retention_policies_channel_check",
         sql`${table.channel} IN ('all','messenger','email','widget','ticket')`,
@@ -170,6 +173,12 @@ export const privacyRequests = quillsSchema
         table.type,
         table.status,
       ),
+      index("privacy_requests_subject_principal_fk_idx")
+        .on(table.workspaceId, table.subjectPrincipalId)
+        .where(sql`"subject_principal_id" IS NOT NULL`),
+      index("privacy_requests_requested_by_principal_fk_idx")
+        .on(table.workspaceId, table.requestedByPrincipalId)
+        .where(sql`"requested_by_principal_id" IS NOT NULL`),
       check(
         "privacy_requests_type_check",
         sql`${table.type} IN ('erasure','access')`,

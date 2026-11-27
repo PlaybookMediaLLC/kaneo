@@ -423,6 +423,7 @@ export function contractApp(router: App, publicRouter?: App) {
 const STATIC_ROUTES = new Set(
   [
     "",
+    "/",
     "/host.js",
     "/host.css",
     "/sdk.js",
