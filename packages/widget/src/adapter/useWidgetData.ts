@@ -191,21 +191,31 @@ export function useWidgetData({
   };
   const load = (signal: AbortSignal) =>
     run(async () => {
-      if (board && surfaces.feedback && boardId.current === undefined)
-        boardId.current =
-          (await resolveBoard(api, board, signal).catch((error) => {
+      let fields: Promise<void> | undefined;
+      if (surfaces.feedback && !boards.length) {
+        const boardsPromise = loadBoards(api, signal).then(
+          (items) => {
+            if (!signal.aborted) setBoards(items);
+            return items;
+          },
+          (error) => {
             if (!unavailable(error)) throw error;
-          })) ?? "";
-      // The boards' public fields for the feedback composer, read beside the snapshot.
-      const fields =
-        surfaces.feedback && !boards.length
-          ? loadBoards(api, signal).then(
-              (items) => !signal.aborted && setBoards(items),
-              (error) => {
-                if (!unavailable(error)) throw error;
-              },
-            )
-          : undefined;
+            return null;
+          },
+        );
+        if (board && boardId.current === undefined) {
+          const items = await boardsPromise;
+          boardId.current =
+            items?.find((item) => item.id === board || item.slug === board)
+              ?.id ?? "";
+        } else {
+          fields = boardsPromise.then(() => undefined);
+        }
+      } else if (board && surfaces.feedback && boardId.current === undefined) {
+        boardId.current =
+          boards.find((item) => item.id === board || item.slug === board)?.id ??
+          "";
+      }
       // Read the count first: a reply that lands during the load makes the next poll read again.
       if (surfaces.messenger)
         await reportUnread(signal).catch((error) => {

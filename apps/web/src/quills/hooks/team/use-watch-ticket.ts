@@ -11,22 +11,24 @@ export function useWatchTicket(viewer: Viewer) {
   return useMutation<WatchTicketResponse, PortalProblem, WatchTicketRequest>({
     mutationFn: (input) => watchTicket(input),
     onSuccess: async (_data, input) => {
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspaceId,
-          viewer,
-          "team",
-          "getTicketWatchStatus",
-        ),
-      });
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspaceId,
-          viewer,
-          "team",
-          "listTicketWatchers",
-        ),
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspaceId,
+            viewer,
+            "team",
+            "getTicketWatchStatus",
+          ),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspaceId,
+            viewer,
+            "team",
+            "listTicketWatchers",
+          ),
+        }),
+      ]);
     },
   });
 }

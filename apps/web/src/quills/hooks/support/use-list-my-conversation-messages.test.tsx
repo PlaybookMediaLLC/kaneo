@@ -20,6 +20,6 @@ describe("useListMyConversationMessages", () => {
     viewer: { kind: "anonymous" },
     takesViewer: false,
     invalidates: [],
-    pollMs: 10_000,
+    pollMs: 60_000,
   });
 });

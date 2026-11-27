@@ -175,18 +175,18 @@ export const answerCustomer: Work = async (workspaceId, event) => {
       publicSources(db, knowledge, text, near),
     );
   const embedding = { failed: false };
-  const sources = await search(
-    question,
-    await vectorOf(question, usage, embedding),
-  );
+  // Load read-only connector tools in parallel with embedding the initial question.
+  const [near, connectorMap] = await Promise.all([
+    vectorOf(question, usage, embedding),
+    loadConnectorTools(workspaceId, "agent"),
+  ]);
+  const sources = await search(question, near);
   const seen = new Map<string, Source>(
     sources.map((source) => [source.id, source]),
   );
   // Fixed before the first call: read tools an admin turned on by name for the agent
   // (connector-tools.ts `offer`). A customer cannot approve, and no teammate is here.
-  const connectorTools = [
-    ...(await loadConnectorTools(workspaceId, "agent")).values(),
-  ];
+  const connectorTools = [...connectorMap.values()];
   const budget = connectorBudget();
   const repeats = new Map<string, number>();
   const tools: LoopTool[] = [
@@ -254,6 +254,7 @@ export const answerCustomer: Work = async (workspaceId, event) => {
     tools,
     maxSteps: MAX_STEPS,
     maxCallsPerStep: 3,
+    toolCallConcurrency: 3,
     maxOutputTokens: 1024,
     timeoutMs: 150_000,
     stepTimeoutMs: 50_000,

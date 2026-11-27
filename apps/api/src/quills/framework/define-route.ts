@@ -25,11 +25,8 @@ import type { PermissionMap } from "../../utils/role-permissions";
 import { requireWorkspacePermission } from "../../utils/require-workspace-permission";
 import { workspaceAccess } from "../../utils/workspace-access-middleware";
 import { recordQuillsChange, type changeSchema } from "../events";
-import {
-  quillsActions,
-  withQuillsRequest,
-  type QuillsAction,
-} from "../with-quills-request";
+import { wakeQuillsWorkspace } from "../jobs/wake-hook";
+import { withQuillsRequest, type QuillsAction } from "../with-quills-request";
 import { appKey, boundApp, confineKey, type AppCapability } from "./app";
 import { prefersBrowserNavigation } from "./browser-navigation";
 import {
@@ -157,6 +154,12 @@ export type QuillsRouteDeclaration<
    * before the handler runs; other clients get the JSON answer.
    */
   browserPage?: (input: { workspace: string; query: Output<Q> }) => string;
+  /**
+   * Public GET: optional Cache-Control header for non-personalized, non-token reads.
+   */
+  cacheControl?: string;
+  /** Public GET: optional Vary header paired with cacheControl (e.g. "Accept-Language"). */
+  vary?: string;
   /**
    * Public GET: a 302 to the URL returned for the handler's result, after the transaction (signing
    * may resolve provider credentials), privately cached for `maxAge` seconds. The result is never sent.
@@ -613,6 +616,13 @@ export function buildQuillsRoute<
     throw new Error(`${d.operationId}: a browser page is for a public GET`);
   if (d.location && (audience !== "public" || d.method !== "get" || d.raw))
     throw new Error(`${d.operationId}: a redirect is for a public JSON GET`);
+  if (
+    (d.cacheControl || d.vary) &&
+    (audience !== "public" || d.method !== "get" || d.location || d.browserPage)
+  )
+    throw new Error(
+      `${d.operationId}: cacheControl and vary are only for public GET routes without redirects`,
+    );
   if (audience === "signed" || audience === "internal") {
     if (
       d.native ||
@@ -795,6 +805,7 @@ export function buildQuillsRoute<
           if (first === REPLAY) return answer(d.replay);
           called = await d.call!(first.prepared, first.input);
         }
+        let wakeWorkspaceId: string | undefined;
         const result = await open(async (db, input, credential) => {
           if (!(await recordDelivery(db, verifier.name, located.deliveryId)))
             return REPLAY;
@@ -812,14 +823,17 @@ export function buildQuillsRoute<
           // A machine caller is no teammate and no customer: the audit row records a system change,
           // unless the credential names a teammate (an OAuth redirect started by one).
           const principalId = d.actor ? await d.actor(db, located) : null;
-          for (const one of [change || []].flat())
+          const changes = [change || []].flat();
+          for (const one of changes)
             await recordQuillsChange(
               db,
               principalId ? { principalId, actorType: "user" } : null,
               one,
             );
+          if (changes.length) wakeWorkspaceId = input.workspaceId;
           return result;
         });
+        if (wakeWorkspaceId) wakeQuillsWorkspace(wakeWorkspaceId);
         return answer(result === REPLAY ? d.replay : result);
       } catch (error) {
         return failure(error);
@@ -1002,6 +1016,7 @@ export function buildQuillsRoute<
         seen = { workspaceId: first.scoped.workspaceId, caller: first.caller };
         called = await d.call!(first.prepared, first.scoped);
       }
+      let wakeWorkspaceId: string | undefined;
       const result = await withQuillsAudience(
         {
           workspace: params.workspace,
@@ -1045,11 +1060,14 @@ export function buildQuillsRoute<
           const result = d.response.parse(raw) as z.output<R>;
           const change =
             typeof d.event === "function" && d.event(scoped, result, raw);
-          for (const one of [change || []].flat())
+          const changes = [change || []].flat();
+          for (const one of changes)
             await recordQuillsChange(db, callerActor(caller), one);
+          if (changes.length) wakeWorkspaceId = workspace.id;
           return result;
         },
       ).catch(unavailable);
+      if (wakeWorkspaceId) wakeQuillsWorkspace(wakeWorkspaceId);
       if (d.location) {
         const target = await d.location(result);
         return c.body(null, 302, {
@@ -1057,11 +1075,17 @@ export function buildQuillsRoute<
           "Cache-Control": `private, max-age=${target.maxAge}`,
         });
       }
-      if (d.raw)
+      if (d.raw) {
         return c.body(result as string, 200, {
           "content-type": `${d.raw}; charset=utf-8`,
+          ...(d.cacheControl && { "cache-control": d.cacheControl }),
+          ...(d.vary && { vary: d.vary }),
         });
-      return c.json(result, 200);
+      }
+      const response = c.json(result, 200);
+      if (d.cacheControl) response.headers.set("cache-control", d.cacheControl);
+      if (d.vary) response.headers.append("vary", d.vary);
+      return response;
     }) as unknown as RouteHandler<typeof route, RouteEnv<A>>;
     return [route, handler] as const;
   }
@@ -1140,11 +1164,17 @@ export function buildQuillsRoute<
     const access = {
       action: d.action,
       also: d.alsoRequires,
-      // A function project ID runs after the permission checks, so `load` and the action set run there too.
+      readOnly: d.method === "get",
+      workspaceAccessChecked: true,
+      onActions: callerActions
+        ? (resolved: ReadonlySet<QuillsAction>) => {
+            actions = resolved;
+          }
+        : undefined,
+      // A function project ID runs after the permission checks, so `load` runs there too.
       projectId:
-        (load || project || callerActions) &&
+        (load || project) &&
         (async () => {
-          if (callerActions) actions = await quillsActions(c);
           if (load) loaded = await load({ ...input, userId: c.get("userId") });
           if (!project) return undefined;
           const projectId = await project(input);
@@ -1173,12 +1203,17 @@ export function buildQuillsRoute<
     // The second transaction checks the permissions again.
     let called = undefined as C;
     if (prepare) {
-      const prepared = await withQuillsRequest(c, access, async (db, actor) => {
-        await gate(db);
-        return prepare({ ...input, db, actor, loaded, actions });
-      });
+      const prepared = await withQuillsRequest(
+        c,
+        { ...access, readOnly: false },
+        async (db, actor) => {
+          await gate(db);
+          return prepare({ ...input, db, actor, loaded, actions });
+        },
+      );
       called = await d.call!(prepared, input);
     }
+    let teammateRecordedEvents = false;
     const result = await withQuillsRequest(c, access, async (db, actor) => {
       const appId = await gate(db);
       const raw = await handle({
@@ -1192,13 +1227,15 @@ export function buildQuillsRoute<
       const result = d.response.parse(raw) as z.output<R>;
       const change =
         typeof d.event === "function" && d.event(input, result, raw);
+      const changes = [change || []].flat();
       // Every change that an app request records names the app.
-      for (const one of [change || []].flat())
+      for (const one of changes)
         await recordQuillsChange(
           db,
           actor,
           appId ? { ...one, payload: { ...one.payload, appId } } : one,
         );
+      if (changes.length) teammateRecordedEvents = true;
       return result;
     }).catch(async (error) => {
       // The call's effect outside the database must not outlive a failed handler transaction.
@@ -1209,6 +1246,7 @@ export function buildQuillsRoute<
         );
       throw error;
     });
+    if (teammateRecordedEvents) wakeQuillsWorkspace(input.workspaceId);
     const failed = d.failure?.(called);
     if (failed) throw failed;
     const body = d.after

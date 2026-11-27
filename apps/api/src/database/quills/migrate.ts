@@ -9,7 +9,9 @@ import * as schema from "./schema";
 import { CATALOGUE_VERSION } from "./seed-system";
 import { initializeQuillsWorkspace } from "./initialize-workspace";
 import type { Database } from "./client";
+import { setHnswIterativeScanSupported } from "../../quills/assistant/engine/distance";
 import { ensurePageViewPartitions } from "./page-view-partitions";
+import { ensurePublicPerformanceIndexes } from "./public-indexes";
 import {
   CONCURRENT_INDEX_SPECS,
   ensureQuillsIndexes,
@@ -66,6 +68,10 @@ export async function runQuillsMigrations(
     const hnsw = await client.query("SELECT 1 FROM pg_am WHERE amname='hnsw'");
     if (!hnsw.rowCount)
       throw new Error("Quills requires the HNSW index access method");
+    const iterative = await client.query(
+      "SELECT 1 FROM pg_settings WHERE name='hnsw.iterative_scan'",
+    );
+    setHnswIterativeScanSupported(Boolean(iterative.rowCount));
     let appliedCount = 0;
     const ledger = await client.query(
       "SELECT to_regclass('quills_migrations.__drizzle_migrations') AS name",
@@ -201,12 +207,18 @@ export async function runQuillsMigrations(
     );
     await ensurePageViewPartitions(client);
     await ensureQuillsIndexes(client);
-    if (
+    await ensurePublicPerformanceIndexes(client);
+    const schemaChanged =
       appliedCount < readMigrationFiles({ migrationsFolder }).length ||
-      unrecorded.length
-    )
+      unrecorded.length > 0;
+    if (schemaChanged)
       await client.query("SELECT quills_migrations.capture_schema_manifest()");
-    await verifyQuillsPostconditions(client);
+    await verifyQuillsPostconditions(client, {
+      strict:
+        schemaChanged ||
+        process.env.QUILLS_STRICT_STARTUP_VERIFY === "1" ||
+        process.env.CI === "true",
+    });
     if (!(await getMigrationStatus(client, migrationsFolder)).upToDate)
       throw new Error("Quills migration ledger does not match the bundled SQL");
     const workspaces = await client.query<{ id: string }>(

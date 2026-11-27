@@ -168,64 +168,47 @@ export const backfillEmbeddings: Work = async (workspaceId) => {
   const left = budget();
   const text = (rows: { id: string; title: string; content: string }[]) =>
     rows.map((row) => ({ id: row.id, text: postText(row) }));
-  const done = {
-    posts: await embedRows(text(pending.posts), "post_embedding", usage, left),
-    articles: await embedRows(
-      text(pending.articles),
-      "article_embedding",
-      usage,
-      left,
-    ),
-    snippets: await embedRows(
-      text(pending.snippets),
-      "snippet_embedding",
-      usage,
-      left,
-    ),
-    documents: await embedRows(
-      text(pending.documents),
-      "document_embedding",
-      usage,
-      left,
-    ),
+  const [donePosts, doneArticles, doneSnippets, doneDocuments] =
+    await Promise.all([
+      embedRows(text(pending.posts), "post_embedding", usage, left),
+      embedRows(text(pending.articles), "article_embedding", usage, left),
+      embedRows(text(pending.snippets), "snippet_embedding", usage, left),
+      embedRows(text(pending.documents), "document_embedding", usage, left),
+    ]);
+  const model = aiConfig()!.embeddingModel;
+  const bulkUpdateEmbeddings = async (
+    db: Database,
+    table:
+      | typeof posts
+      | typeof helpCenterArticles
+      | typeof assistantSnippets
+      | typeof assistantDocuments,
+    rows: { id: string; values: number[] }[],
+  ) => {
+    if (!rows.length) return;
+    const now = new Date();
+    const tuples = sql.join(
+      rows.map(
+        (row) =>
+          sql`(${sql.param(row.id, table.id)}::uuid, ${vectorParam(row.values)})`,
+      ),
+      sql`, `,
+    );
+    await db.execute(sql`
+      UPDATE ${table} AS t
+      SET embedding = v.embedding,
+          embedding_model = ${model},
+          embedding_updated_at = ${now}
+      FROM (VALUES ${tuples}) AS v(id, embedding)
+      WHERE t.id = v.id AND t.embedding IS NULL
+    `);
   };
   return async (db) => {
     await logUsage(db, usage);
-    for (const row of done.posts)
-      await db
-        .update(posts)
-        .set(embeddingSet(row.values))
-        .where(and(eq(posts.id, row.id as never), isNull(posts.embedding)));
-    for (const row of done.articles)
-      await db
-        .update(helpCenterArticles)
-        .set(embeddingSet(row.values))
-        .where(
-          and(
-            eq(helpCenterArticles.id, row.id as never),
-            isNull(helpCenterArticles.embedding),
-          ),
-        );
-    for (const row of done.snippets)
-      await db
-        .update(assistantSnippets)
-        .set(embeddingSet(row.values))
-        .where(
-          and(
-            eq(assistantSnippets.id, row.id as never),
-            isNull(assistantSnippets.embedding),
-          ),
-        );
-    for (const row of done.documents)
-      await db
-        .update(assistantDocuments)
-        .set(embeddingSet(row.values))
-        .where(
-          and(
-            eq(assistantDocuments.id, row.id as never),
-            isNull(assistantDocuments.embedding),
-          ),
-        );
+    await bulkUpdateEmbeddings(db, posts, donePosts);
+    await bulkUpdateEmbeddings(db, helpCenterArticles, doneArticles);
+    await bulkUpdateEmbeddings(db, assistantSnippets, doneSnippets);
+    await bulkUpdateEmbeddings(db, assistantDocuments, doneDocuments);
   };
 };
 
@@ -325,33 +308,33 @@ export const checkDuplicates: Work = async (workspaceId, event) => {
       };
     });
   const examplesBlock = renderExamples("duplicate", examples, untrusted);
-  const found: {
-    other: (typeof candidates)[number];
-    verdict: z.output<typeof judgeDuplicate.schema>;
-    model: string;
-  }[] = [];
-  for (const other of candidates) {
-    if (!left()) break;
-    const answer = await runCapability(judgeDuplicate, {
-      first: postText(post),
-      second: postText(other),
-      examples: examplesBlock,
-    });
-    usage.push({
-      ...usageEntry(
-        judgeDuplicate.step,
-        "chat_completion",
-        answer.usage,
-        post.id,
-      ),
-      metadata: { examples: examples.length, exampleCandidates },
-    });
-    if (
-      answer.value.duplicate &&
-      answer.value.confidence >= DUPLICATE_CONFIDENCE
-    )
-      found.push({ other, verdict: answer.value, model: answer.usage.model });
-  }
+  const judged = left()
+    ? await Promise.all(
+        candidates.map(async (other) => {
+          const answer = await runCapability(judgeDuplicate, {
+            first: postText(post),
+            second: postText(other),
+            examples: examplesBlock,
+          });
+          usage.push({
+            ...usageEntry(
+              judgeDuplicate.step,
+              "chat_completion",
+              answer.usage,
+              post.id,
+            ),
+            metadata: { examples: examples.length, exampleCandidates },
+          });
+          return answer.value.duplicate &&
+            answer.value.confidence >= DUPLICATE_CONFIDENCE
+            ? { other, verdict: answer.value, model: answer.usage.model }
+            : null;
+        }),
+      )
+    : [];
+  const found = judged.filter((item): item is NonNullable<typeof item> =>
+    Boolean(item),
+  );
   return async (db) => {
     await logUsage(db, usage);
     await db
@@ -741,49 +724,58 @@ async function translateArticle(
   if (!article) return [];
   const results: Translation[] = [];
   let failure: unknown;
-  for (const locale of locales.slice(0, 12)) {
-    if (!left()) break;
-    try {
-      const answer = await chatJson(
-        z.object({
-          title: z.string().min(1).max(500),
-          description: z.string().max(1000).nullable(),
-          content: z.string().min(1).max(200000),
-        }),
-        [
-          {
-            role: "system",
-            content: [
-              `Translate this help-center article into the locale "${locale}". Keep Markdown, links, code and product names.`,
-              terms.length
-                ? `Never translate these terms: ${terms.slice(0, 100).join(", ")}.`
-                : "",
-              'Answer with one JSON object: {"title": string, "description": string | null, "content": string}.',
-            ].join("\n"),
-          },
-          {
-            role: "user",
-            content: untrusted(
-              "article",
-              JSON.stringify({
-                title: article.title,
-                description: article.description,
-                // ponytail: a longer article is cut; translate it in parts when that matters.
-                content: article.content.slice(0, 30000),
-              }),
-            ),
-          },
-        ],
-        8000,
-      );
-      usage.push(
-        usageEntry("article_translation", "chat_completion", answer.usage),
-      );
-      results.push({ locale, ...answer.value });
-    } catch (error) {
-      usage.push(failedUsage("article_translation", "chat_completion", error));
-      failure = error;
-    }
+  const pendingLocales = locales.slice(0, 12);
+  const CONCURRENCY = 3;
+  for (let i = 0; i < pendingLocales.length && left(); i += CONCURRENCY) {
+    const batch = pendingLocales.slice(i, i + CONCURRENCY);
+    await Promise.all(
+      batch.map(async (locale) => {
+        if (!left()) return;
+        try {
+          const answer = await chatJson(
+            z.object({
+              title: z.string().min(1).max(500),
+              description: z.string().max(1000).nullable(),
+              content: z.string().min(1).max(200000),
+            }),
+            [
+              {
+                role: "system",
+                content: [
+                  `Translate this help-center article into the locale "${locale}". Keep Markdown, links, code and product names.`,
+                  terms.length
+                    ? `Never translate these terms: ${terms.slice(0, 100).join(", ")}.`
+                    : "",
+                  'Answer with one JSON object: {"title": string, "description": string | null, "content": string}.',
+                ].join("\n"),
+              },
+              {
+                role: "user",
+                content: untrusted(
+                  "article",
+                  JSON.stringify({
+                    title: article.title,
+                    description: article.description,
+                    // ponytail: a longer article is cut; translate it in parts when that matters.
+                    content: article.content.slice(0, 30000),
+                  }),
+                ),
+              },
+            ],
+            8000,
+          );
+          usage.push(
+            usageEntry("article_translation", "chat_completion", answer.usage),
+          );
+          results.push({ locale, ...answer.value });
+        } catch (error) {
+          usage.push(
+            failedUsage("article_translation", "chat_completion", error),
+          );
+          failure = error;
+        }
+      }),
+    );
   }
   if (!results.length && failure) throw failure;
   return results;

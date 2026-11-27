@@ -2,14 +2,27 @@
 import { sql } from "drizzle-orm";
 import { posts } from "../../../database/quills/schema/posts";
 
+let iterativeScanSupported = false;
+
+/** Records whether the connected PostgreSQL server's pgvector supports hnsw.iterative_scan (0.8+). */
+export function setHnswIterativeScanSupported(supported: boolean): void {
+  iterativeScanSupported = supported;
+}
+
+export function supportsHnswIterativeScan(): boolean {
+  return iterativeScanSupported;
+}
+
 /**
- * Cosine distance as an expression the HNSW index cannot serve. The index filters after its scan
- * (40 candidates across every workspace), so a workspace-scoped search reads exact distances.
- * ponytail: an exact scan of the workspace's embedded rows; turn on pgvector iterative scans in
- * the scoping layer if a workspace grows past tens of thousands of embedded rows.
+ * Cosine distance for workspace-scoped RLS queries. When pgvector 0.8+ iterative HNSW scans are
+ * available, client.ts sets hnsw.iterative_scan = 'strict_order' transaction-locally so the HNSW
+ * indexes can be used without truncating after 40 global candidates. On pgvector 0.5-0.7, `0 +`
+ * forces exact distance evaluation so RLS never drops rows.
  */
 export const exactDistance = (column: unknown, target: unknown) =>
-  sql`((${column} <=> ${target}) + 0)`;
+  iterativeScanSupported
+    ? sql`(${column} <=> ${target})`
+    : sql`(0 + (${column} <=> ${target}))`;
 
 /** A fresh vector as a query parameter. */
 export const vectorParam = (values: number[]) =>

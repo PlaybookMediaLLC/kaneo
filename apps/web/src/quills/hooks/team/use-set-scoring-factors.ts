@@ -15,22 +15,24 @@ export function useSetScoringFactors(viewer: Viewer) {
   >({
     mutationFn: (input) => setScoringFactors(input),
     onSuccess: async (_data, input) => {
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspaceId,
-          viewer,
-          "team",
-          "getScoringFactors",
-        ),
-      });
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspaceId,
-          viewer,
-          "team",
-          "listPosts",
-        ),
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspaceId,
+            viewer,
+            "team",
+            "getScoringFactors",
+          ),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspaceId,
+            viewer,
+            "team",
+            "listPosts",
+          ),
+        }),
+      ]);
     },
   });
 }

@@ -1,3 +1,4 @@
+import type { MouseEvent } from "react";
 import { IconMsgsOutline18 } from "nucleo-ui-essential-outline-18";
 import { useTranslation } from "react-i18next";
 // quills-web-allow C13: Type-only API DTO import; this component receives all data and callbacks through props.
@@ -19,6 +20,7 @@ export interface PostListProps {
   votePostId?: string | null;
   voteProblem?: PortalProblem | null;
   onLoadMore: () => void;
+  onNavigate?: (href: string) => void;
   onRetryVote?: () => void;
   onVote: (post: PortalPostSummary, voted: boolean) => Promise<void>;
 }
@@ -58,6 +60,24 @@ export function PostList(props: PostListProps) {
                 className="block truncate font-medium after:absolute after:inset-0 after:rounded-xl focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring"
                 href={portalHref(props.workspaceId, `posts/${post.id}`)}
                 dir="auto"
+                onClick={
+                  props.onNavigate
+                    ? (event: MouseEvent<HTMLAnchorElement>) => {
+                        if (
+                          event.button !== 0 ||
+                          event.metaKey ||
+                          event.ctrlKey ||
+                          event.shiftKey ||
+                          event.altKey
+                        )
+                          return;
+                        event.preventDefault();
+                        props.onNavigate!(
+                          portalHref(props.workspaceId, `posts/${post.id}`),
+                        );
+                      }
+                    : undefined
+                }
               >
                 {post.title}
               </a>

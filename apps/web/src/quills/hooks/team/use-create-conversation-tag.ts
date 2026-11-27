@@ -15,22 +15,24 @@ export function useCreateConversationTag(viewer: Viewer) {
   >({
     mutationFn: (input) => createConversationTag(input),
     onSuccess: async (_data, input) => {
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspaceId,
-          viewer,
-          "team",
-          "listConversationTags",
-        ),
-      });
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspaceId,
-          viewer,
-          "team",
-          "listConversationTagUsage",
-        ),
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspaceId,
+            viewer,
+            "team",
+            "listConversationTags",
+          ),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspaceId,
+            viewer,
+            "team",
+            "listConversationTagUsage",
+          ),
+        }),
+      ]);
     },
   });
 }

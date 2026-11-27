@@ -80,6 +80,8 @@ export function PostAttachments({
                       className="h-auto max-w-full rounded-lg"
                       src={file.data.downloadUrl}
                       alt={file.data.name}
+                      loading="lazy"
+                      decoding="async"
                     />
                   ) : null}
                   <a

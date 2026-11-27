@@ -15,30 +15,32 @@ export function useEditPortalOwnComment(viewer: Viewer) {
   >({
     mutationFn: (input) => editPortalOwnComment(input),
     onSuccess: async (_data, input) => {
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspace,
-          viewer,
-          "feedback",
-          "listPortalPostComments",
-        ),
-      });
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspace,
-          viewer,
-          "feedback",
-          "listPortalPosts",
-        ),
-      });
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspace,
-          viewer,
-          "feedback",
-          "getPortalPost",
-        ),
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspace,
+            viewer,
+            "feedback",
+            "listPortalPostComments",
+          ),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspace,
+            viewer,
+            "feedback",
+            "listPortalPosts",
+          ),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspace,
+            viewer,
+            "feedback",
+            "getPortalPost",
+          ),
+        }),
+      ]);
     },
   });
 }

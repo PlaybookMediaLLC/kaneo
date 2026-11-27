@@ -15,30 +15,32 @@ export function useDeletePortalOwnPost(viewer: Viewer) {
   >({
     mutationFn: (input) => deletePortalOwnPost(input),
     onSuccess: async (_data, input) => {
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspace,
-          viewer,
-          "feedback",
-          "listPortalPosts",
-        ),
-      });
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspace,
-          viewer,
-          "feedback",
-          "listPortalBoards",
-        ),
-      });
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspace,
-          viewer,
-          "feedback",
-          "getPortalPost",
-        ),
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspace,
+            viewer,
+            "feedback",
+            "listPortalPosts",
+          ),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspace,
+            viewer,
+            "feedback",
+            "listPortalBoards",
+          ),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspace,
+            viewer,
+            "feedback",
+            "getPortalPost",
+          ),
+        }),
+      ]);
     },
   });
 }

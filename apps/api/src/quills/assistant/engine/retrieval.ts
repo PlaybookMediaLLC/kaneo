@@ -5,6 +5,7 @@ import {
   eq,
   ilike,
   inArray,
+  isNotNull,
   isNull,
   lte,
   ne,
@@ -63,7 +64,7 @@ export async function searchArticles(
     .select({
       id: helpCenterArticles.id,
       title: helpCenterArticles.title,
-      content: helpCenterArticles.content,
+      excerpt: sql<string>`left(${helpCenterArticles.content}, 1200)`,
     })
     .from(helpCenterArticles)
     .innerJoin(
@@ -96,7 +97,7 @@ export async function searchArticles(
     type: "article",
     id: row.id,
     title: row.title,
-    excerpt: row.content.slice(0, 1200),
+    excerpt: row.excerpt,
   }));
 }
 
@@ -110,12 +111,13 @@ const NEAR_SIMILARITY = 0.4;
 /** Rows whose vector (from the same model) is near the question, nearest first. */
 const nearTo = (
   near: Near | null | undefined,
-  column: { embedding: unknown; embeddingModel: AnyColumn },
+  column: { embedding: AnyColumn; embeddingModel: AnyColumn },
 ) => {
   if (!near) return null;
   const distance = exactDistance(column.embedding, vectorParam(near.values));
   return {
     match: and(
+      isNotNull(column.embedding),
       eq(column.embeddingModel, near.model),
       sql`${distance} <= ${1 - NEAR_SIMILARITY}`,
     ),
@@ -126,7 +128,7 @@ const nearTo = (
 /**
  * What a customer may be told, by the customer agent's knowledge settings: published public
  * articles when `helpCenter` is on, then public snippets, and documents and web pages when
- * `documents` is on.
+ * `documents` is on. Sequential on the single transaction client (pg runs one query at a time).
  */
 export const publicSources = async (
   db: Database,
@@ -137,6 +139,36 @@ export const publicSources = async (
   ...(knowledge.helpCenter ? await searchArticles(db, query, "public") : []),
   ...(await searchKnowledge(db, query, "public", knowledge.documents, near)),
 ];
+
+/** Merges vector and lexical hits (vector first, deduped, capped at LIMIT). */
+function mergeHits<T extends { id: string }>(
+  semantic: readonly T[],
+  lexical: readonly T[],
+): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const row of [...semantic, ...lexical]) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    out.push(row);
+    if (out.length >= LIMIT) break;
+  }
+  return out;
+}
+
+/**
+ * Runs vector (HNSW) and lexical branches separately so pgvector HNSW indexes are eligible,
+ * then merges hits sequentially on the transaction client.
+ */
+async function searchHybrid<T extends { id: string }>(
+  runSemantic: (() => Promise<T[]>) | null,
+  runLexical: () => Promise<T[]>,
+): Promise<T[]> {
+  if (!runSemantic) return runLexical();
+  const semantic = await runSemantic();
+  if (semantic.length >= LIMIT) return semantic.slice(0, LIMIT);
+  return mergeHits(semantic, await runLexical());
+}
 
 /**
  * Snippets within the audience, then documents and ready web pages when `documents` is on. A row
@@ -150,60 +182,86 @@ export async function searchKnowledge(
   near?: Near | null,
 ): Promise<Source[]> {
   const snippetNear = nearTo(near, assistantSnippets);
-  const snippets = await db
-    .select({
-      id: assistantSnippets.id,
-      title: assistantSnippets.title,
-      content: assistantSnippets.content,
-    })
-    .from(assistantSnippets)
-    .where(
-      and(
-        eq(assistantSnippets.enabled, true),
-        inArray(
-          assistantSnippets.audience,
-          audience === "public" ? ["public"] : ["public", "team"],
-        ),
-        or(
-          anyWord(query, assistantSnippets.title, assistantSnippets.content),
-          snippetNear?.match,
-        ),
-      ),
-    )
-    .orderBy(
-      ...(snippetNear ? [snippetNear.order] : []),
-      desc(assistantSnippets.updatedAt),
-    )
-    .limit(LIMIT);
-  const found: Source[] = snippets.map((row) => ({
-    type: "snippet",
-    id: row.id,
-    title: row.title,
-    excerpt: row.content,
-  }));
+  const snippetBase = and(
+    eq(assistantSnippets.enabled, true),
+    inArray(
+      assistantSnippets.audience,
+      audience === "public" ? ["public"] : ["public", "team"],
+    ),
+  );
+  const snippets = await searchHybrid(
+    snippetNear
+      ? () =>
+          db
+            .select({
+              id: assistantSnippets.id,
+              title: assistantSnippets.title,
+              excerpt: sql<string>`left(${assistantSnippets.content}, 1200)`,
+            })
+            .from(assistantSnippets)
+            .where(and(snippetBase, snippetNear.match))
+            .orderBy(snippetNear.order, desc(assistantSnippets.updatedAt))
+            .limit(LIMIT)
+      : null,
+    () =>
+      db
+        .select({
+          id: assistantSnippets.id,
+          title: assistantSnippets.title,
+          excerpt: sql<string>`left(${assistantSnippets.content}, 1200)`,
+        })
+        .from(assistantSnippets)
+        .where(
+          and(
+            snippetBase,
+            anyWord(query, assistantSnippets.title, assistantSnippets.content),
+          ),
+        )
+        .orderBy(desc(assistantSnippets.updatedAt))
+        .limit(LIMIT),
+  );
+  const found: Source[] = snippets.map((row) => ({ type: "snippet", ...row }));
   if (!documents) return found;
+
   const documentNear = nearTo(near, assistantDocuments);
-  const files = await db
-    .select({
-      id: assistantDocuments.id,
-      title: assistantDocuments.title,
-      excerpt: sql<string>`left(${assistantDocuments.content}, 1200)`,
-    })
-    .from(assistantDocuments)
-    .where(
-      and(
-        isNull(assistantDocuments.deletedAt),
-        or(
-          anyWord(query, assistantDocuments.title, assistantDocuments.content),
-          documentNear?.match,
-        ),
-      ),
-    )
-    .orderBy(
-      ...(documentNear ? [documentNear.order] : []),
-      desc(assistantDocuments.createdAt),
-    )
-    .limit(LIMIT);
+  const files = await searchHybrid(
+    documentNear
+      ? () =>
+          db
+            .select({
+              id: assistantDocuments.id,
+              title: assistantDocuments.title,
+              excerpt: sql<string>`left(${assistantDocuments.content}, 1200)`,
+            })
+            .from(assistantDocuments)
+            .where(
+              and(isNull(assistantDocuments.deletedAt), documentNear.match),
+            )
+            .orderBy(documentNear.order, desc(assistantDocuments.createdAt))
+            .limit(LIMIT)
+      : null,
+    () =>
+      db
+        .select({
+          id: assistantDocuments.id,
+          title: assistantDocuments.title,
+          excerpt: sql<string>`left(${assistantDocuments.content}, 1200)`,
+        })
+        .from(assistantDocuments)
+        .where(
+          and(
+            isNull(assistantDocuments.deletedAt),
+            anyWord(
+              query,
+              assistantDocuments.title,
+              assistantDocuments.content,
+            ),
+          ),
+        )
+        .orderBy(desc(assistantDocuments.createdAt))
+        .limit(LIMIT),
+  );
+
   const pages = await db
     .select({
       id: assistantWebSources.id,
@@ -220,6 +278,7 @@ export async function searchKnowledge(
     )
     .orderBy(desc(assistantWebSources.fetchedAt))
     .limit(LIMIT);
+
   return [
     ...found,
     ...files.map((row) => ({ type: "document" as const, ...row })),

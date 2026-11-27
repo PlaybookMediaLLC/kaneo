@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import type { Database } from "../../../database/quills/client";
 import { agentSkills } from "../../../database/quills/schema/agent-skills";
 import { assistantGuidanceRules } from "../../../database/quills/schema/assistant-guidance";
@@ -26,21 +26,22 @@ export async function loadGuidance(db: Database, agent: Agent) {
     )
     .orderBy(asc(assistantGuidanceRules.priority))
     .limit(20);
-  const skills = (
-    await db
-      .select({
-        name: agentSkills.name,
-        whenToUse: agentSkills.whenToUse,
-        instructions: agentSkills.instructions,
-        assignments: agentSkills.assignments,
-      })
-      .from(agentSkills)
-      .where(eq(agentSkills.enabled, true))
-      .orderBy(asc(agentSkills.name))
-      .limit(50)
-  )
-    .filter((skill) => skill.assignments?.[agent])
-    .slice(0, 10);
+  const skills = await db
+    .select({
+      name: agentSkills.name,
+      whenToUse: agentSkills.whenToUse,
+      instructions: agentSkills.instructions,
+      assignments: agentSkills.assignments,
+    })
+    .from(agentSkills)
+    .where(
+      and(
+        eq(agentSkills.enabled, true),
+        sql`${agentSkills.assignments} @> ${JSON.stringify({ [agent]: true })}::jsonb`,
+      ),
+    )
+    .orderBy(asc(agentSkills.name))
+    .limit(10);
   return { rules, skills };
 }
 

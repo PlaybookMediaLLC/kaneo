@@ -10,7 +10,7 @@ export function useGetMyConversation(
 ) {
   return useQuery({
     ...getMyConversationQuery(input, viewer),
-    refetchInterval: 10_000,
+    refetchInterval: 60_000,
     refetchIntervalInBackground: false,
     enabled: Boolean(input.param.workspace && input.param.conversationId),
   });

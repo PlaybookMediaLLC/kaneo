@@ -15,30 +15,32 @@ export function useCreatePostFromConversation(viewer: Viewer) {
   >({
     mutationFn: (input) => createPostFromConversation(input),
     onSuccess: async (_data, input) => {
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspaceId,
-          viewer,
-          "team",
-          "getLinkedPostsForConversation",
-        ),
-      });
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspaceId,
-          viewer,
-          "team",
-          "listConversationMessages",
-        ),
-      });
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspaceId,
-          viewer,
-          "team",
-          "getConversation",
-        ),
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspaceId,
+            viewer,
+            "team",
+            "getLinkedPostsForConversation",
+          ),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspaceId,
+            viewer,
+            "team",
+            "listConversationMessages",
+          ),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspaceId,
+            viewer,
+            "team",
+            "getConversation",
+          ),
+        }),
+      ]);
     },
   });
 }

@@ -15,22 +15,24 @@ export function useLinkTicketToConversation(viewer: Viewer) {
   >({
     mutationFn: (input) => linkTicketToConversation(input),
     onSuccess: async (_data, input) => {
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspaceId,
-          viewer,
-          "team",
-          "getConversationTicketLink",
-        ),
-      });
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspaceId,
-          viewer,
-          "team",
-          "listConversationMessages",
-        ),
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspaceId,
+            viewer,
+            "team",
+            "getConversationTicketLink",
+          ),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspaceId,
+            viewer,
+            "team",
+            "listConversationMessages",
+          ),
+        }),
+      ]);
     },
   });
 }

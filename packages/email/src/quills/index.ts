@@ -26,7 +26,7 @@ export { directionOf } from "./direction";
  * than ranked; see ./provider for the rule and its one inbound exception.
  */
 
-import { render } from "@react-email/components";
+import { render, toPlainText } from "@react-email/components";
 import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
 import { Resend } from "resend";
@@ -235,6 +235,9 @@ function getSmtpTransporter(): Transporter {
     const secure = getEnv("EMAIL_SMTP_SECURE") === "true";
     log.info({ host, port, secure }, "initializing smtp transporter");
     smtpTransporter = nodemailer.createTransport({
+      pool: true,
+      maxConnections: 5,
+      maxMessages: 100,
       host,
       port,
       secure,
@@ -441,9 +444,7 @@ async function dispatch(input: DispatchOptions): Promise<EmailResult> {
     options.html ?? (options.react ? await render(options.react) : undefined);
   const text =
     options.text ??
-    (options.react
-      ? await render(options.react, { plainText: true })
-      : undefined);
+    (options.react && html !== undefined ? toPlainText(html) : undefined);
 
   if (provider === "ses") {
     // Message-ID is platform-controlled: the transport drops ours on the way
@@ -598,7 +599,9 @@ async function dispatch(input: DispatchOptions): Promise<EmailResult> {
       "code" in error &&
       (error as { code: string }).code === "ETIMEDOUT"
     ) {
+      const stale = smtpTransporter;
       smtpTransporter = null;
+      stale?.close();
     }
     log.error({ err: error, provider: "smtp" }, "email send failed");
     recordOutboundLog({

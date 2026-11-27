@@ -3,10 +3,10 @@ import { evaluateMyPortalAccessQuery } from "@/quills/api/portal/evaluate-my-por
 import { getPublicPortalConfigQuery } from "@/quills/api/portal/get-public-portal-config";
 import type { Viewer } from "@/quills/core/types";
 import { PortalRoute } from "@/quills/portal/layout";
-import { ensureQuillsI18n } from "@/quills/i18n/load";
 
 export const Route = createFileRoute("/portal/$workspaceId")({
   beforeLoad: async ({ context, params }) => {
+    const { ensureQuillsI18n } = await import("@/quills/i18n/load");
     await ensureQuillsI18n();
     const viewer: Viewer = context.user?.id
       ? { kind: "user", id: context.user.id }

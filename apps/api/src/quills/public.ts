@@ -29,6 +29,31 @@ import widgetSupport from "./widget/support/index";
 // routes (/signed/...) prove the caller with a signature (framework/signed.ts); the internal route
 // (/internal/...) with QUILLS_INTERNAL_TOKEN. They mount before the workspace routes, so a
 // workspace slug never shadows their fixed prefixes.
+export type QuillsPublicRouters = [
+  typeof widgetHost,
+  typeof integrationWebhooks,
+  typeof oauthCallback,
+  typeof connectorOAuthCallback,
+  typeof inboundEmail,
+  typeof emailEvents,
+  typeof jobWake,
+  typeof portalTokenSignIn,
+  typeof portal,
+  typeof widget,
+  typeof portalFeedback,
+  typeof widgetFeedback,
+  typeof widgetHelp,
+  typeof contentPublic,
+  typeof widgetKbAsk,
+  typeof portalSupport,
+  typeof widgetSupport,
+  typeof customerFiles,
+  typeof avatarImage,
+  typeof track,
+  typeof portalSurveys,
+  typeof widgetSurveys,
+];
+
 export default apiRouter()
   .route("/", widgetHost)
   .route("/", integrationWebhooks)

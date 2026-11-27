@@ -1,6 +1,6 @@
 import { brandText } from "@kaneo/branding";
-import quills from "./quills";
-import quillsPublic from "./quills/public";
+import quills, { type QuillsTeammateRouters } from "./quills";
+import quillsPublic, { type QuillsPublicRouters } from "./quills/public";
 import { runQuillsMigrations } from "./database/quills/migrate";
 import { resolveDatabaseConfig } from "./database/resolve-database-url";
 import { startWebhookWorker } from "./admin/webhooks/start-webhook-worker";
@@ -9,6 +9,7 @@ import { syncWorkspaceAccess } from "./ws/workspace-access";
 import { drainPasswordResetDeliveries } from "./utils/password-reset-delivery";
 import "./instrument";
 
+import { createHash } from "node:crypto";
 import { dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { serve } from "@hono/node-server";
@@ -18,7 +19,7 @@ import * as Sentry from "@sentry/node";
 import type { Session, User } from "better-auth/types";
 import { eq, sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { compress } from "hono/compress";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
@@ -668,7 +669,26 @@ export function createApp() {
   api.openAPIRegistry.register("ApiError", apiErrorSchema);
   organizationRoutes(api.openAPIRegistry);
 
+  let cachedOpenApi: { body: string; etag: string } | undefined;
+  const serveOpenApi = (c: Context, cached: { body: string; etag: string }) => {
+    c.header("Cache-Control", "public, max-age=300");
+    c.header("ETag", cached.etag);
+    const inm = c.req.header("If-None-Match");
+    if (
+      inm &&
+      inm.split(",").some((part) => {
+        const trimmed = part.trim();
+        return trimmed === "*" || trimmed.replace(/^W\//, "") === cached.etag;
+      })
+    ) {
+      return c.body(null, 304);
+    }
+    c.header("Content-Type", "application/json; charset=utf-8");
+    return c.body(cached.body, 200);
+  };
+
   api.get("/openapi", (c) => {
+    if (cachedOpenApi) return serveOpenApi(c, cachedOpenApi);
     const document = api.getOpenAPI31Document({
       openapi: "3.1.0",
       info: {
@@ -731,7 +751,10 @@ export function createApp() {
       }
     }
 
-    return c.json(document);
+    const body = JSON.stringify(document);
+    const etag = `"${createHash("sha256").update(body).digest("base64url").slice(0, 16)}"`;
+    cachedOpenApi = { body, etag };
+    return serveOpenApi(c, cachedOpenApi);
   });
 
   // Better Auth serves GET /auth/device as JSON. Browsers that open the API URL
@@ -1173,8 +1196,6 @@ const {
   adminApi,
   workflowRuleApi,
   workspaceApi,
-  quillsApi,
-  quillsPublicApi,
   customFieldApi,
   importApi,
   oauthApi,
@@ -1229,8 +1250,6 @@ export type AppType =
   | typeof workflowRuleApi
   | typeof invitationApi
   | typeof workspaceApi
-  | typeof quillsApi
-  | typeof quillsPublicApi
   | typeof customFieldApi
   | typeof importApi
   | typeof userApi
@@ -1238,5 +1257,7 @@ export type AppType =
   | typeof publicProjectApi
   | typeof invitationPublicApi
   | typeof oauthApi;
+
+export type { QuillsTeammateRouters, QuillsPublicRouters };
 
 export default app;

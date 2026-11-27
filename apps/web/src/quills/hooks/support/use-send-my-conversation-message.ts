@@ -15,22 +15,24 @@ export function useSendMyConversationMessage(viewer: Viewer) {
   >({
     mutationFn: (input) => sendMyConversationMessage(input),
     onSuccess: async (_data, input) => {
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspace,
-          viewer,
-          "support",
-          "getMyConversation",
-        ),
-      });
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspace,
-          viewer,
-          "support",
-          "listMyConversationMessages",
-        ),
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspace,
+            viewer,
+            "support",
+            "getMyConversation",
+          ),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspace,
+            viewer,
+            "support",
+            "listMyConversationMessages",
+          ),
+        }),
+      ]);
     },
   });
 }

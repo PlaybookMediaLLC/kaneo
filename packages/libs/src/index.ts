@@ -1,2 +1,2 @@
 export { resolveApiBaseUrl } from "./api-url";
-export { client, windowId } from "./hono";
+export { client, quillsClient, windowId } from "./hono";

@@ -208,3 +208,5 @@ export { BillingSettingsPage } from "@/components/billing/billing-settings-page"
 // Group A workspace pages (lane M): the member tabs and the changelog editor.
 export { TabsPanel } from "@/components/ui/tabs";
 export { Skeleton } from "@/components/ui/skeleton";
+// Portal realtime support updates over the user-scoped WebSocket.
+export { getUserWsUrl } from "@/hooks/use-user-websocket";

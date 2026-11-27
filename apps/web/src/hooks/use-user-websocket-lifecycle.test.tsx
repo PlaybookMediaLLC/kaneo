@@ -150,6 +150,77 @@ describe("user WebSocket lifecycle", () => {
       queryKey: ["quills", "workspace", "user-a"],
     });
   });
+  it("narrows QUILLS_CHANGED invalidation when entityType is provided", () => {
+    renderHook(useUserWebSocket);
+    act(() =>
+      TestSocket.instances[0].onmessage?.({
+        data: JSON.stringify({
+          type: "QUILLS_CHANGED",
+          workspaceId: "workspace",
+          eventId: "e-post",
+          entityType: "post",
+        }),
+      }),
+    );
+    act(() => vi.advanceTimersByTime(300));
+    expect(client.invalidateQueries).toHaveBeenCalledTimes(1);
+    const predicate = client.invalidateQueries.mock.calls[0]?.[0].predicate;
+    expect(
+      predicate({
+        queryKey: ["quills", "workspace", "user-a", "team", "listPosts"],
+      }),
+    ).toBe(true);
+    expect(
+      predicate({
+        queryKey: ["quills", "workspace", "user-a", "feedback", "listPosts"],
+      }),
+    ).toBe(true);
+    expect(
+      predicate({
+        queryKey: ["quills", "workspace", "user-a", "support", "listThreads"],
+      }),
+    ).toBe(false);
+    expect(
+      predicate({
+        queryKey: ["quills", "workspace", "user-a", "settings", "get"],
+      }),
+    ).toBe(false);
+  });
+  it("invalidates customer support queries on QUILLS_CUSTOMER_CHANGED", () => {
+    renderHook(useUserWebSocket);
+    act(() =>
+      TestSocket.instances[0].onmessage?.({
+        data: JSON.stringify({
+          type: "QUILLS_CUSTOMER_CHANGED",
+          workspaceId: "workspace",
+          conversationId: "conv_1",
+        }),
+      }),
+    );
+    expect(client.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["quills", "workspace", "user-a", "support"],
+    });
+  });
+  it("invalidates Quills data on reconnect WORKSPACE_ACCESS_SYNC but not initial connect", () => {
+    renderHook(useUserWebSocket);
+    const sync = () =>
+      act(() =>
+        TestSocket.instances[0].onmessage?.({
+          data: JSON.stringify({
+            type: "WORKSPACE_ACCESS_SYNC",
+            workspaceIds: ["workspace"],
+          }),
+        }),
+      );
+    sync();
+    expect(client.invalidateQueries).not.toHaveBeenCalledWith({
+      queryKey: ["quills", "workspace", "user-a"],
+    });
+    sync();
+    expect(client.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["quills", "workspace", "user-a"],
+    });
+  });
   it("keeps an archived board open to show its archived state and refreshes on restore", () => {
     renderHook(useUserWebSocket);
     act(() =>

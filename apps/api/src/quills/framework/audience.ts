@@ -105,14 +105,18 @@ async function portalAccount(
     const session = await getUserSession(c.req.raw.headers);
     if (!session?.user) return null;
     const { id, name, email, emailVerified, image } = session.user;
+    const [member, tokenCustomerId] = await Promise.all([
+      isMemberOfNamedWorkspace(workspace, id),
+      tokenCustomerOfNamedWorkspace(workspace, id),
+    ]);
     return {
       id,
       name: name || email.split("@")[0] || "Customer",
       email,
       emailVerified,
       image: image ?? null,
-      member: await isMemberOfNamedWorkspace(workspace, id),
-      tokenCustomerId: await tokenCustomerOfNamedWorkspace(workspace, id),
+      member,
+      tokenCustomerId,
     };
   } catch (error) {
     // A rejected credential is an anonymous caller; anything else is a server failure.
@@ -501,14 +505,20 @@ const strings = (value: unknown) =>
 export async function evaluatePortalAccess(
   db: Database,
   caller: QuillsCaller,
+  storedPortalConfig?: string | null,
 ): Promise<PortalAccessDecision> {
-  const [row] = await db
-    .select({ portalConfig: settings.portalConfig })
-    .from(settings)
-    .limit(1);
+  const portalConfig =
+    storedPortalConfig !== undefined
+      ? storedPortalConfig
+      : (
+          await db
+            .select({ portalConfig: settings.portalConfig })
+            .from(settings)
+            .limit(1)
+        )[0]?.portalConfig;
   let access: Record<string, unknown> = {};
   try {
-    const config: unknown = JSON.parse(row?.portalConfig || "{}");
+    const config: unknown = JSON.parse(portalConfig || "{}");
     const value = (config as { access?: unknown } | null)?.access;
     access = value && typeof value === "object" ? { ...value } : {};
   } catch {

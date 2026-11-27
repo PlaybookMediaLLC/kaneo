@@ -15,22 +15,24 @@ export function useUpdateCustomerProfile(viewer: Viewer) {
   >({
     mutationFn: (input) => updateCustomerProfile(input),
     onSuccess: async (_data, input) => {
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspace,
-          viewer,
-          "portal",
-          "getCustomerProfile",
-        ),
-      });
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspace,
-          viewer,
-          "portal",
-          "getPublicUserProfile",
-        ),
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspace,
+            viewer,
+            "portal",
+            "getCustomerProfile",
+          ),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspace,
+            viewer,
+            "portal",
+            "getPublicUserProfile",
+          ),
+        }),
+      ]);
     },
   });
 }

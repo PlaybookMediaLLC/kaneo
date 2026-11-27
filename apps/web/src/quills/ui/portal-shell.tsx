@@ -46,9 +46,12 @@ export function PortalShell({
           <div className="portal-brand flex min-w-0 flex-1 items-center gap-2 text-base tracking-tight lg:flex-none">
             {branding.logoUrl ? (
               <img
-                className="max-h-8 max-w-32 object-contain"
+                className="h-auto max-h-8 w-auto max-w-32 object-contain"
                 src={branding.logoUrl}
                 alt={displayName}
+                width={128}
+                height={32}
+                decoding="async"
               />
             ) : null}
             {branding.headerDisplayMode === "logo_and_name" ||

@@ -48,12 +48,20 @@ export function createQuillsTestQueryClient() {
 
 export function renderComponent(element: ReactElement) {
   const client = createQuillsTestQueryClient();
+  const router = createRouter({
+    routeTree: createRootRoute(),
+    history: createMemoryHistory({ initialEntries: ["/"] }),
+  });
   const result = render(element, {
     wrapper: ({ children }) => (
-      <Providers client={client}>{children}</Providers>
+      <Providers client={client}>
+        <RouterContextProvider router={router}>
+          {children}
+        </RouterContextProvider>
+      </Providers>
     ),
   });
-  return Object.assign(result, { queryClient: client });
+  return Object.assign(result, { queryClient: client, router });
 }
 
 export interface RenderPageOptions {
