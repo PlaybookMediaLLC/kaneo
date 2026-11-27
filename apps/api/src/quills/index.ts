@@ -87,6 +87,59 @@ const context = defineQuillsRoute({
   },
 });
 
+const contextRouter = apiRouter<
+  BaseVariables & { workspaceId: string }
+>().openapi(...context);
+
+// Flat router tuple for @kaneo/libs so Hono's client type expands each sub-router independently
+// instead of recursing over a 47-deep .route() chain during apps/web typecheck.
+export type QuillsTeammateRouters = [
+  typeof files,
+  typeof jobs,
+  typeof links,
+  typeof sharedTeams,
+  typeof directory,
+  typeof quillsSettings,
+  typeof websiteBranding,
+  typeof feedback,
+  typeof delivery,
+  typeof taxonomy,
+  typeof portalAccessSettings,
+  typeof portalSignInSettings,
+  typeof content,
+  typeof integrations,
+  typeof operations,
+  typeof supportTickets,
+  typeof supportConversations,
+  typeof supportAssistant,
+  typeof workspaceSearch,
+  typeof supportTyping,
+  typeof supportPresence,
+  typeof supportLinkPreview,
+  typeof supportReadBatch,
+  typeof testConversations,
+  typeof portalInvites,
+  typeof profileTeamContext,
+  typeof reporting,
+  typeof automation,
+  typeof assistant,
+  typeof apps,
+  typeof agentChannels,
+  typeof surveys,
+  typeof changelogAi,
+  typeof changelogEngagement,
+  typeof changelogTranslations,
+  typeof boardSettings,
+  typeof boardDelivery,
+  typeof postTasks,
+  typeof postUpdates,
+  typeof demand,
+  typeof scores,
+  typeof scoring,
+  typeof postSummary,
+  typeof contextRouter,
+];
+
 export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", files)
   .route("/", jobs)
@@ -136,4 +189,4 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", scoring)
   // RFC 0004: the AI chip of the request detail.
   .route("/", postSummary)
-  .openapi(...context);
+  .route("/", contextRouter);

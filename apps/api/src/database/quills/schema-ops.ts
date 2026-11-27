@@ -417,18 +417,70 @@ export const CONCURRENT_INDEX_SPECS: readonly ConcurrentIndexSpec[] = [
     concurrent: false,
     ddl: "CREATE INDEX IF NOT EXISTS page_views_principal_id_idx ON quills.page_views (principal_id) WHERE principal_id IS NOT NULL",
   },
+  // Workspace-leading composite indexes for hot multi-tenant RLS scans.
+  {
+    name: "conversations_workspace_status_last_msg_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS conversations_workspace_status_last_msg_idx ON quills.conversations (workspace_id, status, last_message_at DESC, id)",
+  },
+  {
+    name: "conversations_workspace_waiting_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS conversations_workspace_waiting_idx ON quills.conversations (workspace_id, waiting_since, id) WHERE waiting_since IS NOT NULL",
+  },
+  {
+    name: "conversation_messages_workspace_conv_created_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS conversation_messages_workspace_conv_created_idx ON quills.conversation_messages (workspace_id, conversation_id, created_at, id)",
+  },
+  {
+    name: "posts_workspace_status_created_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS posts_workspace_status_created_idx ON quills.posts (workspace_id, status_id, created_at DESC, id) WHERE deleted_at IS NULL",
+  },
+  {
+    name: "posts_workspace_board_created_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS posts_workspace_board_created_idx ON quills.posts (workspace_id, board_id, created_at DESC, id) WHERE deleted_at IS NULL",
+  },
+  {
+    name: "post_comments_workspace_post_created_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS post_comments_workspace_post_created_idx ON quills.post_comments (workspace_id, post_id, created_at, id) WHERE deleted_at IS NULL",
+  },
+  {
+    name: "tickets_workspace_status_updated_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS tickets_workspace_status_updated_idx ON quills.tickets (workspace_id, status_id, updated_at DESC, id) WHERE deleted_at IS NULL",
+  },
+  {
+    name: "audit_log_workspace_occurred_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS audit_log_workspace_occurred_idx ON quills.audit_log (workspace_id, occurred_at DESC, id)",
+  },
+  {
+    name: "job_queue_workspace_running_lease_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS job_queue_workspace_running_lease_idx ON quills.job_queue (workspace_id, queue, locked_until) WHERE status = 'running'",
+  },
 ];
 
 export async function ensureQuillsIndexes(
   client: Client,
   specs: readonly ConcurrentIndexSpec[] = CONCURRENT_INDEX_SPECS,
 ) {
+  if (!specs.length) return;
+  const states = await client.query<{ relname: string; valid: boolean }>(
+    `SELECT c.relname, i.indisvalid AS valid FROM pg_index i JOIN pg_class c ON c.oid=i.indexrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='quills' AND c.relname = ANY($1)`,
+    [specs.map((spec) => spec.name)],
+  );
+  const validByName = new Map(
+    states.rows.map((row) => [row.relname, row.valid]),
+  );
   for (const spec of specs) {
-    const state = await client.query<{ valid: boolean }>(
-      `SELECT i.indisvalid AS valid FROM pg_index i JOIN pg_class c ON c.oid=i.indexrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='quills' AND c.relname=$1`,
-      [spec.name],
-    );
-    if (state.rows[0]?.valid === false)
+    const valid = validByName.get(spec.name);
+    if (valid === true) continue;
+    if (valid === false)
       await client.query(
         `DROP INDEX ${spec.concurrent ? "CONCURRENTLY" : ""} quills."${spec.name}"`,
       );
@@ -436,7 +488,11 @@ export async function ensureQuillsIndexes(
   }
 }
 
-export async function verifyQuillsPostconditions(client: Client) {
+export async function verifyQuillsPostconditions(
+  client: Client,
+  options: { strict?: boolean } = {},
+) {
+  const strict = options.strict ?? true;
   const marker = await client.query(
     "SELECT to_regclass('quills_migrations.schema_manifest') AS name",
   );
@@ -449,6 +505,20 @@ export async function verifyQuillsPostconditions(client: Client) {
         "Quills restored schema differs from its migration manifest",
       );
   }
+  const invalid = await client.query(
+    `SELECT c.relname FROM pg_index i JOIN pg_class c ON c.oid=i.indexrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='quills' AND NOT i.indisvalid`,
+  );
+  if (invalid.rowCount) throw new Error("Quills contains invalid indexes");
+  const unsafe = await client.query(
+    `SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='quills' AND c.relkind IN ('r','p') AND NOT c.relispartition AND (NOT c.relrowsecurity OR NOT c.relforcerowsecurity OR NOT EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid=c.oid AND p.polname='workspace_isolation'))`,
+  );
+  if (unsafe.rowCount)
+    throw new Error("Quills workspace isolation is incomplete");
+
+  // Steady-state restarts with an unchanged schema manifest skip per-table catalog loops and
+  // temp-table DDL probes; migrations, CI, and QUILLS_STRICT_STARTUP_VERIFY=1 run full probes.
+  if (!strict && marker.rows[0].name) return;
+
   for (const table of Object.values(schema).filter((value) =>
     is(value, PgTable),
   )) {
@@ -471,15 +541,6 @@ export async function verifyQuillsPostconditions(client: Client) {
       throw new Error(`Quills foreign key missing: ${expected.name}`);
   }
 
-  const invalid = await client.query(
-    `SELECT c.relname FROM pg_index i JOIN pg_class c ON c.oid=i.indexrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='quills' AND NOT i.indisvalid`,
-  );
-  if (invalid.rowCount) throw new Error("Quills contains invalid indexes");
-  const unsafe = await client.query(
-    `SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='quills' AND c.relkind IN ('r','p') AND NOT c.relispartition AND (NOT c.relrowsecurity OR NOT c.relforcerowsecurity OR NOT EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid=c.oid AND p.polname='workspace_isolation'))`,
-  );
-  if (unsafe.rowCount)
-    throw new Error("Quills workspace isolation is incomplete");
   for (const spec of CONCURRENT_INDEX_SPECS) {
     const actual = await client.query<{ definition: string }>(
       `SELECT pg_get_indexdef(c.oid) AS definition FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_index i ON i.indexrelid=c.oid WHERE n.nspname='quills' AND c.relname=$1 AND i.indisvalid`,

@@ -20,6 +20,7 @@ type Message = ListConversationMessagesResponse["items"][number];
 export interface MessageListProps {
   workspaceId: string;
   conversationId: string;
+  closed?: boolean;
   /** Newest first, as the API returns them. */
   messages: readonly Message[];
   customerName: string;
@@ -51,7 +52,7 @@ export function MessageList(props: MessageListProps) {
     {
       param: {
         workspaceId: props.workspaceId,
-        conversationId: props.conversationId,
+        conversationId: props.closed ? "" : props.conversationId,
       },
     },
     team.viewer,
@@ -66,8 +67,9 @@ export function MessageList(props: MessageListProps) {
     messages.map((message) => message.id),
     props.conversationId,
   );
+  const peopleById = new Map(props.people.map((person) => [person.id, person]));
   const avatar = (id: string | null) =>
-    props.people.find((person) => person.id === id)?.avatarUrl;
+    id ? peopleById.get(id)?.avatarUrl : undefined;
   const me = props.people.find((person) => person.userId === team.viewer.id);
   // An unknown teammate, automation and older rows keep the stored text.
   const eventText = (message: Message) => {
@@ -75,7 +77,7 @@ export function MessageList(props: MessageListProps) {
     const actor = message.systemActorPrincipalId;
     if (!keys || !actor) return message.content;
     if (actor === me?.id) return t(keys.you);
-    const name = props.people.find((person) => person.id === actor)?.name;
+    const name = peopleById.get(actor)?.name;
     return name ? t(keys.named, { name }) : message.content;
   };
   return (

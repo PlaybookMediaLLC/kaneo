@@ -1,10 +1,12 @@
 # Build stage
 FROM --platform=$BUILDPLATFORM node:24.22.2-alpine AS builder
 
+ENV PNPM_STORE_DIR=/pnpm/store
+
 # Install build dependencies in a single layer
 RUN apk add --no-cache python3 make g++ && \
   corepack enable && \
-  corepack prepare pnpm@12.15.0 --activate
+  corepack prepare pnpm@12.18.0 --activate
 
 WORKDIR /app
 
@@ -27,7 +29,7 @@ COPY packages/quills-ai/package.json ./packages/quills-ai/
 COPY apps/api/package.json ./apps/api/
 
 # Install dependencies
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 
 # Copy source files
 COPY packages/typescript-config ./packages/typescript-config
@@ -73,7 +75,9 @@ RUN sed -i 's/"extends": "@kaneo\/typescript-config\/base.json"/"extends": "..\/
 # resulting node_modules is architecture-independent and safe to copy into the arm64 runtime.
 FROM --platform=$BUILDPLATFORM node:24.22.2-alpine AS prod-deps
 
-RUN corepack enable && corepack prepare pnpm@12.15.0 --activate
+ENV PNPM_STORE_DIR=/pnpm/store
+
+RUN corepack enable && corepack prepare pnpm@12.18.0 --activate
 
 WORKDIR /app
 
@@ -93,7 +97,7 @@ COPY packages/mcp/package.json ./packages/mcp/
 COPY packages/quills-ai/package.json ./packages/quills-ai/
 COPY apps/api/package.json ./apps/api/
 
-RUN sed -i 's/"prepare": "husky"/"prepare": ""/g' package.json && \
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store sed -i 's/"prepare": "husky"/"prepare": ""/g' package.json && \
   HUSKY=0 NODE_ENV=production pnpm install --prod --frozen-lockfile --no-optional
 
 # Production stage - use specific version tag without SHA256

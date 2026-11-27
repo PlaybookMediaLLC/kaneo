@@ -96,6 +96,24 @@ describe("widget host page and bundles", () => {
     ).toContain("text/css");
   });
 
+  it("answers 304 Not Modified when If-None-Match matches the widget ETag", async () => {
+    const page = await app.request("/quills-public/acme/widget");
+    const pageEtag = page.headers.get("etag");
+    expect(pageEtag).toBeTruthy();
+    const page304 = await app.request("/quills-public/acme/widget", {
+      headers: { "If-None-Match": pageEtag! },
+    });
+    expect(page304.status).toBe(304);
+
+    const sdk = await app.request("/quills-public/acme/widget/sdk.js");
+    const sdkEtag = sdk.headers.get("etag");
+    expect(sdkEtag).toBeTruthy();
+    const sdk304 = await app.request("/quills-public/acme/widget/sdk.js", {
+      headers: { "If-None-Match": sdkEtag! },
+    });
+    expect(sdk304.status).toBe(304);
+  });
+
   it("answers 503 while the widget is not built", async () => {
     const empty = new Hono().route(
       "/quills-public",

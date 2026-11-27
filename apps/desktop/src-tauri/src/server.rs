@@ -196,8 +196,11 @@ pub fn normalize(address: String) -> Result<String, String> {
 #[tauri::command]
 pub fn connect(app: AppHandle, address: String) -> Result<(), String> {
     let url = parse(&address)?;
+    let unchanged = app.state::<Server>().current().as_ref() == Some(&url);
     use_server(&app, &url).map_err(|error| error.to_string())?;
-    save(&app, &url)?;
+    if !unchanged || !settings_file(&app).is_some_and(|path| path.exists()) {
+        save(&app, &url)?;
+    }
     window::show(&app, url);
     Ok(())
 }

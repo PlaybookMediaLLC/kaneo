@@ -66,6 +66,8 @@ export async function runToolLoop(input: {
   stepTimeoutMs: number;
   /** The final answer is a JSON object (JSON mode); the caller checks it against its schema. */
   json?: boolean;
+  /** Max concurrent tool calls in one step; defaults to 1 (sequential for write-capable loops). */
+  toolCallConcurrency?: number;
   onStep: (usage: Usage) => void;
   onDenied: (name: string, args: unknown) => void;
 }): Promise<string | null> {
@@ -108,7 +110,7 @@ export async function runToolLoop(input: {
       ...(input.json && { output: Output.json() }),
       // A handler error ends the loop before the next model call sees it.
       stopWhen: [stepCountIs(input.maxSteps), () => failure !== undefined],
-      toolCallConcurrency: 1,
+      toolCallConcurrency: input.toolCallConcurrency ?? 1,
       prepareStep: ({ stepNumber, messages }) => {
         if (failure !== undefined) throw failure;
         calls = 0;

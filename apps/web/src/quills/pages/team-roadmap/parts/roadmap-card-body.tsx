@@ -26,6 +26,8 @@ import type { RoadmapPost } from "../roadmap-moves";
 export interface RoadmapCardBodyProps {
   workspaceId: string;
   post: RoadmapPost;
+  /** Pre-stripped plain text title when computed by the card wrapper. */
+  title?: string;
   /** The status of the column that shows the card. */
   statusId: string;
   /** The board name. */
@@ -61,7 +63,7 @@ export function RoadmapCardBody({
   ...props
 }: RoadmapCardBodyProps) {
   const { t, i18n } = useTranslation("quills");
-  const title = plainText(post.title);
+  const title = props.title ?? plainText(post.title);
   const status = props.statuses.find((item) => item.id === statusId);
   const show = useContext(CardDisplayContext);
   const board = show.board ? props.board : null;
@@ -72,10 +74,6 @@ export function RoadmapCardBody({
       <span className="sr-only">{t(key, { count: value })}</span>
     </span>
   );
-  const created = new Date(post.createdAt).toLocaleDateString(i18n.language, {
-    month: "short",
-    year: "numeric",
-  });
   return (
     <>
       {board || show.author ? (
@@ -134,7 +132,12 @@ export function RoadmapCardBody({
       ) : null}
       {show.created ? (
         <p className="mt-2 text-xs text-faint-foreground">
-          {t("team-roadmap.created", { date: created })}
+          {t("team-roadmap.created", {
+            date: new Date(post.createdAt).toLocaleDateString(i18n.language, {
+              month: "short",
+              year: "numeric",
+            }),
+          })}
         </p>
       ) : null}
       {onMove && !props.preview ? (

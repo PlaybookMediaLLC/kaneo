@@ -64,6 +64,15 @@ kaneo:
   # Do not add a bare `env:` key with no children. YAML reads that as null, which
   # overrides the chart's whole env map and breaks rendering.
 
+  # Cap V8 heap inside the 1 GiB pod (leaving headroom for Nginx + native buffers)
+  # and size the PostgreSQL pool above the default 10 for concurrent Quills RLS
+  # transactions and background workers.
+  extraEnv:
+    - name: DATABASE_POOL_MAX
+      value: "25"
+    - name: NODE_OPTIONS
+      value: "--max-old-space-size=640"
+
   service:
     # Port 5173 appears in four places in values.yaml. Change all four together, or
     # the ingress and gateway backends point at a port the service does not expose.

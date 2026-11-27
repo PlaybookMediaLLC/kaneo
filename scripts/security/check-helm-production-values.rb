@@ -67,6 +67,12 @@ verify(app_password.dig('valueFrom', 'secretKeyRef', 'name') == DB_SECRET, 'KANE
 database_url = kaneo.fetch('env').find { |e| e['name'] == 'DATABASE_URL' }
 verify(database_url.fetch('value').include?('$(KANEO_POSTGRES_PASSWORD)'), 'DATABASE_URL must interpolate the secret, not embed a password')
 
+pool_max = kaneo.fetch('env').find { |e| e['name'] == 'DATABASE_POOL_MAX' }
+verify(pool_max && pool_max['value'] == '25', 'DATABASE_POOL_MAX did not reach the kaneo pod')
+
+node_options = kaneo.fetch('env').find { |e| e['name'] == 'NODE_OPTIONS' }
+verify(node_options && node_options['value'].include?('--max-old-space-size=640'), 'NODE_OPTIONS heap cap did not reach the kaneo pod')
+
 docs.select { |d| d['kind'] == 'Deployment' }.each do |deployment|
   verify(!deployment.to_s.include?('kaneo_password'), 'The default database password leaked into a Deployment')
 end

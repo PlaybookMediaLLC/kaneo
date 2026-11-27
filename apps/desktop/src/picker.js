@@ -23,9 +23,9 @@ function choose() {
 }
 
 /** True when the server answers. An opaque response is enough to prove it. */
-async function answers(url) {
+async function answers(url, timeoutMs = 10_000) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10_000);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     await fetch(new URL("/api/health", url), {
       mode: "no-cors",
@@ -39,11 +39,14 @@ async function answers(url) {
   }
 }
 
-async function connect(address) {
+async function connect(
+  address,
+  { normalized = false, timeoutMs = 10_000 } = {},
+) {
   busy(true, say("picker.connecting"));
   try {
-    const url = await invoke("normalize", { address });
-    if (!(await answers(url))) {
+    const url = normalized ? address : await invoke("normalize", { address });
+    if (!(await answers(url, timeoutMs))) {
       busy(false, say("picker.cannotReach", new URL(url).host));
       return false;
     }
@@ -83,7 +86,7 @@ async function main() {
     "picker.connectingTo",
     new URL(state.current).host,
   );
-  if (!(await connect(state.current)))
+  if (!(await connect(state.current, { normalized: true, timeoutMs: 3_000 })))
     element("saved-text").textContent = say(
       "picker.noAnswer",
       new URL(state.current).host,

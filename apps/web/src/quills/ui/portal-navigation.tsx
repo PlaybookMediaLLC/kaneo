@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { type MouseEvent, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { portalHref } from "../core/portal-href";
 import type { PortalNav } from "../core/portal-nav";
@@ -8,12 +8,15 @@ export interface PortalNavigationProps {
   currentPath: string;
   /** The tabs that the public portal config turns on. */
   nav: PortalNav;
+  /** Optional SPA navigation callback provided by the portal shell. */
+  onNavigate?: (href: string) => void;
 }
 
 export function PortalNavigation({
   workspaceId,
   currentPath,
   nav,
+  onNavigate,
 }: PortalNavigationProps) {
   const { t } = useTranslation("quills");
   const root = portalHref(workspaceId);
@@ -70,15 +73,34 @@ export function PortalNavigation({
         },
       ]
         .filter((item) => nav.tabs[item.tab as keyof typeof nav.tabs])
-        .map((item) => (
-          <a
-            key={item.path}
-            href={portalHref(workspaceId, item.path)}
-            aria-current={item.active ? "page" : undefined}
-          >
-            {t(item.label)}
-          </a>
-        ))}
+        .map((item) => {
+          const href = portalHref(workspaceId, item.path);
+          return (
+            <a
+              key={item.path}
+              href={href}
+              aria-current={item.active ? "page" : undefined}
+              onClick={
+                onNavigate
+                  ? (event: MouseEvent<HTMLAnchorElement>) => {
+                      if (
+                        event.button !== 0 ||
+                        event.metaKey ||
+                        event.ctrlKey ||
+                        event.shiftKey ||
+                        event.altKey
+                      )
+                        return;
+                      event.preventDefault();
+                      onNavigate(href);
+                    }
+                  : undefined
+              }
+            >
+              {t(item.label)}
+            </a>
+          );
+        })}
       {nav.links.map((link) => (
         <a
           key={`${link.label} ${link.url}`}

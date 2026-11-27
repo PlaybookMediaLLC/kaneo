@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { ensureQuillsI18n } from "@/quills/i18n/load";
 import { DesktopSignInPage } from "@/quills/pages/desktop-sign-in/desktop-sign-in-page";
 
 // The desktop app's browser sign-in. `start` opens the browser at once; `provider` names the
@@ -16,7 +15,10 @@ const searchSchema = z.object({
 
 export const Route = createFileRoute("/quills/desktop")({
   validateSearch: searchSchema,
-  beforeLoad: ensureQuillsI18n,
+  beforeLoad: async () => {
+    const { ensureQuillsI18n } = await import("@/quills/i18n/load");
+    await ensureQuillsI18n();
+  },
   component: RouteComponent,
 });
 

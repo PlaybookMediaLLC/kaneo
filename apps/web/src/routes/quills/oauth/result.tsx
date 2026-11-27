@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { ensureQuillsI18n } from "@/quills/i18n/load";
 import { OauthResultPage } from "@/quills/pages/oauth-result/oauth-result-page";
 
 const searchSchema = z.object({
@@ -21,7 +20,10 @@ const searchSchema = z.object({
 
 export const Route = createFileRoute("/quills/oauth/result")({
   validateSearch: searchSchema,
-  beforeLoad: ensureQuillsI18n,
+  beforeLoad: async () => {
+    const { ensureQuillsI18n } = await import("@/quills/i18n/load");
+    await ensureQuillsI18n();
+  },
   component: RouteComponent,
 });
 

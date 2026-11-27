@@ -261,14 +261,17 @@ export async function generateOperation(root, kind, operationId, options) {
       OPTIMISTIC: options.optimistic
         ? `onMutate: async (input) => { const queryKey = quillsOperationKey(input.param.${workspaceParam}, viewer, ${JSON.stringify(area)}, ${JSON.stringify(optimisticTarget.name)}); await queryClient.cancelQueries({ queryKey }); const previous = queryClient.getQueryData(queryKey); queryClient.setQueryData(queryKey, input.json); return { queryKey, previous }; }, onError: (_error, _input, context) => { if (context) queryClient.setQueryData(context.queryKey, context.previous); }, `
         : "",
-      INVALIDATIONS: invalidated.length
-        ? invalidated
-            .map(
-              (target) =>
-                `await queryClient.invalidateQueries({ queryKey: quillsOperationKey(input.param.${workspaceParam}, viewer, ${JSON.stringify(area)}, ${JSON.stringify(target.name)}) });`,
-            )
-            .join(" ")
-        : marker,
+      INVALIDATIONS:
+        invalidated.length > 1
+          ? `await Promise.all([${invalidated
+              .map(
+                (target) =>
+                  `queryClient.invalidateQueries({ queryKey: quillsOperationKey(input.param.${workspaceParam}, viewer, ${JSON.stringify(area)}, ${JSON.stringify(target.name)}) })`,
+              )
+              .join(", ")}]);`
+          : invalidated.length === 1
+            ? `await queryClient.invalidateQueries({ queryKey: quillsOperationKey(input.param.${workspaceParam}, viewer, ${JSON.stringify(area)}, ${JSON.stringify(invalidated[0].name)}) });`
+            : marker,
     });
   const operationTest = await renderTemplate(
     root,

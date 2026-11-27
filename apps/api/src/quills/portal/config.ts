@@ -92,6 +92,8 @@ const portalConfig = defineQuillsRoute({
   description:
     "Sign-in uses the existing Kaneo account endpoints under /api/auth; portal customers need no workspace membership.",
   action: "read",
+  // Short private cache so signed S3 logo URLs (default 300s TTL) are never cached in shared CDNs.
+  cacheControl: "private, max-age=60",
   response: z.object({
     name: z.string(),
     features: z.object({

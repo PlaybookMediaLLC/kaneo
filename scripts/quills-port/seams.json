@@ -31,7 +31,16 @@
 		"scripts/dev-desktop",
 		".github/workflows/desktop.yml",
 		"tests/api-integration/desktop-session.test.ts",
-		".github/workflows/desktop-test.yml"
+		".github/workflows/desktop-test.yml",
+		"packages/widget",
+		"packages/quills-ai",
+		"packages/ids",
+		"packages/logger",
+		"packages/quills-swift",
+		"branding",
+		"packages/libs/src/hono.test.ts",
+		"tests/api/openapi-cache.test.ts",
+		"apps/web/src/fetchers/quills"
 	],
 	"seams": [
 		{
@@ -55,7 +64,13 @@
 		{
 			"file": "apps/web/src/hooks/use-user-websocket.ts",
 			"state": "existing",
-			"lines": "the QUILLS_CHANGED block: invalidate the legacy quills-* keys and the quills-web keys [\"quills\", workspaceId, userId] of the current user; RFC 0004: the workspacePath pattern also matches the teammate app (/feedback/{id}), so an access revocation leaves it as it leaves a Kaneo workspace page; the QUILLS_CHANGED invalidation waits a 300 ms window so a burst refetches once; WORKSPACE_ACCESS_SYNC (sent on each connect) also invalidates the quills-web keys of each workspace",
+			"lines": "the QUILLS_CHANGED block (scoped by entityType when present, 300 ms debounce window) and QUILLS_CUSTOMER_CHANGED block (invalidates portal support queries); exported getUserWsUrl for portal realtime; RFC 0004 workspacePath matching /feedback/{id}; WORKSPACE_ACCESS_SYNC invalidates quills-web keys on reconnect only",
+			"plannedChange": "none"
+		},
+		{
+			"file": "apps/web/src/hooks/use-user-websocket-lifecycle.test.tsx",
+			"state": "existing",
+			"lines": "unit tests covering QUILLS_CHANGED entity scoping, QUILLS_CUSTOMER_CHANGED, and reconnect-only WORKSPACE_ACCESS_SYNC Quills invalidation",
 			"plannedChange": "none"
 		},
 		{
@@ -85,8 +100,8 @@
 		{
 			"file": "apps/api/src/index.ts",
 			"state": "existing",
-			"lines": "import + api.route(\"/quills\", quills) + 3 type-export entries + runQuillsMigrations at startup; import + api.route(\"/quills-public\", quillsPublic) before the session middleware + 3 type-export entries",
-			"plannedChange": "P3 added the /quills-public mount (src/quills/public.ts) before the session middleware, after the public calendar feed, plus its import and 3 type-export entries. No further change planned"
+			"lines": "import + api.route(\"/quills\", quills) + api.route(\"/quills-public\", quillsPublic) + QuillsTeammateRouters/QuillsPublicRouters type exports + runQuillsMigrations at startup + memoized GET /openapi with ETag/304",
+			"plannedChange": "none"
 		},
 		{
 			"file": "apps/api/src/index.ts",
@@ -109,8 +124,14 @@
 		{
 			"file": "apps/api/src/scheduler/index.ts",
 			"state": "existing",
-			"lines": "3 imports + 3 withCheckIn registrations",
+			"lines": "3 imports + enable/disableQuillsAutoWake + 3 withCheckIn registrations (with optional minOkIntervalMs throttling for 10s quills-jobs)",
 			"plannedChange": "none. New job handlers register inside apps/api/src/quills/jobs/worker.ts"
+		},
+		{
+			"file": "apps/api/src/storage/s3.ts",
+			"state": "existing",
+			"lines": "Quills storage prefix helper/reference",
+			"plannedChange": "none"
 		},
 		{
 			"file": "apps/api/src/storage/cleanup-queue.ts",
@@ -151,13 +172,13 @@
 		{
 			"file": "apps/api/Dockerfile",
 			"state": "existing",
-			"lines": "packages/widget: package.json and source copies in the builder, `pnpm exec tsup` in packages/widget, dist copy into the runtime image",
+			"lines": "packages/widget build/copy, pnpm@12.18.0 alignment, and BuildKit pnpm store cache mounts",
 			"plannedChange": "none. The API serves the widget iframe page and sdk.js from packages/widget/dist (src/quills/widget/host.ts)"
 		},
 		{
 			"file": "Dockerfile.kaneo",
 			"state": "existing",
-			"lines": "packages/widget: package.json and source copies in api-builder, `pnpm exec tsup` in packages/widget, dist copy into api-runtime",
+			"lines": "packages/widget build/copy, pnpm@12.18.0 alignment, BuildKit pnpm store cache mounts, and web-builder package.json layer ordering",
 			"plannedChange": "none. Same widget build as apps/api/Dockerfile"
 		},
 		{
@@ -175,8 +196,38 @@
 		{
 			"file": "packages/libs/src/hono.ts",
 			"state": "existing",
-			"lines": "1 line: an explicit ReturnType<typeof hc<AppType>> annotation on client",
-			"plannedChange": "none. The inferred client type with the Quills routes is too large to emit inline (TS7056)"
+			"lines": "ReturnType<typeof hc<AppType>> annotation (TS7056), brandText(\"X-Kaneo-Window-Id\") header, and flat IntersectClients quillsClient over QuillsTeammateRouters & QuillsPublicRouters",
+			"plannedChange": "none"
+		},
+		{
+			"file": "packages/libs/src/index.ts",
+			"state": "existing",
+			"lines": "re-exports quillsClient alongside client and windowId",
+			"plannedChange": "none"
+		},
+		{
+			"file": "packages/libs/package.json",
+			"state": "existing",
+			"lines": "@kaneo/branding workspace dependency for brandText(\"X-Kaneo-Window-Id\")",
+			"plannedChange": "none"
+		},
+		{
+			"file": "apps/web/vite.config.ts",
+			"state": "existing",
+			"lines": "fork-branding plugin (folding apps/web/src and packages/libs/src) and quills-upstream-side-effect-free plugin marking src/quills/ui/upstream.ts side-effect-free",
+			"plannedChange": "none"
+		},
+		{
+			"file": "apps/web/src/query-client/index.ts",
+			"state": "existing",
+			"lines": "setQueryDefaults([\"quills\"], ...) for Quills refetchOnMount and PortalProblem retries",
+			"plannedChange": "none"
+		},
+		{
+			"file": "apps/api/src/ws/index.ts",
+			"state": "existing",
+			"lines": "broadcastToUserAndWait for Quills cache invalidations",
+			"plannedChange": "none"
 		},
 		{
 			"file": "apps/api/vitest.integration.config.ts",
@@ -217,7 +268,7 @@
 		{
 			"file": "pnpm-lock.yaml",
 			"state": "generated",
-			"lines": "the @quills/desktop importer and @tauri-apps/cli",
+			"lines": "the @quills/desktop importer, @tauri-apps/cli, and @kaneo/branding in packages/libs",
 			"plannedChange": "regenerate with pnpm install after an upstream conflict"
 		}
 	]

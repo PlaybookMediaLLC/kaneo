@@ -9,13 +9,15 @@ import {
   taskTable,
   teamTable,
   userTable,
+  workspaceRoleTable,
   workspaceTable,
   workspaceUserTable,
 } from "../../database/schema";
 import { assertAssignableUser } from "../../utils/assert-assignable-user";
-import type { PermissionMap } from "../../utils/role-permissions";
+import { rolesAllow, type PermissionMap } from "../../utils/role-permissions";
 import { findInaccessibleProjectIds } from "../../project-access/find-inaccessible-project-ids";
 import { roleHasWorkspacePermission } from "../../utils/require-workspace-permission";
+import { splitRoles } from "../../utils/split-roles";
 import { hasInstanceAdminRole } from "../../utils/instance-admin-role";
 import { PORTAL_TOKEN_PROVIDER } from "./portal-sign-in";
 import type { QuillsAction } from "../with-quills-request";
@@ -169,28 +171,36 @@ export async function quillsReaders(
   const readers = new Map<string, { email: string }>();
   const ids = [...new Set(userIds)];
   if (!ids.length) return readers;
-  const rows = await platformDb
-    .select({
-      userId: workspaceUserTable.userId,
-      role: workspaceUserTable.role,
-      email: userTable.email,
-    })
-    .from(workspaceUserTable)
-    .innerJoin(userTable, eq(userTable.id, workspaceUserTable.userId))
-    .where(
-      and(
-        eq(workspaceUserTable.workspaceId, workspaceId),
-        inArray(workspaceUserTable.userId, ids),
-        sql`coalesce(${userTable.banned},false)=false`,
-      ),
-    );
-  for (const row of rows)
-    if (
-      await roleHasWorkspacePermission(workspaceId, row.role, {
-        workspace: ["read"],
-        quills: [...actions],
+  const [rows, storedRoles] = await Promise.all([
+    platformDb
+      .select({
+        userId: workspaceUserTable.userId,
+        role: workspaceUserTable.role,
+        email: userTable.email,
       })
-    )
+      .from(workspaceUserTable)
+      .innerJoin(userTable, eq(userTable.id, workspaceUserTable.userId))
+      .where(
+        and(
+          eq(workspaceUserTable.workspaceId, workspaceId),
+          inArray(workspaceUserTable.userId, ids),
+          sql`coalesce(${userTable.banned},false)=false`,
+        ),
+      ),
+    platformDb
+      .select({
+        role: workspaceRoleTable.role,
+        permission: workspaceRoleTable.permission,
+      })
+      .from(workspaceRoleTable)
+      .where(eq(workspaceRoleTable.workspaceId, workspaceId)),
+  ]);
+  const required = {
+    workspace: ["read"],
+    quills: [...actions],
+  };
+  for (const row of rows)
+    if (rolesAllow(splitRoles(row.role), storedRoles, required))
       readers.set(row.userId, { email: row.email });
   return readers;
 }
@@ -291,26 +301,38 @@ export async function tokenCustomerOfNamedWorkspace(
  * framework/audience.ts#PortalAccount. Undefined for a missing or banned account. Workers only.
  */
 export async function portalAccount(workspaceId: string, userId: string) {
-  const [row] = await platformDb
+  return (await portalAccounts(workspaceId, [userId])).get(userId);
+}
+
+/** Batched lookup of unbanned portal accounts for a workspace in 1 query. Workers only. */
+export async function portalAccounts(
+  workspaceId: string,
+  userIds: readonly string[],
+) {
+  const unique = [...new Set(userIds.filter(Boolean))];
+  if (!unique.length) return new Map();
+  const rows = await platformDb
     .select({
       id: userTable.id,
       name: userTable.name,
       email: userTable.email,
       emailVerified: userTable.emailVerified,
       image: userTable.image,
-      // ${userTable}.id, not ${userTable.id}: in a one-table select, drizzle writes the column as a
-      // bare "id", which the subquery would bind to workspace_member.id.
       member: sql<boolean>`exists (select 1 from ${workspaceUserTable} where ${workspaceUserTable.workspaceId} = ${workspaceId} and ${workspaceUserTable.userId} = ${userTable}.id)`,
     })
     .from(userTable)
     .where(
       and(
-        eq(userTable.id, userId),
+        inArray(userTable.id, unique),
         sql`coalesce(${userTable.banned},false)=false`,
       ),
-    )
-    .limit(1);
-  return row && { ...row, name: row.name || row.email.split("@")[0]! };
+    );
+  return new Map(
+    rows.map((row) => [
+      row.id,
+      { ...row, name: row.name || row.email.split("@")[0]! },
+    ]),
+  );
 }
 
 /**
@@ -335,17 +357,28 @@ export async function memberQuillsActions(workspaceId: string, userId: string) {
         sql`coalesce(${userTable.banned},false)=false`,
       ),
     );
-  const held: (typeof statement.quills)[number][] = [];
-  if (member)
-    for (const action of statement.quills)
-      if (
-        await roleHasWorkspacePermission(workspaceId, member.role, {
-          workspace: ["read"],
-          quills: [action],
+  if (!member) return [];
+  const roles = splitRoles(member.role);
+  const storedRoles = roles.length
+    ? await platformDb
+        .select({
+          role: workspaceRoleTable.role,
+          permission: workspaceRoleTable.permission,
         })
-      )
-        held.push(action);
-  return held;
+        .from(workspaceRoleTable)
+        .where(
+          and(
+            eq(workspaceRoleTable.workspaceId, workspaceId),
+            inArray(workspaceRoleTable.role, roles),
+          ),
+        )
+    : [];
+  return statement.quills.filter((action) =>
+    rolesAllow(roles, storedRoles, {
+      workspace: ["read"],
+      quills: [action],
+    }),
+  );
 }
 
 /**

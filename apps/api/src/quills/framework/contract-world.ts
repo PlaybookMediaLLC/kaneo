@@ -225,13 +225,15 @@ export async function startContract(testPool: Pool, url: string) {
        WHERE n.nspname='quills' AND c.relkind IN ('r','p') AND NOT c.relispartition ORDER BY 1`,
     )
   ).rows.map((row) => row.relname);
+  // Order-independent O(1)-memory MVCC tuple-version checksum: detects any committed INSERT,
+  // UPDATE or DELETE without sorting or TOAST-decompressing every row on every negative check.
   const hash = (list: string[]) =>
     `SELECT ${list
       .map(
         (table) =>
-          `(SELECT md5(coalesce(string_agg(x::text, '|' ORDER BY x::text), '')) FROM quills."${table}" x WHERE x.workspace_id=$1)`,
+          `(SELECT count(*)::text || ':' || coalesce(bit_xor(hashtextextended(tableoid::text || ':' || ctid::text || ':' || xmin::text, 0))::text, '0') FROM quills."${table}" x WHERE x.workspace_id=$1)`,
       )
-      .join(" || ")} AS h`;
+      .join(" || '|' || ")} AS h`;
   fingerprintSql = {
     // Rate-limit counters commit on purpose before a request fails; they are not request data.
     all: hash(tables.filter((t) => t !== "rate_bucket")),

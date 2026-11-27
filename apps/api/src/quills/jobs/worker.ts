@@ -4,8 +4,13 @@ import db from "../../database";
 import { withQuillsSystemWorkspace } from "../../database/quills/client";
 import { events } from "../../database/quills/schema/events";
 import type { JobQueueRow } from "../../database/quills/schema/job-queue";
-import { workspaceUserTable, userTable } from "../../database/schema";
-import { roleHasWorkspacePermission } from "../../utils/require-workspace-permission";
+import {
+  workspaceRoleTable,
+  workspaceUserTable,
+  userTable,
+} from "../../database/schema";
+import { rolesAllow } from "../../utils/role-permissions";
+import { splitRoles } from "../../utils/split-roles";
 import { broadcastToUserAndWait } from "../../ws";
 import { subscribeToEvent } from "../../events";
 import { fanOut } from "./fanout";
@@ -37,6 +42,7 @@ import {
   QUILLS_QUEUES,
   type QuillsQueue,
 } from "./queue";
+import { registerQuillsWaker } from "./wake-hook";
 
 /** Delivery handlers. Each validates its payload and finishes its own job. */
 const handlers: Record<
@@ -81,37 +87,62 @@ void subscribeToEvent("task.status_changed", handOffTaskStatus);
 // A move to another project can put the task in a done column without a status change event.
 void subscribeToEvent("task.moved", handOffTaskStatus);
 
+export type QuillsChangeMeta = {
+  entityType?: string;
+  eventType?: string;
+};
+
 export async function deliverQuillsChange(
   workspaceId: string,
   eventId: string,
+  meta?: QuillsChangeMeta,
 ) {
-  const members = await db
-    .select({
-      userId: workspaceUserTable.userId,
-      role: workspaceUserTable.role,
-    })
-    .from(workspaceUserTable)
-    .innerJoin(userTable, eq(userTable.id, workspaceUserTable.userId))
-    .where(
-      and(
-        eq(workspaceUserTable.workspaceId, workspaceId),
-        sql`coalesce(${userTable.banned},false)=false`,
+  const [members, storedRoles] = await Promise.all([
+    db
+      .select({
+        userId: workspaceUserTable.userId,
+        role: workspaceUserTable.role,
+      })
+      .from(workspaceUserTable)
+      .innerJoin(userTable, eq(userTable.id, workspaceUserTable.userId))
+      .where(
+        and(
+          eq(workspaceUserTable.workspaceId, workspaceId),
+          sql`coalesce(${userTable.banned},false)=false`,
+        ),
       ),
-    );
-  for (const member of members)
-    if (
-      await roleHasWorkspacePermission(workspaceId, member.role, {
+    db
+      .select({
+        role: workspaceRoleTable.role,
+        permission: workspaceRoleTable.permission,
+      })
+      .from(workspaceRoleTable)
+      .where(eq(workspaceRoleTable.workspaceId, workspaceId)),
+  ]);
+  const recipients = members
+    .filter((member) =>
+      rolesAllow(splitRoles(member.role), storedRoles, {
         workspace: ["read"],
         quills: ["read"],
-      })
-    ) {
-      // Only invalidate caches: no feature data or credentials cross this channel.
-      await broadcastToUserAndWait(member.userId, {
-        type: "QUILLS_CHANGED",
-        workspaceId,
-        eventId,
-      });
-    }
+      }),
+    )
+    .map((member) => member.userId);
+  // Fan out concurrently in bounded batches instead of serializing Redis RTTs per member.
+  const BATCH = 20;
+  for (let i = 0; i < recipients.length; i += BATCH) {
+    await Promise.all(
+      recipients.slice(i, i + BATCH).map((userId) =>
+        // Only invalidate caches: no feature data or credentials cross this channel.
+        broadcastToUserAndWait(userId, {
+          type: "QUILLS_CHANGED",
+          workspaceId,
+          eventId,
+          ...(meta?.entityType ? { entityType: meta.entityType } : {}),
+          ...(meta?.eventType ? { eventType: meta.eventType } : {}),
+        }),
+      ),
+    );
+  }
   // The portal customer who owns the conversation or ticket, on the same socket kind.
   await deliverCustomerChange(workspaceId, eventId);
 }
@@ -120,26 +151,31 @@ export async function drainQuillsWorkspace(
   deliver = deliverQuillsChange,
   queues: readonly QuillsQueue[] = QUILLS_QUEUES,
 ) {
-  await withQuillsSystemWorkspace(workspaceId, async (tx) => {
-    const pending = await tx
-      .select({ eventId: events.eventId })
-      .from(events)
-      .where(
-        and(
-          isNull(events.publishedAt),
-          sql`NOT EXISTS (SELECT 1 FROM quills.job_queue j WHERE j.queue='quills.event' AND j.dedupe_key=${events.eventId})`,
-        ),
-      )
-      .orderBy(events.id)
-      .limit(100);
-    for (const event of pending) await enqueueQuillsEvent(tx, event.eventId);
-  });
+  if (queues.includes("quills.event")) {
+    await withQuillsSystemWorkspace(workspaceId, async (tx) => {
+      const pending = await tx
+        .select({ eventId: events.eventId })
+        .from(events)
+        .where(
+          and(
+            isNull(events.publishedAt),
+            sql`NOT EXISTS (SELECT 1 FROM quills.job_queue j WHERE j.queue='quills.event' AND j.dedupe_key=${events.eventId})`,
+          ),
+        )
+        .orderBy(events.id)
+        .limit(100);
+      for (const event of pending) await enqueueQuillsEvent(tx, event.eventId);
+    });
+  }
   let processed = 0,
     failed = 0;
   const deadline = Date.now() + 10000;
   // ponytail: up to 50 jobs per pass inside the 10-second budget; fan-out of large audiences drains over several passes.
   for (let i = 0; i < 50 && Date.now() < deadline; i++) {
-    const job = await withQuillsSystemWorkspace(workspaceId, claimFrom(queues));
+    const job = await withQuillsSystemWorkspace(
+      workspaceId,
+      claimFrom(queues, { reapExpired: i === 0 }),
+    );
     if (!job) break;
     try {
       if (job.queue !== "quills.event") {
@@ -153,7 +189,12 @@ export async function drainQuillsWorkspace(
         async (tx) =>
           (
             await tx
-              .select({ id: events.id, publishedAt: events.publishedAt })
+              .select({
+                id: events.id,
+                publishedAt: events.publishedAt,
+                type: events.type,
+                entityType: events.entityType,
+              })
               .from(events)
               .where(eq(events.eventId, payload.eventId))
           )[0],
@@ -167,7 +208,10 @@ export async function drainQuillsWorkspace(
         let timer: ReturnType<typeof setTimeout> | undefined;
         try {
           await Promise.race([
-            deliver(workspaceId, payload.eventId),
+            deliver(workspaceId, payload.eventId, {
+              entityType: event.entityType,
+              eventType: event.type,
+            }),
             new Promise<never>((_, reject) => {
               timer = setTimeout(
                 () => reject(new Error("Broadcast timeout")),
@@ -211,32 +255,113 @@ export async function drainQuillsWorkspace(
   }
   return { processed, failed, degraded: failed > 0 };
 }
-/** Every queue but quills.ai: provider calls take up to minutes and must not delay a delivery. */
-const DELIVERY = QUILLS_QUEUES.filter((queue) => queue !== "quills.ai");
-let assistantDrain: Promise<void> | undefined;
-let assistantCursor = "";
-/**
- * Drains quills.ai in its own loop, one at a time per process, without holding up the delivery
- * pass that the scheduler awaits. A process that stops mid-job leaves a lease that expires and
- * is retried.
- */
-function drainAssistantQueue() {
-  assistantDrain ??= (async () => {
-    try {
-      const page = await db.execute<{ workspaceId: string }>(
-        sql`SELECT quills.runnable_workspaces(${assistantCursor}) AS "workspaceId"`,
-      );
-      if (!page.rows.length) assistantCursor = "";
-      for (const row of page.rows) {
-        await drainQuillsWorkspace(row.workspaceId, deliverQuillsChange, [
-          "quills.ai",
-        ]).catch(() => {});
-        assistantCursor = row.workspaceId;
+/** Delivery queues: excludes long-running AI provider calls and full-workspace wipes so neither stalls live events. */
+const DELIVERY = QUILLS_QUEUES.filter(
+  (queue) => queue !== "quills.ai" && queue !== "quills.wipe",
+);
+const FAST_WAKE_QUEUES: readonly QuillsQueue[] = [
+  "quills.event",
+  "quills.workflow",
+];
+const MAX_CONCURRENT_WAKES = 4;
+let autoWakeEnabled = false;
+const wakeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const inFlightWakes = new Set<string>();
+const rewakePending = new Set<string>();
+const backgroundDrains = new Map<
+  "quills.ai" | "quills.wipe",
+  { running: boolean; pending: Set<string> }
+>();
+
+/** Enables post-commit in-process event wakes when the API scheduler is running. */
+export function enableQuillsAutoWake(): void {
+  autoWakeEnabled = true;
+  registerQuillsWaker(scheduleQuillsWake);
+}
+
+/** Disables post-commit wakes and cancels pending timers during graceful shutdown. */
+export function disableQuillsAutoWake(): void {
+  autoWakeEnabled = false;
+  registerQuillsWaker(null);
+  for (const timer of wakeTimers.values()) clearTimeout(timer);
+  wakeTimers.clear();
+  rewakePending.clear();
+}
+
+function startWakeDrain(workspaceId: string): void {
+  if (!autoWakeEnabled) return;
+  if (
+    inFlightWakes.has(workspaceId) ||
+    inFlightWakes.size >= MAX_CONCURRENT_WAKES
+  ) {
+    rewakePending.add(workspaceId);
+    return;
+  }
+  inFlightWakes.add(workspaceId);
+  void drainQuillsWorkspace(workspaceId, deliverQuillsChange, FAST_WAKE_QUEUES)
+    .catch(() => {})
+    .finally(() => {
+      inFlightWakes.delete(workspaceId);
+      if (!autoWakeEnabled) return;
+      if (rewakePending.delete(workspaceId)) {
+        scheduleQuillsWake(workspaceId);
+      } else if (rewakePending.size > 0) {
+        const next = rewakePending.values().next().value;
+        if (next) {
+          rewakePending.delete(next);
+          startWakeDrain(next);
+        }
       }
-    } catch {
-      /* The next tick retries. */
+    });
+}
+
+/**
+ * Schedules a fast debounced drain of `quills.event` / `quills.workflow` after a mutation commits,
+ * cutting realtime latency from up to 10s down to ~50ms while bounding in-flight concurrency.
+ */
+function scheduleQuillsWake(workspaceId: string): void {
+  if (!autoWakeEnabled || !workspaceId) return;
+  if (inFlightWakes.has(workspaceId)) {
+    rewakePending.add(workspaceId);
+    return;
+  }
+  if (wakeTimers.has(workspaceId)) return;
+  const timer = setTimeout(() => {
+    wakeTimers.delete(workspaceId);
+    startWakeDrain(workspaceId);
+  }, 50);
+  timer.unref?.();
+  wakeTimers.set(workspaceId, timer);
+}
+
+/**
+ * Drains a long-running background queue (`quills.ai` or `quills.wipe`) across runnable
+ * workspaces, accumulating newly discovered workspaces while busy so later pages never starve.
+ */
+function drainBackgroundQueue(
+  queue: "quills.ai" | "quills.wipe",
+  workspaceIds: readonly string[],
+) {
+  if (!workspaceIds.length) return;
+  let state = backgroundDrains.get(queue);
+  if (!state) {
+    state = { running: false, pending: new Set() };
+    backgroundDrains.set(queue, state);
+  }
+  for (const id of workspaceIds) state.pending.add(id);
+  if (state.running) return;
+  state.running = true;
+  void (async () => {
+    try {
+      while (state.pending.size > 0) {
+        const workspaceId = state.pending.values().next().value!;
+        state.pending.delete(workspaceId);
+        await drainQuillsWorkspace(workspaceId, deliverQuillsChange, [
+          queue,
+        ]).catch(() => {});
+      }
     } finally {
-      assistantDrain = undefined;
+      state.running = false;
     }
   })();
 }
@@ -253,7 +378,6 @@ export function runQuillsJobs() {
   return pass;
 }
 async function runPass() {
-  drainAssistantQueue();
   const page = await db.execute<{ workspaceId: string }>(
     sql`SELECT quills.runnable_workspaces(${cursor}) AS "workspaceId"`,
   );
@@ -261,6 +385,9 @@ async function runPass() {
     cursor = "";
     return { degraded: false };
   }
+  const workspaceIds = page.rows.map((row) => row.workspaceId);
+  drainBackgroundQueue("quills.ai", workspaceIds);
+  drainBackgroundQueue("quills.wipe", workspaceIds);
   let degraded = false;
   const deadline = Date.now() + 10000;
   for (const row of page.rows) {

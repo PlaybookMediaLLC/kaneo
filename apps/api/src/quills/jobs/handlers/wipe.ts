@@ -4,6 +4,7 @@ import {
   withQuillsSystemWorkspace,
   type Database,
 } from "../../../database/quills/client";
+import { invalidateQuillsWorkspaceInitCache } from "../../../database/quills/initialize-workspace";
 import * as schema from "../../../database/quills/schema";
 import type { JobQueueRow } from "../../../database/quills/schema/job-queue";
 import { recordQuillsChange } from "../../events";
@@ -86,6 +87,7 @@ export async function runWipeJob(workspaceId: string, job: JobQueueRow) {
       // another worker can claim it after the five-minute lease. Batch it, or index the foreign keys
       // to `principal`, when a workspace outgrows that.
       await wipeQuillsData(db, workspaceId);
+      invalidateQuillsWorkspaceInitCache(workspaceId);
       await recordQuillsChange(db, null, {
         type: "workspace.wiped",
         entityType: "workspace",

@@ -19,21 +19,6 @@ import { validateWorkspaceAccess } from "../utils/validate-workspace-access";
 export type QuillsAction = (typeof statement.quills)[number];
 
 /**
- * The Quills actions that the caller holds: the role's permissions within the API key's scope,
- * as requireWorkspacePermission checks them. Call it after withQuillsRequest's permission checks.
- */
-export async function quillsActions(
-  c: Context,
-): Promise<ReadonlySet<QuillsAction>> {
-  const can = await workspacePermissionChecker(c);
-  return new Set(
-    statement.quills.filter((action) =>
-      can({ workspace: ["read"], quills: [action] }),
-    ),
-  );
-}
-
-/**
  * Project IDs must come from the feature's persisted relationship, never a caller's substitute.
  * A function project ID runs after the permission checks, so a denied caller learns nothing from its lookup.
  */
@@ -44,6 +29,12 @@ export async function withQuillsRequest<T>(
     /** Further Quills actions that the caller must also hold (role and API-key scope). */
     also?: readonly QuillsAction[];
     projectId?: string | (() => Promise<string | undefined>);
+    /** True on GET routes so withQuillsWorkspace skips FOR SHARE row locks. */
+    readOnly?: boolean;
+    /** True when defineQuillsRoute already ran workspaceAccess.fromParam on this request. */
+    workspaceAccessChecked?: boolean;
+    /** Receives every Quills action the caller holds, computed in the same permission lookup. */
+    onActions?: (actions: ReadonlySet<QuillsAction>) => void;
   },
   work: (db: Database, actor: QuillsActor) => Promise<T>,
 ): Promise<T> {
@@ -52,11 +43,27 @@ export async function withQuillsRequest<T>(
   if (!userId) throw new HTTPException(401, { message: "Unauthorized" });
   if (!workspaceId)
     throw new HTTPException(400, { message: "Workspace is required" });
-  await validateWorkspaceAccess(userId, workspaceId, c.get("apiKey")?.id);
-  await requireWorkspacePermission({
-    workspace: ["read"],
-    quills: [access.action, ...(access.also ?? [])],
-  })(c, async () => {});
+  if (!access.workspaceAccessChecked)
+    await validateWorkspaceAccess(userId, workspaceId, c.get("apiKey")?.id);
+  const required = {
+    workspace: ["read"] as string[],
+    quills: [access.action, ...(access.also ?? [])] as string[],
+  };
+  if (access.onActions) {
+    const can = await workspacePermissionChecker(c);
+    if (!can(required))
+      // Delegate denial so API_KEY_SCOPE / MISSING_PERMISSION error bodies stay identical.
+      await requireWorkspacePermission(required)(c, async () => {});
+    access.onActions(
+      new Set(
+        statement.quills.filter((action) =>
+          can({ workspace: ["read"], quills: [action] }),
+        ),
+      ),
+    );
+  } else {
+    await requireWorkspacePermission(required)(c, async () => {});
+  }
   const projectId =
     typeof access.projectId === "function"
       ? await access.projectId()
@@ -76,5 +83,7 @@ export async function withQuillsRequest<T>(
       throw new HTTPException(404, { message: "Project not found" });
     await assertProjectAccess(userId, project.id);
   }
-  return withQuillsWorkspace({ userId, workspaceId }, work);
+  return withQuillsWorkspace({ userId, workspaceId }, work, {
+    readOnly: access.readOnly,
+  });
 }

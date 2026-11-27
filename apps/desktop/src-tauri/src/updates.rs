@@ -16,7 +16,15 @@ pub fn enabled(app: &AppHandle) -> bool {
 pub fn init(app: &AppHandle) -> tauri::Result<()> {
     if enabled(app) {
         app.plugin(tauri_plugin_updater::Builder::new().build())?;
-        check(app.clone(), false);
+        // Defer the background update check off cold start so it does not compete with initial app load.
+        let handle = app.clone();
+        tauri::async_runtime::spawn(async move {
+            let _ = tauri::async_runtime::spawn_blocking(|| {
+                std::thread::sleep(std::time::Duration::from_secs(5));
+            })
+            .await;
+            check(handle, false);
+        });
     }
     Ok(())
 }

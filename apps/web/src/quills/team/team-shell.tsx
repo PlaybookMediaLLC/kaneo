@@ -121,7 +121,7 @@ export function TeamShell({ children, ...rail }: TeamShellProps) {
                       : "team.navigation",
                   )}
                 </SheetTitle>
-                {nav(() => setMenuOpen(false))}
+                {menuOpen ? nav(() => setMenuOpen(false)) : null}
               </SheetContent>
             </Sheet>
             <p className="truncate text-sm font-semibold">
