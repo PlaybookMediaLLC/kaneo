@@ -14,7 +14,7 @@ export function ensureStyles(side: "left" | "right"): void {
   el.textContent = [
     // Fixed launcher geometry containment keeps CLS = 0 (#316) and visible focus satisfies WCAG 2.4.7 (#317).
     ".quackback-launcher{contain:layout style}",
-    ".quackback-launcher:focus-visible,.quackback-bubble button:focus-visible,.quackback-panel-close:focus-visible{outline:2px solid #2563eb;outline-offset:3px}",
+    ".quackback-launcher:focus-visible,.quackback-bubble button:focus-visible,.quackback-panel-close:focus-visible{outline:2px solid #71665c;outline-offset:3px}",
     ".quackback-occluded{opacity:0!important;pointer-events:none!important;transform:scale(0.92)!important}",
     ".quackback-panel{position:fixed;z-index:2147483647;overflow:hidden;pointer-events:none;",
     `bottom:16px;${side}:16px;width:384px;height:min(760px,calc(100dvh - 32px));`,
