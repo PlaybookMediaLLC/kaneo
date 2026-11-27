@@ -8,6 +8,10 @@
     ".": {
       "types": "./index.d.ts",
       "default": "./index.cjs"
+    },
+    "./docs": {
+      "types": "./docs.d.ts",
+      "default": "./docs.cjs"
     }
   }
 }

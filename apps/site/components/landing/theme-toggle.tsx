@@ -3,38 +3,41 @@
 import { MoonIcon, SunIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-
-type Theme = "light" | "dark";
-
-function applyTheme(theme: Theme) {
-  const root = document.documentElement;
-  root.classList.toggle("dark", theme === "dark");
-  root.style.colorScheme = theme;
-}
+import {
+  resolveIsDark,
+  setSiteTheme,
+  THEME_CHANGE_EVENT,
+  THEME_STORAGE_KEY,
+} from "@/lib/theme";
 
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>("dark");
+  const [isDark, setIsDark] = useState(true);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem("kaneo-site-theme");
-    const initial: Theme =
-      stored === "light" || stored === "dark"
-        ? stored
-        : window.matchMedia("(prefers-color-scheme: dark)").matches
-          ? "dark"
-          : "light";
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const sync = () => setIsDark(resolveIsDark());
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === null || event.key === THEME_STORAGE_KEY) {
+        sync();
+      }
+    };
 
-    setTheme(initial);
-    applyTheme(initial);
+    sync();
     setMounted(true);
+    media.addEventListener("change", sync);
+    window.addEventListener(THEME_CHANGE_EVENT, sync);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      media.removeEventListener("change", sync);
+      window.removeEventListener(THEME_CHANGE_EVENT, sync);
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
   const toggleTheme = () => {
-    const nextTheme: Theme = theme === "dark" ? "light" : "dark";
-    setTheme(nextTheme);
-    applyTheme(nextTheme);
-    localStorage.setItem("kaneo-site-theme", nextTheme);
+    const nextIsDark = setSiteTheme(isDark ? "light" : "dark");
+    setIsDark(nextIsDark);
   };
 
   return (
@@ -45,7 +48,7 @@ export function ThemeToggle() {
       size="icon"
       variant="ghost"
     >
-      {mounted && theme === "dark" ? (
+      {mounted && isDark ? (
         <SunIcon className="size-4" />
       ) : (
         <MoonIcon className="size-4" />

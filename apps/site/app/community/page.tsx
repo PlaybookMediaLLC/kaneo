@@ -7,6 +7,7 @@ import { PageIntro } from "@/components/landing/page-intro";
 import { SectionSeparator } from "@/components/landing/section-separator";
 import { Button } from "@/components/ui/button";
 import { communityProjects } from "@/lib/community";
+import { getMcpDocsHref } from "@/lib/docs/links";
 import { withSocialMetadata } from "@/lib/metadata";
 
 export const metadata: Metadata = withSocialMetadata({
@@ -69,7 +70,7 @@ export default function Page() {
                 <li>
                   <a
                     className="font-medium text-foreground underline-offset-4 hover:underline"
-                    href="/docs/core/integrations/mcp"
+                    href={getMcpDocsHref()}
                   >
                     MCP server
                   </a>
