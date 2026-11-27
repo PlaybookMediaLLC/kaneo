@@ -132,7 +132,7 @@ export const claimFrom =
         updatedAt: new Date(),
         finishedAt: null,
       })
-      .where(sql`${jobQueue.id} = ${job.id}::uuid`)
+      .where(eq(jobQueue.id, BigInt(job.id)))
       .returning();
     return claimed;
   };

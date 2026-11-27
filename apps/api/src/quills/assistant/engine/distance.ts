@@ -22,7 +22,7 @@ export function supportsHnswIterativeScan(): boolean {
 export const exactDistance = (column: unknown, target: unknown) =>
   iterativeScanSupported
     ? sql`(${column} <=> ${target})`
-    : sql`0 + (${column} <=> ${target})`;
+    : sql`(0 + (${column} <=> ${target}))`;
 
 /** A fresh vector as a query parameter. */
 export const vectorParam = (values: number[]) =>

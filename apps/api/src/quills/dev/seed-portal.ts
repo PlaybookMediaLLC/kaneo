@@ -8,6 +8,7 @@ import {
   workspaceUserTable,
 } from "../../database/schema";
 import { withQuillsWorkspace } from "../../database/quills/client";
+import { invalidateQuillsWorkspaceInitCache } from "../../database/quills/initialize-workspace";
 import { settings } from "../../database/quills/schema/auth";
 import { boards } from "../../database/quills/schema/boards";
 import { changelogEntries } from "../../database/quills/schema/changelog";
@@ -79,6 +80,7 @@ export async function seedPortal(reset = false) {
     throw new Error("Portal seed workspace ID is owned by another fixture");
   if (reset && existingWorkspace) {
     await db.delete(workspaceTable).where(eq(workspaceTable.id, WORKSPACE_ID));
+    invalidateQuillsWorkspaceInitCache(WORKSPACE_ID);
     existingWorkspace = undefined;
   }
   const [existingUser] = await db

@@ -113,7 +113,9 @@ export async function demandOf(
       : sql<number>`count(distinct ${counted.principalId})::int`;
   const voters = db
     .select({
-      postId: counted.postId,
+      postId: sql<PostId>`${counted.postId}`
+        .mapWith(voted.id)
+        .as("voter_post_id"),
       voters: people().as("voters"),
       nice: people("nice").as("nice"),
       important: people("important").as("important"),
@@ -128,7 +130,7 @@ export async function demandOf(
     .as("pairs");
   const companyStats = db
     .select({
-      postId: pairs.postId,
+      postId: sql<PostId>`${pairs.postId}`.as("company_post_id"),
       companies: sql<number>`count(*)::int`.as("companies"),
       mrrCents: sql<number>`coalesce(sum(${companies.mrrCents}), 0)::float8`.as(
         "mrr_cents",

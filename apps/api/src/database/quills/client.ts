@@ -8,6 +8,7 @@ import { eq, sql, type SQL } from "drizzle-orm";
 import { hasInstanceAdminRole } from "../../utils/instance-admin-role";
 import {
   drizzle,
+  NodePgSession,
   NodePgTransaction,
   type NodePgDatabase,
 } from "drizzle-orm/node-postgres";
@@ -24,7 +25,7 @@ export type Database = Transaction & { readonly [workspaceScope]: true };
 // Pre-extract the ~90-table relational schema metadata and PgDialect once at module load
 // instead of rebuilding them on every scoped Quills transaction.
 const quillsDialect = new PgDialect();
-const schemaTemplate = drizzle({} as never, { schema });
+const schemaTemplate = drizzle.mock({ schema });
 const quillsSchemaConfig = {
   fullSchema: schemaTemplate._.fullSchema,
   schema: schemaTemplate._.schema!,
@@ -51,7 +52,11 @@ async function scopedTransaction<T>(
   try {
     return await drizzle(client).transaction(
       async () => {
-        const session = drizzle(guarded)._.session;
+        const session = new NodePgSession(
+          guarded,
+          quillsDialect,
+          quillsSchemaConfig,
+        );
         const tx = new NodePgTransaction<
           typeof schema,
           NonNullable<typeof schemaTemplate._.schema>
@@ -92,6 +97,7 @@ export async function withQuillsWorkspace<T>(
     let identity: {
       name: string;
       slug: string;
+      createdAt: string | Date;
       userName: string;
       image: string | null;
       role: string | null;
@@ -102,12 +108,13 @@ export async function withQuillsWorkspace<T>(
       const res = await tx.execute<{
         name: string;
         slug: string;
+        createdAt: string | Date;
         userName: string;
         image: string | null;
         role: string | null;
         memberId: string | null;
       }>(sql`
-        SELECT w.name, w.slug, u.name AS "userName", u.image, u.role, m.id AS "memberId"
+        SELECT w.name, w.slug, w.created_at AS "createdAt", u.name AS "userName", u.image, u.role, m.id AS "memberId"
         FROM public.workspace w
         JOIN public."user" u ON u.id = ${context.userId}
         LEFT JOIN public.workspace_member m
@@ -125,11 +132,12 @@ export async function withQuillsWorkspace<T>(
       const workspace = await tx.execute<{
         name: string;
         slug: string;
+        createdAt: string | Date;
         userName: string;
         image: string | null;
         role: string | null;
       }>(sql`
-        SELECT w.name, w.slug, u.name AS "userName", u.image, u.role
+        SELECT w.name, w.slug, w.created_at AS "createdAt", u.name AS "userName", u.image, u.role
         FROM public.workspace w, public."user" u
         WHERE w.id = ${context.workspaceId} AND u.id = ${context.userId}
         AND w.archived_at IS NULL ${options.exclusiveWorkspace ? sql`FOR UPDATE OF w` : sql`FOR SHARE OF w, u`}
@@ -154,6 +162,7 @@ export async function withQuillsWorkspace<T>(
       workspaceId: context.workspaceId,
       name: identity.name,
       slug: identity.slug,
+      createdAt: String(identity.createdAt),
     };
     const wroteInit = await initializeQuillsWorkspace(
       tx as Database,
@@ -330,8 +339,13 @@ export async function withQuillsSystemWorkspace<T>(
 ): Promise<T> {
   if (!workspaceId) throw new Error("Workspace is required");
   return scopedTransaction(async (tx) => {
-    const result = await tx.execute<{ id: string; name: string; slug: string }>(
-      sql`SELECT id, name, slug FROM public.workspace WHERE id = ${workspaceId} AND (${options.allowArchived === true} OR archived_at IS NULL) FOR SHARE`,
+    const result = await tx.execute<{
+      id: string;
+      name: string;
+      slug: string;
+      createdAt: string | Date;
+    }>(
+      sql`SELECT id, name, slug, created_at AS "createdAt" FROM public.workspace WHERE id = ${workspaceId} AND (${options.allowArchived === true} OR archived_at IS NULL) FOR SHARE`,
     );
     if (result.rows.length !== 1)
       throw new Error("Quills workspace is unavailable");
@@ -341,9 +355,12 @@ export async function withQuillsSystemWorkspace<T>(
         : sql`select set_config('quills.workspace_id', ${workspaceId}, true), set_config('pg_trgm.word_similarity_threshold', '0.4', true)`,
     );
     await tx.execute(sql`SET LOCAL ROLE quills_runtime`);
+    const row = result.rows[0]!;
     const initializedWorkspace = {
       workspaceId,
-      ...result.rows[0]!,
+      name: row.name,
+      slug: row.slug,
+      createdAt: String(row.createdAt),
     };
     const wroteInit =
       !options.allowArchived &&

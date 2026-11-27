@@ -168,14 +168,16 @@ export async function drainQuillsWorkspace(
     });
   }
   let processed = 0,
-    failed = 0;
+    failed = 0,
+    needsReap = true;
   const deadline = Date.now() + 10000;
   // ponytail: up to 50 jobs per pass inside the 10-second budget; fan-out of large audiences drains over several passes.
   for (let i = 0; i < 50 && Date.now() < deadline; i++) {
     const job = await withQuillsSystemWorkspace(
       workspaceId,
-      claimFrom(queues, { reapExpired: i === 0 }),
+      claimFrom(queues, { reapExpired: needsReap }),
     );
+    needsReap = false;
     if (!job) break;
     try {
       if (job.queue !== "quills.event") {
@@ -233,6 +235,7 @@ export async function drainQuillsWorkspace(
       processed++;
     } catch (error) {
       failed++;
+      needsReap = true;
       try {
         // A payload that fails validation never passes on a retry.
         await withQuillsSystemWorkspace(workspaceId, (tx) =>
