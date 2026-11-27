@@ -42,7 +42,11 @@ describe("useQuillsInit", () => {
   it("inits the widget on mount and destroys on unmount", () => {
     const destroy = vi.spyOn(Quills, "destroy");
     function C() {
-      useQuillsInit({ instanceUrl: ORIGIN, workspace: "acme" });
+      useQuillsInit({
+        instanceUrl: ORIGIN,
+        workspace: "acme",
+        preload: "idle",
+      });
       return null;
     }
     const { unmount } = render(<C />);
@@ -91,6 +95,7 @@ describe("useQuillsInit", () => {
         instanceUrl: ORIGIN,
         workspace: "acme",
         shouldInitialize: enabled,
+        preload: "idle",
       });
       return null;
     }
@@ -119,6 +124,7 @@ describe("useQuillsInit", () => {
         instanceUrl: ORIGIN,
         workspace: "acme",
         initializeDelay: 500,
+        preload: "idle",
       });
       return null;
     }

@@ -3532,7 +3532,12 @@
 			"startDate": "Date de début",
 			"noDate": "Pas de date",
 			"dates": "Dates",
-			"project": "Projet"
+			"project": "Projet",
+			"churnRisk": "Churn risk",
+			"companiesCount": "{{count}} companies",
+			"customerContext": "Customer context",
+			"requestersCount": "{{count}} requesters",
+			"votesCount": "{{count}} votes"
 		},
 		"move": {
 			"title": "Déplacer la tâche",

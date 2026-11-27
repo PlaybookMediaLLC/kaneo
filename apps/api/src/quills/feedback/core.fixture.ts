@@ -1,5 +1,6 @@
 export * from "./boards.fixture";
 export * from "./comments.fixture";
+export * from "./hygiene.fixture";
 export * from "./insights.fixture";
 export * from "./posts.fixture";
 export * from "./signals.fixture";
@@ -16,6 +17,7 @@ export {
   createQuillsPostTask,
   listQuillsPostTasks,
 } from "./post-tasks.fixture";
+export * from "./task-customer-context.fixture";
 export * from "./board-delivery.fixture";
 // #92: one update to every channel.
 export * from "./post-updates.fixture";

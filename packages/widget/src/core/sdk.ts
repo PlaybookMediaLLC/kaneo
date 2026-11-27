@@ -209,7 +209,7 @@ export function createSDK(): SDK {
   let capturing = false;
   async function capture(id: string): Promise<void> {
     const target = bridge;
-    if (!target) return;
+    if (!target || !config) return;
     let image: Blob | null = null;
     if (panelOpen && !capturing) {
       capturing = true;
@@ -219,6 +219,7 @@ export function createSDK(): SDK {
             !!element.closest(
               ".quackback-launcher, .quackback-greeting, .quackback-panel, .quackback-backdrop",
             ),
+          `${widgetBase(config.instanceUrl, config.workspace, config.baseUrl)}/capture.js`,
         );
       } catch {
         image = null;
@@ -549,12 +550,92 @@ export function createSDK(): SDK {
     pendingDevice = null;
   }
 
+  let configLoaded = false;
+
   function queryEl(selector: string): Element | null {
     try {
       return document.querySelector(selector);
     } catch {
       return null;
     }
+  }
+
+  function loadServerConfig(gen: number): void {
+    const active = config;
+    if (configLoaded || configAbort || !active || initGeneration !== gen)
+      return;
+    const reveal = () => {
+      if (initGeneration !== gen) return;
+      revealElapsed = true;
+      launcher?.reveal();
+    };
+    const baked = window.__QUACKBACK_CONFIG__;
+    const bakedMatches =
+      !window.__QUACKBACK_URL__ ||
+      window.__QUACKBACK_URL__ === active.instanceUrl;
+    if (baked !== undefined && bakedMatches) {
+      configLoaded = true;
+      const parsed = serverConfigSchema.safeParse(baked);
+      applyServerConfig(parsed.success ? parsed.data : {}, gen);
+      reveal();
+      return;
+    }
+    const controller = new AbortController();
+    configAbort = controller;
+    const fallback = window.setTimeout(reveal, LAUNCHER_REVEAL_FALLBACK_MS);
+    revealTimer = fallback;
+    void fetchServerConfig(
+      active.instanceUrl,
+      active.workspace,
+      controller.signal,
+      active.baseUrl,
+    )
+      .then((serverConfig) => {
+        if (initGeneration !== gen || !config) return;
+        configLoaded = true;
+        if (serverConfig) return applyServerConfig(serverConfig, gen);
+        // The widget is off or the workspace does not exist: remove the launcher and cancel
+        // any idle panel preload, but keep `config` so an explicit host `open()` still shows
+        // the unavailable panel.
+        serverDisabled = true;
+        if (bound) {
+          bound.el.removeEventListener("click", bound.onClick);
+          bound.el.removeAttribute("data-quills-unread");
+          bound = null;
+        }
+        cancelPanelPreload();
+        if (!panelOpen) {
+          mobileCleanup?.();
+          mobileCleanup = null;
+          mobileMql = null;
+          panel?.destroy();
+          panel = null;
+          bridge?.dispose();
+          bridge = null;
+          ready = false;
+          identifying = false;
+          for (const settle of [sentResult, queuedResult])
+            settle?.({
+              success: false,
+              user: null,
+              error: "Widget disabled",
+            });
+          sentResult = null;
+          queuedResult = null;
+          pendingIdentify = null;
+          pendingIdentifyPresent = false;
+        }
+        launcher?.remove();
+        launcher = null;
+        fail("WIDGET_DISABLED", "The widget is off for this workspace");
+      })
+      .finally(() => {
+        window.clearTimeout(fallback);
+        if (initGeneration !== gen) return;
+        configAbort = null;
+        revealTimer = null;
+        reveal();
+      });
   }
 
   function createLauncherIfNeeded(): LauncherHandle | null {
@@ -583,11 +664,13 @@ export function createSDK(): SDK {
       bound = { el, onClick };
       return null;
     }
+    const gen = initGeneration;
     launcher = createLauncher({
       placement,
       offset: config.offset,
       locale: config.locale,
       onClick: () => dispatch("toggle"),
+      onIntent: () => loadServerConfig(gen),
     });
     if (launcherHidden) launcher.setHidden(true);
     return launcher;
@@ -615,6 +698,7 @@ export function createSDK(): SDK {
         // Validate before destroy so a bad re-init leaves the working instance intact.
         if (config) dispatch("destroy");
         const gen = ++initGeneration;
+        configLoaded = false;
         serverDisabled = false;
         revealElapsed = false;
         const resolvedLocale = next.locale ?? pendingLocale ?? undefined;
@@ -638,90 +722,29 @@ export function createSDK(): SDK {
         if (!hostTracking) clearDeviceId();
         placement = next.placement ?? "right";
         createLauncherIfNeeded();
-        // Preload the hidden panel iframe off the host page's critical path:
-        // init typically runs while the host is still loading, and the iframe
-        // immediately competes for its bandwidth. An open() before the idle
-        // slot fires still creates the panel on the spot.
-        // Inline, the widget shows at once, in the host element.
-        if (next.container) dispatch("open");
-        else schedulePanelPreload();
         if (config.identity !== undefined) {
           sendIdentity(config.identity);
         } else if (!pendingIdentifyPresent && !identifying) {
           sendIdentity({ anonymous: true });
         }
-        const reveal = () => {
-          if (initGeneration !== gen) return;
-          revealElapsed = true;
-          launcher?.reveal();
-        };
+        // Facade-first (#316): by default (`preload: "interaction"`), make zero network requests
+        // and mount no iframe until the visitor interacts or the host calls `open()`.
+        // Inline containers and explicit `preload: "idle"` opt-ins still boot proactively.
         const baked = window.__QUACKBACK_CONFIG__;
         const bakedMatches =
           !window.__QUACKBACK_URL__ ||
           window.__QUACKBACK_URL__ === next.instanceUrl;
-        if (baked !== undefined && bakedMatches) {
-          const parsed = serverConfigSchema.safeParse(baked);
-          applyServerConfig(parsed.success ? parsed.data : {}, gen);
-          reveal();
+        if (next.container) {
+          loadServerConfig(gen);
+          dispatch("open");
+        } else if (next.preload === "idle") {
+          schedulePanelPreload();
+          loadServerConfig(gen);
+        } else if (baked !== undefined && bakedMatches) {
+          loadServerConfig(gen);
         } else {
-          const controller = new AbortController();
-          configAbort = controller;
-          const fallback = window.setTimeout(
-            reveal,
-            LAUNCHER_REVEAL_FALLBACK_MS,
-          );
-          revealTimer = fallback;
-          void fetchServerConfig(
-            next.instanceUrl,
-            next.workspace,
-            controller.signal,
-            next.baseUrl,
-          )
-            .then((serverConfig) => {
-              if (serverConfig) return applyServerConfig(serverConfig, gen);
-              // The widget is off or the workspace does not exist: remove the launcher and cancel
-              // any idle panel preload, but keep `config` so an explicit host `open()` still shows
-              // the unavailable panel.
-              if (initGeneration !== gen) return;
-              serverDisabled = true;
-              if (bound) {
-                bound.el.removeEventListener("click", bound.onClick);
-                bound.el.removeAttribute("data-quills-unread");
-                bound = null;
-              }
-              cancelPanelPreload();
-              if (!panelOpen) {
-                mobileCleanup?.();
-                mobileCleanup = null;
-                mobileMql = null;
-                panel?.destroy();
-                panel = null;
-                bridge?.dispose();
-                bridge = null;
-                ready = false;
-                identifying = false;
-                for (const settle of [sentResult, queuedResult])
-                  settle?.({
-                    success: false,
-                    user: null,
-                    error: "Widget disabled",
-                  });
-                sentResult = null;
-                queuedResult = null;
-                pendingIdentify = null;
-                pendingIdentifyPresent = false;
-              }
-              launcher?.remove();
-              launcher = null;
-              fail("WIDGET_DISABLED", "The widget is off for this workspace");
-            })
-            .finally(() => {
-              window.clearTimeout(fallback);
-              if (initGeneration !== gen) return;
-              configAbort = null;
-              revealTimer = null;
-              reveal();
-            });
+          revealElapsed = true;
+          launcher?.reveal();
         }
         return;
       }
@@ -739,6 +762,8 @@ export function createSDK(): SDK {
         // open before init is a no-op, matching close/hide
         if (!config) return fail("NOT_READY", "Call init before open");
         const opts = (a as OpenOptions) ?? {};
+        // Warm server config on first open if facade deferred it until interaction.
+        loadServerConfig(initGeneration);
         // The page may have changed since the last open in a single-page app.
         sendContext();
         if (ready && bridge) bridge.send("quackback:open", opts);
@@ -760,12 +785,14 @@ export function createSDK(): SDK {
           postId?: string;
           articleId?: string;
           entryId?: string;
+          conversationId?: string;
         };
         emitter.emit("open", {
           view: ctx.view,
           postId: ctx.postId,
           articleId: ctx.articleId,
           entryId: ctx.entryId,
+          ...(ctx.conversationId ? { conversationId: ctx.conversationId } : {}),
         });
         changed();
         return;
@@ -878,6 +905,7 @@ export function createSDK(): SDK {
         serverDisabled = false;
         revealElapsed = false;
         initGeneration += 1;
+        configLoaded = false;
         config = null;
         configAbort?.abort();
         configAbort = null;

@@ -1,6 +1,11 @@
 import { apiRouter, z } from "../../openapi";
 import { settings } from "../../database/quills/schema/auth";
 import { aiConfig } from "../assistant/provider";
+import {
+  CHALLENGE_MODES,
+  CHALLENGE_PROVIDERS,
+  readWidgetAntiSpam,
+} from "../framework/anti-spam";
 import { widgetEnabled } from "../framework/audience";
 import { defineQuillsRoute } from "../framework/define-route";
 import { bool, parseJson, record, str } from "../settings/area";
@@ -56,6 +61,11 @@ const widgetConfig = defineQuillsRoute({
           showTeamAvatars: z.boolean(),
         }),
         position: z.enum(["left", "right"]),
+        antiSpam: z.object({
+          challengeMode: z.enum(CHALLENGE_MODES),
+          challengeProvider: z.enum(CHALLENGE_PROVIDERS),
+          turnstileSiteKey: z.string().nullable(),
+        }),
         theme: z.object({
           themeMode: z.enum(["light", "dark", "user"]),
           lightPrimary: z.string().nullable(),
@@ -79,6 +89,7 @@ const widgetConfig = defineQuillsRoute({
       return { enabled: false, config: null };
     const stored = parseJson(row?.widgetConfig ?? null);
     const branding = parseJson(row?.brandingConfig ?? null);
+    const antiSpam = readWidgetAntiSpam(stored);
     const mode = branding.themeMode;
     return {
       enabled: true,
@@ -101,6 +112,14 @@ const widgetConfig = defineQuillsRoute({
           stored.position === "bottom-left"
             ? ("left" as const)
             : ("right" as const),
+        antiSpam: {
+          challengeMode: antiSpam.challengeMode,
+          challengeProvider: antiSpam.challengeProvider,
+          turnstileSiteKey:
+            antiSpam.challengeProvider === "turnstile"
+              ? (process.env.CLOUDFLARE_TURNSTILE_SITE_KEY ?? null)
+              : null,
+        },
         theme: {
           themeMode:
             mode === "light" || mode === "dark"

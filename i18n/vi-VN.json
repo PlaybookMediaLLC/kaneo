@@ -3424,7 +3424,12 @@
 			"startDate": "Ngày bắt đầu",
 			"noDate": "Không có ngày",
 			"dates": "Ngày",
-			"project": "Dự án"
+			"project": "Dự án",
+			"churnRisk": "Churn risk",
+			"companiesCount": "{{count}} companies",
+			"customerContext": "Customer context",
+			"requestersCount": "{{count}} requesters",
+			"votesCount": "{{count}} votes"
 		},
 		"move": {
 			"title": "Di chuyển công việc",

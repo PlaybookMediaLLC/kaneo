@@ -3478,7 +3478,12 @@
 			"startDate": "Başlangıç tarihi",
 			"noDate": "Tarih yok",
 			"dates": "Tarihler",
-			"project": "Proje"
+			"project": "Proje",
+			"churnRisk": "Churn risk",
+			"companiesCount": "{{count}} companies",
+			"customerContext": "Customer context",
+			"requestersCount": "{{count}} requesters",
+			"votesCount": "{{count}} votes"
 		},
 		"move": {
 			"title": "Talebi taşı",

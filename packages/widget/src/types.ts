@@ -66,6 +66,12 @@ export interface InitOptions {
   /** Bundle identity into init — shorthand for init + identify. */
   identity?: Identity;
   /**
+   * When to mount the widget iframe and fetch server config: `"interaction"` (default) keeps the
+   * host page free of extra requests until the visitor hovers, focuses, clicks or calls `open()`;
+   * `"idle"` preloads the iframe during browser idle time.
+   */
+  preload?: "interaction" | "idle";
+  /**
    * Set `tracking: false` to keep host-page visitor analytics off: no pageview
    * beacons and no new device id, for example until the visitor accepts
    * analytics cookies. Turn it on later with `Quills.tracking(true)`, or
@@ -112,8 +118,9 @@ export type Identity =
  * - `{ postId }` deep-links to a specific post
  * - `{ articleId }` deep-links to a help article (`article_…` TypeID or slug;
  *   stored `kb_article_…` ids also resolve)
+ * - `{ conversationId }` deep-links to a specific conversation thread
  *
- * `postId` and `articleId` win over `view` when both are set. `board` applies
+ * `postId`, `articleId` and `conversationId` win over `view` when set. `board` applies
  * only to `new-post` — Home filtering uses `init({ defaultBoard })` or `?board=`.
  *
  * The iframe handles every field on this type. A target whose surface is
@@ -131,7 +138,8 @@ export type OpenOptions =
   | { view: "notifications" }
   | { view: "tickets" }
   | { postId: string }
-  | { articleId: string };
+  | { articleId: string }
+  | { conversationId: string };
 
 /** Payload types are inferred from the iframe boundary schemas. */
 export type { WidgetUser, EventMap } from "./core/protocol.js";

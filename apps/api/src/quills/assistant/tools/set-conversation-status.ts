@@ -13,6 +13,18 @@ export const setConversationStatus = defineWriteTool({
   approval: "required",
   available: (context) => Boolean(context.conversationId),
   summary: (args) => `Set the conversation status to ${args.status}`,
+  previewDiff: (conversation, args) => ({
+    targetType: "conversation",
+    targetId: conversation?.id ?? null,
+    fields: [
+      {
+        field: "status",
+        before: conversation?.status ?? null,
+        after: args.status,
+      },
+    ],
+    recordCount: 1,
+  }),
   // As setQuillsConversationStatus: a close needs every required attribute.
   execute: async (db, _actor, conversation, args) => {
     if (args.status === "closed" && conversation.status !== "closed")

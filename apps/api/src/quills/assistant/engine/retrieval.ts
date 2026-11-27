@@ -74,6 +74,8 @@ export async function searchArticles(
     .where(
       and(
         isNull(helpCenterArticles.deletedAt),
+        // Exclude stale-flagged KB articles from AI grounding by default (#314).
+        isNull(helpCenterArticles.staleFlaggedAt),
         // A future publish time is a scheduled article, not a published one.
         lte(helpCenterArticles.publishedAt, sql`now()`),
         isNull(helpCenterCategories.deletedAt),

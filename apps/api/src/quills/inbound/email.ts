@@ -1,7 +1,12 @@
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { apiRouter, z } from "../../openapi";
-import { principal, user as customer } from "../../database/quills/schema/auth";
+import {
+  principal,
+  settings,
+  user as customer,
+} from "../../database/quills/schema/auth";
+import { contactIdentities } from "../../database/quills/schema/contact-identities";
 import {
   conversationFollowers,
   conversationMessages,
@@ -9,6 +14,8 @@ import {
   conversations,
 } from "../../database/quills/schema/conversation";
 import { files } from "../../database/quills/schema/files";
+import { looksLikeSpam } from "../feedback/content-checks";
+import { isSpamBlocked, isTrustedSender } from "../framework/anti-spam";
 import { defineQuillsRoute, type Database } from "../framework/define-route";
 import {
   downloadResendAttachment,
@@ -115,6 +122,29 @@ function mailbox(value: string | undefined) {
 const messageIds = (value: string | undefined) =>
   (value?.match(/<[^<>\s]{1,900}>/g) ?? []).slice(0, MAX_REFERENCES);
 
+/** Follow a merged tombstone chain (bounded) to the surviving contact principal. */
+async function resolveSurvivingPrincipal(
+  db: Database,
+  principalId: (typeof principal.$inferSelect)["id"],
+) {
+  let currentId = principalId;
+  for (let hop = 0; hop < 5; hop++) {
+    const [row] = await db
+      .select({
+        id: principal.id,
+        blockedAt: principal.blockedAt,
+        mergedInto: principal.mergedIntoPrincipalId,
+      })
+      .from(principal)
+      .where(eq(principal.id, currentId))
+      .limit(1);
+    if (!row) return null;
+    if (!row.mergedInto) return row.blockedAt ? null : row.id;
+    currentId = row.mergedInto;
+  }
+  return null;
+}
+
 function fileFamily(type: string) {
   return type.startsWith("image/")
     ? ("image" as const)
@@ -136,6 +166,34 @@ async function senderPrincipal(
   db: Database,
   sender: { address: string; name: string },
 ) {
+  // Multi-identity resolution (#310): check secondary/merged emails in contact_identities first.
+  const [linked] = await db
+    .select({ principalId: contactIdentities.principalId })
+    .from(contactIdentities)
+    .where(
+      and(
+        eq(contactIdentities.kind, "email"),
+        sql`lower(${contactIdentities.value}) = ${sender.address}`,
+      ),
+    )
+    .limit(1);
+  if (linked) {
+    return resolveSurvivingPrincipal(db, linked.principalId);
+  }
+  // Chat-to-email continuation (#319): anonymous widget visitors store verified email on principal.contactEmail.
+  const [byContactEmail] = await db
+    .select({ id: principal.id })
+    .from(principal)
+    .where(
+      and(
+        sql`lower(${principal.contactEmail}) = ${sender.address}`,
+        isNull(principal.mergedIntoPrincipalId),
+      ),
+    )
+    .limit(1);
+  if (byContactEmail) {
+    return resolveSurvivingPrincipal(db, byContactEmail.id);
+  }
   const find = async () =>
     (
       await db
@@ -165,11 +223,11 @@ async function senderPrincipal(
     })
     .onConflictDoNothing();
   const [person] = await db
-    .select({ id: principal.id, blockedAt: principal.blockedAt })
+    .select({ id: principal.id })
     .from(principal)
     .where(eq(principal.userId, identity.id))
     .limit(1);
-  return person && !person.blockedAt ? person.id : null;
+  return person ? resolveSurvivingPrincipal(db, person.id) : null;
 }
 
 /** Finds or provisions the Quills teammate principal for a verified workspace member. */
@@ -384,6 +442,10 @@ const inbound = defineQuillsRoute({
     const data = body.data;
     const sender = mailbox(data.from);
     if (!sender) return answer("rejected");
+    // Email-domain blocklist (#320) runs before creating any customer row or conversation.
+    if ((await isSpamBlocked(db, { email: sender.address })).blocked) {
+      return answer("blocked");
+    }
 
     const hasDataHeaders =
       data.headers !== undefined &&
@@ -460,6 +522,7 @@ const inbound = defineQuillsRoute({
       id: conversations.id,
       status: conversations.status,
       endReason: conversations.endReason,
+      mergedIntoConversationId: conversations.mergedIntoConversationId,
       visitorPrincipalId: conversations.visitorPrincipalId,
       waitingSince: conversations.waitingSince,
       resolvedAt: conversations.resolvedAt,
@@ -467,7 +530,7 @@ const inbound = defineQuillsRoute({
       lastMessageAt: conversations.lastMessageAt,
       reopenedCount: conversations.reopenedCount,
     };
-
+    // The signed reply address of an email or messenger conversation first (#319): routes without any header.
     const addressed = replyAddressConversation(data.to ?? [], workspaceId);
     const [byAddress] = addressed
       ? await db
@@ -476,14 +539,14 @@ const inbound = defineQuillsRoute({
           .where(
             and(
               eq(conversations.id, addressed as ConversationId),
-              eq(conversations.channel, "email"),
+              inArray(conversations.channel, ["email", "messenger"]),
             ),
           )
           .for("update")
       : [];
 
     const ours = ownMessageIds(references) as MessageId[];
-    const [thread] = byAddress
+    let [thread] = byAddress
       ? [byAddress]
       : references.length
         ? await db
@@ -495,7 +558,7 @@ const inbound = defineQuillsRoute({
             )
             .where(
               and(
-                eq(conversations.channel, "email"),
+                inArray(conversations.channel, ["email", "messenger"]),
                 or(
                   inArray(
                     sql<string>`${conversationMessages.metadata} ->> 'emailMessageId'`,
@@ -514,6 +577,17 @@ const inbound = defineQuillsRoute({
             .limit(1)
             .for("update")
         : [];
+    // Follow merged conversations (#322) so customer replies land on the surviving thread.
+    for (let hop = 0; hop < 5 && thread?.mergedIntoConversationId; hop++) {
+      const [surviving] = await db
+        .select(threadColumns)
+        .from(conversations)
+        .where(eq(conversations.id, thread.mergedIntoConversationId))
+        .limit(1)
+        .for("update");
+      if (!surviving) break;
+      thread = surviving;
+    }
 
     // Gather CC headers from webhook, Resend fetch, and raw Cc header
     const ccHeaderValues = [
@@ -543,6 +617,12 @@ const inbound = defineQuillsRoute({
       forwardParsed?.isForward && forwardParsed.requester
         ? forwardParsed.requester
         : sender;
+    if (
+      effectiveRequester.address !== sender.address &&
+      (await isSpamBlocked(db, { email: effectiveRequester.address })).blocked
+    ) {
+      return answer("blocked");
+    }
     const effectiveSubject = forwardParsed?.isForward
       ? forwardParsed.subject
       : data.subject?.slice(0, 500) || null;
@@ -555,6 +635,9 @@ const inbound = defineQuillsRoute({
 
     const requesterId = await senderPrincipal(db, effectiveRequester);
     if (!requesterId) return answer("blocked");
+    if ((await isSpamBlocked(db, { principalId: requesterId })).blocked) {
+      return answer("blocked");
+    }
 
     // Allow replies from the conversation's requester OR any CC'd participant (#325).
     let senderId = requesterId;
@@ -601,6 +684,18 @@ const inbound = defineQuillsRoute({
       }
     }
 
+    const [spamCfg] = !activeThread
+      ? await db
+          .select({ spamFilterConfig: settings.spamFilterConfig })
+          .from(settings)
+          .limit(1)
+      : [];
+    const quarantined =
+      !activeThread &&
+      !forwardParsed?.isForward &&
+      !isTrustedSender(spamCfg?.spamFilterConfig, effectiveRequester.address) &&
+      looksLikeSpam(`${effectiveSubject ?? ""}\n${effectiveBody}`);
+
     const conversation =
       activeThread ??
       (
@@ -610,6 +705,12 @@ const inbound = defineQuillsRoute({
             visitorPrincipalId: requesterId,
             channel: "email",
             source: "email",
+            status: quarantined ? "closed" : "open",
+            ...(quarantined && {
+              endReason: "spam",
+              spamReason: "heuristic",
+              resolvedAt: now,
+            }),
             subject:
               (spawnFollowUpFrom && effectiveSubject
                 ? `Follow-up: ${effectiveSubject}`
@@ -768,7 +869,6 @@ const inbound = defineQuillsRoute({
         });
       return answer("duplicate");
     }
-
     // Bind inserted file rows to the persisted message
     if (insertedFiles.length > 0) {
       await db
@@ -825,8 +925,9 @@ const inbound = defineQuillsRoute({
       }
     }
 
-    // Spam-ended or automated (OOO/bounce) mail never reopens a closed conversation (#311)
+    // Quarantined spam, spam-ended, or automated (OOO/bounce) mail never reopens a closed conversation (#311, #320)
     const shouldStayClosed =
+      quarantined ||
       isSpamThread ||
       Boolean(
         activeThread &&
@@ -841,7 +942,11 @@ const inbound = defineQuillsRoute({
       .set({
         status: nextStatus,
         ...(shouldStayClosed
-          ? {}
+          ? {
+              ...(quarantined || isSpamThread
+                ? { resolvedAt: conversation.resolvedAt ?? now }
+                : {}),
+            }
           : {
               snoozedUntil: null,
               ...reopened(

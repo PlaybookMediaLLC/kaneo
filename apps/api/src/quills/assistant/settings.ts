@@ -6,13 +6,14 @@ import {
   type StoredAssistantConfig,
 } from "../../database/quills/schema/auth";
 import { defineQuillsRoute, type Database } from "../framework/define-route";
+import { TOOL_POLICY_MODES } from "./ai/tool";
 import { aiConfig } from "./provider";
 import { TOOL_NAMES } from "./tools";
 
 // The assistant's identity, voice, knowledge sources and tool rules, in settings.assistant_config.
 // One read and one update replace the source's seven per-section update functions.
 
-const MODES = ["propose", "off"] as const;
+const MODES = TOOL_POLICY_MODES;
 const toolRules = z
   .array(z.object({ tool: z.enum(TOOL_NAMES), mode: z.enum(MODES) }))
   .max(TOOL_NAMES.length);

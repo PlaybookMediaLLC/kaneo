@@ -555,6 +555,57 @@ export async function fanOut(workspaceId: string, eventId: string) {
     const event = await loadEvent(db, eventId);
     if (!event || (event.context as { deliver?: unknown }).deliver !== true)
       return undefined;
+    // Anti-spam guard (#320): spam-ended conversations or blocked visitors NEVER consume
+    // AI tokens, trigger teammate notifications, or send outbound email/webhooks.
+    if (
+      event.type === "conversation.created" ||
+      event.type === "message.created" ||
+      event.type === "conversation.email_received"
+    ) {
+      const { conversationMessages, conversations } =
+        await import("../../database/quills/schema/conversation");
+      const { isSpamBlocked } = await import("../framework/anti-spam");
+      const payload = (event.payload ?? {}) as Record<string, string>;
+      let convId: string | null =
+        event.entityType === "conversation"
+          ? event.entityId
+          : (payload.conversationId ?? null);
+      if (!convId && event.entityType === "conversation_message") {
+        const [msg] = await db
+          .select({ conversationId: conversationMessages.conversationId })
+          .from(conversationMessages)
+          .where(eq(conversationMessages.id, event.entityId as never))
+          .limit(1);
+        convId = msg?.conversationId ?? null;
+      }
+      if (convId) {
+        const [conv] = await db
+          .select({
+            endReason: conversations.endReason,
+            visitorPrincipalId: conversations.visitorPrincipalId,
+            visitorEmail: conversations.visitorEmail,
+          })
+          .from(conversations)
+          .where(eq(conversations.id, convId as never))
+          .limit(1);
+        if (conv?.endReason === "spam") return undefined;
+        if (conv?.visitorPrincipalId) {
+          const [visitor] = await db
+            .select({ blockedAt: principal.blockedAt })
+            .from(principal)
+            .where(eq(principal.id, conv.visitorPrincipalId))
+            .limit(1);
+          if (visitor?.blockedAt) return undefined;
+        }
+        if (conv && (conv.visitorPrincipalId || conv.visitorEmail)) {
+          const blocked = await isSpamBlocked(db, {
+            principalId: conv.visitorPrincipalId,
+            email: conv.visitorEmail,
+          });
+          if (blocked.blocked) return undefined;
+        }
+      }
+    }
     const queue = eventQueues[event.type];
     if (queue) await enqueueQuillsJob(db, queue, { eventId }, eventId, 3);
     // A reply on a GitHub conversation, or its retry, becomes an issue comment.

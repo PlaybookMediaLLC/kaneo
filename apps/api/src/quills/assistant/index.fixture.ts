@@ -2,6 +2,7 @@
 import "./provider-edge.fixture";
 
 export * from "./analytics.fixture";
+export * from "./budget-routes.fixture";
 export * from "./connectors.fixture";
 export * from "./copilot.fixture";
 export * from "./documents.fixture";

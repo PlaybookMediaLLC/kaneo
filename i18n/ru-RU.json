@@ -3594,7 +3594,12 @@
 			"startDate": "Дата начала",
 			"noDate": "Без даты",
 			"dates": "Даты",
-			"project": "Проект"
+			"project": "Проект",
+			"churnRisk": "Churn risk",
+			"companiesCount": "{{count}} companies",
+			"customerContext": "Customer context",
+			"requestersCount": "{{count}} requesters",
+			"votesCount": "{{count}} votes"
 		},
 		"move": {
 			"title": "Переместить задачу",

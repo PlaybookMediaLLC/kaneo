@@ -38,6 +38,7 @@ import changelogTranslations from "./feedback/changelog-translations";
 import boardSettings from "./feedback/board-settings";
 import boardDelivery from "./feedback/board-delivery";
 import postTasks from "./feedback/post-tasks";
+import taskCustomerContext from "./feedback/task-customer-context";
 import postUpdates from "./feedback/post-updates";
 import demand from "./feedback/demand";
 import scores from "./feedback/scores";
@@ -132,6 +133,7 @@ export type QuillsTeammateRouters = [
   typeof boardSettings,
   typeof boardDelivery,
   typeof postTasks,
+  typeof taskCustomerContext,
   typeof postUpdates,
   typeof demand,
   typeof scores,
@@ -140,53 +142,64 @@ export type QuillsTeammateRouters = [
   typeof contextRouter,
 ];
 
-export default apiRouter<BaseVariables & { workspaceId: string }>()
-  .route("/", files)
-  .route("/", jobs)
-  .route("/", links)
-  .route("/", sharedTeams)
-  .route("/", directory)
-  .route("/", quillsSettings)
-  .route("/", websiteBranding)
-  .route("/", feedback)
-  .route("/", delivery)
-  .route("/", taxonomy)
-  .route("/", portalAccessSettings)
-  .route("/", portalSignInSettings)
-  .route("/", content)
-  .route("/", integrations)
-  .route("/", operations)
-  .route("/", supportTickets)
-  .route("/", supportConversations)
-  .route("/", supportAssistant)
-  .route("/", workspaceSearch)
-  .route("/", supportTyping)
-  .route("/", supportPresence)
-  .route("/", supportLinkPreview)
-  .route("/", supportReadBatch)
-  .route("/", testConversations)
-  .route("/", portalInvites)
-  .route("/", profileTeamContext)
-  .route("/", reporting)
-  .route("/", automation)
-  .route("/", assistant)
-  .route("/", apps)
-  .route("/", agentChannels)
-  .route("/", surveys)
+// Mount sub-routers imperatively so TypeScript does not compute a 47-deep nested
+// Hono MergeSchemaPath generic on the default export (typed clients use QuillsTeammateRouters).
+const quillsRouter = apiRouter<BaseVariables & { workspaceId: string }>();
+const teammateRouters = [
+  files,
+  jobs,
+  links,
+  sharedTeams,
+  directory,
+  quillsSettings,
+  websiteBranding,
+  feedback,
+  delivery,
+  taxonomy,
+  portalAccessSettings,
+  portalSignInSettings,
+  content,
+  integrations,
+  operations,
+  supportTickets,
+  supportConversations,
+  supportAssistant,
+  workspaceSearch,
+  supportTyping,
+  supportPresence,
+  supportLinkPreview,
+  supportReadBatch,
+  testConversations,
+  portalInvites,
+  profileTeamContext,
+  reporting,
+  automation,
+  assistant,
+  apps,
+  agentChannels,
+  surveys,
   // RFC 0003 lane L5.
-  .route("/", changelogAi)
-  .route("/", changelogEngagement)
-  .route("/", changelogTranslations)
+  changelogAi,
+  changelogEngagement,
+  changelogTranslations,
   // RFC 0003, lane L3.
-  .route("/", boardSettings)
+  boardSettings,
   // RFC 0005: requests become Kaneo tasks.
-  .route("/", boardDelivery)
-  .route("/", postTasks)
+  boardDelivery,
+  postTasks,
+  taskCustomerContext,
   // #92: one update to every channel.
-  .route("/", postUpdates)
-  .route("/", demand)
-  .route("/", scores)
-  .route("/", scoring)
+  postUpdates,
+  demand,
+  scores,
+  scoring,
   // RFC 0004: the AI chip of the request detail.
-  .route("/", postSummary)
-  .route("/", contextRouter);
+  postSummary,
+  contextRouter,
+] as const;
+
+for (const sub of teammateRouters) {
+  quillsRouter.route("/", sub);
+}
+
+export default quillsRouter;

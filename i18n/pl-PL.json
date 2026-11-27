@@ -4107,7 +4107,12 @@
 			"startDate": "Data rozpoczęcia",
 			"title": "Właściwości",
 			"dates": "Daty",
-			"project": "Projekt"
+			"project": "Projekt",
+			"churnRisk": "Churn risk",
+			"companiesCount": "{{count}} companies",
+			"customerContext": "Customer context",
+			"requestersCount": "{{count}} requesters",
+			"votesCount": "{{count}} votes"
 		},
 		"relations": {
 			"blocks": "Blokuje",

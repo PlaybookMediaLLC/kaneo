@@ -12,6 +12,10 @@ export function ensureStyles(side: "left" | "right"): void {
   const el = existing ?? document.createElement("style");
   el.id = STYLE_ID;
   el.textContent = [
+    // Fixed launcher geometry containment keeps CLS = 0 (#316) and visible focus satisfies WCAG 2.4.7 (#317).
+    ".quackback-launcher{contain:layout style}",
+    ".quackback-launcher:focus-visible,.quackback-bubble button:focus-visible,.quackback-panel-close:focus-visible{outline:2px solid #71665c;outline-offset:3px}",
+    ".quackback-occluded{opacity:0!important;pointer-events:none!important;transform:scale(0.92)!important}",
     ".quackback-panel{position:fixed;z-index:2147483647;overflow:hidden;pointer-events:none;",
     `bottom:16px;${side}:16px;width:384px;height:min(760px,calc(100dvh - 32px));`,
     "box-sizing:border-box;border:1px solid rgba(0,0,0,.08);border-radius:20px;box-shadow:0 18px 40px -16px rgba(40,38,36,.16),0 4px 16px -8px rgba(40,38,36,.08);",
@@ -23,7 +27,7 @@ export function ensureStyles(side: "left" | "right"): void {
     // higher-specificity rule would otherwise SHRINK it there.
     "@media(min-width:761px){.quackback-panel.quackback-expanded{width:min(480px,calc(100vw - 32px));height:min(860px,calc(100dvh - 32px))}}",
     ".quackback-panel.quackback-open{opacity:1;transform:scale(1);pointer-events:auto}",
-    ".quackback-panel-close{position:absolute;top:12px;right:14px;width:32px;height:32px;border:0;border-radius:50%;background:#fff;color:#848281;display:grid;place-items:center;cursor:pointer}",
+    ".quackback-panel-close{position:absolute;top:12px;right:14px;width:32px;height:32px;border:0;border-radius:50%;background:#fff;color:#374151;display:grid;place-items:center;cursor:pointer}",
     ".quackback-panel.quackback-closing{opacity:0;transform:scale(0);pointer-events:none;",
     "transition:opacity 200ms cubic-bezier(0.4,0,1,1),transform 200ms cubic-bezier(0.4,0,1,1)}",
     "@media(max-width:760px){",
@@ -39,7 +43,8 @@ export function ensureStyles(side: "left" | "right"): void {
     "@media(min-width:761px){.quackback-backdrop{display:none!important}}",
     // Inline in a host element: always shown, in the page flow (gap G-18).
     ".quackback-panel.quackback-inline{position:relative;inset:auto;z-index:auto;width:100%;height:100%;min-height:480px;opacity:1;transform:none;visibility:visible;pointer-events:auto;box-shadow:none;border-radius:12px;transition:none}",
-    "@media(prefers-reduced-motion:reduce){.quackback-panel,.quackback-backdrop,.quackback-launcher,.quackback-launcher *,.quackback-greeting{transition:none!important}.quackback-launcher{transform:none!important}}",
+    "@media(prefers-reduced-motion:reduce){.quackback-panel,.quackback-backdrop,.quackback-launcher,.quackback-launcher *,.quackback-bubble,.quackback-greeting{transition:none!important}.quackback-launcher{transform:none!important}}",
+    "@media(forced-colors:active){.quackback-launcher,.quackback-bubble,.quackback-greeting,.quackback-panel{border:1px solid CanvasText!important}.quackback-launcher:focus-visible,.quackback-bubble button:focus-visible,.quackback-greeting button:focus-visible,.quackback-panel-close:focus-visible{outline:2px solid Highlight!important}}",
   ].join("");
   if (!existing) document.head.appendChild(el);
 }

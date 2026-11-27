@@ -60,7 +60,14 @@ export function ConversationView({
   );
   return (
     <article className="qb-conversation-view">
-      <div className="qb-thread" ref={scroll.thread}>
+      <div
+        className="qb-thread"
+        ref={scroll.thread}
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions text"
+        aria-label={conversation.title}
+      >
         <h1>{conversation.title}</h1>
         {(conversation.unreadCount ?? 0) > 0 && onRead && (
           <button

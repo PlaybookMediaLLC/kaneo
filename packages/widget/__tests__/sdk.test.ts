@@ -67,7 +67,11 @@ describe("sdk", () => {
 
   it("init creates a launcher and iframe", () => {
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     expect(
       document.querySelector('button[aria-label="Open feedback widget"]'),
     ).not.toBeNull();
@@ -82,6 +86,7 @@ describe("sdk", () => {
       instanceUrl: ORIGIN,
       workspace: WORKSPACE,
       launcher: false,
+      preload: "idle",
     });
     expect(
       document.querySelector('button[aria-label="Open feedback widget"]'),
@@ -91,7 +96,11 @@ describe("sdk", () => {
   it("a repeat init re-applies launcher: false", () => {
     stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     expect(
       document.querySelector('button[aria-label="Open feedback widget"]'),
     ).not.toBeNull();
@@ -99,6 +108,7 @@ describe("sdk", () => {
       instanceUrl: ORIGIN,
       workspace: WORKSPACE,
       launcher: false,
+      preload: "idle",
     });
     expect(
       document.querySelector('button[aria-label="Open feedback widget"]'),
@@ -108,11 +118,16 @@ describe("sdk", () => {
   it("a repeat init moves an existing launcher to the new placement", () => {
     stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     sdk.dispatch("init", {
       instanceUrl: ORIGIN,
       workspace: WORKSPACE,
       placement: "left",
+      preload: "idle",
     });
     const btn = document.querySelector(
       'button[aria-label="Open feedback widget"]',
@@ -124,7 +139,11 @@ describe("sdk", () => {
   it("a repeat init that throws leaves the existing instance intact", () => {
     stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     expect(() =>
       sdk.dispatch("init", { instanceUrl: "not a url", workspace: WORKSPACE }),
     ).toThrow();
@@ -137,7 +156,11 @@ describe("sdk", () => {
   it("init defaults identity to anonymous once iframe is ready", () => {
     const { postMessage, spy } = stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     fireReady();
     expect(postMessage).toHaveBeenCalledWith(
       { type: "quackback:identify", data: { anonymous: true } },
@@ -153,6 +176,7 @@ describe("sdk", () => {
       instanceUrl: ORIGIN,
       workspace: WORKSPACE,
       identity: { id: "u1", email: "a@b.c", name: "Ada" },
+      preload: "idle",
     });
     fireReady();
     expect(postMessage).toHaveBeenCalledWith(
@@ -168,7 +192,11 @@ describe("sdk", () => {
   it("identify sends the payload after ready", () => {
     const { postMessage, spy } = stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     fireReady();
     window.dispatchEvent(
       new MessageEvent("message", {
@@ -189,7 +217,11 @@ describe("sdk", () => {
   it("logout sends null identify and keeps the launcher visible", () => {
     const { spy } = stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     fireReady();
     sdk.dispatch("logout");
     const launcher = document.querySelector(
@@ -203,7 +235,11 @@ describe("sdk", () => {
   it("keeps the closed panel out of the tab order and names the frame", () => {
     stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     const iframe = document.querySelector(
       "iframe.quackback-widget-iframe",
     ) as HTMLIFrameElement;
@@ -222,6 +258,7 @@ describe("sdk", () => {
       instanceUrl: ORIGIN,
       workspace: WORKSPACE,
       locale: "de",
+      preload: "idle",
     });
     expect(
       (
@@ -236,7 +273,11 @@ describe("sdk", () => {
     stubIframe();
     window.__QUACKBACK_CONFIG__ = {};
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     sdk.dispatch("open");
     const launcher = document.querySelector<HTMLButtonElement>(
       ".quackback-launcher",
@@ -260,7 +301,11 @@ describe("sdk", () => {
   it("isOpen tracks panel state", () => {
     stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     expect(sdk.isOpen()).toBe(false);
     sdk.dispatch("open");
     expect(sdk.isOpen()).toBe(true);
@@ -271,7 +316,11 @@ describe("sdk", () => {
   it("getUser / isIdentified reflect identify-result messages", () => {
     stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     expect(sdk.getUser()).toBeNull();
     expect(sdk.isIdentified()).toBe(false);
     fireReady();
@@ -298,7 +347,11 @@ describe("sdk", () => {
   it("open emits an open event with view context", () => {
     stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     const seen: unknown[] = [];
     sdk.dispatch("on", "open", (payload: unknown) => seen.push(payload));
     sdk.dispatch("open", { view: "new-post", title: "Bug:" });
@@ -309,7 +362,11 @@ describe("sdk", () => {
   it("open passes deep-link fields to the iframe", () => {
     const { postMessage, spy } = stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     fireReady();
     sdk.dispatch("open", { postId: "post_01h" });
     expect(postMessage).toHaveBeenCalledWith(
@@ -340,7 +397,11 @@ describe("sdk", () => {
   it("open forwards the messages and tickets views to the iframe", () => {
     const { postMessage, spy } = stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     fireReady();
     sdk.dispatch("open", { view: "messages" });
     expect(postMessage).toHaveBeenLastCalledWith(
@@ -358,7 +419,11 @@ describe("sdk", () => {
   it("open event carries the messages and tickets views", () => {
     stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     const seen: Array<{ view?: string }> = [];
     sdk.dispatch("on", "open", (payload: { view?: string }) =>
       seen.push(payload),
@@ -379,6 +444,7 @@ describe("sdk", () => {
       instanceUrl: ORIGIN,
       workspace: WORKSPACE,
       pageUrl: "origin",
+      preload: "idle",
     });
     fireReady();
     sdk.dispatch("metadata", { plan: "pro" });
@@ -395,6 +461,7 @@ describe("sdk", () => {
       instanceUrl: ORIGIN,
       workspace: WORKSPACE,
       pageUrl: "none",
+      preload: "idle",
     });
     fireReady();
     sdk.dispatch("metadata", { plan: "pro" });
@@ -407,7 +474,11 @@ describe("sdk", () => {
   it("metadata merges and sends to iframe", () => {
     const { postMessage, spy } = stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     fireReady();
     // The page URL goes with the metadata, without its query and fragment.
     window.history.replaceState(null, "", "/billing?token=secret#part");
@@ -448,7 +519,11 @@ describe("sdk", () => {
     const image = new Blob(["png"], { type: "image/png" });
     vi.mocked(capturePage).mockResolvedValue(image);
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     fireReady();
     const ask = (id: string) =>
       window.dispatchEvent(
@@ -501,7 +576,11 @@ describe("sdk", () => {
   it("hideLauncher hides the button; showLauncher shows it again", () => {
     stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     const launcher = () =>
       document.querySelector(
         'button[aria-label="Open feedback widget"]',
@@ -525,7 +604,11 @@ describe("sdk", () => {
       ),
     );
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     const btn = document.querySelector(
       'button[aria-label="Open feedback widget"]',
     ) as HTMLButtonElement;
@@ -550,7 +633,11 @@ describe("sdk", () => {
       launcherGreeting: "Hi there!",
     };
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     const btn = document.querySelector(
       'button[aria-label="Open feedback widget"]',
     ) as HTMLButtonElement;
@@ -571,7 +658,11 @@ describe("sdk", () => {
       }),
     );
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     expect(document.querySelector("iframe.quackback-widget-iframe")).toBeNull();
     sdk.dispatch("open");
     expect(
@@ -592,7 +683,11 @@ describe("sdk", () => {
       vi.fn(() => new Promise(() => {})),
     ); // never resolves
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     const btn = document.querySelector(
       'button[aria-label="Open feedback widget"]',
     ) as HTMLButtonElement;
@@ -626,7 +721,11 @@ describe("sdk", () => {
         vi.fn(() => new Promise((resolve) => (resolveFetch = resolve))),
       );
       sdk = createSDK();
-      sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+      sdk.dispatch("init", {
+        instanceUrl: ORIGIN,
+        workspace: WORKSPACE,
+        preload: "idle",
+      });
       vi.advanceTimersByTime(1800);
       expect(document.querySelector(".quackback-launcher")).not.toBeNull();
       resolveFetch(reply);
@@ -647,6 +746,7 @@ describe("sdk", () => {
       sdk.dispatch("init", {
         instanceUrl: "javascript:alert(1)",
         workspace: WORKSPACE,
+        preload: "idle",
       }),
     ).toThrow(/instanceUrl must be an http/);
   });
@@ -672,7 +772,11 @@ describe("sdk", () => {
   it("navigate opens http(s) URLs with noopener,noreferrer", () => {
     stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
     window.dispatchEvent(
       new MessageEvent("message", {
@@ -694,7 +798,11 @@ describe("sdk", () => {
   it("navigate ignores javascript: URLs", () => {
     stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
     window.dispatchEvent(
       new MessageEvent("message", {
@@ -712,7 +820,11 @@ describe("sdk", () => {
   it("destroy removes the iframe and launcher", () => {
     stubIframe();
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     expect(
       document.querySelector("iframe.quackback-widget-iframe"),
     ).not.toBeNull();
@@ -725,7 +837,11 @@ describe("sdk", () => {
 
   it("an iframe unread count drives the launcher badge and unread subscribers", () => {
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     const handler = vi.fn();
     sdk.dispatch("on", "unread", handler);
 
@@ -741,12 +857,12 @@ describe("sdk", () => {
 
     // Host subscribers get the count...
     expect(handler).toHaveBeenCalledWith({ count: 5 });
-    // ...and the launcher shows the badge.
-    const badge = (
-      document.querySelector(
-        'button[aria-label="Open feedback widget"]',
-      ) as HTMLButtonElement
-    ).lastElementChild as HTMLElement;
+    // ...and the launcher shows the badge and announces the unread count.
+    const launcherBtn = document.querySelector(
+      "button.quackback-launcher",
+    ) as HTMLButtonElement;
+    expect(launcherBtn.getAttribute("aria-label")).toContain("5 unread");
+    const badge = launcherBtn.lastElementChild as HTMLElement;
     expect(badge.style.display).toBe("flex");
     expect(badge.textContent).toBe("5");
   });
@@ -784,6 +900,7 @@ describe("sdk server-driven launcher config", () => {
       instanceUrl: ORIGIN,
       workspace: WORKSPACE,
       placement: "right",
+      preload: "idle",
     });
     const btn = document.querySelector(
       'button[aria-label="Chat with us"]',
@@ -807,7 +924,11 @@ describe("sdk server-driven launcher config", () => {
       })),
     );
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     await new Promise((r) => setTimeout(r, 0));
     const btn = document.querySelector(
       'button[aria-label="Feedback"]',
@@ -824,6 +945,7 @@ describe("sdk server-driven launcher config", () => {
       instanceUrl: ORIGIN,
       workspace: WORKSPACE,
       placement: "left",
+      preload: "idle",
     });
     const btn = document.querySelector(
       'button[aria-label="Open feedback widget"]',
@@ -898,7 +1020,11 @@ describe("sdk server-driven launcher config", () => {
       })),
     );
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     sdk.dispatch("setLocale", "fr");
     await new Promise((r) => setTimeout(r, 0));
     const btn = document.querySelector(
@@ -916,7 +1042,11 @@ describe("sdk server-driven launcher config", () => {
     sdk.dispatch("setTheme", "dark");
     sdk.dispatch("setLocale", "fr");
     void sdk.dispatch("identify", { ssoToken: "signed-before-init" });
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
 
     expect(sdk.getState().theme).toBe("dark");
     expect(sdk.getState().locale).toBe("fr");
@@ -953,7 +1083,11 @@ describe("sdk server-driven launcher config", () => {
     );
     sdk = createSDK();
     sdk.dispatch("hideLauncher");
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     await new Promise((r) => setTimeout(r, 0));
 
     const btn = document.querySelector(
@@ -992,7 +1126,11 @@ describe("sdk server-driven launcher config", () => {
       ),
     );
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     fireReady();
     const pending = sdk.dispatch("identify", {
       ssoToken: "tok",
@@ -1041,6 +1179,7 @@ describe("sdk server-driven launcher config", () => {
       instanceUrl: ORIGIN,
       workspace: WORKSPACE,
       launcher: false,
+      preload: "idle",
     });
     fireReady();
     window.dispatchEvent(
@@ -1084,7 +1223,11 @@ describe("sdk server-driven launcher config", () => {
     sdk = createSDK();
     sdk.dispatch("setLocale", "de");
     expect(sdk.getState().locale).toBe("de");
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     await new Promise((r) => setTimeout(r, 0));
 
     const btn = document.querySelector(
@@ -1101,5 +1244,46 @@ describe("sdk server-driven launcher config", () => {
       "iframe.quackback-widget-iframe",
     ) as HTMLIFrameElement;
     expect(iframe.getAttribute("title")).toBe("Aide");
+  });
+});
+
+describe("sdk facade click-to-load default (#316)", () => {
+  afterEach(() => {
+    sdk?.dispatch("destroy");
+    sdk = undefined;
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    document.body.innerHTML = "";
+    document.head.innerHTML = "";
+  });
+
+  it("makes zero network requests and mounts no iframe before visitor interaction", () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ enabled: true, config: {} }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    sdk = createSDK();
+    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+
+    const btn = document.querySelector<HTMLButtonElement>(
+      ".quackback-launcher",
+    );
+    expect(btn).not.toBeNull();
+    expect(btn?.style.opacity).toBe("1");
+    expect(document.querySelector("iframe")).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // Hover/focus warms server config without mounting the iframe yet.
+    btn!.dispatchEvent(new Event("pointerenter"));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(document.querySelector("iframe")).toBeNull();
+
+    // Clicking the launcher mounts and opens the iframe on demand.
+    btn!.click();
+    expect(
+      document.querySelector("iframe.quackback-widget-iframe"),
+    ).not.toBeNull();
+    expect(sdk.isOpen()).toBe(true);
   });
 });

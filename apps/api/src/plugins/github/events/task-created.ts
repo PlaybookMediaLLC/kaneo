@@ -60,12 +60,15 @@ async function createTaskIssue(
     let createdLink: { id: string; metadata?: string | null } | undefined =
       existingLink;
     let issueNumber = existingLink ? Number(existingLink.externalId) : 0;
+    const { loadPiiSafeTaskCustomerContext } =
+      await import("../services/customer-context");
+    const customerContext = await loadPiiSafeTaskCustomerContext(event.taskId);
     if (!existingLink) {
       const createdIssue = await octokit.rest.issues.create({
         owner: repositoryOwner,
         repo: repositoryName,
         title: formatIssueTitle(event.title),
-        body: formatIssueBody(event.description, event.taskId),
+        body: formatIssueBody(event.description, event.taskId, customerContext),
       });
 
       createdLink = await createExternalLink({
@@ -125,7 +128,9 @@ async function createTaskIssue(
             issue_number: issueNumber,
             ...(field === "title"
               ? { title: formatIssueTitle(value) }
-              : { body: formatIssueBody(value, event.taskId) }),
+              : {
+                  body: formatIssueBody(value, event.taskId, customerContext),
+                }),
           })
         )?.data?.updated_at,
       state: async (value) =>

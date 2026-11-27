@@ -321,6 +321,12 @@ export async function resolveCaller(
   return caller;
 }
 
+export type RequestChallengeHeaders = Readonly<{
+  provider: string;
+  token: string;
+  nonce?: string;
+}>;
+
 /**
  * Read-only request metadata for portal, widget, public and signed handlers. Never the raw headers
  * or cookies. Teammate handlers do not get it.
@@ -333,6 +339,8 @@ export type RequestMeta = Readonly<{
   country: string | null;
   /** `DNT: 1` or `Sec-GPC: 1`. */
   doNotTrack: boolean;
+  /** Optional anti-spam challenge solution sent via X-Quills-Challenge-* headers. */
+  challenge: RequestChallengeHeaders | null;
 }>;
 
 /** CDN country headers, first valid value wins. `XX` and `T1` (Tor) mean unknown. */
@@ -349,6 +357,9 @@ export function requestMeta(headers: Headers): RequestMeta {
   ).find(
     (code) => code && /^[A-Z]{2}$/.test(code) && code !== "XX" && code !== "T1",
   );
+  const provider = headers.get("x-quills-challenge-provider")?.trim();
+  const token = headers.get("x-quills-challenge-token")?.trim();
+  const nonce = headers.get("x-quills-challenge-nonce")?.trim();
   return Object.freeze({
     ip: readClientIp(headers) ?? null,
     userAgent: headers.get("user-agent")?.slice(0, 512) || null,
@@ -356,6 +367,14 @@ export function requestMeta(headers: Headers): RequestMeta {
     doNotTrack:
       headers.get("dnt")?.trim() === "1" ||
       headers.get("sec-gpc")?.trim() === "1",
+    challenge:
+      provider && token
+        ? Object.freeze({
+            provider,
+            token,
+            ...(nonce ? { nonce } : {}),
+          })
+        : null,
   });
 }
 
@@ -436,52 +455,92 @@ export function verifyIdentityToken(token: string, secret: string) {
   }
 }
 
+export type RateLimitRule = {
+  limit: number;
+  windowSeconds: number;
+  /** Optional per-workspace ceiling across all clients in the same window (#320). */
+  workspaceLimit?: number;
+  /** Optional per-session/principal ceiling in the same window (#320). */
+  sessionLimit?: number;
+};
+
 /**
  * Counts one attempt for this client in its own committed transaction, so a failed request
- * still spends budget. 429 over the limit. With `account`, the bucket is that signed-in account's.
+ * still spends budget. 429 over the limit (with `Retry-After`). Supports per-IP, per-session,
+ * and per-workspace buckets (#320).
  */
 export async function enforceRateLimit(
   c: Context,
   workspace: string,
   name: string,
-  rule: { limit: number; windowSeconds: number },
+  rule: RateLimitRule,
   account?: string,
+  sessionId?: string,
 ) {
-  // ponytail: the bucket is per workspace and client IP; a client spreading attempts over many workspaces gets a budget in each.
-  const key = account
-    ? `${name}:account:${account}`
-    : `${name}:${readClientIp(c.req.raw.headers) ?? "unknown"}`;
-  const count = await withQuillsAudience({ workspace }, async (db) => {
-    const [row] = await db
-      .insert(rateBucket)
-      .values({
-        workspaceKey: "_",
-        key,
-        count: 1,
-        windowExpiresAt: sql`now() + make_interval(secs => ${rule.windowSeconds})`,
-      })
-      .onConflictDoUpdate({
-        target: [
-          rateBucket.workspaceId,
-          rateBucket.workspaceKey,
-          rateBucket.key,
-        ],
-        set: {
-          count: sql`CASE WHEN ${rateBucket.windowExpiresAt} <= now() THEN 1 ELSE ${rateBucket.count} + 1 END`,
-          windowExpiresAt: sql`CASE WHEN ${rateBucket.windowExpiresAt} <= now() THEN excluded.window_expires_at ELSE ${rateBucket.windowExpiresAt} END`,
-        },
-      })
-      .returning({ count: rateBucket.count });
-    return row!.count;
+  const clientIp = readClientIp(c.req.raw.headers) ?? "unknown";
+  const buckets: Array<{ key: string; limit: number }> = [
+    {
+      key: account ? `${name}:account:${account}` : `${name}:${clientIp}`,
+      limit: rule.limit,
+    },
+  ];
+  if (sessionId && rule.sessionLimit) {
+    buckets.push({
+      key: `${name}:session:${sessionId}`,
+      limit: rule.sessionLimit,
+    });
+  }
+  if (rule.workspaceLimit) {
+    buckets.push({
+      key: `${name}:workspace`,
+      limit: rule.workspaceLimit,
+    });
+  }
+  const hit = await withQuillsAudience({ workspace }, async (db) => {
+    for (const bucket of buckets) {
+      const [row] = await db
+        .insert(rateBucket)
+        .values({
+          workspaceKey: "_",
+          key: bucket.key,
+          count: 1,
+          windowExpiresAt: sql`now() + make_interval(secs => ${rule.windowSeconds})`,
+        })
+        .onConflictDoUpdate({
+          target: [
+            rateBucket.workspaceId,
+            rateBucket.workspaceKey,
+            rateBucket.key,
+          ],
+          set: {
+            count: sql`CASE WHEN ${rateBucket.windowExpiresAt} <= now() THEN 1 ELSE ${rateBucket.count} + 1 END`,
+            windowExpiresAt: sql`CASE WHEN ${rateBucket.windowExpiresAt} <= now() THEN excluded.window_expires_at ELSE ${rateBucket.windowExpiresAt} END`,
+          },
+        })
+        .returning({
+          count: rateBucket.count,
+          expiresAt: rateBucket.windowExpiresAt,
+        });
+      if (row && row.count > bucket.limit) {
+        const retryAfter = Math.max(
+          1,
+          Math.ceil((row.expiresAt.getTime() - Date.now()) / 1000),
+        );
+        return { exceeded: true as const, retryAfter };
+      }
+    }
+    return { exceeded: false as const, retryAfter: 0 };
   }).catch((error) => {
     if (error instanceof QuillsWorkspaceUnavailable)
       throw new HTTPException(404, { message: "Workspace not found" });
     throw error;
   });
-  if (count > rule.limit)
+  if (hit.exceeded) {
+    c.header("Retry-After", String(hit.retryAfter));
     throw new HTTPException(429, {
       message: "Too many attempts, try again later",
     });
+  }
 }
 
 export type PortalAccessDecision =

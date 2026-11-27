@@ -138,6 +138,10 @@ export const conversations = quillsSchema
       // resolution-rate reporting: resolved-rate = count(end_reason IN
       // ('resolved','tracked_as_feedback')) / count(all ended EXCLUDING 'spam').
       endReason: text("end_reason"),
+      mergedIntoConversationId: typeIdColumnNullable("conversation")(
+        "merged_into_conversation_id",
+      ),
+      mergedAt: timestamp("merged_at", { withTimezone: true }),
       endNote: text("end_note"),
       // Which rule or classifier filed a spam-ended conversation (the
       // deterministic signals, the AI classifier, or an agent). App-layer

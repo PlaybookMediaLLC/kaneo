@@ -159,6 +159,38 @@ export const [submitQuillsWidgetCsat, submitQuillsCsat] = both((audience) =>
   onConversation(audience, () => ({ body: { rating: 4, comment: "Quick" } })),
 );
 
+export const [
+  submitQuillsWidgetResolutionFeedback,
+  submitQuillsResolutionFeedback,
+] = both((audience) =>
+  fixture({
+    seed: async (env) => {
+      const w = await world(env, audience);
+      const { assistantInvolvements } =
+        await import("../../../database/quills/schema/assistant");
+      await env.scoped(env.a, (db) =>
+        db.insert(assistantInvolvements).values({
+          conversationId: w.mine.conversationId,
+          triggeredBy: "first_touch",
+          status: "active",
+        }),
+      );
+      return w;
+    },
+    valid: (w) => ({
+      bearer: w.bearer,
+      params: { conversationId: w.mine.conversationId },
+      body: { resolved: true },
+    }),
+    foreign: (w) => ({ conversationId: w.foreign.conversationId }),
+    hidden,
+    ...(audience === "portal" && {
+      own,
+      probe: (env: ContractEnv, w: World) => snapshotOf(env, w.principalId),
+    }),
+  }),
+);
+
 /** A post by `author` (the workspace actor when absent), as a card's confirmation names. */
 const postIn = (env: ContractEnv, workspaceId: string, author?: string) =>
   env.scoped(workspaceId, async (db, actor) => {

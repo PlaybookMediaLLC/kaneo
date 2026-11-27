@@ -3478,7 +3478,12 @@
 			"startDate": "शुरू की तारीख",
 			"noDate": "कोई तारीख नहीं",
 			"dates": "तारीखें",
-			"project": "प्रोजेक्ट"
+			"project": "प्रोजेक्ट",
+			"churnRisk": "Churn risk",
+			"companiesCount": "{{count}} companies",
+			"customerContext": "Customer context",
+			"requestersCount": "{{count}} requesters",
+			"votesCount": "{{count}} votes"
 		},
 		"move": {
 			"title": "कार्य ले जाएँ",

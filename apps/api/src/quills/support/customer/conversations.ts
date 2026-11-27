@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { createId } from "@kaneo/ids";
 import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
 import {
@@ -7,11 +7,23 @@ import {
   responseTimestamp,
   z,
 } from "../../../openapi";
+import { assistantInvolvements } from "../../../database/quills/schema/assistant";
+import {
+  principal,
+  settings,
+  user as customer,
+} from "../../../database/quills/schema/auth";
 import {
   conversationMessages,
   conversations,
 } from "../../../database/quills/schema/conversation";
 import { files } from "../../../database/quills/schema/files";
+import { looksLikeSpam } from "../../feedback/content-checks";
+import {
+  challengeInputSchema,
+  enforceWidgetAntiSpam,
+  isTrustedSender,
+} from "../../framework/anti-spam";
 import { defineQuillsRoute } from "../../framework/define-route";
 import { createDownload } from "../../framework/files";
 import { widgetMetadata } from "../../portal/feedback/posts";
@@ -345,17 +357,25 @@ export function conversationRoutes(audience: Customer) {
     description:
       "Creates the conversation and its first message. A retry with the same idempotencyKey and text returns the first result; other text with that key is 409.",
     action: "create",
-    rateLimit: { limit: 20, windowSeconds: 600 },
+    rateLimit: { limit: widget ? 500 : 20, windowSeconds: 600 },
     body: z.object({
       content: messageText,
       idempotencyKey,
       /** The visitor's own uploads (POST /uploads, then /files), at most 10. */
       attachmentIds,
-      ...(widget && { metadata: messageMetadata }),
+      ...(widget && {
+        metadata: messageMetadata,
+        challenge: challengeInputSchema.optional(),
+      }),
     }),
     response: sent,
     responseDescription: "The new conversation and its first message",
-    errors: sendErrors,
+    errors: {
+      ...sendErrors,
+      ...(widget && {
+        403: "Anti-spam challenge required or failed, or origin/sender blocked",
+      }),
+    },
     event: (_input, result) =>
       !result.replayed && {
         type: "conversation.created",
@@ -363,9 +383,16 @@ export function conversationRoutes(audience: Customer) {
         entityId: result.conversation.id,
         payload: { messageId: result.message.id },
       },
-    handler: async ({ db, caller, body, request }) => {
+    handler: async ({ db, workspaceId, caller, body, request }) => {
       await requireSurface(db, audience, caller, "messenger");
       const me = caller.principalId!;
+      const [cfgRow] = await db
+        .select({
+          widgetConfig: settings.widgetConfig,
+          spamFilterConfig: settings.spamFilterConfig,
+        })
+        .from(settings)
+        .limit(1);
       const receipt = await claimReceipt(
         db,
         me,
@@ -378,6 +405,32 @@ export function conversationRoutes(audience: Customer) {
         },
       );
       if (receipt.claimed) {
+        if (widget) {
+          const bodyChallenge = (
+            body as { challenge?: z.output<typeof challengeInputSchema> }
+          ).challenge;
+          await enforceWidgetAntiSpam(db, {
+            workspaceId,
+            widgetConfig: cfgRow?.widgetConfig,
+            kind: "conversation",
+            ip: request.ip,
+            sessionId: me,
+            challenge: bodyChallenge ?? request.challenge,
+          });
+        }
+        const [senderRow] = await db
+          .select({
+            contactEmail: principal.contactEmail,
+            userEmail: customer.email,
+          })
+          .from(principal)
+          .leftJoin(customer, eq(customer.id, principal.userId))
+          .where(eq(principal.id, me))
+          .limit(1);
+        const senderEmail = senderRow?.userEmail ?? senderRow?.contactEmail;
+        const quarantined =
+          !isTrustedSender(cfgRow?.spamFilterConfig, senderEmail) &&
+          looksLikeSpam(body.content);
         const [created] = await db
           .insert(conversations)
           .values({
@@ -385,7 +438,12 @@ export function conversationRoutes(audience: Customer) {
             visitorPrincipalId: me,
             channel: "messenger",
             source: widget ? "widget" : "portal",
-            status: "open",
+            status: quarantined ? "closed" : "open",
+            ...(quarantined && {
+              endReason: "spam",
+              spamReason: "heuristic",
+              resolvedAt: new Date(),
+            }),
             subject: body.content.slice(0, 140),
           })
           .returning();
@@ -398,7 +456,9 @@ export function conversationRoutes(audience: Customer) {
           metadataOf(body),
         );
         await rememberSender(db, created!.id, request.ip);
-        await sendAwayReply(db, created!.id);
+        if (!quarantined) {
+          await sendAwayReply(db, created!.id);
+        }
         await attachMessageFiles(
           db,
           me,
@@ -530,6 +590,21 @@ export function conversationRoutes(audience: Customer) {
           body.content,
           metadataOf(body),
         );
+        // Honest resolution tracking (#302): a customer follow-up after an assumed or confirmed
+        // assistant resolution marks the involvement as reopened so resolution rates stay truthful.
+        await db
+          .update(assistantInvolvements)
+          .set({ reopenedAfterResolutionAt: new Date() })
+          .where(
+            and(
+              eq(assistantInvolvements.conversationId, conversation.id),
+              inArray(assistantInvolvements.status, [
+                "resolved_confirmed",
+                "resolved_assumed",
+              ]),
+              isNull(assistantInvolvements.reopenedAfterResolutionAt),
+            ),
+          );
         await sendAwayReply(db, target.id);
         await attachMessageFiles(
           db,
@@ -858,6 +933,97 @@ export function conversationRoutes(audience: Customer) {
     },
   });
 
+  const resolutionFeedback = defineQuillsRoute({
+    audience,
+    ...writer,
+    method: "post",
+    path: `${base}/conversations/{conversationId}/resolution-feedback`,
+    operationId: name(
+      "submitQuillsWidgetResolutionFeedback",
+      "submitQuillsResolutionFeedback",
+    ),
+    summary: `Confirm whether the assistant resolved a conversation of ${who}`,
+    description:
+      "Records explicit customer confirmation (resolved: true -> resolved_confirmed) or rejection (resolved: false -> handed_off with reopenedAfterResolutionAt stamped).",
+    action: "update",
+    rateLimit: { limit: 30, windowSeconds: 600 },
+    params: conversationParams,
+    body: z.object({ resolved: z.boolean() }),
+    response: z.object({
+      involvementId: z.string(),
+      status: z.enum([
+        "active",
+        "handed_off",
+        "resolved_confirmed",
+        "resolved_assumed",
+        "abandoned",
+      ]),
+    }),
+    responseDescription: "Updated assistant involvement status",
+    errors,
+    event: (_input, result) => ({
+      type: "assistant.resolution_feedback_recorded",
+      entityType: "assistant_involvement",
+      entityId: result.involvementId,
+      payload: { status: result.status },
+    }),
+    handler: async ({ db, caller, params, body }) => {
+      await requireSurface(db, audience, caller, "messenger");
+      const conversation = await ownConversation(
+        db,
+        caller.principalId,
+        params.conversationId,
+        true,
+      );
+      const [latest] = await db
+        .select({
+          id: assistantInvolvements.id,
+          status: assistantInvolvements.status,
+          endedAt: assistantInvolvements.endedAt,
+        })
+        .from(assistantInvolvements)
+        .where(eq(assistantInvolvements.conversationId, conversation.id))
+        .orderBy(desc(assistantInvolvements.createdAt))
+        .limit(1)
+        .for("update");
+      if (!latest) throw notFound("Assistant involvement");
+      const now = new Date();
+      if (body.resolved) {
+        await db
+          .update(assistantInvolvements)
+          .set({
+            status: "resolved_confirmed",
+            endedAt: latest.endedAt ?? now,
+          })
+          .where(eq(assistantInvolvements.id, latest.id));
+        return {
+          involvementId: latest.id,
+          status: "resolved_confirmed" as const,
+        };
+      }
+      await db
+        .update(assistantInvolvements)
+        .set({
+          status: "handed_off",
+          handoffReason: "explicit_request",
+          endedAt: latest.endedAt ?? now,
+          reopenedAfterResolutionAt: now,
+        })
+        .where(eq(assistantInvolvements.id, latest.id));
+      if (conversation.endReason !== "spam") {
+        await db
+          .update(conversations)
+          .set({
+            status: "open",
+            waitingSince: sql`coalesce(${conversations.waitingSince}, now())`,
+            updatedAt: now,
+          })
+          .where(eq(conversations.id, conversation.id));
+      }
+      return { involvementId: latest.id, status: "handed_off" as const };
+    },
+  });
+
   return apiRouter()
     .openapi(...list)
     .openapi(...unread)
@@ -870,5 +1036,6 @@ export function conversationRoutes(audience: Customer) {
     .openapi(...markRead)
     .openapi(...typing)
     .openapi(...csat)
-    .openapi(...confirmCard);
+    .openapi(...confirmCard)
+    .openapi(...resolutionFeedback);
 }

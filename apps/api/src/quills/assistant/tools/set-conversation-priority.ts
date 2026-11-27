@@ -13,6 +13,18 @@ export const setConversationPriority = defineWriteTool({
   approval: "required",
   available: (context) => Boolean(context.conversationId),
   summary: (args) => `Set the conversation priority to ${args.priority}`,
+  previewDiff: (conversation, args) => ({
+    targetType: "conversation",
+    targetId: conversation?.id ?? null,
+    fields: [
+      {
+        field: "priority",
+        before: conversation?.priority ?? null,
+        after: args.priority,
+      },
+    ],
+    recordCount: 1,
+  }),
   execute: async (db, actor, conversation, args) =>
     (await setPriority(db, actor, conversation, args.priority))
       ? conversationChange(conversation, "conversation.priority_changed", {

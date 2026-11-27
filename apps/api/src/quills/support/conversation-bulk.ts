@@ -1,8 +1,10 @@
-import { asc, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { TypeId } from "@kaneo/ids";
 import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
 import { apiRouter, z, type BaseVariables } from "../../openapi";
+import { principal } from "../../database/quills/schema/auth";
 import { conversations } from "../../database/quills/schema/conversation";
+import { spamBlocks } from "../../database/quills/schema/spam-blocks";
 import { defineQuillsRoute, type Database } from "../framework/define-route";
 import { memberUserIds } from "../framework/platform-reads";
 import {
@@ -17,6 +19,7 @@ import {
   assignAgent,
   assignTeam,
   attachTag,
+  endConversation,
   requireClosable,
   resolveAssignee,
   resolveLiveTag,
@@ -69,6 +72,10 @@ const action = z.discriminatedUnion("type", [
   z.object({ type: z.literal("close") }),
   z.object({ type: z.literal("reopen") }),
   z.object({ type: z.literal("restore_spam") }),
+  z.object({
+    type: z.literal("mark_spam"),
+    blockVisitors: z.boolean().optional(),
+  }),
 ]);
 
 const result = z.object({
@@ -145,6 +152,47 @@ const bulkUpdate = defineQuillsRoute({
         break;
       case "restore_spam":
         apply = (c) => restoreFromSpam(db, c);
+        break;
+      case "mark_spam":
+        apply = async (c) => {
+          let changed = await endConversation(db, c, "spam", null);
+          if (step.blockVisitors && c.visitorPrincipalId) {
+            const [visitor] = await db
+              .select({ id: principal.id })
+              .from(principal)
+              .where(
+                and(
+                  eq(principal.id, c.visitorPrincipalId),
+                  isNull(principal.kaneoUserId),
+                ),
+              )
+              .limit(1);
+            if (visitor) {
+              await db
+                .insert(spamBlocks)
+                .values({
+                  kind: "visitor_principal",
+                  value: visitor.id,
+                  reason: "Marked as spam in bulk action",
+                  createdByPrincipalId: actor.principalId,
+                  expiresAt: sql`now() + interval '30 days'`,
+                })
+                .onConflictDoUpdate({
+                  target: [
+                    spamBlocks.workspaceId,
+                    spamBlocks.kind,
+                    spamBlocks.value,
+                  ],
+                  set: {
+                    expiresAt: sql`now() + interval '30 days'`,
+                    createdByPrincipalId: actor.principalId,
+                  },
+                });
+              changed = true;
+            }
+          }
+          return changed;
+        };
         break;
     }
     const changedIds: string[] = [];

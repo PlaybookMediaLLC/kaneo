@@ -365,6 +365,7 @@ const acceptAsVote = defineQuillsRoute({
       signal.principalId,
       actor,
       source,
+      signal.id,
     );
     return {
       source,

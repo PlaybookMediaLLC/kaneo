@@ -1,4 +1,4 @@
-import { and, count, gte, inArray, lt, sql, sum } from "drizzle-orm";
+import { and, count, gte, inArray, isNotNull, lt, sql, sum } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { apiRouter, z, type BaseVariables } from "../../openapi";
 import { aiUsageLog } from "../../database/quills/schema/ai-usage-log";
@@ -47,9 +47,9 @@ const performance = defineQuillsRoute({
   method: "get",
   path: "/assistant/analytics/performance",
   operationId: "getQuillsQuinnPerformance",
-  summary: "Get the customer agent's involvement and resolution counts",
+  summary: "Get the customer agent's involvement and honest resolution counts",
   description:
-    "Involvements started in the range, by status, and the tool calls that succeeded.",
+    "Involvements started in the range, by status, with confirmed resolutions separated from assumed-by-silence resolutions and reopen-after-resolution counts.",
   action: "read",
   query: range,
   response: z.object({
@@ -61,6 +61,11 @@ const performance = defineQuillsRoute({
       >,
     ),
     resolutionRate: z.number(),
+    confirmedResolutions: z.number(),
+    assumedResolutions: z.number(),
+    reopenedAfterResolution: z.number(),
+    confirmedResolutionRate: z.number(),
+    assumedResolutionRate: z.number(),
     succeededToolCalls: z.number(),
   }),
   responseDescription: "The counts",
@@ -78,6 +83,14 @@ const performance = defineQuillsRoute({
       .groupBy(assistantInvolvements.status);
     const byStatus = tally(INVOLVEMENT, rows);
     const involvements = rows.reduce((total, row) => total + row.n, 0);
+    const reopenedAfterResolution = await db.$count(
+      assistantInvolvements,
+      and(
+        isNotNull(assistantInvolvements.reopenedAfterResolutionAt),
+        gte(assistantInvolvements.createdAt, start),
+        lt(assistantInvolvements.createdAt, end),
+      ),
+    );
     const succeededToolCalls = await db.$count(
       assistantToolCalls,
       and(
@@ -86,12 +99,22 @@ const performance = defineQuillsRoute({
         lt(assistantToolCalls.createdAt, end),
       ),
     );
+    const confirmedResolutions = byStatus.resolved_confirmed;
+    const assumedResolutions = byStatus.resolved_assumed;
     return {
       involvements,
       byStatus,
       resolutionRate: involvements
-        ? (byStatus.resolved_confirmed + byStatus.resolved_assumed) /
-          involvements
+        ? (confirmedResolutions + assumedResolutions) / involvements
+        : 0,
+      confirmedResolutions,
+      assumedResolutions,
+      reopenedAfterResolution,
+      confirmedResolutionRate: involvements
+        ? confirmedResolutions / involvements
+        : 0,
+      assumedResolutionRate: involvements
+        ? assumedResolutions / involvements
         : 0,
       succeededToolCalls,
     };

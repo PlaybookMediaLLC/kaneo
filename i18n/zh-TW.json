@@ -3424,7 +3424,12 @@
 			"startDate": "開始日期",
 			"noDate": "無日期",
 			"dates": "日期",
-			"project": "專案"
+			"project": "專案",
+			"churnRisk": "Churn risk",
+			"companiesCount": "{{count}} companies",
+			"customerContext": "Customer context",
+			"requestersCount": "{{count}} requesters",
+			"votesCount": "{{count}} votes"
 		},
 		"move": {
 			"title": "移動任務",

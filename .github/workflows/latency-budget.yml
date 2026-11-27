@@ -1,0 +1,23 @@
+name: Latency Budget
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  latency-budget:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify widget size & latency budgets
+        run: |
+          pnpm --filter @quills/widget build
+          pnpm --filter @quills/widget check:size
+      - name: Verify latency-budget script syntax
+        run: node --check tests/e2e/latency-budget.test.mjs

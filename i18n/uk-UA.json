@@ -3586,7 +3586,12 @@
 			"startDate": "Дата початку",
 			"noDate": "Немає дати",
 			"dates": "Дати",
-			"project": "Проєкт"
+			"project": "Проєкт",
+			"churnRisk": "Churn risk",
+			"companiesCount": "{{count}} companies",
+			"customerContext": "Customer context",
+			"requestersCount": "{{count}} requesters",
+			"votesCount": "{{count}} votes"
 		},
 		"move": {
 			"title": "Перемістити завдання",

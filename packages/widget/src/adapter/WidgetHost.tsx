@@ -1,5 +1,5 @@
 import { removeAvatar, squareAvatar, uploadAvatar } from "./avatar.js";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { WidgetView } from "../ui/WidgetView.js";
 import { ApiError, createApi } from "./api.js";
 import {
@@ -8,6 +8,7 @@ import {
   type ParentMessage,
 } from "./bridge.js";
 import { loadArticle, type Surfaces } from "./load.js";
+import { writes } from "./writes.js";
 import { useWidgetSurvey } from "./surveys.js";
 import { useWidgetActivity } from "./activity.js";
 import { useWidgetContactEmail } from "./contact-email.js";
@@ -45,6 +46,8 @@ function navigationFor(target: Target):
   | null {
   if (target.postId) return { tab: "feedback", detail: target.postId };
   if (target.articleId) return { tab: "help", article: target.articleId };
+  if (target.conversationId)
+    return { tab: "messages", detail: target.conversationId };
   switch (target.view) {
     case "new-post": {
       const draft = [target.title, target.body].filter(Boolean).join("\n");
@@ -195,12 +198,64 @@ export function WidgetHost({
     const parent = createParentBridge((message) => handle.current(message));
     bridge.current = parent;
     parent.ready();
-    return () => parent.dispose();
+    // Consume signed email continuation fragment (#319) and scrub it from URL history immediately.
+    const hash = window.location.hash;
+    const resumeMatch = /(?:^#|&)quills_resume=([^&]+)/.exec(hash);
+    const resumeAbort = new AbortController();
+    if (resumeMatch?.[1]) {
+      const resumeToken = decodeURIComponent(resumeMatch[1]);
+      try {
+        window.history.replaceState(
+          null,
+          "",
+          `${window.location.pathname}${window.location.search}`,
+        );
+      } catch {
+        // ignore sandboxed history errors
+      }
+      void api
+        .resumeConversation(resumeToken, resumeAbort.signal)
+        .then((res) => {
+          setActive(true);
+          visitor.resume(res.sessionToken);
+          setPending(
+            navigationFor({
+              view: "messages",
+              conversationId: res.conversationId,
+            }),
+          );
+        })
+        .catch(() => {
+          // expired or invalid token falls back silently
+        });
+    }
+    return () => {
+      resumeAbort.abort();
+      parent.dispose();
+    };
     // The page mounts once per iframe load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const ready = typeof config === "object" && config !== null;
+  // Keep visitor presence warm while the messenger is open & visible so offline emails pause (#319).
+  useEffect(() => {
+    if (!active || !ready || !visitor.session || !config.surfaces.messenger) {
+      return;
+    }
+    const streamKey = `widget-${Math.random().toString(36).slice(2, 10)}`;
+    const abort = new AbortController();
+    const beat = () => {
+      if (document.visibilityState === "hidden") return;
+      void api.heartbeatPresence(streamKey, abort.signal).catch(() => {});
+    };
+    beat();
+    const timer = window.setInterval(beat, 25_000);
+    return () => {
+      window.clearInterval(timer);
+      abort.abort();
+    };
+  }, [active, ready, visitor.session, config, api]);
   const data = useWidgetData({
     api,
     session: ready ? visitor.session : null,
@@ -297,6 +352,33 @@ export function WidgetHost({
     document.documentElement.setAttribute("dir", dir);
   }, [dir]);
 
+  const helpWrites = useMemo(() => writes(api), [api]);
+  const onSearchHelp = useCallback(
+    async (queryText: string, signal?: AbortSignal) => {
+      const res = await helpWrites.searchHelp(
+        queryText,
+        locale ?? undefined,
+        signal,
+      );
+      return {
+        queryId: res.queryId,
+        articles: res.articles.map((item) => ({
+          id: item.id,
+          title: item.title,
+          category: item.category.name,
+          body: item.snippet || item.description || "",
+        })),
+      };
+    },
+    [helpWrites, locale],
+  );
+  const onSearchHelpClick = useCallback(
+    (queryId: string, articleId: string) => {
+      void helpWrites.recordHelpSearchClick(queryId, articleId).catch(() => {});
+    },
+    [helpWrites],
+  );
+
   const close = () => bridge.current?.post({ type: "quackback:close" });
   if (config === "off") return <Unavailable onClose={close} />;
   return (
@@ -342,6 +424,8 @@ export function WidgetHost({
         replyTime: config.replyTime ?? undefined,
         greeting: config.greeting,
       })}
+      onSearchHelp={onSearchHelp}
+      onSearchHelpClick={onSearchHelpClick}
       {...data}
       // Images go with feedback and messages, from a visitor that the host app identified: the
       // upload routes refuse an anonymous session (RFC 0003 feature 6). The camera is feedback only.

@@ -4,4 +4,5 @@ export * from "./team-counts.fixture";
 export * from "./visitor-analytics.fixture";
 export * from "../transfer/runs/data-runs.fixture";
 export * from "../transfer/runs/export-runs.fixture";
+export * from "../transfer/runs/full-export.fixture";
 export * from "../transfer/runs/import-runs.fixture";

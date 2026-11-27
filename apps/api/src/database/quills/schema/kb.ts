@@ -164,6 +164,13 @@ export const helpCenterArticles = quillsSchema
       embeddingUpdatedAt: timestamp("embedding_updated_at", {
         withTimezone: true,
       }),
+      // Freshness ownership & staleness tracking (#314).
+      ownerId: typeIdColumnNullable("principal")("owner_id"),
+      reviewBy: timestamp("review_by", { withTimezone: true }),
+      lastReviewedAt: timestamp("last_reviewed_at", { withTimezone: true }),
+      staleReason: text("stale_reason"),
+      staleDetails: text("stale_details"),
+      staleFlaggedAt: timestamp("stale_flagged_at", { withTimezone: true }),
       createdAt: timestamp("created_at", { withTimezone: true })
         .defaultNow()
         .notNull(),
@@ -176,6 +183,15 @@ export const helpCenterArticles = quillsSchema
       uniqueIndex("kb_articles_slug_idx").on(table.workspaceId, table.slug),
       uniqueIndex("kb_articles_url_id_idx").on(table.workspaceId, table.urlId),
       index("kb_articles_principal_id_idx").on(table.principalId),
+      index("kb_articles_owner_id_idx")
+        .on(table.workspaceId, table.ownerId)
+        .where(sql`${table.ownerId} IS NOT NULL`),
+      index("kb_articles_stale_flagged_idx")
+        .on(table.workspaceId, table.staleFlaggedAt)
+        .where(sql`${table.staleFlaggedAt} IS NOT NULL`),
+      index("kb_articles_review_by_idx")
+        .on(table.workspaceId, table.reviewBy)
+        .where(sql`${table.reviewBy} IS NOT NULL`),
       index("kb_articles_published_at_idx").on(table.publishedAt),
       index("kb_articles_deleted_at_idx").on(table.deletedAt),
       index("kb_articles_category_published_idx").on(
@@ -207,6 +223,50 @@ export const helpCenterArticles = quillsSchema
         columns: [table.workspaceId, table.principalId],
         foreignColumns: [principal.workspaceId, principal.id],
       }).onDelete("restrict"),
+      foreignKey({
+        name: "kb_articles_owner_id_fk",
+        columns: [table.workspaceId, table.ownerId],
+        foreignColumns: [principal.workspaceId, principal.id],
+      }).onDelete("set null"),
+      workspacePolicy(table.workspaceId),
+    ],
+  )
+  .enableRLS();
+
+/** Links a KB article to a changelog entry, feature post, or external product URL (#314). */
+export const kbArticleLinks = quillsSchema
+  .table(
+    "kb_article_links",
+    {
+      workspaceId: workspaceColumn(),
+      id: uuid("id").defaultRandom().notNull(),
+      articleId: typeIdColumn("article")("article_id").notNull(),
+      targetKind: text("target_kind")
+        .$type<"changelog" | "post" | "url">()
+        .notNull(),
+      targetId: text("target_id").notNull(),
+      createdAt: timestamp("created_at", { withTimezone: true })
+        .defaultNow()
+        .notNull(),
+    },
+    (table) => [
+      primaryKey({ columns: [table.workspaceId, table.id] }),
+      uniqueIndex("kb_article_links_ws_article_target_uq").on(
+        table.workspaceId,
+        table.articleId,
+        table.targetKind,
+        table.targetId,
+      ),
+      index("kb_article_links_ws_target_idx").on(
+        table.workspaceId,
+        table.targetKind,
+        table.targetId,
+      ),
+      foreignKey({
+        name: "kb_article_links_article_fk",
+        columns: [table.workspaceId, table.articleId],
+        foreignColumns: [helpCenterArticles.workspaceId, helpCenterArticles.id],
+      }).onDelete("cascade"),
       workspacePolicy(table.workspaceId),
     ],
   )
@@ -319,6 +379,9 @@ export const helpCenterSearchQueries = quillsSchema
       normalizedQuery: text("normalized_query").notNull(),
       locale: text("locale").notNull(),
       resultsCount: integer("results_count").notNull(),
+      // Click-through tracking for search quality insights (#315).
+      clickedArticleId: typeIdColumnNullable("article")("clicked_article_id"),
+      clickedAt: timestamp("clicked_at", { withTimezone: true }),
       createdAt: timestamp("created_at", { withTimezone: true })
         .defaultNow()
         .notNull(),
@@ -327,6 +390,30 @@ export const helpCenterSearchQueries = quillsSchema
       // The admin aggregation's time window and retention read
       // kb_search_queries_workspace_created_idx (schema-ops.ts).
       primaryKey({ columns: [table.workspaceId, table.id] }),
+      workspacePolicy(table.workspaceId),
+    ],
+  )
+  .enableRLS();
+
+/** Workspace-configured synonym groups expanding KB hybrid search queries (#315). */
+export const kbSearchSynonyms = quillsSchema
+  .table(
+    "kb_search_synonyms",
+    {
+      workspaceId: workspaceColumn(),
+      id: uuid("id").defaultRandom().notNull(),
+      term: text("term").notNull(),
+      synonyms: jsonb("synonyms").$type<string[]>().notNull().default([]),
+      createdAt: timestamp("created_at", { withTimezone: true })
+        .defaultNow()
+        .notNull(),
+    },
+    (table) => [
+      primaryKey({ columns: [table.workspaceId, table.id] }),
+      uniqueIndex("kb_search_synonyms_ws_term_uq").on(
+        table.workspaceId,
+        sql`lower(${table.term})`,
+      ),
       workspacePolicy(table.workspaceId),
     ],
   )

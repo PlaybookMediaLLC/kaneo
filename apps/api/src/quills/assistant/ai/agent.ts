@@ -12,7 +12,7 @@ import {
   type ToolSet,
 } from "ai";
 import { usageOf } from "./calls";
-import { aiConfig } from "./config";
+import { aiConfig, type AiConfig } from "./config";
 import { AiError, toAiError } from "./errors";
 import { toModelMessages } from "./messages";
 import { languageModel } from "./registry";
@@ -68,10 +68,12 @@ export async function runToolLoop(input: {
   json?: boolean;
   /** Max concurrent tool calls in one step; defaults to 1 (sequential for write-capable loops). */
   toolCallConcurrency?: number;
+  /** Optional workspace BYOK / degraded-model config override (#302). */
+  configOverride?: AiConfig;
   onStep: (usage: Usage) => void;
   onDenied: (name: string, args: unknown) => void;
 }): Promise<string | null> {
-  const config = aiConfig();
+  const config = input.configOverride ?? aiConfig();
   if (!config) throw new AiError("not_configured");
   const role = input.role ?? "deep";
   let calls = 0;

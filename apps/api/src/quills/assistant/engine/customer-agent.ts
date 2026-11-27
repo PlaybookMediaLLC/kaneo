@@ -17,6 +17,7 @@ import { runToolLoop, type LoopTool } from "../ai/agent";
 import { repairJson } from "../ai/repair";
 import { checkArgs } from "../connector-tools";
 import { AiError, aiConfig, embed, untrusted } from "../provider";
+import type { AiConfig } from "../ai/config";
 import { logUsage, type UsageEntry } from "../runs";
 import { readConfig } from "../settings";
 import {
@@ -71,11 +72,12 @@ async function vectorOf(
   text: string,
   usage: UsageEntry[],
   state: { failed: boolean },
+  configOverride?: AiConfig,
 ): Promise<Near | null> {
-  const model = aiConfig()?.embeddingModel;
+  const model = (configOverride ?? aiConfig())?.embeddingModel;
   if (!model || state.failed) return null;
   try {
-    const result = await embed([text], EMBED_MS);
+    const result = await embed([text], EMBED_MS, configOverride);
     usage.push({
       step: "customer_agent_search",
       callType: "embedding",
@@ -93,7 +95,6 @@ async function vectorOf(
 
 /** conversation.created and message.created: answers the customer's newest message. */
 export const answerCustomer: Work = async (workspaceId, event) => {
-  if (!aiConfig()) return nothing;
   const payload = event.payload as Record<string, string>;
   const messageId =
     event.type === "conversation.created" ? payload.messageId : event.entityId;
@@ -122,9 +123,26 @@ export const answerCustomer: Work = async (workspaceId, event) => {
       !conversation ||
       conversation.channel !== "messenger" ||
       conversation.status !== "open" ||
+      conversation.endReason === "spam" ||
       conversation.assignedAgentPrincipalId
     )
       return null;
+    if (conversation.visitorPrincipalId) {
+      const { principal } =
+        await import("../../../database/quills/schema/auth");
+      const { isSpamBlocked } = await import("../../framework/anti-spam");
+      const [visitor] = await db
+        .select({ blockedAt: principal.blockedAt })
+        .from(principal)
+        .where(eq(principal.id, conversation.visitorPrincipalId))
+        .limit(1);
+      if (visitor?.blockedAt) return null;
+      const blocked = await isSpamBlocked(db, {
+        principalId: conversation.visitorPrincipalId,
+        email: conversation.visitorEmail,
+      });
+      if (blocked.blocked) return null;
+    }
     const [involvement] = await db
       .select({
         id: assistantInvolvements.id,
@@ -155,6 +173,16 @@ export const answerCustomer: Work = async (workspaceId, event) => {
         .limit(TRANSCRIPT)
     ).reverse();
     const guidance = await loadGuidance(db, "agent");
+    const { checkAiBudget, resolveWorkspaceAiConfig } =
+      await import("../budget");
+    const budgetCheck = await checkAiBudget(db);
+    const resolvedAiConfig = await resolveWorkspaceAiConfig(
+      db,
+      budgetCheck.degradedMode === "cheaper_model"
+        ? budgetCheck.cheaperModel
+        : null,
+    );
+    if (!resolvedAiConfig) return null;
     return {
       config,
       conversation,
@@ -162,12 +190,90 @@ export const answerCustomer: Work = async (workspaceId, event) => {
       question: message.content,
       transcript,
       guidance,
+      budgetCheck,
+      resolvedAiConfig,
       // At most one proposed request per conversation.
       cardOffered: transcript.some((row) => row.metadata?.feedbackCard),
     };
   });
   if (!read) return nothing;
-  const { config, conversation, involvement, question, transcript } = read;
+  const {
+    config,
+    conversation,
+    involvement,
+    question,
+    transcript,
+    budgetCheck,
+    resolvedAiConfig,
+  } = read;
+  if (budgetCheck.degradedMode === "pause") {
+    return async (db) => {
+      const [current] = await db
+        .select({
+          status: conversations.status,
+          assignee: conversations.assignedAgentPrincipalId,
+        })
+        .from(conversations)
+        .where(eq(conversations.id, conversation.id))
+        .for("update");
+      const [latest] = await db
+        .select({
+          id: assistantInvolvements.id,
+          status: assistantInvolvements.status,
+        })
+        .from(assistantInvolvements)
+        .where(eq(assistantInvolvements.conversationId, conversation.id))
+        .orderBy(desc(assistantInvolvements.createdAt))
+        .limit(1);
+      if (
+        current?.status !== "open" ||
+        current.assignee ||
+        (latest && latest.status !== "active")
+      ) {
+        return;
+      }
+      const now = new Date();
+      if (latest) {
+        await db
+          .update(assistantInvolvements)
+          .set({
+            status: "handed_off",
+            handoffReason: "capability_limit",
+            endedAt: now,
+          })
+          .where(eq(assistantInvolvements.id, latest.id));
+      } else {
+        await db.insert(assistantInvolvements).values({
+          conversationId: conversation.id,
+          triggeredBy: "first_touch",
+          status: "handed_off",
+          handoffReason: "capability_limit",
+          endedAt: now,
+        });
+      }
+      await systemNotice(
+        db,
+        conversation.id,
+        `${config.identity.name} is paused because the workspace AI budget cap was reached (${budgetCheck.reason ?? "budget_limit"}). Handing off to the team.`,
+        { internal: true, event: { kind: "assistant_handoff" } },
+      );
+      await db
+        .update(conversations)
+        .set({
+          waitingSince: sql`coalesce(${conversations.waitingSince}, now())`,
+        })
+        .where(eq(conversations.id, conversation.id));
+      await recordQuillsChange(db, null, {
+        type: "conversation.updated",
+        entityType: "conversation",
+        entityId: conversation.id,
+        payload: {
+          conversationId: conversation.id,
+          reason: "ai_budget_paused",
+        },
+      });
+    };
+  }
   const voice = config.agent.voice;
   const knowledge = config.agent.knowledge;
   const usage: UsageEntry[] = [];
@@ -178,7 +284,7 @@ export const answerCustomer: Work = async (workspaceId, event) => {
   const embedding = { failed: false };
   // Load read-only connector tools in parallel with embedding the initial question.
   const [near, connectorMap] = await Promise.all([
-    vectorOf(question, usage, embedding),
+    vectorOf(question, usage, embedding, resolvedAiConfig),
     loadConnectorTools(workspaceId, "agent"),
   ]);
   const sources = await search(question, near);
@@ -201,7 +307,7 @@ export const answerCustomer: Work = async (workspaceId, event) => {
         if (!parsed.success) return "Failed: the arguments are not valid.";
         const found = await search(
           parsed.data.query,
-          await vectorOf(parsed.data.query, usage, embedding),
+          await vectorOf(parsed.data.query, usage, embedding, resolvedAiConfig),
         );
         for (const source of found) seen.set(source.id, source);
         // Crawled pages are third-party text: inside the data fence, as in the first prompt.
@@ -253,6 +359,8 @@ export const answerCustomer: Work = async (workspaceId, event) => {
   const text = await runToolLoop({
     json: true,
     tools,
+    configOverride: resolvedAiConfig,
+    role: budgetCheck.degradedMode === "cheaper_model" ? "fast" : undefined,
     maxSteps: MAX_STEPS,
     maxCallsPerStep: 3,
     toolCallConcurrency: 3,
@@ -263,6 +371,7 @@ export const answerCustomer: Work = async (workspaceId, event) => {
       usage.push({
         step: "customer_agent",
         callType: "chat_completion",
+        conversationId: conversation.id,
         usage: step,
       }),
     onDenied: () => undefined,
@@ -356,6 +465,7 @@ export const answerCustomer: Work = async (workspaceId, event) => {
           .returning({ id: assistantInvolvements.id })
       )[0]!.id;
     const text = reply.value.reply.trim();
+    const isBudgetDraft = budgetCheck.degradedMode === "draft_mode";
     if (text) {
       const [message] = await db
         .insert(conversationMessages)
@@ -363,27 +473,31 @@ export const answerCustomer: Work = async (workspaceId, event) => {
           conversationId: conversation.id,
           principalId: null,
           senderType: "agent",
-          content: text,
+          isInternal: isBudgetDraft,
+          content: isBudgetDraft ? `[AI Budget Draft]\n${text}` : text,
           citations: citations.length ? citations : null,
           metadata: {
-            assistantReply: true,
-            ...(card && { feedbackCard: card }),
-          },
+            assistantReply: !isBudgetDraft,
+            ...(isBudgetDraft && { assistantBudgetDraft: true }),
+            ...(card && !isBudgetDraft && { feedbackCard: card }),
+          } as never,
         })
         .returning({
           id: conversationMessages.id,
           createdAt: conversationMessages.createdAt,
         });
-      await db
-        .update(conversations)
-        .set({
-          lastMessageAt: message!.createdAt,
-          lastMessagePreview: preview(text),
-          updatedAt: message!.createdAt,
-        })
-        .where(eq(conversations.id, conversation.id));
+      if (!isBudgetDraft) {
+        await db
+          .update(conversations)
+          .set({
+            lastMessageAt: message!.createdAt,
+            lastMessagePreview: preview(text),
+            updatedAt: message!.createdAt,
+          })
+          .where(eq(conversations.id, conversation.id));
+      }
       await recordQuillsChange(db, null, {
-        type: "message.created",
+        type: isBudgetDraft ? "message.note_created" : "message.created",
         entityType: "conversation_message",
         entityId: message!.id,
         payload: { conversationId: conversation.id, source: "assistant" },
@@ -406,13 +520,66 @@ export const answerCustomer: Work = async (workspaceId, event) => {
       })
       .where(eq(assistantInvolvements.id, involvementId));
     if (reply.value.handoff) {
-      // The private handoff note: why, and what the customer asked, for the teammate who takes over.
-      await systemNotice(
-        db,
-        conversation.id,
-        `${config.identity.name} handed this conversation to the team (${reply.value.handoff.replace(/_/g, " ")}). The customer asked: "${question.slice(0, 500)}"`,
-        { internal: true, event: { kind: "assistant_handoff" } },
-      );
+      // Structured handoff summary (#309): committed as an internal note with metadata.handoff
+      // inside the same transaction BEFORE teammates are notified.
+      const visitorLines = read.transcript
+        .filter((m) => m.senderType === "visitor")
+        .map((m) => m.content.trim())
+        .filter(Boolean);
+      const agentLines = read.transcript
+        .filter((m) => m.senderType === "agent" && m.metadata?.assistantReply)
+        .map((m) => m.content.trim())
+        .filter(Boolean);
+      const handoffData = {
+        reason: reply.value.handoff,
+        issueSummary: (visitorLines[0] ?? question).slice(0, 300),
+        detailsAlreadyProvided: visitorLines
+          .slice(-4)
+          .map((l) => l.slice(0, 240)),
+        stepsAlreadyTried: agentLines.slice(-3).map((l) => l.slice(0, 240)),
+        suggestedNextAction:
+          reply.value.handoff === "explicit_request"
+            ? "Customer asked for a human teammate; respond directly using the details above without asking them to repeat."
+            : "Review the customer's details and prior assistant replies, then follow up.",
+      };
+      const noteText = [
+        `AI Handoff (${handoffData.reason})`,
+        `Issue: ${handoffData.issueSummary}`,
+        handoffData.detailsAlreadyProvided.length
+          ? `Details already provided:\n- ${handoffData.detailsAlreadyProvided.join("\n- ")}`
+          : null,
+        handoffData.stepsAlreadyTried.length
+          ? `Already tried:\n- ${handoffData.stepsAlreadyTried.join("\n- ")}`
+          : null,
+        `Next: ${handoffData.suggestedNextAction}`,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+      const [handoffNote] = await db
+        .insert(conversationMessages)
+        .values({
+          conversationId: conversation.id,
+          principalId: null,
+          senderType: "agent",
+          isInternal: true,
+          content: noteText,
+          metadata: {
+            assistantHandoff: true,
+            handoff: handoffData,
+          } as never,
+        })
+        .returning({ id: conversationMessages.id });
+      if (handoffNote) {
+        await recordQuillsChange(db, null, {
+          type: "message.note_created",
+          entityType: "conversation_message",
+          entityId: handoffNote.id,
+          payload: {
+            conversationId: conversation.id,
+            reason: reply.value.handoff,
+          },
+        });
+      }
       await systemNotice(db, conversation.id, "A teammate will reply here.", {
         event: { kind: "assistant_handoff" },
       });

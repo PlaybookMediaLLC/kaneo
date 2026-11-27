@@ -1,16 +1,27 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { assistantPendingActions } from "../../../database/quills/schema/assistant-pending-actions";
+import {
+  assistantPendingActions,
+  type ActionPreviewDiff,
+} from "../../../database/quills/schema/assistant-pending-actions";
 import { assistantToolCalls } from "../../../database/quills/schema/assistant-tool-calls";
 import { withQuillsSystemWorkspace } from "../../../database/quills/client";
 import { settings } from "../../../database/quills/schema/auth";
+import { conversations } from "../../../database/quills/schema/conversation";
 import { recordQuillsChange } from "../../events";
 import { runToolLoop, type LoopTool } from "../ai/agent";
-import type { AiTool, ToolContext, WriteTool } from "../ai/tool";
+import {
+  ACTION_TTL_MS,
+  MAX_PROPOSED_CHANGES_PER_MESSAGE,
+  resolveToolPolicy,
+  type AiTool,
+  type ToolContext,
+  type WriteTool,
+} from "../ai/tool";
 import { untrusted, type Message, type Usage } from "../provider";
 import type { Run, UsageEntry } from "../runs";
 import { readConfig } from "../settings";
-import { offeredTools } from "../tools";
+import { nativeTools, offeredTools } from "../tools";
 import { checkArgs, isConnectorTool, summaryOf } from "../connector-tools";
 import {
   callConnector,
@@ -31,14 +42,12 @@ import {
 import { applyAutoWrites, type AutoWrite } from "./tool-writes";
 
 // The copilot turn on the AI SDK tool loop (ai/agent.ts) with the tool registry (tools/). The model
-// sees a native tool only while the asking teammate holds its action. A read tool returns only what
-// that teammate may read; a write tool follows its approval policy: `required` becomes a pending
-// action that runs only when a teammate approves it, `auto` runs as the teammate when the turn's
-// answer is stored. Connector tools follow their connector's policies (connector-calls.ts, ROUTES.md).
+// sees a native tool only while the asking teammate holds its action and workspace/procedure policies
+// allow it. Write tools default to `ask` (pending action with previewDiff and 15m TTL) unless an
+// admin explicitly opts a tool into `auto_write`. Connector tools follow their connector's policies.
 
 const MAX_STEPS = 4;
 const MAX_CALLS_PER_STEP = 5;
-const ACTION_TTL_MS = 24 * 60 * 60 * 1000;
 const input = z.object({
   conversationId: z.string().nullable(),
   ticketId: z.string().nullable(),
@@ -59,6 +68,8 @@ type Proposal = {
   toolName: string;
   args: Record<string, unknown>;
   summary: string;
+  previewDiff: ActionPreviewDiff | null;
+  procedureId: string | null;
 };
 
 export async function answerCopilot(
@@ -87,9 +98,17 @@ export async function answerCopilot(
       .limit(1);
     const config = readConfig(row!.config);
     const guidance = await loadGuidance(db, "copilot");
+    const [conversation] = item.conversationId
+      ? await db
+          .select()
+          .from(conversations)
+          .where(eq(conversations.id, item.conversationId as never))
+          .limit(1)
+      : [];
     return {
       config,
       guidance,
+      conversation: conversation ?? null,
       thread: await transcript(
         db,
         item,
@@ -98,11 +117,28 @@ export async function answerCopilot(
     };
   });
   const { config } = context;
-  const off = new Set(
-    config.copilot.toolRules
-      .filter((rule) => rule.mode === "off")
-      .map((rule) => rule.tool),
+  const rulesByTool = new Map<string, string>(
+    config.copilot.toolRules.map((rule) => [rule.tool, rule.mode]),
   );
+  // Code-enforced procedure allowlist (#300): when any active skill/procedure specifies
+  // allowedTools, write tools outside the union are disabled in code regardless of prompting.
+  const constrainedSkills = context.guidance.skills.filter(
+    (s) => Array.isArray(s.allowedTools) && s.allowedTools.length > 0,
+  );
+  const procedureAllowedTools = constrainedSkills.length
+    ? new Set(constrainedSkills.flatMap((s) => s.allowedTools))
+    : null;
+  const activeProcedureId = constrainedSkills[0]?.id ?? null;
+
+  const off = new Set<string>();
+  for (const [toolName, tool] of Object.entries(nativeTools)) {
+    const effective = resolveToolPolicy(
+      tool,
+      [rulesByTool.get(toolName)],
+      procedureAllowedTools,
+    );
+    if (effective === "disabled") off.add(toolName);
+  }
   const toolContext: ToolContext = {
     workspaceId,
     principalId: run.principalId,
@@ -241,6 +277,13 @@ export async function answerCopilot(
         return `Denied: the teammate does not have the ${needs} permission.`;
       }
       if (connector.policy === "approval") {
+        if (
+          proposals.length + autos.length >=
+          MAX_PROPOSED_CHANGES_PER_MESSAGE
+        ) {
+          record({ status: "denied", resultSummary: "Change cap reached" });
+          return `Denied: at most ${MAX_PROPOSED_CHANGES_PER_MESSAGE} changes may be proposed in one turn.`;
+        }
         const summary = summaryOf(connector, checked);
         proposals.push({
           toolName: name,
@@ -250,6 +293,23 @@ export async function answerCopilot(
             arguments: checked,
           },
           summary,
+          previewDiff: {
+            targetType: "connector",
+            targetId: connector.connectorId,
+            fields: Object.entries(checked).map(([field, after]) => ({
+              field,
+              before: null,
+              after:
+                typeof after === "string" ||
+                typeof after === "number" ||
+                typeof after === "boolean" ||
+                after === null
+                  ? after
+                  : JSON.stringify(after),
+            })),
+            recordCount: 1,
+          },
+          procedureId: activeProcedureId,
         });
         record({
           status: "succeeded",
@@ -299,19 +359,41 @@ export async function answerCopilot(
     return result.content;
   }
 
-  /** A write tool's call, by its approval policy. */
+  /** A write tool's call, governed by workspace policy, procedure allowlist, and per-turn change cap. */
   function writeCall(
     tool: WriteTool,
     args: Record<string, unknown>,
     record: (entry: Omit<Audit, "latencyMs" | "args" | "toolName">) => void,
   ) {
+    const policy = resolveToolPolicy(
+      tool,
+      [rulesByTool.get(tool.name)],
+      procedureAllowedTools,
+    );
+    if (policy === "disabled") {
+      record({ status: "denied", resultSummary: "Disabled by policy" });
+      return "Denied: this tool is disabled by workspace or procedure policy.";
+    }
+    if (proposals.length + autos.length >= MAX_PROPOSED_CHANGES_PER_MESSAGE) {
+      record({ status: "denied", resultSummary: "Change cap reached" });
+      return `Denied: at most ${MAX_PROPOSED_CHANGES_PER_MESSAGE} changes may be proposed in one turn.`;
+    }
     const summary = tool.summary(args as never);
-    if (tool.approval === "auto") {
+    if (policy === "auto_write") {
       // applyAutoWrites records the call once, with its real outcome.
       autos.push({ tool, args });
       return `Applies when the answer is stored: ${summary}.`;
     }
-    proposals.push({ toolName: tool.name, args, summary });
+    const previewDiff = tool.previewDiff
+      ? tool.previewDiff(context.conversation, args as never)
+      : null;
+    proposals.push({
+      toolName: tool.name,
+      args,
+      summary,
+      previewDiff,
+      procedureId: activeProcedureId,
+    });
     record({
       status: "succeeded",
       resultSummary: "Proposed",
@@ -366,6 +448,9 @@ export async function answerCopilot(
           toolName: proposal.toolName,
           args: proposal.args,
           summary: proposal.summary,
+          previewDiff: proposal.previewDiff,
+          approvalTokenHash: null,
+          procedureId: proposal.procedureId as never,
           originRole: "copilot_qa",
           expiresAt: new Date(Date.now() + ACTION_TTL_MS),
           idempotencyKey,

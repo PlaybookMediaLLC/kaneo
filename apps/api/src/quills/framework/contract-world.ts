@@ -421,9 +421,14 @@ export function contractApp(router: App, publicRouter?: App) {
 /** Routes under /quills and /quills-public that were not mounted through defineQuillsRoute. */
 /** Static widget files (widget/host.ts): no database row, credential or request input. */
 const STATIC_ROUTES = new Set(
-  ["", "/host.js", "/host.css", "/sdk.js"].map(
-    (file) => `GET /quills-public/:workspace/widget${file}`,
-  ),
+  [
+    "",
+    "/host.js",
+    "/host.css",
+    "/sdk.js",
+    "/capture.js",
+    "/fonts/inter-latin.woff2",
+  ].map((file) => `GET /quills-public/:workspace/widget${file}`),
 );
 
 export function unregisteredRoutes(app: App) {

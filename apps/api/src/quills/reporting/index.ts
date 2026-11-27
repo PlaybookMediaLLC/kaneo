@@ -1,6 +1,7 @@
 import { apiRouter, type BaseVariables } from "../../openapi";
 import dataRuns from "../transfer/runs/data-runs";
 import exportRuns from "../transfer/runs/export-runs";
+import fullExport from "../transfer/runs/full-export";
 import importRuns from "../transfer/runs/import-runs";
 import adminOverview from "./admin-overview";
 import analytics from "./analytics";
@@ -17,4 +18,5 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", teamCounts)
   .route("/", dataRuns)
   .route("/", exportRuns)
+  .route("/", fullExport)
   .route("/", importRuns);
