@@ -69,7 +69,26 @@
 		"theme": "Theme",
 		"themeText": "Dynamic lets each visitor use light or dark mode.",
 		"title": "Branding",
-		"uploadLogo": "Upload a logo"
+		"uploadLogo": "Upload a logo",
+		"emailTemplates": {
+			"title": "Email templates",
+			"description": "Customize branded emails with visual blocks or HTML, preview light and dark modes, and send a test email.",
+			"modeBlocks": "Visual blocks",
+			"modeHtml": "Raw HTML",
+			"subject": "Subject",
+			"heading": "Heading",
+			"body": "Body copy",
+			"buttonLabel": "Button label",
+			"buttonUrl": "Button URL",
+			"htmlBody": "Custom HTML",
+			"preview": "Update preview",
+			"previewFailed": "Could not render email preview.",
+			"previewTitle": "Live email preview",
+			"sendTest": "Send test",
+			"sendTestTo": "Recipient email",
+			"sentTest": "Test email dispatched.",
+			"sendTestFailed": "Could not send test email."
+		}
 	},
 	"domain": {
 		"actions": "Actions for {{domain}}",
@@ -101,7 +120,9 @@
 		"scheme": "https://",
 		"title": "Domain",
 		"unanswered": "No DNS answer",
-		"description": "Show the portal on your own domain."
+		"description": "Show the portal on your own domain.",
+		"widgetProxyTitle": "Self-hosted widget reverse proxy",
+		"widgetProxyNote": "Serve the widget from your own origin with zero cookies so privacy browsers never block it."
 	},
 	"languages": {
 		"actions": "Actions for {{language}}",

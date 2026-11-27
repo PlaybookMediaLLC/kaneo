@@ -19,6 +19,7 @@ import {
   ticketParams,
   type TicketRow,
 } from "./ticket-view";
+import { assertTeamVisible, resolveAllowedTeamIds } from "./team-scope";
 
 const errors = { 404: "Ticket or message not found" };
 const readState = z.object({ agentLastReadAt: nullableResponseTimestamp });
@@ -49,13 +50,21 @@ const markRead = defineQuillsRoute({
   operationId: "markQuillsTicketRead",
   summary: "Mark a support ticket read for teammates",
   action: "read",
+  callerActions: true,
   params: ticketParams,
   response: readState,
   responseDescription: "The teammate read marker",
   errors,
   event: marker,
-  handler: async ({ db, params }) => {
+  handler: async ({ db, workspaceId, actor, actions, params }) => {
+    const allowedTeams = await resolveAllowedTeamIds(
+      db,
+      workspaceId,
+      actor,
+      actions,
+    );
     const ticket = await findTicket(db, params.ticketId);
+    assertTeamVisible(allowedTeams, ticket.assigneeTeamId, "Ticket");
     const { agentLastReadAt } = await setMarker(db, ticket, new Date());
     return { agentLastReadAt };
   },
@@ -68,14 +77,22 @@ const markUnread = defineQuillsRoute({
   summary: "Mark a support ticket unread from one message",
   description: "The message and every later one count as unread for teammates.",
   action: "read",
+  callerActions: true,
   params: ticketParams,
   body: z.object({ messageId: flexibleToTypeIdSchema("conversation_msg") }),
   response: readState,
   responseDescription: "The teammate read marker",
   errors,
   event: marker,
-  handler: async ({ db, params, body }) => {
+  handler: async ({ db, workspaceId, actor, actions, params, body }) => {
+    const allowedTeams = await resolveAllowedTeamIds(
+      db,
+      workspaceId,
+      actor,
+      actions,
+    );
     const ticket = await findTicket(db, params.ticketId);
+    assertTeamVisible(allowedTeams, ticket.assigneeTeamId, "Ticket");
     const pair = await pairConversationId(db, ticket.id);
     const [message] = await db
       .select({ createdAt: conversationMessages.createdAt })

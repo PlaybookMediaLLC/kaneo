@@ -74,6 +74,14 @@ export interface InitOptions {
    * only when the instance also enables visitor analytics.
    */
   tracking?: boolean;
+  /** Custom widget domain or reverse-proxy base URL (e.g. "/support-widget" or "https://support.acme.com/widget") (#318). */
+  baseUrl?: string;
+  /** Optional support email rendered as an "Email us instead" fallback if the widget fails to load (#318). */
+  fallbackEmail?: string;
+  /** Milliseconds to wait for the widget iframe before calling onLoadError (default 3000) (#318). */
+  loadTimeoutMs?: number;
+  /** Invoked when the widget fails to load or times out (e.g., blocked by an ad-blocker) (#318). */
+  onLoadError?: (error: { code: string; message: string }) => void;
 }
 
 /**

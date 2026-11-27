@@ -1,4 +1,13 @@
-import { and, asc, eq, isNull, ne, sql, type SQLWrapper } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  inArray,
+  isNull,
+  ne,
+  sql,
+  type SQLWrapper,
+} from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
 import { apiRouter, z, type BaseVariables } from "../../openapi";
@@ -22,6 +31,7 @@ import {
   ticketViews,
 } from "./ticket-view";
 import { lockTickets } from "./ticket-lifecycle";
+import { assertTeamVisible, resolveAllowedTeamIds } from "./team-scope";
 
 const errors = {
   404: "Ticket or conversation not found",
@@ -41,6 +51,7 @@ const getLinks = defineQuillsRoute({
   description:
     "A tracker lists the customer tickets it tracks; any other ticket names its tracker.",
   action: "read",
+  callerActions: true,
   params: ticketParams,
   response: z.object({
     tracker: ticketSchema.nullable(),
@@ -48,8 +59,15 @@ const getLinks = defineQuillsRoute({
   }),
   responseDescription: "The tracker links",
   errors,
-  handler: async ({ db, params }) => {
+  handler: async ({ db, workspaceId, actor, actions, params }) => {
+    const allowedTeams = await resolveAllowedTeamIds(
+      db,
+      workspaceId,
+      actor,
+      actions,
+    );
     const ticket = await findTicket(db, params.ticketId);
+    assertTeamVisible(allowedTeams, ticket.assignedTeamId, "Ticket");
     if (ticket.type === "tracker") {
       const rows = await db
         .select()
@@ -60,6 +78,9 @@ const getLinks = defineQuillsRoute({
             eq(ticketLinks.trackerTicketId, ticket.id),
             tracked,
             isNull(tickets.deletedAt),
+            ...(allowedTeams !== null && allowedTeams.length > 0
+              ? [inArray(tickets.assignedTeamId, allowedTeams)]
+              : []),
           ),
         )
         .orderBy(asc(tickets.number))
@@ -82,6 +103,9 @@ const getLinks = defineQuillsRoute({
           eq(ticketLinks.linkedTicketId, ticket.id),
           tracked,
           isNull(tickets.deletedAt),
+          ...(allowedTeams !== null && allowedTeams.length > 0
+            ? [inArray(tickets.assignedTeamId, allowedTeams)]
+            : []),
         ),
       );
     return {
@@ -296,6 +320,7 @@ const listConversations = defineQuillsRoute({
   description:
     "pairConversationId shares a customer ticket's thread. provenanceConversationIds are the conversations a non-customer ticket was opened from.",
   action: "read",
+  callerActions: true,
   params: ticketParams,
   response: z.object({
     pairConversationId: z.string().nullable(),
@@ -304,8 +329,15 @@ const listConversations = defineQuillsRoute({
   }),
   responseDescription: "The linked conversations",
   errors,
-  handler: async ({ db, params }) => {
-    await findTicket(db, params.ticketId);
+  handler: async ({ db, workspaceId, actor, actions, params }) => {
+    const allowedTeams = await resolveAllowedTeamIds(
+      db,
+      workspaceId,
+      actor,
+      actions,
+    );
+    const ticket = await findTicket(db, params.ticketId);
+    assertTeamVisible(allowedTeams, ticket.assignedTeamId, "Ticket");
     const provenance = await db
       .select({ id: ticketConversations.conversationId })
       .from(ticketConversations)

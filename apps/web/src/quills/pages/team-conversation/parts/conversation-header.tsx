@@ -1,5 +1,7 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import type { GetConversationResponse } from "../../../api/team/get-conversation";
+import { apiOrigin } from "../../../core/api-origin";
 import { useArchiveConversation } from "../../../hooks/team/use-archive-conversation";
 import { useAssignConversation } from "../../../hooks/team/use-assign-conversation";
 import { useBlockConversationIp } from "../../../hooks/team/use-block-conversation-ip";
@@ -12,8 +14,10 @@ import { useRestoreConversationFromSpam } from "../../../hooks/team/use-restore-
 import { useSetConversationStatus } from "../../../hooks/team/use-set-conversation-status";
 import { useUnarchiveConversation } from "../../../hooks/team/use-unarchive-conversation";
 import { useUnblockUser } from "../../../hooks/team/use-unblock-user";
+import type { ThreadViewer } from "../../../hooks/team/use-thread-presence";
 import { useTeamRuntime } from "../../../team/runtime";
 import { DetailHeader } from "../../../ui/inbox/detail-header";
+import { ThreadViewersAvatars } from "../../../ui/inbox/thread-viewers-avatars";
 import { PersonAvatar } from "../../../ui/person-avatar";
 import type { Teammate } from "../../team-conversations/conversation-list";
 import { ActionProblem } from "./action-problem";
@@ -26,6 +30,7 @@ export interface ConversationHeaderProps {
   /** Undefined while the conversation loads: the heading still shows, so focus can land on it. */
   conversation?: GetConversationResponse;
   people: readonly Teammate[];
+  viewers?: readonly ThreadViewer[];
   myPrincipalId: string | null;
   onBack: () => void;
   onPrevious: () => void;
@@ -38,11 +43,13 @@ export function ConversationHeader({
   workspaceId,
   conversation,
   people,
+  viewers,
   myPrincipalId,
   ...move
 }: ConversationHeaderProps) {
   const { t } = useTranslation("quills");
   const team = useTeamRuntime();
+  const queryClient = useQueryClient();
   const status = useSetConversationStatus(team.viewer);
   const assign = useAssignConversation(team.viewer);
   const end = useEndConversation(team.viewer);
@@ -53,6 +60,25 @@ export function ConversationHeader({
   const unblockIp = useUnblockConversationIp(team.viewer);
   const archive = useArchiveConversation(team.viewer);
   const unarchive = useUnarchiveConversation(team.viewer);
+  const offerSolution = useMutation({
+    mutationFn: async () => {
+      if (!conversation) return;
+      const res = await fetch(
+        `${apiOrigin()}/api/quills/${encodeURIComponent(workspaceId)}/conversations/${encodeURIComponent(conversation.id)}/offer-solution`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({}),
+        },
+      );
+      if (!res.ok) throw new Error(`Offer solution failed (${res.status})`);
+      return res.json();
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["quills"] });
+    },
+  });
   const changes = [
     status,
     assign,
@@ -80,9 +106,13 @@ export function ConversationHeader({
     { param: { ...param, workspaceId: conversation ? workspaceId : "" } },
     team.viewer,
   ).data;
-  const locked = !team.permissions.update || changes.some((m) => m.isPending);
+  const locked =
+    !team.permissions.update ||
+    changes.some((m) => m.isPending) ||
+    offerSolution.isPending;
   const reset = () => {
     for (const change of changes) change.reset();
+    offerSolution.reset();
   };
   const spam = conversation?.endReason === "spam";
   const name =
@@ -96,6 +126,9 @@ export function ConversationHeader({
         actions={
           conversation ? (
             <>
+              {viewers?.length ? (
+                <ThreadViewersAvatars viewers={viewers} />
+              ) : null}
               <AssigneePicker
                 value={conversation.assignedAgentPrincipalId}
                 people={people}
@@ -126,6 +159,10 @@ export function ConversationHeader({
                 blocked={profile ? Boolean(profile.blockedAt) : null}
                 ipBlocked={ip?.available ? Boolean(ip.blockedUntil) : null}
                 disabled={locked}
+                onOfferSolution={() => {
+                  reset();
+                  offerSolution.mutate();
+                }}
                 onSnooze={() => {
                   reset();
                   status.mutate({ param, json: { status: "snoozed" } });
@@ -194,6 +231,11 @@ export function ConversationHeader({
         <ActionProblem
           problem={changes.find((change) => change.error)?.error ?? null}
         />
+        {offerSolution.isError ? (
+          <p role="alert" className="text-xs text-destructive">
+            {t("core.problem.failed")}
+          </p>
+        ) : null}
       </div>
     </>
   );

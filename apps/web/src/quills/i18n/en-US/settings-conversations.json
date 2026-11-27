@@ -125,6 +125,11 @@
 		"timeInvalid": "Enter a time as HH:MM, such as 09:00.",
 		"timezone": "Time zone",
 		"title": "General",
+		"undoSend": "Undo send window",
+		"undoSendDelay": "Undo send delay",
+		"undoSendDelayText": "Hold customer replies for 5–30 seconds so teammates can undo mistakes before delivery.",
+		"undoSendSeconds": "{{count}} seconds",
+		"undoSendText": "Hold every customer reply briefly with an Undo button before it reaches the customer.",
 		"wait": "Wait before closing",
 		"waitText": "The time that the chat stays open after the visitor leaves."
 	},

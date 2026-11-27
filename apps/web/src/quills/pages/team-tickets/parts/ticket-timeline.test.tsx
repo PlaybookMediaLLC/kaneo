@@ -1,7 +1,25 @@
+import type { ReactElement } from "react";
 import { describe, expect, it } from "vite-plus/test";
+import { TeamRuntimeProvider } from "../../../team/runtime";
 import { renderComponent } from "../../../test/render";
 import { timeline, type TicketMessage } from "../timeline";
 import { TicketTimeline } from "./ticket-timeline";
+
+const team = {
+  workspaceId: "workspace_test_1",
+  viewer: { kind: "user" as const, id: "user_test_1" },
+  permissions: {
+    read: true,
+    create: true,
+    update: true,
+    delete: true,
+    manageSettings: true,
+  },
+};
+const render = (element: ReactElement) =>
+  renderComponent(
+    <TeamRuntimeProvider value={team}>{element}</TeamRuntimeProvider>,
+  );
 
 const message = (
   id: string,
@@ -22,7 +40,7 @@ const requester = { name: "Grace", avatarUrl: null };
 
 describe("TicketTimeline", () => {
   it("shows the changes, the customer message, the reply and the note in order", () => {
-    const view = renderComponent(
+    const view = render(
       <TicketTimeline
         requester={requester}
         entries={timeline(
@@ -67,12 +85,12 @@ describe("TicketTimeline", () => {
     ]);
     expect(items[1]).toHaveTextContent("Grace");
     expect(items[2]).toHaveTextContent("Ada");
-    expect(items[3]).toHaveTextContent("Note");
+    expect(items[3]).toHaveTextContent("Internal note");
     expect(items[3]).toHaveTextContent("Teammate");
   });
 
   it("shows a system message as a centered line", () => {
-    const view = renderComponent(
+    const view = render(
       <TicketTimeline
         requester={requester}
         entries={timeline(
@@ -86,9 +104,7 @@ describe("TicketTimeline", () => {
   });
 
   it("says when the thread is empty", () => {
-    const view = renderComponent(
-      <TicketTimeline requester={requester} entries={[]} />,
-    );
+    const view = render(<TicketTimeline requester={requester} entries={[]} />);
     expect(view.getByText("No messages yet.")).toBeInTheDocument();
   });
 });

@@ -67,20 +67,37 @@ function inbox() {
   return api;
 }
 
-/** The replies in request order: the page, the mark-read, then the header, thread and panel. */
+const detailAnswers = () => ({
+  listQuillsTickets: tickets,
+  listQuillsTicketStatuses: statuses,
+  getQuillsTicket: urgent,
+  listQuillsPrincipals: listPrincipalsFixture.ok(),
+  listQuillsTicketViewers: { viewers: [] },
+  setQuillsTicketViewer: { ok: true, expiresAt: "2026-11-02T00:00:25.000Z" },
+  markQuillsTicketRead: markTicketReadFixture.ok(),
+  getQuillsTicketWatchStatus: getTicketWatchStatusFixture.ok(),
+  listQuillsTicketMessages: messages,
+  listQuillsTicketActivity: listTicketActivityFixture.ok(),
+  listQuillsTicketWatchers: listTicketWatchersFixture.ok(),
+  listQuillsTicketConversations: listTicketConversationsFixture.ok(),
+  getQuillsTicketLinks: getTicketLinksFixture.ok({ tracker: null }),
+  listQuillsTicketExternalLinks: listTicketExternalLinksFixture.ok(),
+  getQuillsTicketSummary: getTicketSummaryFixture.ok(),
+  replyQuillsTicket: replyTicketFixture.ok(),
+});
+
 function detail() {
-  const api = inbox();
-  api.reply(urgent);
-  api.reply(listPrincipalsFixture.ok());
-  api.reply(markTicketReadFixture.ok());
-  api.reply(getTicketWatchStatusFixture.ok());
-  api.reply(messages);
-  api.reply(listTicketActivityFixture.ok());
-  api.reply(listTicketWatchersFixture.ok());
-  api.reply(listTicketConversationsFixture.ok());
-  api.reply(getTicketLinksFixture.ok({ tracker: null }));
-  api.reply(listTicketExternalLinksFixture.ok());
-  api.reply(getTicketSummaryFixture.ok());
+  const api = mockApi();
+  const answers: Record<string, unknown> = detailAnswers();
+  for (let index = 0; index < 40; index += 1) {
+    api.defer(({ resolve }) => {
+      const request = api.calls().at(-1)!;
+      const id = Object.keys(answers).find((operation) =>
+        api.calls(operation).includes(request),
+      );
+      resolve(id ? answers[id] : { message: "Unexpected" }, id ? 200 : 500);
+    });
+  }
   return api;
 }
 
@@ -88,19 +105,8 @@ let done: ReturnType<typeof mockApi>;
 
 async function reply(view: ReturnType<typeof renderPage>) {
   await view.findByText("I cannot sign in.");
-  done.reply(replyTicketFixture.ok());
-  // The reply refreshes these in turn.
-  for (const body of [
-    messages,
-    tickets,
-    urgent,
-    listTicketActivityFixture.ok(),
-    getTicketWatchStatusFixture.ok(),
-    listTicketWatchersFixture.ok(),
-  ])
-    done.reply(body);
   fill("Reply to Grace…", "We reset your account.");
-  press("Send");
+  press("Send to customer");
   await waitFor(() => expect(view.getByRole("textbox")).toHaveValue(""));
   await waitFor(() =>
     expect(done.calls("listQuillsTicketWatchers")).toHaveLength(2),

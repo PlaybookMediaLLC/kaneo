@@ -80,7 +80,7 @@ describe("ConversationComposer", () => {
     });
     expect(view.getByText("invoice.pdf")).toBeInTheDocument();
     fill("Reply to Grace…", "Here it is");
-    press("Send");
+    press("Send to customer");
     await vi.waitFor(() =>
       expect(api.calls("replyQuillsConversation")).toHaveLength(1),
     );
@@ -116,7 +116,7 @@ describe("ConversationComposer", () => {
       },
     });
     fill("Reply to Grace…", "First");
-    press("Send");
+    press("Send to customer");
     await vi.waitFor(() =>
       expect(api.calls("replyQuillsConversation")).toHaveLength(1),
     );
@@ -154,7 +154,7 @@ describe("ConversationComposer", () => {
     const box = await view.findByLabelText("Write a note for the team…");
     expect(box).toHaveFocus();
     fill("Write a note for the team…", "Check the invoice");
-    press("Send");
+    press("Add note");
     expect(await view.findByRole("alert")).toBeInTheDocument();
     expect(box).toHaveValue("Check the invoice");
     expect(api.calls("sendQuillsConversationTyping")).toHaveLength(0);

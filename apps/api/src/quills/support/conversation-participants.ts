@@ -7,7 +7,10 @@ import {
   type BaseVariables,
 } from "../../openapi";
 import { principal, user } from "../../database/quills/schema/auth";
-import { conversationParticipants } from "../../database/quills/schema/conversation";
+import {
+  conversationFollowers,
+  conversationParticipants,
+} from "../../database/quills/schema/conversation";
 import { defineQuillsRoute, type Database } from "../framework/define-route";
 import { isCustomer, realEmail } from "../directory/customer";
 import {
@@ -18,6 +21,7 @@ import {
   systemNotice,
   type ConversationId,
 } from "./conversation-model";
+import { assertTeamVisible, resolveAllowedTeamIds } from "./team-scope";
 
 // Customers added to a conversation beyond its visitor (group threads). Teammates are never participants.
 
@@ -71,12 +75,24 @@ const listParticipants = defineQuillsRoute({
   summary: "List the customers added to a conversation",
   description: "Oldest first. Synthetic lead addresses are never shown.",
   action: "read",
+  callerActions: true,
   params: conversationParams,
   response: z.object({ items: z.array(participant) }),
   responseDescription: "Participants",
   errors,
-  handler: async ({ db, params }) => {
+  handler: async ({ db, workspaceId, actor, actions, params }) => {
+    const allowedTeams = await resolveAllowedTeamIds(
+      db,
+      workspaceId,
+      actor,
+      actions,
+    );
     const conversation = await findConversation(db, params.conversationId);
+    assertTeamVisible(
+      allowedTeams,
+      conversation.assignedTeamId,
+      "Conversation",
+    );
     return { items: await participantsOf(db, conversation.id) };
   },
 });
@@ -219,7 +235,55 @@ const removeParticipant = defineQuillsRoute({
   },
 });
 
+const follower = z.object({
+  principalId: z.string(),
+  name: z.string().nullable(),
+  avatarUrl: z.string().nullable(),
+  createdAt: responseTimestamp,
+});
+
+const listFollowers = defineQuillsRoute({
+  method: "get",
+  path: "/conversations/{conversationId}/followers",
+  operationId: "listQuillsConversationFollowers",
+  summary: "List teammates following a conversation (including forwarders)",
+  action: "read",
+  callerActions: true,
+  params: conversationParams,
+  response: z.object({ items: z.array(follower) }),
+  responseDescription: "Teammate followers",
+  errors,
+  handler: async ({ db, workspaceId, actor, actions, params }) => {
+    const allowedTeams = await resolveAllowedTeamIds(
+      db,
+      workspaceId,
+      actor,
+      actions,
+    );
+    const conversation = await findConversation(db, params.conversationId);
+    assertTeamVisible(
+      allowedTeams,
+      conversation.assignedTeamId,
+      "Conversation",
+    );
+    const items = await db
+      .select({
+        principalId: conversationFollowers.principalId,
+        name: principal.displayName,
+        avatarUrl: principal.avatarUrl,
+        createdAt: conversationFollowers.createdAt,
+      })
+      .from(conversationFollowers)
+      .innerJoin(principal, eq(principal.id, conversationFollowers.principalId))
+      .where(eq(conversationFollowers.conversationId, conversation.id))
+      .orderBy(asc(conversationFollowers.createdAt))
+      .limit(100);
+    return { items };
+  },
+});
+
 export default apiRouter<BaseVariables & { workspaceId: string }>()
   .openapi(...listParticipants)
   .openapi(...addParticipant)
-  .openapi(...removeParticipant);
+  .openapi(...removeParticipant)
+  .openapi(...listFollowers);

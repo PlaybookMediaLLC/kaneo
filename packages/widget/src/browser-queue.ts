@@ -31,14 +31,20 @@ declare global {
 
 const sdk = createSDK();
 const w = window;
-// Kaneo serves this bundle at {instanceUrl}/api/quills-public/{workspace}/widget/sdk.js, so a
-// script-tag install carries both values in its own URL.
+// Kaneo serves this bundle at {instanceUrl}/api/quills-public/{workspace}/widget/sdk.js, or via
+// a custom widget domain / reverse proxy at {baseUrl}/sdk.js (#318).
+const currentSrc =
+  (document.currentScript as HTMLScriptElement | null)?.src ?? "";
 const served =
   /^(https?:\/\/[^/]+(?:\/[^?#]*?)?)\/api\/quills-public\/([A-Za-z0-9_-]+)\/widget\/sdk\.js(?:[?#]|$)/.exec(
-    (document.currentScript as HTMLScriptElement | null)?.src ?? "",
+    currentSrc,
   );
+const proxied = !served
+  ? /^(https?:\/\/[^/]+(?:\/[^?#]*?)?)\/sdk\.js(?:[?#]|$)/.exec(currentSrc)
+  : null;
 const bakedUrl = w.__QUACKBACK_URL__ ?? served?.[1];
 const bakedWorkspace = served?.[2];
+const bakedBaseUrl = proxied?.[1];
 
 // Suppresses the deferred fallback once the host has taken explicit control:
 // either by initializing (their options take precedence) or by destroying
@@ -61,13 +67,14 @@ function dispatch(command: unknown, a?: unknown, b?: unknown): unknown {
     return queries[command as keyof typeof queries]();
   let options = a;
   if (command === "init" || command === "destroy") bootSuppressed = true;
-  if (command === "init" && bakedUrl) {
+  if (command === "init" && (bakedUrl || bakedBaseUrl)) {
     const opts =
       a && typeof a === "object" ? (a as Record<string, unknown>) : {};
     options = {
       ...opts,
-      ...(!opts.instanceUrl && { instanceUrl: bakedUrl }),
+      ...(!opts.instanceUrl && bakedUrl && { instanceUrl: bakedUrl }),
       ...(!opts.workspace && bakedWorkspace && { workspace: bakedWorkspace }),
+      ...(!opts.baseUrl && bakedBaseUrl && { baseUrl: bakedBaseUrl }),
     };
   }
   return sdk.dispatch(command as "init", options, b);
@@ -97,7 +104,7 @@ for (const args of queued) {
 
 // Deferred so an explicit `Quills("init", ...)` from host code can pre-empt
 // the default-options fallback.
-if (bakedUrl) {
+if (bakedUrl || bakedBaseUrl) {
   setTimeout(() => {
     if (!bootSuppressed) dispatch("init", {});
   }, 0);

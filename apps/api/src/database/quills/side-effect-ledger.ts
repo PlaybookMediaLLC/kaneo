@@ -263,6 +263,67 @@ export const SIDE_EFFECT_LEDGER: readonly LedgerRegistration[] = [
     reason:
       "When the remote MCP tool catalogue was last refreshed. Nothing outbound reads it — sync is operator-initiated or scheduled against the remote, not drained on IS NULL — so after a restore an older value merely reports the catalogue as staler than it is, and the next sync overwrites it.",
   },
+  {
+    column: schema.conversations.breachUpdateSentAt,
+    policy: "settle",
+    strategy: "stamp-pending",
+    eligibleWhen: (restoredTo) =>
+      and(
+        isNotNull(schema.conversations.promisedReplyAt),
+        lte(schema.conversations.promisedReplyAt, restoredTo),
+      )!,
+    reason:
+      "Records the one proactive promised-reply-breach apology sent to the customer (#333). Only rows already past promised_reply_at at restore time are settled so future deadlines still trigger.",
+  },
+  {
+    column: schema.conversations.solutionOfferedAt,
+    policy: "preserve",
+    reason:
+      "Conversation workflow state recording when an agent offered a solution (#311). Stamping NULL rows on restore would falsely mark every open unresolved conversation as awaiting confirmation.",
+  },
+  {
+    column: schema.conversations.closeReminderSentAt,
+    policy: "settle",
+    strategy: "stamp-pending",
+    eligibleWhen: (restoredTo) =>
+      and(
+        isNotNull(schema.conversations.solutionOfferedAt),
+        isNotNull(schema.conversations.autoCloseAt),
+        lte(
+          schema.conversations.autoCloseAt,
+          new Date(restoredTo.getTime() + 24 * 60 * 60_000),
+        ),
+      )!,
+    reason:
+      "Records the single quiet-close reminder sent within 24h before auto-closing a solution-offered conversation (#311). Narrowed via eligibleWhen so open conversations without a due auto-close keep NULL.",
+  },
+  {
+    column: schema.principal.surveySentAt,
+    policy: "settle",
+    strategy: "restart-window",
+    reason:
+      "Per-customer CSAT survey cooldown ledger (#312). Rewinding to an older timestamp or NULL would bypass the configured cooldown window and spam the customer.",
+  },
+  {
+    column: schema.notificationPreferences.digestLastSentAt,
+    policy: "settle",
+    strategy: "restart-window",
+    reason:
+      "Teammate hourly/daily notification digest window ledger (#321). Rewinding to an older timestamp or NULL would send a duplicate digest email.",
+  },
+  {
+    column: schema.webhooks.lastAlertedAt,
+    policy: "settle",
+    strategy: "restart-window",
+    reason:
+      "24h cooldown watermark for webhook failure alerts (#330). Rewinding to an older timestamp or NULL would re-open the cooldown window and emit duplicate failure alerts.",
+  },
+  {
+    column: schema.webhookDeliveries.deliveredAt,
+    policy: "preserve",
+    reason:
+      "Display-only delivery completion timestamp on the ephemeral webhook_deliveries attempt log (#330). Delivery deduplication is owned by hook_deliveries, not this row.",
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -284,6 +345,16 @@ export const SIDE_EFFECT_LEDGER_EXEMPTIONS: readonly LedgerExemption[] = [
     column: schema.integrations.lastSyncAt,
     reason:
       "Declared in the initial migration and never wired: no writer and no reader anywhere in the tree. Reclassify as settle the moment a poll-based sync starts stamping it, because a rewound sync cursor re-pushes stale state outbound.",
+  },
+  {
+    column: schema.tickets.solutionOfferedAt,
+    reason:
+      "Declared in migration 0049 for future ticket-level solution confirmation (#311) but currently unread and unwired; reclassify as preserve once ticket offer-solution is wired.",
+  },
+  {
+    column: schema.tickets.closeReminderSentAt,
+    reason:
+      "Declared in migration 0049 for future ticket-level quiet auto-close reminders (#311) but currently unread and unwired; reclassify as settle with stamp-pending + eligibleWhen once a ticket reminder sweep reads it.",
   },
 ];
 
@@ -314,7 +385,7 @@ export const LEDGER_COLUMN_PATTERNS: readonly RegExp[] = [
   // "we sent / delivered / announced it": an outbound act, completed.
   /(?:^|_)(notified|sent|delivered|announced|dispatched|emailed|pushed|published|broadcast)_at$/,
   // "the last time we reached out": an outbound cursor a scheduler resumes from.
-  /^last_(sync|synced|triggered|outbound|inbound|checked|attempted|attempt|run|polled|poll)_at$/,
+  /^last_(sync|synced|triggered|outbound|inbound|checked|attempted|attempt|run|polled|poll|alerted)_at$/,
   // "this was consumed / carried out once": a one-shot that must not re-arm.
   // `last_*` is excluded here so plain recency stamps (last_used_at,
   // last_seen_at) do not masquerade as one-shot ledgers.

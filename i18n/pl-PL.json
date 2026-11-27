@@ -1000,7 +1000,8 @@
 			"owner": "Właściciel",
 			"admin": "Administrator",
 			"member": "Członek",
-			"viewer": "Obserwator"
+			"viewer": "Obserwator",
+			"collaborator": "Collaborator"
 		},
 		"members": {
 			"pageTitle": "Członkowie",
@@ -2014,7 +2015,8 @@
 			"defaultRoleDescriptions": {
 				"admin": "Ma pełny dostęp do obszaru roboczego.",
 				"member": "Może tworzyć zadania i projekty oraz nimi zarządzać.",
-				"viewer": "Może wyświetlać zadania i dodawać komentarze."
+				"viewer": "Może wyświetlać zadania i dodawać komentarze.",
+				"collaborator": "Free internal seat: can view threads and add internal notes without replying externally."
 			},
 			"defaultRoleHelp": "Rola domyślna: nazwa jest zarezerwowana i nie można usunąć tego wiersza.",
 			"deleteDialog": {
@@ -2204,6 +2206,10 @@
 					"manage_settings": {
 						"label": "Manage Quills settings",
 						"description": "Change Quills configuration for this workspace."
+					},
+					"comment_internal": {
+						"description": "Add internal notes and @mention teammates without sending external customer replies.",
+						"label": "Comment internally"
 					}
 				}
 			},
@@ -2238,7 +2244,8 @@
 				"nameExists": "Rola o tej nazwie już istnieje",
 				"nameRequired": "Nazwa roli jest wymagana",
 				"permissionRequired": "Należy wybrać co najmniej jedno uprawnienie"
-			}
+			},
+			"freeSeatBadge": "Free seat"
 		},
 		"mattermostIntegration": {
 			"connect": "Connect Mattermost",

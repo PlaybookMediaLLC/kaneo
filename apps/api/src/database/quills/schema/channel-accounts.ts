@@ -24,6 +24,7 @@ import {
   typeIdColumnNullable,
 } from "@kaneo/ids/drizzle";
 import { teams } from "./teams";
+import { brands } from "./brands";
 
 /**
  * What a published record proves.
@@ -272,6 +273,7 @@ export const channelAccounts = quillsSchema
       module: text("module", { enum: ["support", "feedback", "changelog"] }),
       sendingDomainId:
         typeIdColumnNullable("sending_domain")("sending_domain_id"),
+      brandId: typeIdColumnNullable("brand")("brand_id"),
       config: jsonb("config")
         .$type<ChannelAccountConfig>()
         .notNull()
@@ -305,6 +307,11 @@ export const channelAccounts = quillsSchema
           emailSendingDomains.id,
         ],
       }).onDelete("restrict"),
+      foreignKey({
+        name: "channel_accounts_brand_id_fkey",
+        columns: [table.workspaceId, table.brandId],
+        foreignColumns: [brands.workspaceId, brands.id],
+      }).onDelete("set null"),
       // One inbound route per workspace (v1); relax when multi-inbox lands.
       uniqueIndex("channel_accounts_one_inbound_uq")
         .on(table.workspaceId, table.owningTeamId)
@@ -324,6 +331,9 @@ export const channelAccounts = quillsSchema
       index("channel_accounts_team_role_idx")
         .on(table.owningTeamId, table.role)
         .where(sql`deleted_at IS NULL`),
+      index("channel_accounts_brand_id_idx")
+        .on(table.brandId)
+        .where(sql`brand_id IS NOT NULL`),
       primaryKey({ columns: [table.workspaceId, table.id] }),
       workspacePolicy(table.workspaceId),
     ],

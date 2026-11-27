@@ -4,13 +4,14 @@ import { ConversationSection } from "./conversation-section";
 import { CustomerIdentity } from "./customer-identity";
 import { CustomerSection } from "./customer-section";
 import { type EmailAuth, EmailSecuritySection } from "./email-security-section";
+import { ForwardParseWarning } from "./forward-parse-warning";
 import { LinksSection } from "./links-section";
 import { PreviousConversations } from "./previous-conversations";
 import { SummarySection } from "./summary-section";
 
 export interface ConversationPropertiesProps {
   workspaceId: string;
-  conversation: GetConversationResponse;
+  conversation: GetConversationResponse & { forwardParseFailed?: boolean };
   /** The checks of the newest inbound mail that has them. */
   emailSecurity?: { auth: EmailAuth; receivedAt: string } | null;
 }
@@ -33,6 +34,12 @@ export function ConversationProperties({
     t("team-conversations.unknown");
   return (
     <div className="grid gap-3">
+      {conversation.forwardParseFailed ? (
+        <ForwardParseWarning
+          workspaceId={workspaceId}
+          conversationId={conversation.id}
+        />
+      ) : null}
       <CustomerIdentity
         workspaceId={workspaceId}
         principalId={conversation.visitorPrincipalId}

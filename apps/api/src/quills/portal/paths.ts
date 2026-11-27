@@ -1,6 +1,15 @@
 const clientBase = () =>
   (process.env.KANEO_CLIENT_URL || "http://localhost:5173").replace(/\/+$/, "");
 
+const apiBase = () => {
+  const raw = (
+    process.env.KANEO_API_URL ||
+    process.env.KANEO_CLIENT_URL ||
+    "http://localhost:1337"
+  ).replace(/\/+$/, "");
+  return raw.endsWith("/api") ? raw : `${raw}/api`;
+};
+
 const portalBase = (workspaceId: string) =>
   `${clientBase()}/portal/${encodeURIComponent(workspaceId)}`;
 
@@ -18,6 +27,10 @@ export const portalPaths = {
       workspaceId,
       `/conversations/${encodeURIComponent(conversationId)}`,
     ),
+  requestLink: (workspaceId: string, token: string) =>
+    portalPath(workspaceId, `/r/${encodeURIComponent(token)}`),
+  publicMedia: (workspaceId: string, token: string) =>
+    `${apiBase()}/quills-public/${encodeURIComponent(workspaceId)}/media/${encodeURIComponent(token)}`,
   invite: (workspaceId: string, inviteId: string, token: string) =>
     `${portalPath(workspaceId, `/invite/${encodeURIComponent(inviteId)}`)}#${new URLSearchParams({ token })}`,
   csat: (workspaceId: string, token: string, rating: number) =>

@@ -15,6 +15,7 @@ import { DEFAULT_TARGET } from "../integrations/channels";
 import { githubRepo } from "../integrations/oauth-providers";
 import { validTarget } from "../integrations/providers";
 import { findTicket, systemMessage, ticketParams } from "./ticket-view";
+import { assertTeamVisible, resolveAllowedTeamIds } from "./team-scope";
 
 // A ticket's links to issues in the connected trackers that P7b built (GitHub, GitLab): list, link an
 // existing issue, create a new one, unlink. The issue must be in one of the connection's channels
@@ -131,6 +132,7 @@ const list = defineQuillsRoute({
   description:
     "The ticket's active links, oldest first (at most 100), and the connected issue trackers with the channels an issue can be linked in or created in.",
   action: "read",
+  callerActions: true,
   params: ticketParams,
   response: z.object({
     links: z.array(linkView),
@@ -145,8 +147,15 @@ const list = defineQuillsRoute({
   }),
   responseDescription: "Links and linkable trackers",
   errors,
-  handler: async ({ db, params }) => {
-    await findTicket(db, params.ticketId);
+  handler: async ({ db, workspaceId, actor, actions, params }) => {
+    const allowedTeams = await resolveAllowedTeamIds(
+      db,
+      workspaceId,
+      actor,
+      actions,
+    );
+    const ticket = await findTicket(db, params.ticketId);
+    assertTeamVisible(allowedTeams, ticket.assignedTeamId, "Ticket");
     const rows = await db
       .select(linkColumns)
       .from(links)

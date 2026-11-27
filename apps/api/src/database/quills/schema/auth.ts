@@ -771,6 +771,8 @@ export const principal = quillsSchema
       blockedByPrincipalId: typeIdColumnNullable("principal")(
         "blocked_by_principal_id",
       ),
+      // Last CSAT survey email sent to this customer for per-customer cooldown enforcement (#312).
+      surveySentAt: timestamp("survey_sent_at", { withTimezone: true }),
     },
     (table) => [
       foreignKey({

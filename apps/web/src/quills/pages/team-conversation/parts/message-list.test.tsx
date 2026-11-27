@@ -120,7 +120,7 @@ describe("MessageList", () => {
       "2026-11-01T10:00:00.000Z",
     );
     expect(items[1]!.querySelectorAll("time")).toHaveLength(1);
-    expect(items[2]).toHaveTextContent("Note");
+    expect(items[2]).toHaveTextContent("Internal note");
     expect(items[2]).toHaveTextContent("Check the invoice");
     expect(items[3]).toHaveTextContent("Conversation ended");
     expect(items[3]!.querySelectorAll("time")).toHaveLength(2);

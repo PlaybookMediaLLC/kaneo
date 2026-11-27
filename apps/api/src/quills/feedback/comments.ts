@@ -247,8 +247,9 @@ const createComment = defineQuillsRoute({
   operationId: "createQuillsComment",
   summary: "Comment on a post",
   description:
-    "The caller is the author. A reply to an internal comment is internal too. The parent must be a comment of the same post.",
-  action: "create",
+    "The caller is the author. A reply to an internal comment is internal too. Customer-visible comments require quills:create; internal notes also accept quills:comment_internal (collaborators). The parent must be a comment of the same post.",
+  action: ["comment_internal", "create"],
+  callerActions: true,
   params: postParams,
   body: z.object({
     content,
@@ -260,12 +261,18 @@ const createComment = defineQuillsRoute({
   errors,
   event: commentEvent("comment.created"),
   load: loadProjects,
-  handler: async ({ db, actor, params, body, loaded: projects }) => {
+  handler: async ({ db, actor, actions, params, body, loaded: projects }) => {
     const post = await findPost(db, params.postId, projects);
     const parent = body.parentId
       ? await findComment(db, body.parentId, projects, true)
       : undefined;
     if (parent && parent.postId !== post.id) throw notFound("Parent comment");
+    const isPrivate = body.isPrivate || !!parent?.isPrivate;
+    if (!isPrivate && !actions.has("create")) {
+      throw new HTTPException(403, {
+        message: "Collaborators can only post internal notes",
+      });
+    }
     // Before the insert, which takes a key-share lock on the post.
     const target = await lockMergeTarget(db, post.id);
     const [comment] = await db
@@ -276,7 +283,7 @@ const createComment = defineQuillsRoute({
         principalId: actor.principalId,
         content: body.content,
         isTeamMember: true,
-        isPrivate: body.isPrivate || !!parent?.isPrivate,
+        isPrivate,
       })
       .returning();
     await countComment(db, comment!, 1, target);

@@ -77,6 +77,10 @@ export function createSDK(): SDK {
   let identifying = false;
   let configAbort: AbortController | null = null;
   let revealTimer: number | null = null;
+  let loadTimer: number | null = null;
+  let loadErrorCb: ((error: { code: string; message: string }) => void) | null =
+    null;
+  let fallbackLink: HTMLAnchorElement | null = null;
   let metadata: Record<string, string> | null = null;
   // `pendingIdentify` can be an Identity, `{anonymous: true}`, or `null` (logout).
   // `pendingIdentifyPresent` distinguishes "nothing queued" from "logout queued".
@@ -125,6 +129,38 @@ export function createSDK(): SDK {
   const changed = () => emitter.emit("statechange", state());
   const fail = (code: string, message: string) =>
     emitter.emit("error", { code, message });
+  function clearLoadFallback(): void {
+    if (loadTimer !== null) {
+      window.clearTimeout(loadTimer);
+      loadTimer = null;
+    }
+    if (fallbackLink) {
+      fallbackLink.remove();
+      fallbackLink = null;
+    }
+  }
+  function triggerLoadError(code: string, message: string): void {
+    fail(code, message);
+    loadErrorCb?.({ code, message });
+    if (
+      config?.fallbackEmail &&
+      !fallbackLink &&
+      typeof document !== "undefined"
+    ) {
+      const a = document.createElement("a");
+      a.href = `mailto:${config.fallbackEmail}`;
+      a.textContent = "Email us instead";
+      a.setAttribute("data-quills-fallback", "true");
+      a.style.cssText =
+        "position:fixed;bottom:20px;right:20px;z-index:2147483000;padding:10px 16px;border-radius:999px;background:#111827;color:#fff;font:500 14px/1.2 system-ui,-apple-system,sans-serif;text-decoration:none;box-shadow:0 4px 14px rgba(0,0,0,.18)";
+      if (placement === "left") {
+        a.style.right = "";
+        a.style.left = "20px";
+      }
+      document.body.appendChild(a);
+      fallbackLink = a;
+    }
+  }
   function serverThemeMode(): Theme {
     const mode = serverTheme?.themeMode ?? "user";
     return mode === "user" ? "auto" : mode;
@@ -135,7 +171,12 @@ export function createSDK(): SDK {
   }
 
   function iframeOrigin(): string {
-    return new URL(config!.instanceUrl).origin;
+    const base = widgetBase(
+      config!.instanceUrl,
+      config!.workspace,
+      config!.baseUrl,
+    );
+    return new URL(base, window.location.href).origin;
   }
 
   /**
@@ -198,6 +239,7 @@ export function createSDK(): SDK {
           pendingOpen = null;
         }
         sendMobileState();
+        clearLoadFallback();
         emitter.emit("ready", {});
         break;
       case "quackback:close":
@@ -340,7 +382,11 @@ export function createSDK(): SDK {
       ? (document.querySelector(config!.container) ?? undefined)
       : undefined;
     panel = createPanel({
-      widgetUrl: widgetBase(config!.instanceUrl, config!.workspace),
+      widgetUrl: `${widgetBase(
+        config!.instanceUrl,
+        config!.workspace,
+        config!.baseUrl,
+      )}/`,
       placement,
       defaultBoard: config!.defaultBoard,
       container,
@@ -349,6 +395,23 @@ export function createSDK(): SDK {
       locale: config!.locale,
       onBackdropClick: () => dispatch("close"),
     });
+    if (
+      !ready &&
+      loadTimer === null &&
+      (loadErrorCb || config!.fallbackEmail)
+    ) {
+      const timeoutMs = config!.loadTimeoutMs ?? 3000;
+      const initToken = config;
+      loadTimer = window.setTimeout(() => {
+        loadTimer = null;
+        if (config === initToken && !ready) {
+          triggerLoadError(
+            "LOAD_TIMEOUT",
+            `Widget did not load within ${timeoutMs}ms`,
+          );
+        }
+      }, timeoutMs);
+    }
     bridge = createBridge({
       getIframe: () => panel?.iframe ?? null,
       origin: iframeOrigin(),
@@ -433,7 +496,7 @@ export function createSDK(): SDK {
     // Host-page pageview tracking is instance-controlled: it starts only when
     // the server config enables visitor analytics, and only if this init is
     // still the live one. The durable device id is a separate opt-in on top.
-    if (serverConfig.visitorAnalytics === true) {
+    if (serverConfig.visitorAnalytics === true && initToken.instanceUrl) {
       analyticsConfig = {
         instanceUrl: initToken.instanceUrl,
         deviceTracking: serverConfig.visitorDeviceTracking === true,
@@ -513,6 +576,16 @@ export function createSDK(): SDK {
         // Validate before destroy so a bad re-init leaves the working instance intact.
         if (config) dispatch("destroy");
         config = next;
+        loadErrorCb =
+          a &&
+          typeof a === "object" &&
+          typeof (a as { onLoadError?: unknown }).onLoadError === "function"
+            ? (
+                a as {
+                  onLoadError: (e: { code: string; message: string }) => void;
+                }
+              ).onLoadError
+            : null;
         hostTheme = next.theme ?? null;
         announcedOpen = false;
         // Only an explicit option changes the host's choice, so a withdrawal
@@ -553,6 +626,7 @@ export function createSDK(): SDK {
             next.instanceUrl,
             next.workspace,
             controller.signal,
+            next.baseUrl,
           )
             .then((serverConfig) => {
               if (serverConfig) return applyServerConfig(serverConfig, next);
@@ -720,6 +794,8 @@ export function createSDK(): SDK {
         configAbort = null;
         if (revealTimer !== null) window.clearTimeout(revealTimer);
         revealTimer = null;
+        clearLoadFallback();
+        loadErrorCb = null;
         cancelPanelPreload();
         panel?.destroy();
         launcher?.remove();

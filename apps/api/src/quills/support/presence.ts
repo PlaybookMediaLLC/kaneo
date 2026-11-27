@@ -5,7 +5,8 @@ import { kvStore } from "../../database/quills/schema/kv";
 import { defineQuillsRoute, type Database } from "../framework/define-route";
 import { readSettingsKey } from "../feedback/settings-json";
 import { requireSurface } from "./customer/model";
-import { officeHoursSchema } from "./support-settings";
+import { computeOfficeHoursStatus } from "./office-hours-calc";
+import { getWaitTimeEstimate } from "./wait-estimate";
 
 // Team availability for customers: the office hours, and live agent presence (RFC 0001 decision D8).
 // A teammate's open inbox sends a heartbeat. Each heartbeat keeps one kv_store row per teammate for
@@ -49,71 +50,52 @@ async function agentsOnline(db: Database) {
   return Boolean(live);
 }
 
-/** The weekday (0 = Sunday), date and HH:MM of `now` in `timeZone`. */
-function localTime(now: Date, timeZone: string) {
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      weekday: "short",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-    })
-      .formatToParts(now)
-      .map((part) => [part.type, part.value]),
-  );
-  return {
-    day: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(
-      parts.weekday!,
-    ),
-    date: `${parts.year}-${parts.month}-${parts.day}`,
-    time: `${parts.hour}:${parts.minute}`,
-  };
-}
-
 /**
  * Whether the stored office hours (support/support-settings.ts) are open at `now`. Off, unset or
  * a value that its own schema refuses reads as open, as the settings read does. An interval whose
  * end is before its start runs past midnight.
  */
 export function withinOfficeHours(stored: unknown, now: Date) {
-  const parsed = officeHoursSchema.safeParse(stored);
-  if (!parsed.success || !parsed.data.enabled) return true;
-  const hours = parsed.data;
-  const local = localTime(now, hours.timezone);
-  if (
-    hours.holidays.some(
-      (h) =>
-        h.date === local.date ||
-        (h.recurringAnnual && h.date.slice(5) === local.date.slice(5)),
-    )
-  )
-    return false;
-  const yesterday = (local.day + 6) % 7;
-  return hours.intervals.some(({ day, start, end }) =>
-    start < end
-      ? day === local.day && local.time >= start && local.time < end
-      : (day === local.day && local.time >= start) ||
-        (day === yesterday && local.time < end),
-  );
+  return computeOfficeHoursStatus(stored, now).withinOfficeHours;
 }
 
-/** The team's availability, as the widget and the portal show it. */
+/** The team's availability and honest wait-time estimate, as the widget and the portal show it (#333). */
 export const presenceSchema = z.object({
   agentsOnline: z.boolean(),
   withinOfficeHours: z.boolean(),
+  nextOpenAt: z.string().nullable().optional(),
+  estimatedWaitMinutes: z.number().nullable().optional(),
+  estimatedWaitRange: z
+    .object({
+      minMinutes: z.number(),
+      maxMinutes: z.number(),
+      medianMinutes: z.number(),
+      label: z.string(),
+    })
+    .nullable()
+    .optional(),
 });
 
 export async function teamPresence(db: Database) {
+  const [online, storedHours, wait] = await Promise.all([
+    agentsOnline(db),
+    readSettingsKey(db, "metadata", "officeHours"),
+    getWaitTimeEstimate(db),
+  ]);
+  const office = computeOfficeHoursStatus(storedHours, new Date());
   return {
-    agentsOnline: await agentsOnline(db),
-    withinOfficeHours: withinOfficeHours(
-      await readSettingsKey(db, "metadata", "officeHours"),
-      new Date(),
-    ),
+    agentsOnline: online,
+    withinOfficeHours: office.withinOfficeHours,
+    nextOpenAt: office.nextOpenAt,
+    estimatedWaitMinutes: wait?.medianMinutes ?? null,
+    estimatedWaitRange: wait
+      ? {
+          minMinutes: wait.minMinutes,
+          maxMinutes: wait.maxMinutes,
+          medianMinutes: wait.medianMinutes,
+          label: wait.label,
+        }
+      : null,
   };
 }
 

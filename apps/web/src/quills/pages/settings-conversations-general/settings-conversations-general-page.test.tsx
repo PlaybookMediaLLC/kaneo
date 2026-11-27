@@ -41,6 +41,7 @@ const ready = () => {
   );
   api.reply(getPortalSettingsFixture.ok({ supportEnabled: true }));
   api.reply(getAwayReplyFixture.ok());
+  api.reply({ enabled: false, delaySeconds: 10 });
 };
 
 describe("SettingsConversationsGeneralPage", () => {
@@ -48,13 +49,13 @@ describe("SettingsConversationsGeneralPage", () => {
     loading: {
       prepare: () => {
         const api = mockApi();
-        for (let index = 0; index < 9; index += 1) api.defer(() => undefined);
+        for (let index = 0; index < 10; index += 1) api.defer(() => undefined);
       },
     },
     failed: {
       prepare: () => {
         const api = mockApi();
-        for (let index = 0; index < 9; index += 1) api.fail();
+        for (let index = 0; index < 10; index += 1) api.fail();
       },
     },
     ready: {

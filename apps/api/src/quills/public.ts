@@ -2,6 +2,7 @@ import { apiRouter } from "../openapi";
 import { connectorOAuthCallback } from "./assistant/connectors";
 import avatarImage from "./files/avatar-image";
 import customerFiles from "./files/customer";
+import publicMedia from "./files/public-media";
 import inboundEmail from "./inbound/email";
 import emailEvents from "./inbound/events";
 import integrationWebhooks from "./integrations/inbound";
@@ -49,6 +50,7 @@ export type QuillsPublicRouters = [
   typeof widgetSupport,
   typeof customerFiles,
   typeof avatarImage,
+  typeof publicMedia,
   typeof track,
   typeof portalSurveys,
   typeof widgetSurveys,
@@ -74,6 +76,7 @@ export default apiRouter()
   .route("/", widgetSupport)
   .route("/", customerFiles)
   .route("/", avatarImage)
+  .route("/", publicMedia)
   .route("/", track)
   .route("/", portalSurveys)
   .route("/", widgetSurveys);

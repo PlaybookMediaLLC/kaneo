@@ -10,6 +10,8 @@ export interface TeamPermissions {
   manageSettings: boolean;
   /** quills:view_revenue (#79): customer revenue. Absent means hidden. */
   viewRevenue?: boolean;
+  /** quills:comment_internal (#328): internal notes & @mentions without customer replies. */
+  commentInternal?: boolean;
 }
 
 export interface TeamRuntimeValue {

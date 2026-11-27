@@ -2,13 +2,20 @@ import type { GetNotificationPreferencesResponse } from "../api/team/get-notific
 
 /** The notification types that Quills sends today (apps/api/src/quills/jobs/fanout.ts). */
 export type NotificationType = "post_status_changed" | "comment_created";
-export type Channel = "inApp" | "email";
+export type Channel = "inApp" | "email" | "push" | "slackDm";
 
 /** The stored preferences, or the stored preferences with a change that is being saved. */
 export interface ShownPreferences {
   emailStatusChange: boolean;
   emailNewComment: boolean;
-  matrix: { type: string; inApp?: boolean | null; email?: boolean | null }[];
+  digestFrequency?: "off" | "hourly" | "daily";
+  matrix: {
+    type: string;
+    inApp?: boolean | null;
+    email?: boolean | null;
+    push?: boolean | null;
+    slackDm?: boolean | null;
+  }[];
 }
 
 const legacy = {
@@ -18,7 +25,7 @@ const legacy = {
 
 /**
  * The value that the API applies (`wants` in apps/api/src/quills/jobs/preferences.ts): the matrix
- * cell, else the legacy mail flag for email, else on. Mute is a separate switch.
+ * cell, else the legacy mail flag for email, else quiet defaults (push/slackDm off, inApp on).
  */
 export const effective = (
   prefs: ShownPreferences,
@@ -26,7 +33,11 @@ export const effective = (
   channel: Channel,
 ) =>
   prefs.matrix.find((cell) => cell.type === type)?.[channel] ??
-  (channel === "email" ? prefs[legacy[type]] : true);
+  (channel === "email"
+    ? prefs[legacy[type]]
+    : channel === "inApp"
+      ? true
+      : false);
 
 /** The full matrix with one cell changed. The API replaces the stored matrix, so keep every other cell. */
 export function withCell(
@@ -37,7 +48,10 @@ export function withCell(
 ) {
   const cells = matrix.some((cell) => cell.type === type)
     ? matrix
-    : [...matrix, { type, inApp: null, email: null, push: null }];
+    : [
+        ...matrix,
+        { type, inApp: null, email: null, push: null, slackDm: null },
+      ];
   return cells.map((cell) => {
     const next = cell.type === type ? { ...cell, [channel]: value } : cell;
     // The API takes a boolean or no value, not null.
@@ -46,6 +60,7 @@ export function withCell(
       inApp: next.inApp ?? undefined,
       email: next.email ?? undefined,
       push: next.push ?? undefined,
+      slackDm: next.slackDm ?? undefined,
     };
   });
 }

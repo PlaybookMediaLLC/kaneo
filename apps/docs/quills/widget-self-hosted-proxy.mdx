@@ -1,0 +1,92 @@
+---
+title: "Self-Hosted Widget Proxy & Custom Domain"
+description: "Serve the Quills widget from your own domain or path proxy so privacy browsers and ad-blockers never block it, with zero cookies and graceful fallback."
+---
+
+To prevent ad-blockers or privacy extensions from blocking third-party widget hosts, Quills supports **first-party custom widget domains**, **same-origin reverse proxies**, **zero-cookie transport**, and a **graceful load-timeout fallback**.
+
+## Option 1: Custom Widget Domain (DNS)
+
+Configure a dedicated subdomain (for example `support.acme.com`) via `PUT /api/quills/{workspaceId}/operations/domains/widget` and verify its TXT record.
+
+Once verified, point your subdomain CNAME at your Kaneo host and initialize the widget with `baseUrl`:
+
+```html
+<script src="https://support.acme.com/widget/sdk.js" defer></script>
+<script>
+  Quills("init", {
+    instanceUrl: "https://support.acme.com",
+    workspace: "acme",
+    baseUrl: "https://support.acme.com/widget",
+    fallbackEmail: "support@acme.com",
+    onLoadError: (err) => console.warn("Support widget unavailable:", err),
+  });
+</script>
+```
+
+The custom host middleware strips all `Cookie` / `Set-Cookie` headers and sets `Access-Control-Allow-Origin: *` on `sdk.js` and `config.json`.
+
+## Option 2: Same-Origin Reverse Proxy
+
+Proxy `/support-widget/*` on your own domain to `/api/quills-public/{workspace}/widget/*` and initialize with `baseUrl: "/support-widget"`.
+
+### Nginx
+
+```nginx
+location /support-widget/ {
+  proxy_pass https://kaneo.example.com/api/quills-public/acme/widget/;
+  proxy_set_header Host kaneo.example.com;
+  proxy_hide_header Set-Cookie;
+  proxy_set_header Cookie "";
+}
+```
+
+### Cloudflare Workers
+
+```ts
+export default {
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const suffix = url.pathname.replace(/^\/support-widget/, "");
+    const target = `https://kaneo.example.com/api/quills-public/acme/widget${suffix}${url.search}`;
+    const headers = new Headers(request.headers);
+    headers.delete("cookie");
+    const res = await fetch(target, { method: request.method, headers, body: request.body });
+    const out = new Response(res.body, res);
+    out.headers.delete("set-cookie");
+    return out;
+  },
+};
+```
+
+### Caddy
+
+```caddy
+handle_path /support-widget/* {
+  reverse_proxy https://kaneo.example.com {
+    header_up Host kaneo.example.com
+    header_up -Cookie
+    header_down -Set-Cookie
+    rewrite /api/quills-public/acme/widget{uri}
+  }
+}
+```
+
+### Vercel (`vercel.json`)
+
+```json
+{
+  "rewrites": [
+    {
+      "source": "/support-widget/:path*",
+      "destination": "https://kaneo.example.com/api/quills-public/acme/widget/:path*"
+    }
+  ]
+}
+```
+
+## Graceful Fallback
+
+If the widget fails to reach ready state within `loadTimeoutMs` (default `3000` ms):
+- `onLoadError({ code: "LOAD_TIMEOUT", message })` is invoked.
+- If `fallbackEmail` is set, an unobtrusive **"Email us instead"** `mailto:` button renders in the launcher slot.

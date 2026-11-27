@@ -12,6 +12,7 @@ import {
   SettingsNote,
   SettingsSection,
 } from "../../ui/upstream";
+import { WebhookDeliveriesSection } from "./parts/webhook-deliveries-panel";
 
 export interface SettingsApiPageProps {
   workspaceId: string;
@@ -90,6 +91,10 @@ export function SettingsApiPage({ workspaceId }: SettingsApiPageProps) {
             {t("settings-connections.api.developerNote")}
           </SettingsNote>
         </SettingsSection>
+        <WebhookDeliveriesSection
+          workspaceId={workspaceId}
+          disabled={!team.permissions.manageSettings}
+        />
       </div>
     </PageFrame>
   );

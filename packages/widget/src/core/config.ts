@@ -31,23 +31,31 @@ export const serverConfigSchema = z.object({
 });
 export type ServerConfig = z.infer<typeof serverConfigSchema>;
 
-/** The widget's base path on a Kaneo instance. */
-export const widgetBase = (instanceUrl: string, workspace: string) =>
-  `${instanceUrl}/api/quills-public/${encodeURIComponent(workspace)}/widget`;
+/** The widget's base path on a Kaneo instance, custom domain, or reverse proxy (#318). */
+export const widgetBase = (
+  instanceUrl?: string,
+  workspace?: string,
+  baseUrl?: string,
+) =>
+  baseUrl
+    ? baseUrl.replace(/\/+$/, "")
+    : `${(instanceUrl ?? "").replace(/\/+$/, "")}/api/quills-public/${encodeURIComponent(workspace ?? "")}/widget`;
 
 /**
  * Null when the instance says the widget is off or the workspace does not exist; `{}` when the
  * config could not be read, so a transient failure still shows the launcher. The version query
- * keeps this cross-origin GET free of custom-header preflights.
+ * keeps this cross-origin GET free of custom-header preflights. Uses `credentials: "omit"` for
+ * zero-cookie operation (#318).
  */
 export async function fetchServerConfig(
-  instanceUrl: string,
-  workspace: string,
+  instanceUrl?: string,
+  workspace?: string,
   signal?: AbortSignal,
+  baseUrl?: string,
 ): Promise<ServerConfig | null> {
   try {
-    const url = `${widgetBase(instanceUrl, workspace)}/config.json?sdk=${encodeURIComponent(SDK_VERSION)}`;
-    const res = await fetch(url, { signal });
+    const url = `${widgetBase(instanceUrl, workspace, baseUrl)}/config.json?sdk=${encodeURIComponent(SDK_VERSION)}`;
+    const res = await fetch(url, { signal, credentials: "omit" });
     if (res.status === 404) return null;
     if (!res.ok) return {};
     // The Quills API wraps the config as { enabled, config }; config is null while the widget is off.

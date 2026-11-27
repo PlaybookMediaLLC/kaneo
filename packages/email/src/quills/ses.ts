@@ -187,6 +187,7 @@ export interface SesSendRequest {
    *  {@link formatAddress} before it reaches the wire. */
   from: string;
   to: string | string[];
+  cc?: string[];
   subject: string;
   html?: string;
   text?: string;
@@ -819,6 +820,9 @@ export async function sendViaSes(
     FromEmailAddress: formatAddress(request.from),
     Destination: {
       ToAddresses: Array.isArray(request.to) ? request.to : [request.to],
+      ...(request.cc && request.cc.length > 0
+        ? { CcAddresses: request.cc }
+        : {}),
     },
     // A team's reply address can carry a display name too, and this list is
     // parsed the same way.
@@ -847,7 +851,13 @@ export async function sendViaSes(
                 RawContent: attachment.content,
                 FileName: attachment.filename,
                 ContentType: attachment.contentType,
-                ContentDisposition: "ATTACHMENT" as const,
+                ContentDisposition:
+                  attachment.disposition === "inline"
+                    ? ("INLINE" as const)
+                    : ("ATTACHMENT" as const),
+                ...(attachment.contentId
+                  ? { ContentId: attachment.contentId }
+                  : {}),
               })),
             }
           : {}),

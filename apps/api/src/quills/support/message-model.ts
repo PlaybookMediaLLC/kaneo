@@ -63,6 +63,8 @@ export const messageSchema = z.object({
   ),
   reactions,
   flaggedAt: nullableResponseTimestamp,
+  sendStatus: z.enum(["sent", "scheduled", "recalled"]),
+  scheduledSendAt: nullableResponseTimestamp,
   createdAt: responseTimestamp,
   editedAt: nullableResponseTimestamp,
 });
@@ -84,6 +86,8 @@ export const selectMessages = (db: Database, where: SQL | undefined) =>
       contentJson: conversationMessages.contentJson,
       metadata: conversationMessages.metadata,
       attachments: conversationMessages.attachments,
+      sendStatus: conversationMessages.sendStatus,
+      scheduledSendAt: conversationMessages.scheduledSendAt,
       createdAt: conversationMessages.createdAt,
       editedAt: conversationMessages.editedAt,
     })
@@ -202,6 +206,8 @@ export async function findMessage(db: Database, id: MessageId) {
       principalId: conversationMessages.principalId,
       senderType: conversationMessages.senderType,
       isInternal: conversationMessages.isInternal,
+      sendStatus: conversationMessages.sendStatus,
+      scheduledSendAt: conversationMessages.scheduledSendAt,
       createdAt: conversationMessages.createdAt,
       metadata: conversationMessages.metadata,
     })
@@ -211,6 +217,7 @@ export async function findMessage(db: Database, id: MessageId) {
         eq(conversationMessages.id, id),
         isNotNull(conversationMessages.conversationId),
         isNull(conversationMessages.deletedAt),
+        sql`${conversationMessages.sendStatus} <> 'recalled'`,
       ),
     )
     .limit(1);

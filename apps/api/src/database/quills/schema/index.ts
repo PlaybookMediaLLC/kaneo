@@ -89,3 +89,4 @@ export * from "./surveys";
 export * from "./changelog-engagement";
 export * from "./changelog-translations";
 export * from "./content-translations";
+export * from "./brands";
