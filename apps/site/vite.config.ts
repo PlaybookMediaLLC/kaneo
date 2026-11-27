@@ -12,6 +12,7 @@ export default defineConfig({
         cache: {
           input: [
             { auto: true },
+            { pattern: "apps/docs/**", base: "workspace" },
             { pattern: "branding/**", base: "workspace" },
             { pattern: "scripts/branding/**", base: "workspace" },
             ".env*",

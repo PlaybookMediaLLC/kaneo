@@ -1,4 +1,5 @@
 import { brand } from "@kaneo/branding";
+import { getMcpDocsHref } from "@/lib/docs/links";
 import { landing } from "@/lib/landing";
 
 export const appStoreUrl = brand.appStoreUrl;
@@ -8,7 +9,7 @@ export const productAnswers = [
   { ...landing.product.hosting, href: "/pricing" },
   { ...landing.product.planning, href: "/openproject-alternative" },
   { ...landing.product.sso, href: "/pricing#managed-instance" },
-  { ...landing.product.agents, href: "/docs/core/integrations/mcp" },
+  { ...landing.product.agents, href: getMcpDocsHref() },
   ...(appStoreUrl ? [{ ...landing.product.mobile, href: appStoreUrl }] : []),
 ];
 

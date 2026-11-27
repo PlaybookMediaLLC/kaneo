@@ -21,6 +21,10 @@ import {
 import { brandMarkdown } from "./markdown.mjs";
 import { packageMetadata, registryMetadata } from "./prepare-package.mjs";
 import { isOmittedDoc, brandDocsConfig } from "./docs-config.mjs";
+import {
+  createExportedDocsMatcher,
+  resolveExportedDocsTarget,
+} from "./docs-output.mjs";
 import { brandInstaller } from "./installer.mjs";
 import { brandHtml } from "./html.mjs";
 import {
@@ -411,6 +415,15 @@ export async function checkOutput(directory) {
       directory,
     );
   const exported = /^apps\/site\/out(?:\/|$)/.test(directory);
+  const isExportedDocsCovered = exported
+    ? createExportedDocsMatcher({
+        exceptions,
+        reviewedCode,
+        exceptionValue,
+        brandText,
+        matches,
+      })
+    : null;
   const inventory = JSON.parse(
     await readFile(path.join(root, "branding/asset-review.json"), "utf8"),
   );
@@ -454,11 +467,24 @@ export async function checkOutput(directory) {
       findings.push(...scanStyles(source, relative));
       continue;
     }
+    const isJson = /\.(json|webmanifest)$/.test(file);
+    const parsedJson = isJson ? JSON.parse(source) : null;
+    if (
+      compiled &&
+      code.test(file) &&
+      matches(source).length === 0 &&
+      !/\\u|\\x/i.test(source)
+    ) {
+      continue;
+    }
     const scanned = code.test(file)
       ? scanBundle(source, relative)
-      : /\.(json|webmanifest)$/.test(file)
-        ? scanValues(JSON.parse(source), relative)
+      : isJson
+        ? scanValues(parsedJson, relative)
         : scanText(source, relative);
+    const docsTarget = exported
+      ? resolveExportedDocsTarget(relative, root)
+      : null;
     // Compilers lose source paths; retain only exact reviewed technical values. Source CI still checks their original locations.
     findings.push(
       ...scanned.filter((finding) => {
@@ -479,11 +505,22 @@ export async function checkOutput(directory) {
         // Static exports inline compiled code into HTML and RSC payloads.
         if (exported && /\.(html|txt)$/.test(file) && covered(finding))
           return false;
-        const sourceFile = relative
-          .replace(/^\.cache\/npm\/([^/]+)\//, "packages/$1/")
-          .replace(/^apps\/web\/dist\//, "apps/web/public/")
-          .replace(/^apps\/site\/out\//, "apps/site/public/")
-          .replace(/^\.cache\/branded-docs(-test-[^/]+)?\//, "apps/docs/");
+        if (
+          docsTarget &&
+          isExportedDocsCovered?.(finding, docsTarget, parsedJson)
+        )
+          return false;
+        const sourceFile =
+          docsTarget?.kind === "openapi"
+            ? docsTarget.sourceFile
+            : relative
+                .replace(/^\.cache\/npm\/([^/]+)\//, "packages/$1/")
+                .replace(/^apps\/web\/dist\//, "apps/web/public/")
+                .replace(/^apps\/site\/out\//, "apps/site/public/")
+                .replace(
+                  /^\.cache\/branded-docs(-test-[^/]+)?\//,
+                  "apps/docs/",
+                );
         const key = `${sourceFile}\0${exceptionValue(finding.value)}\0`;
         return !reviewedText.has(key + finding.term) && !reviewedText.has(key);
       }),

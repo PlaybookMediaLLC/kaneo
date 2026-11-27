@@ -89,6 +89,12 @@ export function Footer() {
               <p className="font-medium">Resources</p>
               <a
                 className="block text-muted-foreground transition-colors hover:text-foreground"
+                href="/api-reference"
+              >
+                API Reference
+              </a>
+              <a
+                className="block text-muted-foreground transition-colors hover:text-foreground"
                 href="/press"
               >
                 {press.title}

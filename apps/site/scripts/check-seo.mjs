@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 
 const siteDir = fileURLToPath(new URL("../", import.meta.url));
 const outDir = path.join(siteDir, "out");
-const docsDir = path.resolve(siteDir, "../docs");
 const origin = brandText("https://kaneo.app");
 const failures = new Set();
 
@@ -42,34 +41,43 @@ function tags(html, name) {
 
 function targetFile(pathname) {
   const relative = decodeURIComponent(pathname).replace(/^\//, "");
-  const isDocs = relative === "docs" || relative.startsWith("docs/");
-  const base = path.join(
-    isDocs ? docsDir : outDir,
-    isDocs ? relative.slice(4) : relative,
-  );
-  const candidates = isDocs
-    ? [`${base}.mdx`, path.join(base, "index.mdx"), base]
-    : [`${base}.html`, path.join(base, "index.html"), base];
+  const base = path.join(outDir, relative);
+  const candidates = [`${base}.html`, path.join(base, "index.html"), base];
   return candidates.find(
     (candidate) => existsSync(candidate) && statSync(candidate).isFile(),
   );
 }
 
-const sitemapFile = path.join(outDir, "sitemap-pages.xml");
-if (!existsSync(sitemapFile)) {
-  console.error("Build the site before running seo:check.");
-  process.exit(1);
+function readSitemapUrls(filePath, label) {
+  if (!existsSync(filePath)) {
+    console.error(
+      `Missing ${label} at ${filePath}. Build the site before running seo:check.`,
+    );
+    process.exit(1);
+  }
+  const xml = readFileSync(filePath, "utf8");
+  return [...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map((match) =>
+    decode(match[1]),
+  );
 }
 
-const sitemap = readFileSync(sitemapFile, "utf8");
-const urls = [...sitemap.matchAll(/<loc>(.*?)<\/loc>/g)].map((match) =>
-  decode(match[1]),
+const pageUrls = readSitemapUrls(
+  path.join(outDir, "sitemap-pages.xml"),
+  "sitemap-pages.xml",
 );
-check(urls.length > 0, "The page sitemap is empty.");
+const docsUrls = readSitemapUrls(
+  path.join(outDir, "docs", "sitemap.xml"),
+  "docs/sitemap.xml",
+);
+const urls = [...pageUrls, ...docsUrls];
+
+check(pageUrls.length > 0, "The page sitemap is empty.");
+check(docsUrls.length > 0, "The docs sitemap is empty.");
 check(
   new Set(urls).size === urls.length,
-  "The sitemap contains duplicate URLs.",
+  "The combined sitemaps contain duplicate URLs.",
 );
+
 const titles = new Map();
 const linkedPages = new Set();
 
@@ -154,7 +162,7 @@ for (const url of urls) {
       failures.add(`Invalid JSON-LD: ${url}`);
     }
   }
-  // Ignore script bodies so hydration payloads cannot masquerade as links.
+  // Ignore script bodies so hydration payloads cannot masquerade as links or images.
   const body = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
   for (const anchor of tags(body, "a")) {
     if (!anchor.href) continue;
@@ -167,6 +175,15 @@ for (const url of urls) {
     if (target.pathname !== location.pathname)
       linkedPages.add(`${origin}${target.pathname}`);
   }
+  for (const image of tags(body, "img")) {
+    if (!image.src || image.src.startsWith("data:")) continue;
+    const target = new URL(image.src, url);
+    if (target.origin !== origin) continue;
+    check(
+      Boolean(targetFile(target.pathname)),
+      `Broken internal image ${target.pathname} on ${location.pathname}`,
+    );
+  }
 }
 
 for (const url of urls)
@@ -177,5 +194,5 @@ if (failures.size) {
   process.exit(1);
 }
 console.log(
-  `SEO checks passed for ${urls.length} pages: metadata, canonicals, social images, headings, JSON-LD, and internal links.`,
+  `SEO checks passed for ${urls.length} pages (${pageUrls.length} site + ${docsUrls.length} docs): metadata, canonicals, social images, headings, JSON-LD, images, and internal links.`,
 );

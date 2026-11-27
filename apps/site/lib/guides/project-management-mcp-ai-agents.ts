@@ -1,3 +1,4 @@
+import { getMcpDocsHref } from "@/lib/docs/links";
 import type { Guide } from "./types";
 
 export const projectManagementMcpAiAgents: Guide = {
@@ -23,7 +24,7 @@ export const projectManagementMcpAiAgents: Guide = {
       items: [
         {
           name: "Stdio server",
-          href: "/docs/core/integrations/mcp",
+          href: getMcpDocsHref(),
           body: "The @kaneo/mcp package runs locally and connects a desktop client such as Claude Desktop to your Kaneo instance using an API key from workspace settings.",
         },
         {
@@ -74,7 +75,7 @@ export const projectManagementMcpAiAgents: Guide = {
     },
   ],
   related: [
-    { label: "MCP documentation", href: "/docs/core/integrations/mcp" },
+    { label: "MCP documentation", href: getMcpDocsHref() },
     { label: "Kaneo vs Linear", href: "/linear-alternative" },
     { label: "All comparisons", href: "/alternatives" },
   ],
