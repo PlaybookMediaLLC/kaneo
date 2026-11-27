@@ -1,6 +1,6 @@
 {
-	"id": "ae99393d-7d53-4ca3-ae5d-b22b64b7ab98",
-	"prevId": "6787cee1-a41e-41cd-91b1-4595c27ef511",
+	"id": "e9fbdea4-2593-4171-acbb-68dd0b96897c",
+	"prevId": "e71add34-bd6d-46ae-8161-3c48edb9a093",
 	"version": "7",
 	"dialect": "postgresql",
 	"tables": {
@@ -871,6 +871,18 @@
 					"primaryKey": false,
 					"notNull": true,
 					"default": 1
+				},
+				"assistant_budget_config": {
+					"name": "assistant_budget_config",
+					"type": "jsonb",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"assistant_provider_secrets": {
+					"name": "assistant_provider_secrets",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
 				},
 				"widget_config": {
 					"name": "widget_config",
@@ -3814,6 +3826,12 @@
 					"primaryKey": false,
 					"notNull": false
 				},
+				"source_signal_id": {
+					"name": "source_signal_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": false
+				},
 				"importance": {
 					"name": "importance",
 					"type": "text",
@@ -4247,6 +4265,31 @@
 					"type": "timestamp with time zone",
 					"primaryKey": false,
 					"notNull": false
+				},
+				"first_team_response_at": {
+					"name": "first_team_response_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"ack_due_at": {
+					"name": "ack_due_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"vote_burst_flagged_at": {
+					"name": "vote_burst_flagged_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"vote_burst_count": {
+					"name": "vote_burst_count",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"default": 0
 				},
 				"score_reach": {
 					"name": "score_reach",
@@ -4829,6 +4872,13 @@
 					"type": "integer",
 					"primaryKey": false,
 					"notNull": false
+				},
+				"churn_risk": {
+					"name": "churn_risk",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
 				},
 				"size": {
 					"name": "size",
@@ -9315,6 +9365,18 @@
 					"primaryKey": false,
 					"notNull": false
 				},
+				"merged_into_conversation_id": {
+					"name": "merged_into_conversation_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"merged_at": {
+					"name": "merged_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": false
+				},
 				"end_note": {
 					"name": "end_note",
 					"type": "text",
@@ -11139,6 +11201,18 @@
 				},
 				"due_at": {
 					"name": "due_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"merged_into_ticket_id": {
+					"name": "merged_into_ticket_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"merged_at": {
+					"name": "merged_at",
 					"type": "timestamp with time zone",
 					"primaryKey": false,
 					"notNull": false
@@ -17034,6 +17108,12 @@
 					"primaryKey": false,
 					"notNull": false
 				},
+				"conversation_id": {
+					"name": "conversation_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": false
+				},
 				"input_tokens": {
 					"name": "input_tokens",
 					"type": "integer",
@@ -17056,6 +17136,12 @@
 				},
 				"cost_usd": {
 					"name": "cost_usd",
+					"type": "numeric(12, 6)",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"estimated_cost_usd": {
+					"name": "estimated_cost_usd",
 					"type": "numeric(12, 6)",
 					"primaryKey": false,
 					"notNull": false
@@ -17865,6 +17951,42 @@
 					"primaryKey": false,
 					"notNull": false
 				},
+				"owner_id": {
+					"name": "owner_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"review_by": {
+					"name": "review_by",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"last_reviewed_at": {
+					"name": "last_reviewed_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"stale_reason": {
+					"name": "stale_reason",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"stale_details": {
+					"name": "stale_details",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"stale_flagged_at": {
+					"name": "stale_flagged_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": false
+				},
 				"created_at": {
 					"name": "created_at",
 					"type": "timestamp with time zone",
@@ -17940,6 +18062,72 @@
 						}
 					],
 					"isUnique": false,
+					"concurrently": false,
+					"method": "btree",
+					"with": {}
+				},
+				"kb_articles_owner_id_idx": {
+					"name": "kb_articles_owner_id_idx",
+					"columns": [
+						{
+							"expression": "workspace_id",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						},
+						{
+							"expression": "owner_id",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						}
+					],
+					"isUnique": false,
+					"where": "\"quills\".\"kb_articles\".\"owner_id\" IS NOT NULL",
+					"concurrently": false,
+					"method": "btree",
+					"with": {}
+				},
+				"kb_articles_stale_flagged_idx": {
+					"name": "kb_articles_stale_flagged_idx",
+					"columns": [
+						{
+							"expression": "workspace_id",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						},
+						{
+							"expression": "stale_flagged_at",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						}
+					],
+					"isUnique": false,
+					"where": "\"quills\".\"kb_articles\".\"stale_flagged_at\" IS NOT NULL",
+					"concurrently": false,
+					"method": "btree",
+					"with": {}
+				},
+				"kb_articles_review_by_idx": {
+					"name": "kb_articles_review_by_idx",
+					"columns": [
+						{
+							"expression": "workspace_id",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						},
+						{
+							"expression": "review_by",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						}
+					],
+					"isUnique": false,
+					"where": "\"quills\".\"kb_articles\".\"review_by\" IS NOT NULL",
 					"concurrently": false,
 					"method": "btree",
 					"with": {}
@@ -18092,6 +18280,16 @@
 					"columnsFrom": ["workspace_id", "principal_id"],
 					"columnsTo": ["workspace_id", "id"],
 					"onDelete": "restrict",
+					"onUpdate": "no action"
+				},
+				"kb_articles_owner_id_fk": {
+					"name": "kb_articles_owner_id_fk",
+					"tableFrom": "kb_articles",
+					"tableTo": "principal",
+					"schemaTo": "quills",
+					"columnsFrom": ["workspace_id", "owner_id"],
+					"columnsTo": ["workspace_id", "id"],
+					"onDelete": "set null",
 					"onUpdate": "no action"
 				}
 			},
@@ -18653,6 +18851,18 @@
 					"primaryKey": false,
 					"notNull": true
 				},
+				"clicked_article_id": {
+					"name": "clicked_article_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"clicked_at": {
+					"name": "clicked_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": false
+				},
 				"created_at": {
 					"name": "created_at",
 					"type": "timestamp with time zone",
@@ -18688,6 +18898,246 @@
 					"to": ["public"],
 					"using": "\"quills\".\"kb_search_queries\".\"workspace_id\" = nullif(current_setting('quills.workspace_id', true), '')",
 					"withCheck": "\"quills\".\"kb_search_queries\".\"workspace_id\" = nullif(current_setting('quills.workspace_id', true), '')"
+				}
+			},
+			"checkConstraints": {},
+			"isRLSEnabled": true
+		},
+		"quills.kb_article_links": {
+			"name": "kb_article_links",
+			"schema": "quills",
+			"columns": {
+				"workspace_id": {
+					"name": "workspace_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "nullif(current_setting('quills.workspace_id', true), '')"
+				},
+				"id": {
+					"name": "id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "gen_random_uuid()"
+				},
+				"article_id": {
+					"name": "article_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"target_kind": {
+					"name": "target_kind",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"target_id": {
+					"name": "target_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"created_at": {
+					"name": "created_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "now()"
+				}
+			},
+			"indexes": {
+				"kb_article_links_ws_article_target_uq": {
+					"name": "kb_article_links_ws_article_target_uq",
+					"columns": [
+						{
+							"expression": "workspace_id",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						},
+						{
+							"expression": "article_id",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						},
+						{
+							"expression": "target_kind",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						},
+						{
+							"expression": "target_id",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						}
+					],
+					"isUnique": true,
+					"concurrently": false,
+					"method": "btree",
+					"with": {}
+				},
+				"kb_article_links_ws_target_idx": {
+					"name": "kb_article_links_ws_target_idx",
+					"columns": [
+						{
+							"expression": "workspace_id",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						},
+						{
+							"expression": "target_kind",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						},
+						{
+							"expression": "target_id",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						}
+					],
+					"isUnique": false,
+					"concurrently": false,
+					"method": "btree",
+					"with": {}
+				}
+			},
+			"foreignKeys": {
+				"kb_article_links_workspace_id_workspace_id_fk": {
+					"name": "kb_article_links_workspace_id_workspace_id_fk",
+					"tableFrom": "kb_article_links",
+					"tableTo": "workspace",
+					"columnsFrom": ["workspace_id"],
+					"columnsTo": ["id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				},
+				"kb_article_links_article_fk": {
+					"name": "kb_article_links_article_fk",
+					"tableFrom": "kb_article_links",
+					"tableTo": "kb_articles",
+					"schemaTo": "quills",
+					"columnsFrom": ["workspace_id", "article_id"],
+					"columnsTo": ["workspace_id", "id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				}
+			},
+			"compositePrimaryKeys": {
+				"kb_article_links_workspace_id_id_pk": {
+					"name": "kb_article_links_workspace_id_id_pk",
+					"columns": ["workspace_id", "id"]
+				}
+			},
+			"uniqueConstraints": {},
+			"policies": {
+				"workspace_isolation": {
+					"name": "workspace_isolation",
+					"as": "PERMISSIVE",
+					"for": "ALL",
+					"to": ["public"],
+					"using": "\"quills\".\"kb_article_links\".\"workspace_id\" = nullif(current_setting('quills.workspace_id', true), '')",
+					"withCheck": "\"quills\".\"kb_article_links\".\"workspace_id\" = nullif(current_setting('quills.workspace_id', true), '')"
+				}
+			},
+			"checkConstraints": {},
+			"isRLSEnabled": true
+		},
+		"quills.kb_search_synonyms": {
+			"name": "kb_search_synonyms",
+			"schema": "quills",
+			"columns": {
+				"workspace_id": {
+					"name": "workspace_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "nullif(current_setting('quills.workspace_id', true), '')"
+				},
+				"id": {
+					"name": "id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "gen_random_uuid()"
+				},
+				"term": {
+					"name": "term",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"synonyms": {
+					"name": "synonyms",
+					"type": "jsonb",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "'[]'::jsonb"
+				},
+				"created_at": {
+					"name": "created_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "now()"
+				}
+			},
+			"indexes": {
+				"kb_search_synonyms_ws_term_uq": {
+					"name": "kb_search_synonyms_ws_term_uq",
+					"columns": [
+						{
+							"expression": "workspace_id",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						},
+						{
+							"expression": "lower(\"term\")",
+							"asc": true,
+							"isExpression": true,
+							"nulls": "last"
+						}
+					],
+					"isUnique": true,
+					"concurrently": false,
+					"method": "btree",
+					"with": {}
+				}
+			},
+			"foreignKeys": {
+				"kb_search_synonyms_workspace_id_workspace_id_fk": {
+					"name": "kb_search_synonyms_workspace_id_workspace_id_fk",
+					"tableFrom": "kb_search_synonyms",
+					"tableTo": "workspace",
+					"columnsFrom": ["workspace_id"],
+					"columnsTo": ["id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				}
+			},
+			"compositePrimaryKeys": {
+				"kb_search_synonyms_workspace_id_id_pk": {
+					"name": "kb_search_synonyms_workspace_id_id_pk",
+					"columns": ["workspace_id", "id"]
+				}
+			},
+			"uniqueConstraints": {},
+			"policies": {
+				"workspace_isolation": {
+					"name": "workspace_isolation",
+					"as": "PERMISSIVE",
+					"for": "ALL",
+					"to": ["public"],
+					"using": "\"quills\".\"kb_search_synonyms\".\"workspace_id\" = nullif(current_setting('quills.workspace_id', true), '')",
+					"withCheck": "\"quills\".\"kb_search_synonyms\".\"workspace_id\" = nullif(current_setting('quills.workspace_id', true), '')"
 				}
 			},
 			"checkConstraints": {},
@@ -21342,6 +21792,12 @@
 				},
 				"ended_at": {
 					"name": "ended_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"reopened_after_resolution_at": {
+					"name": "reopened_after_resolution_at",
 					"type": "timestamp with time zone",
 					"primaryKey": false,
 					"notNull": false
@@ -28403,6 +28859,207 @@
 				}
 			},
 			"checkConstraints": {},
+			"isRLSEnabled": true
+		},
+		"quills.support_merge_records": {
+			"name": "support_merge_records",
+			"schema": "quills",
+			"columns": {
+				"workspace_id": {
+					"name": "workspace_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "nullif(current_setting('quills.workspace_id', true), '')"
+				},
+				"id": {
+					"name": "id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "gen_random_uuid()"
+				},
+				"entity_kind": {
+					"name": "entity_kind",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"source_id": {
+					"name": "source_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"target_id": {
+					"name": "target_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"cross_requester": {
+					"name": "cross_requester",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				},
+				"cross_company": {
+					"name": "cross_company",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				},
+				"notify_requester": {
+					"name": "notify_requester",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				},
+				"merged_by_principal_id": {
+					"name": "merged_by_principal_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"snapshot": {
+					"name": "snapshot",
+					"type": "jsonb",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"undone_at": {
+					"name": "undone_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"undone_by_principal_id": {
+					"name": "undone_by_principal_id",
+					"type": "uuid",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"created_at": {
+					"name": "created_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "now()"
+				}
+			},
+			"indexes": {
+				"support_merge_records_ws_source_idx": {
+					"name": "support_merge_records_ws_source_idx",
+					"columns": [
+						{
+							"expression": "workspace_id",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						},
+						{
+							"expression": "entity_kind",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						},
+						{
+							"expression": "source_id",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						}
+					],
+					"isUnique": false,
+					"concurrently": false,
+					"method": "btree",
+					"with": {}
+				},
+				"support_merge_records_ws_target_idx": {
+					"name": "support_merge_records_ws_target_idx",
+					"columns": [
+						{
+							"expression": "workspace_id",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						},
+						{
+							"expression": "entity_kind",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						},
+						{
+							"expression": "target_id",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						}
+					],
+					"isUnique": false,
+					"concurrently": false,
+					"method": "btree",
+					"with": {}
+				}
+			},
+			"foreignKeys": {
+				"support_merge_records_workspace_id_workspace_id_fk": {
+					"name": "support_merge_records_workspace_id_workspace_id_fk",
+					"tableFrom": "support_merge_records",
+					"tableTo": "workspace",
+					"columnsFrom": ["workspace_id"],
+					"columnsTo": ["id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				},
+				"support_merge_records_merged_by_fk": {
+					"name": "support_merge_records_merged_by_fk",
+					"tableFrom": "support_merge_records",
+					"tableTo": "principal",
+					"schemaTo": "quills",
+					"columnsFrom": ["workspace_id", "merged_by_principal_id"],
+					"columnsTo": ["workspace_id", "id"],
+					"onDelete": "set null",
+					"onUpdate": "no action"
+				},
+				"support_merge_records_undone_by_fk": {
+					"name": "support_merge_records_undone_by_fk",
+					"tableFrom": "support_merge_records",
+					"tableTo": "principal",
+					"schemaTo": "quills",
+					"columnsFrom": ["workspace_id", "undone_by_principal_id"],
+					"columnsTo": ["workspace_id", "id"],
+					"onDelete": "set null",
+					"onUpdate": "no action"
+				}
+			},
+			"compositePrimaryKeys": {
+				"support_merge_records_workspace_id_id_pk": {
+					"name": "support_merge_records_workspace_id_id_pk",
+					"columns": ["workspace_id", "id"]
+				}
+			},
+			"uniqueConstraints": {},
+			"policies": {
+				"workspace_isolation": {
+					"name": "workspace_isolation",
+					"as": "PERMISSIVE",
+					"for": "ALL",
+					"to": ["public"],
+					"using": "\"quills\".\"support_merge_records\".\"workspace_id\" = nullif(current_setting('quills.workspace_id', true), '')",
+					"withCheck": "\"quills\".\"support_merge_records\".\"workspace_id\" = nullif(current_setting('quills.workspace_id', true), '')"
+				}
+			},
+			"checkConstraints": {
+				"support_merge_records_kind_check": {
+					"name": "support_merge_records_kind_check",
+					"value": "\"quills\".\"support_merge_records\".\"entity_kind\" IN ('conversation', 'ticket') AND \"quills\".\"support_merge_records\".\"source_id\" <> \"quills\".\"support_merge_records\".\"target_id\""
+				}
+			},
 			"isRLSEnabled": true
 		}
 	},
