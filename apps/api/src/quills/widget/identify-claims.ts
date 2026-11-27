@@ -103,6 +103,39 @@ export async function claimedAttributes(
   return { set, ignored: [...values.keys()].filter((key) => !(key in set)) };
 }
 
+function parseSegmentSlugs(claim: unknown) {
+  return [
+    ...new Set(
+      (Array.isArray(claim) ? claim : []).filter(
+        (slug): slug is string =>
+          typeof slug === "string" && slug.length > 0 && slug.length <= 100,
+      ),
+    ),
+  ].slice(0, MAX_SEGMENTS);
+}
+
+/** Read-only check of the `segments` claim against this workspace's manual segments. */
+export async function previewClaimedSegments(db: Database, claim: unknown) {
+  const slugs = parseSegmentSlugs(claim);
+  const found = slugs.length
+    ? await db
+        .select({ slug: segments.slug })
+        .from(segments)
+        .where(
+          and(
+            inArray(segments.slug, slugs),
+            eq(segments.type, "manual"),
+            isNull(segments.deletedAt),
+          ),
+        )
+    : [];
+  const known = new Set(found.map((row) => row.slug));
+  return {
+    applied: slugs.filter((slug) => known.has(slug)),
+    ignored: slugs.filter((slug) => !known.has(slug)),
+  };
+}
+
 /**
  * Makes the person's widget-sourced memberships match the `segments` claim (manual segments by
  * slug; unknown slugs are dropped). A missing claim removes every widget-sourced membership, so a
@@ -113,14 +146,7 @@ export async function reconcileClaimedSegments(
   principalId: PrincipalId,
   claim: unknown,
 ) {
-  const slugs = [
-    ...new Set(
-      (Array.isArray(claim) ? claim : []).filter(
-        (slug): slug is string =>
-          typeof slug === "string" && slug.length > 0 && slug.length <= 100,
-      ),
-    ),
-  ].slice(0, MAX_SEGMENTS);
+  const slugs = parseSegmentSlugs(claim);
   const found = slugs.length
     ? await db
         .select({ id: segments.id, slug: segments.slug })
@@ -181,35 +207,17 @@ const companyClaim = (value: unknown) => {
   };
 };
 
-/**
- * Links the person to the first company of the `companies` claim, created or updated by its
- * external ID. A person has one company: the others are reported. A domain that another company
- * holds is left out. A missing claim leaves the current company alone.
- */
-export async function linkClaimedCompany(
+async function lookupCompanyAndDomain(
   db: Database,
-  principalId: PrincipalId,
-  claim: unknown,
-): Promise<IdentifyWarning[]> {
-  if (!Array.isArray(claim) || !claim.length) return [];
-  const warnings: IdentifyWarning[] = claim.slice(1).map((_, index) => ({
-    code: "COMPANY_IGNORED" as const,
-    field: `companies[${index + 1}]`,
-  }));
-  const company = companyClaim(claim[0]);
-  if (!company)
-    return [{ code: "COMPANY_IGNORED", field: "companies[0]" }, ...warnings];
-  // Two identifies naming a new company at once would both insert.
-  await db.execute(
-    sql`select pg_advisory_xact_lock(hashtext(${`quills-company:${company.externalId}`}))`,
-  );
+  company: NonNullable<ReturnType<typeof companyClaim>>,
+) {
   const [existing] = await db
     .select({ id: companies.id })
     .from(companies)
     .where(eq(companies.externalId, company.externalId))
     .limit(1);
   const domainTaken =
-    company.domain &&
+    Boolean(company.domain) &&
     (
       await db
         .select({ id: companies.id })
@@ -222,6 +230,71 @@ export async function linkClaimedCompany(
         )
         .limit(1)
     ).length > 0;
+  return { existing, domainTaken };
+}
+
+function parseCompaniesClaim(claim: unknown) {
+  if (!Array.isArray(claim) || !claim.length)
+    return { company: null, warnings: [] as IdentifyWarning[] };
+  const warnings: IdentifyWarning[] = claim.slice(1).map((_, index) => ({
+    code: "COMPANY_IGNORED" as const,
+    field: `companies[${index + 1}]`,
+  }));
+  const company = companyClaim(claim[0]);
+  if (!company)
+    return {
+      company: null,
+      warnings: [
+        { code: "COMPANY_IGNORED" as const, field: "companies[0]" },
+        ...warnings,
+      ],
+    };
+  return { company, warnings };
+}
+
+/** Read-only validation of the `companies` claim without creating or updating any row. */
+export async function previewClaimedCompany(
+  db: Database,
+  claim: unknown,
+): Promise<{
+  company: { id: string; name: string; domain: string | null } | null;
+  warnings: IdentifyWarning[];
+}> {
+  const { company, warnings } = parseCompaniesClaim(claim);
+  if (!company) return { company: null, warnings };
+  const { domainTaken } = await lookupCompanyAndDomain(db, company);
+  if (domainTaken)
+    warnings.unshift({
+      code: "COMPANY_DOMAIN_IGNORED",
+      field: "companies[0].domain",
+    });
+  return {
+    company: {
+      id: company.externalId,
+      name: company.name,
+      domain: domainTaken ? null : company.domain,
+    },
+    warnings,
+  };
+}
+
+/**
+ * Links the person to the first company of the `companies` claim, created or updated by its
+ * external ID. A person has one company: the others are reported. A domain that another company
+ * holds is left out. A missing claim leaves the current company alone.
+ */
+export async function linkClaimedCompany(
+  db: Database,
+  principalId: PrincipalId,
+  claim: unknown,
+): Promise<IdentifyWarning[]> {
+  const { company, warnings } = parseCompaniesClaim(claim);
+  if (!company) return warnings;
+  // Two identifies naming a new company at once would both insert.
+  await db.execute(
+    sql`select pg_advisory_xact_lock(hashtext(${`quills-company:${company.externalId}`}))`,
+  );
+  const { existing, domainTaken } = await lookupCompanyAndDomain(db, company);
   if (domainTaken)
     warnings.unshift({
       code: "COMPANY_DOMAIN_IGNORED",

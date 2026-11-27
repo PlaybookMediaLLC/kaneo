@@ -1,0 +1,201 @@
+---
+title: "Embed the support & feedback widget"
+description: "Add in-app support chat, help center, feedback, and updates to any web app — manually or in one prompt with an AI coding assistant."
+---
+
+The Quills widget embeds live support conversations, help center search, feedback collection, roadmap voting, and changelog updates directly inside your app. It loads from your Kaneo instance with zero build-time dependencies and accepts verified user identities signed by your backend.
+
+## Fastest path: install with an AI coding assistant
+
+If you use Claude Code, Cursor, Codex, or Antigravity:
+
+1. In your Kaneo workspace, open **Feedback › Share › Widget embed** (or **Settings › Conversations › Widget › Open embed & AI setup**).
+2. Click **Create install code**. Kaneo mints a 15-minute, two-use pairing code (`qbi_…`) and automatically creates your widget signing secret if one does not exist yet.
+3. Click **Copy AI setup prompt** and paste it into your coding assistant inside your app's repository.
+
+Your assistant redeems the pairing code via `POST /api/quills-public/{workspace}/widget/install-context`, writes `QUILLS_WIDGET_SECRET` strictly into your server-only environment file (never in client code or chat), wires your app's authentication session into a server-side HS256 JWT route, mounts the widget in your layout, and validates its work using the read-only `POST /api/quills-public/{workspace}/widget/verify-token` endpoint.
+
+You can also install the portable agent skill from `skills/quills-support/SKILL.md` in this repository.
+
+## Manual setup (any web app)
+
+### 1. Load the widget script
+
+Add the queue stub and script tag to your `<head>` or root layout:
+
+```html
+<script>
+  window.Quills =
+    window.Quills ||
+    function () {
+      (window.Quills.q = window.Quills.q || []).push(arguments);
+    };
+</script>
+<script
+  src="https://your-kaneo-host/api/quills-public/YOUR_WORKSPACE_SLUG/widget/sdk.js"
+  defer
+></script>
+```
+
+`sdk.js` reads the instance URL and workspace slug from its own `<script>` URL (or from `data-instance-url` / `data-workspace` attributes when loaded dynamically or behind a custom proxy path) and auto-initializes unless you call `Quills("init", { ... })` yourself.
+
+### 2. Sign user identities on your server
+
+Kaneo accepts **signed HS256 JWT tokens only** — unsigned `{ id, email }` calls are refused so one visitor cannot impersonate another.
+
+Copy your workspace's **Widget signing secret** from **Settings › Login** (or redeem an install code) and store it in a server-only environment variable (`QUILLS_WIDGET_SECRET`). Never expose it in `NEXT_PUBLIC_*`, `VITE_*`, or client bundles.
+
+#### Node.js / Next.js Route Handler (zero dependencies)
+
+```ts
+// app/api/support/token/route.ts
+import { createHmac } from "node:crypto";
+import { NextResponse } from "next/server";
+
+const b64 = (value: unknown) =>
+  Buffer.from(JSON.stringify(value)).toString("base64url");
+
+function signQuillsToken(
+  payload: Record<string, unknown>,
+  secret: string,
+): string {
+  const header = b64({ alg: "HS256", typ: "JWT" });
+  const body = b64(payload);
+  const unsigned = `${header}.${body}`;
+  const sig = createHmac("sha256", secret).update(unsigned).digest("base64url");
+  return `${unsigned}.${sig}`;
+}
+
+export async function GET(request: Request) {
+  const secret = process.env.QUILLS_WIDGET_SECRET;
+  if (!secret) return new NextResponse(null, { status: 204 });
+
+  // Replace with your app's session lookup (Better Auth, Clerk, Auth.js, etc.)
+  const session = await getSession(request);
+  if (!session?.user?.email) {
+    return new NextResponse(null, {
+      status: 204,
+      headers: { "Cache-Control": "private, no-store" },
+    });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const token = signQuillsToken(
+    {
+      sub: session.user.id,
+      email: session.user.email,
+      ...(session.user.name ? { name: session.user.name } : {}),
+      ...(session.user.image ? { avatarURL: session.user.image } : {}),
+      ...(session.organization
+        ? {
+            companies: [
+              {
+                id: session.organization.id,
+                name: session.organization.name,
+              },
+            ],
+          }
+        : {}),
+      iat: now,
+      exp: now + 600, // Required: at most 1 hour after iat
+    },
+    secret,
+  );
+
+  return NextResponse.json(
+    { token },
+    { headers: { "Cache-Control": "private, no-store" } },
+  );
+}
+```
+
+#### Go (`crypto/hmac`)
+
+```go
+func SignQuillsToken(sub, email, name, secret string) (string, error) {
+	now := time.Now().Unix()
+	header, _ := json.Marshal(map[string]string{"alg": "HS256", "typ": "JWT"})
+	claims := map[string]any{
+		"sub":   sub,
+		"email": email,
+		"iat":   now,
+		"exp":   now + 600,
+	}
+	if name != "" {
+		claims["name"] = name
+	}
+	payload, _ := json.Marshal(claims)
+	enc := base64.RawURLEncoding
+	unsigned := enc.EncodeToString(header) + "." + enc.EncodeToString(payload)
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(unsigned))
+	return unsigned + "." + enc.EncodeToString(mac.Sum(nil)), nil
+}
+```
+
+### 3. Identify signed-in users and sync theme, locale & consent
+
+In a React / Next.js client component mounted in your root layout:
+
+- Call `Quills("identify", { ssoToken: token })` once the user is signed in, and `Quills("logout")` when they sign out. Anonymous votes and conversations merge automatically when a visitor identifies.
+- Sync dark/light mode with `Quills("setTheme", "light" | "dark" | "auto")`.
+- Sync app language with `Quills("setLocale", locale)` (supports `en`, `fr`, `de`, `es`, `ar`, `ru`, `pt-BR`, `zh-CN`, `zh-TW`, `nl`, `pl`, `th`, `uk`).
+- Sync cookie consent with `Quills("tracking", granted)`.
+- Skip mounting (or call `Quills("close")` and `Quills("hideLauncher")`) on embedded/iframe-only routes such as `/embed/*`.
+
+If you use the typed React package `@quills/widget/react`, `useQuillsInit` reactively forwards changes to `identity`, `theme`, `locale`, and `tracking` without tearing down the widget.
+
+## Ad-blocker resilience, CSP & COEP/COOP
+
+### Same-origin reverse proxy (recommended for Next.js / Nginx / Cloudflare)
+
+Proxying `/api/quills-public/:path*` through your own domain ensures ad blockers never block support, avoids cross-origin preflights, and works cleanly across all browsers even under strict `Cross-Origin-Embedder-Policy` (`credentialless` or `require-corp`) headers:
+
+```ts
+// next.config.ts — use beforeFiles so catch-all /api/[...unmatched] routes don't intercept it
+async rewrites() {
+  const quillsUrl = process.env.QUILLS_API_URL; // e.g. https://support.yourcompany.com/api
+  return {
+    beforeFiles: quillsUrl
+      ? [
+          {
+            source: "/api/quills-public/:path*",
+            destination: `${quillsUrl}/quills-public/:path*`,
+          },
+        ]
+      : [],
+    afterFiles: [],
+    fallback: [],
+  };
+}
+```
+
+Then load `<script src="/api/quills-public/YOUR_WORKSPACE_SLUG/widget/sdk.js" defer></script>`. Both `sdk.js`, `config.json`, the widget iframe, and all widget API requests stay same-origin. In production behind a reverse proxy, forward the visitor's client IP (`X-Forwarded-For`) and configure trusted proxy headers on Kaneo so anonymous visitors do not share one rate-limit bucket.
+
+### Direct cross-origin embedding
+
+Kaneo sends `Cross-Origin-Resource-Policy: cross-origin` on `sdk.js`, `config.json`, and the widget iframe assets, and automatically adds the `credentialless` iframe attribute when `window.crossOriginIsolated` is true — so Chromium-based browsers can embed the widget directly even on `COEP: credentialless` or `COEP: require-corp` pages. Because Firefox and Safari do not support `<iframe credentialless>`, pages sending `COEP: require-corp` in those browsers should use the same-origin reverse proxy above. If your app sends a strict `Content-Security-Policy`, allow:
+
+- `style-src 'unsafe-inline'` for the widget launcher and panel shell styles
+- `script-src`, `frame-src`, and `connect-src` for your Kaneo origin (not required if using the same-origin proxy above)
+- `img-src data:` if you allow visitors to capture in-app screenshots for feedback posts
+
+## Verify your integration
+
+1. **Check public config:**
+
+   ```bash
+   curl -fsS "https://your-kaneo-host/api/quills-public/YOUR_WORKSPACE/widget/config.json"
+   ```
+
+   Confirm `"enabled": true` and your expected `tabs` and `theme`.
+
+2. **Dry-run verify a signed JWT (creates zero test users):**
+
+   ```bash
+   curl -fsS -X POST "https://your-kaneo-host/api/quills-public/YOUR_WORKSPACE/widget/verify-token" \
+     -H "Content-Type: application/json" \
+     -d '{"ssoToken":"YOUR_SIGNED_JWT"}'
+   ```
+
+   Confirm HTTP `200`, `"valid": true`, and `"warnings": []`. Any undefined custom attribute or unknown manual segment slug is reported in `warnings`.

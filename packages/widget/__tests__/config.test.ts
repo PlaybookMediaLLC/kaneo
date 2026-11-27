@@ -24,6 +24,52 @@ describe("config.fetchServerConfig", () => {
     expect(cfg?.theme?.lightPrimary).toBe("#ff0000");
   });
 
+  it("accepts null theme color fields and messenger/home tabs from the live API", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          enabled: true,
+          config: {
+            tabs: {
+              feedback: true,
+              changelog: true,
+              help: false,
+              messenger: true,
+              tickets: true,
+              home: true,
+            },
+            hmacRequired: true,
+            ai: false,
+            visitorAnalytics: true,
+            visitorDeviceTracking: true,
+            launcherGreeting: "Need help?",
+            launcherLabel: "Support",
+            replyTime: "hours",
+            home: { greeting: null, subtitle: null, showTeamAvatars: true },
+            position: "left",
+            theme: {
+              themeMode: "user",
+              lightPrimary: "#2563eb",
+              lightPrimaryForeground: null,
+              darkPrimary: null,
+              darkPrimaryForeground: null,
+            },
+          },
+        }),
+      })),
+    );
+    const cfg = await fetchServerConfig("https://feedback.acme.com", "acme");
+    expect(cfg?.position).toBe("left");
+    expect(cfg?.launcherLabel).toBe("Support");
+    expect(cfg?.launcherGreeting).toBe("Need help?");
+    expect(cfg?.theme?.lightPrimary).toBe("#2563eb");
+    expect(cfg?.theme?.darkPrimary).toBeNull();
+    expect(cfg?.tabs?.messenger).toBe(true);
+    expect(cfg?.tabs?.home).toBe(true);
+  });
+
   it("returns null while the widget is off", async () => {
     vi.stubGlobal(
       "fetch",
@@ -86,6 +132,21 @@ describe("config.fetchServerConfig", () => {
     );
     const cfg = await fetchServerConfig("https://feedback.acme.com", "acme");
     expect(cfg).toEqual({});
+  });
+
+  it("strips trailing slashes from instanceUrl so config URL never has double slashes", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ enabled: true, config: {} }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    await fetchServerConfig("https://feedback.acme.com///", "acme");
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /^https:\/\/feedback\.acme\.com\/api\/quills-public\/acme\/widget\/config\.json\?/,
+      ),
+      expect.any(Object),
+    );
   });
 });
 

@@ -23,10 +23,16 @@ export function useQuillsInit(options: UseQuillsInitOptions): void {
     initializeDelay,
     instanceUrl,
     workspace,
+    theme,
+    locale,
+    tracking,
   } = options;
   const shouldInit = shouldInitialize !== false;
   const startedRef = useRef(false);
   const appliedIdentity = useRef<string | null>(null);
+  const appliedTheme = useRef(theme);
+  const appliedLocale = useRef(locale);
+  const appliedTracking = useRef(tracking);
 
   // Latest options live in a ref so the effect below can read current values
   // at startup time without adding every field to its dependency array.
@@ -48,6 +54,9 @@ export function useQuillsInit(options: UseQuillsInitOptions): void {
       startedRef.current = true;
       appliedIdentity.current =
         latest.identity === undefined ? null : JSON.stringify(latest.identity);
+      appliedTheme.current = latest.theme;
+      appliedLocale.current = latest.locale;
+      appliedTracking.current = latest.tracking;
     };
 
     if (initializeDelay && initializeDelay > 0) {
@@ -82,4 +91,29 @@ export function useQuillsInit(options: UseQuillsInitOptions): void {
     Quills.identify(identityRef.current);
     appliedIdentity.current = identityKey;
   }, [identityKey, shouldInit]);
+
+  useEffect(() => {
+    if (!shouldInit || !startedRef.current || theme === appliedTheme.current)
+      return;
+    appliedTheme.current = theme;
+    if (theme !== undefined) Quills.setTheme(theme);
+  }, [theme, shouldInit]);
+
+  useEffect(() => {
+    if (!shouldInit || !startedRef.current || locale === appliedLocale.current)
+      return;
+    appliedLocale.current = locale;
+    if (locale !== undefined) Quills.setLocale(locale);
+  }, [locale, shouldInit]);
+
+  useEffect(() => {
+    if (
+      !shouldInit ||
+      !startedRef.current ||
+      tracking === appliedTracking.current
+    )
+      return;
+    appliedTracking.current = tracking;
+    if (tracking !== undefined) Quills.tracking(tracking);
+  }, [tracking, shouldInit]);
 }

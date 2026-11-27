@@ -374,4 +374,90 @@ describe("browser-queue", () => {
     });
     expect(quills.isOpen()).toBe(true);
   });
+
+  it("reads data-instance-url and data-workspace from a script tag even when currentScript is null", async () => {
+    const dispatched = mockSDK();
+    const script = document.createElement("script");
+    script.type = "application/octet-stream";
+    script.src = "https://app.example.com/support/sdk.js";
+    script.dataset.instanceUrl = "https://app.example.com/";
+    script.dataset.workspace = "acme";
+    document.head.appendChild(script);
+    Object.defineProperty(document, "currentScript", {
+      value: null,
+      configurable: true,
+    });
+    try {
+      await import("../src/browser-queue");
+      await new Promise((r) => setTimeout(r, 0));
+      expect(dispatched).toEqual([
+        [
+          "init",
+          { instanceUrl: "https://app.example.com", workspace: "acme" },
+          undefined,
+        ],
+      ]);
+    } finally {
+      script.remove();
+      Object.defineProperty(document, "currentScript", {
+        value: null,
+        configurable: true,
+      });
+    }
+  });
+
+  it("derives instanceUrl from script src origin when data-workspace is set on a custom proxy path", async () => {
+    const dispatched = mockSDK();
+    const script = document.createElement("script");
+    script.type = "application/octet-stream";
+    script.src = "https://proxy.example.com/support/sdk.js";
+    script.dataset.workspace = "acme";
+    document.head.appendChild(script);
+    Object.defineProperty(document, "currentScript", {
+      value: script,
+      configurable: true,
+    });
+    try {
+      await import("../src/browser-queue");
+      await new Promise((r) => setTimeout(r, 0));
+      expect(dispatched).toEqual([
+        [
+          "init",
+          { instanceUrl: "https://proxy.example.com", workspace: "acme" },
+          undefined,
+        ],
+      ]);
+    } finally {
+      script.remove();
+      Object.defineProperty(document, "currentScript", {
+        value: null,
+        configurable: true,
+      });
+    }
+  });
+
+  it("survives a malformed relative data-instance-url and does not auto-init without a workspace", async () => {
+    const dispatched = mockSDK();
+    const script = document.createElement("script");
+    script.type = "application/octet-stream";
+    script.src = "https://app.example.com/custom/sdk.js";
+    script.dataset.instanceUrl = "//[::1";
+    document.head.appendChild(script);
+    Object.defineProperty(document, "currentScript", {
+      value: script,
+      configurable: true,
+    });
+    try {
+      await import("../src/browser-queue");
+      await new Promise((r) => setTimeout(r, 0));
+      expect(typeof window.Quills).toBe("function");
+      expect(dispatched).toEqual([]);
+    } finally {
+      script.remove();
+      Object.defineProperty(document, "currentScript", {
+        value: null,
+        configurable: true,
+      });
+    }
+  });
 });

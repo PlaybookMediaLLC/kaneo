@@ -87,6 +87,9 @@ export function createPanel(opts: PanelOptions): PanelHandle {
     "allow-scripts allow-forms allow-same-origin allow-popups allow-downloads",
   );
   iframe.setAttribute("allow", "clipboard-write");
+  if (typeof window !== "undefined" && window.crossOriginIsolated) {
+    iframe.setAttribute("credentialless", "");
+  }
   iframe.className = "quackback-widget-iframe";
   panel.appendChild(iframe);
 

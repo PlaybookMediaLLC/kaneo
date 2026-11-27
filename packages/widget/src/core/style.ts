@@ -39,7 +39,7 @@ export function ensureStyles(side: "left" | "right"): void {
     "@media(min-width:761px){.quackback-backdrop{display:none!important}}",
     // Inline in a host element: always shown, in the page flow (gap G-18).
     ".quackback-panel.quackback-inline{position:relative;inset:auto;z-index:auto;width:100%;height:100%;min-height:480px;opacity:1;transform:none;visibility:visible;pointer-events:auto;box-shadow:none;border-radius:12px;transition:none}",
-    "@media(prefers-reduced-motion:reduce){.quackback-panel,.quackback-backdrop,.quackback-launcher,.quackback-launcher *{transition:none!important}.quackback-launcher{transform:none!important}}",
+    "@media(prefers-reduced-motion:reduce){.quackback-panel,.quackback-backdrop,.quackback-launcher,.quackback-launcher *,.quackback-greeting{transition:none!important}.quackback-launcher{transform:none!important}}",
   ].join("");
   if (!existing) document.head.appendChild(el);
 }

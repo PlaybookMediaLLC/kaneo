@@ -31,14 +31,57 @@ declare global {
 
 const sdk = createSDK();
 const w = window;
+const scriptEl =
+  (document.currentScript as HTMLScriptElement | null) ??
+  (document.querySelector(
+    'script[data-quills-workspace], script[data-workspace][src*="sdk.js"], script[src*="/widget/sdk.js"]',
+  ) as HTMLScriptElement | null);
 // Kaneo serves this bundle at {instanceUrl}/api/quills-public/{workspace}/widget/sdk.js, so a
-// script-tag install carries both values in its own URL.
+// script-tag install carries both values in its own URL. Hosts behind a custom proxy path or
+// dynamic loader can also pass data-instance-url and data-workspace on the script tag.
 const served =
   /^(https?:\/\/[^/]+(?:\/[^?#]*?)?)\/api\/quills-public\/([A-Za-z0-9_-]+)\/widget\/sdk\.js(?:[?#]|$)/.exec(
-    (document.currentScript as HTMLScriptElement | null)?.src ?? "",
+    scriptEl?.src ?? "",
   );
-const bakedUrl = w.__QUACKBACK_URL__ ?? served?.[1];
-const bakedWorkspace = served?.[2];
+const rawDataUrl = (
+  scriptEl?.dataset.quillsInstanceUrl ||
+  scriptEl?.dataset.instanceUrl ||
+  ""
+).trim();
+let dataUrl: string | undefined;
+if (rawDataUrl) {
+  if (rawDataUrl.startsWith("/")) {
+    try {
+      const resolved = new URL(rawDataUrl, w.location.href);
+      if (resolved.protocol === "https:" || resolved.protocol === "http:") {
+        dataUrl = resolved.href.replace(/\/+$/, "");
+      }
+    } catch {
+      dataUrl = undefined;
+    }
+  } else {
+    dataUrl = rawDataUrl.replace(/\/+$/, "");
+  }
+}
+const dataWorkspace =
+  (
+    scriptEl?.dataset.quillsWorkspace ||
+    scriptEl?.dataset.workspace ||
+    ""
+  ).trim() || undefined;
+let scriptOrigin: string | undefined;
+if (!dataUrl && !served && dataWorkspace && scriptEl?.src) {
+  try {
+    const parsedSrc = new URL(scriptEl.src, w.location.href);
+    if (parsedSrc.protocol === "https:" || parsedSrc.protocol === "http:") {
+      scriptOrigin = parsedSrc.origin;
+    }
+  } catch {
+    scriptOrigin = undefined;
+  }
+}
+const bakedUrl = w.__QUACKBACK_URL__ ?? dataUrl ?? served?.[1] ?? scriptOrigin;
+const bakedWorkspace = dataWorkspace ?? served?.[2];
 
 // Suppresses the deferred fallback once the host has taken explicit control:
 // either by initializing (their options take precedence) or by destroying
@@ -61,12 +104,12 @@ function dispatch(command: unknown, a?: unknown, b?: unknown): unknown {
     return queries[command as keyof typeof queries]();
   let options = a;
   if (command === "init" || command === "destroy") bootSuppressed = true;
-  if (command === "init" && bakedUrl) {
+  if (command === "init" && (bakedUrl || bakedWorkspace)) {
     const opts =
       a && typeof a === "object" ? (a as Record<string, unknown>) : {};
     options = {
       ...opts,
-      ...(!opts.instanceUrl && { instanceUrl: bakedUrl }),
+      ...(!opts.instanceUrl && bakedUrl && { instanceUrl: bakedUrl }),
       ...(!opts.workspace && bakedWorkspace && { workspace: bakedWorkspace }),
     };
   }
@@ -97,7 +140,7 @@ for (const args of queued) {
 
 // Deferred so an explicit `Quills("init", ...)` from host code can pre-empt
 // the default-options fallback.
-if (bakedUrl) {
+if (bakedUrl && (bakedWorkspace || w.__QUACKBACK_URL__)) {
   setTimeout(() => {
     if (!bootSuppressed) dispatch("init", {});
   }, 0);

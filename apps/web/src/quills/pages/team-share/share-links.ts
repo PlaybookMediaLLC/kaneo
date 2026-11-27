@@ -62,7 +62,9 @@ export function socialLinks(
 
 /** The script-tag embed of the widget (packages/widget/README.md), in three steps. */
 export function widgetSnippets(apiBase: string, workspace: string) {
-  const sdk = `${apiBase.replace(/\/+$/, "")}/quills-public/${encodeURIComponent(workspace)}/widget/sdk.js`;
+  const base = apiBase.replace(/\/+$/, "");
+  const encoded = encodeURIComponent(workspace);
+  const sdk = `${base}/quills-public/${encoded}/widget/sdk.js`;
   return {
     load: [
       "<script>window.Quills=window.Quills||function(){(window.Quills.q=window.Quills.q||[]).push(arguments)};</script>",
@@ -78,5 +80,98 @@ export function widgetSnippets(apiBase: string, workspace: string) {
       '  Quills("identify", { ssoToken: "TOKEN_FROM_YOUR_SERVER" });',
       "</script>",
     ].join("\n"),
+    serverSign: [
+      'import { createHmac } from "node:crypto";',
+      "",
+      'const b64 = (v: unknown) => Buffer.from(JSON.stringify(v)).toString("base64url");',
+      "",
+      "export function signQuillsToken(",
+      "  user: { id: string; email: string; name?: string | null; avatarUrl?: string | null },",
+      "  secret: string,",
+      ") {",
+      "  const now = Math.floor(Date.now() / 1000);",
+      '  const header = b64({ alg: "HS256", typ: "JWT" });',
+      "  const payload = b64({",
+      "    sub: user.id,",
+      "    email: user.email,",
+      "    ...(user.name ? { name: user.name } : {}),",
+      "    ...(user.avatarUrl ? { avatarURL: user.avatarUrl } : {}),",
+      "    iat: now,",
+      "    exp: now + 600,",
+      "  });",
+      '  const unsigned = [header, payload].join(".");',
+      '  const sig = createHmac("sha256", secret).update(unsigned).digest("base64url");',
+      '  return [unsigned, sig].join(".");',
+      "}",
+    ].join("\n"),
+    proxy: [
+      "// next.config.ts (beforeFiles beats catch-all /api routes)",
+      "async rewrites() {",
+      "  return {",
+      "    beforeFiles: [",
+      "      {",
+      '        source: "/api/quills-public/:path*",',
+      `        destination: "${base}/quills-public/:path*",`,
+      "      },",
+      "    ],",
+      "    afterFiles: [],",
+      "    fallback: [],",
+      "  };",
+      "}",
+    ].join("\n"),
   };
+}
+
+/**
+ * Self-contained setup prompt for AI coding agents (Claude Code, Cursor, Codex, Antigravity).
+ * Carries only the short-lived pairing code, never the signing secret.
+ */
+export function aiInstallPrompt(
+  apiBase: string,
+  workspace: string,
+  code: string,
+) {
+  const base = apiBase.replace(/\/+$/, "");
+  const encoded = encodeURIComponent(workspace);
+  const publicBase = `${base}/quills-public/${encoded}/widget`;
+  return [
+    `Integrate the Quills support & feedback widget into this app for workspace "${workspace}".`,
+    "",
+    "1. Redeem the short-lived install pairing code (works twice, expires in 15 minutes):",
+    `   curl -fsS -X POST "${publicBase}/install-context" \\`,
+    '     -H "Content-Type: application/json" \\',
+    `     -d '{"code":"${code}"}'`,
+    "   This enables the widget and returns JSON with `signingSecret`, `tabs`, `portalEnabled`,",
+    "   `widgetSignIn`, `userAttributes`, and `manualSegments`.",
+    "",
+    "2. Store secrets safely (CRITICAL):",
+    "   - Put `signingSecret` ONLY in a server-side env var `QUILLS_WIDGET_SECRET` (e.g. `.env.local`, gitignored).",
+    "   - Put non-secret public settings in `NEXT_PUBLIC_QUILLS_URL` / `VITE_QUILLS_URL` (`" +
+      base.replace(/\/api$/, "") +
+      "`) and `NEXT_PUBLIC_QUILLS_WORKSPACE` / `VITE_QUILLS_WORKSPACE` (`" +
+      workspace +
+      "`).",
+    "   - NEVER expose `QUILLS_WIDGET_SECRET` in client code, `NEXT_PUBLIC_*` / `VITE_*`, git commits, or logs.",
+    "",
+    "3. Add a server-side token route (e.g. `GET /api/support/token`):",
+    "   - Read the current authenticated user from this app's existing session (return `204` if signed out).",
+    "   - Sign an HS256 JWT with `QUILLS_WIDGET_SECRET` (using `node:crypto` HMAC-SHA256, zero extra deps):",
+    "     - Required claims: `sub` (stable user ID), `email`, `iat`, `exp` (at most 1 hour after `iat`, e.g. `iat + 600`).",
+    "     - Optional claims: `name`, `avatarURL`, `companies: [{ id, name, domain? }]` (`domain` is optional; omit if unavailable),",
+    "       and ONLY `traits`/`segments` whose keys/slugs appeared in `userAttributes`/`manualSegments` from step 1.",
+    "   - Return `Cache-Control: private, no-store` JSON `{ token }`.",
+    "",
+    "4. Mount the client widget cleanly in the root app layout:",
+    `   - Prefer a same-origin rewrite \`/api/quills-public/:path*\` -> \`${base}/quills-public/:path*\` (in Next.js, place it in \`rewrites().beforeFiles\` so catch-all \`/api/[...unmatched]\` routes don't intercept it) and load \`/api/quills-public/${encoded}/widget/sdk.js\`; otherwise load \`${publicBase}/sdk.js\` directly.`,
+    "   - Initialize the queue stub `window.Quills = window.Quills || function(){ (window.Quills.q = window.Quills.q || []).push(arguments) }` and call `Quills('init', { theme, locale, tracking })` before loading the script.",
+    "   - Exclude embedded/headless iframe routes (e.g. `/embed/*`, `/preview/*`); on client-side navigation into excluded routes call `Quills('close')` and `Quills('hideLauncher')`, and `Quills('showLauncher')` when leaving them.",
+    "   - Sync theme (`Quills('setTheme', 'light' | 'dark' | 'auto')`), locale (`Quills('setLocale', locale)`), and analytics consent (`Quills('tracking', granted)`) if the app has them.",
+    "   - When signed in, fetch `/api/support/token` and call `Quills('identify', { ssoToken: token })` (NEVER pass unsigned `{ id, email }`). On sign-out, call `Quills('logout')`.",
+    "   - If the app has a strict CSP, allow `style-src 'unsafe-inline'` for widget shell styles, `img-src data:` for screenshot capture, and the widget origin in `script-src`, `frame-src`, `connect-src` (not needed if using the same-origin rewrite).",
+    "",
+    "5. Verify end-to-end before finishing:",
+    `   - Confirm \`GET ${publicBase}/config.json\` returns \`"enabled": true\`.`,
+    `   - Sign a sample token with your new server helper and \`POST ${publicBase}/verify-token\` with \`{"ssoToken":"..."}\` — confirm HTTP 200, \`valid: true\`, and \`warnings: []\` (read-only, creates no test user).`,
+    "   - Run the app's typecheck/tests and verify the launcher renders and opens cleanly with zero console errors.",
+  ].join("\n");
 }

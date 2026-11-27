@@ -44,6 +44,8 @@ export interface LauncherHandle {
   setLocale(locale: string | undefined): void;
   /** Fade the button in. Called after initial colors are set to avoid a color flash. */
   reveal(): void;
+  /** Hide or show both the button and any proactive greeting/announcement bubble. */
+  setHidden(hidden: boolean): void;
   remove(): void;
 }
 
@@ -63,6 +65,7 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
   // Unread counts only need attention while the widget is closed.
   let unreadCount = 0;
   let isOpen = false;
+  let isHidden = false;
   let revealed = false;
   // Visible button label — when set, it doubles as the accessible name.
   let labelText = "";
@@ -179,6 +182,7 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
   // the session. Its own light card colors so it reads over any launcher color.
   const side = opts.placement === "left" ? "left" : "right";
   const bubble = document.createElement("div");
+  bubble.className = "quackback-greeting";
   Object.assign(bubble.style, {
     position: contained ? "absolute" : "fixed",
     bottom: `${bottom + 64}px`,
@@ -242,7 +246,9 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
   const renderGreeting = () => {
     bubbleText.textContent = announcement?.text ?? greetingText ?? "";
     const show =
-      !isOpen && (!!announcement || (!!greetingText && !greetingDismissed()));
+      !isHidden &&
+      !isOpen &&
+      (!!announcement || (!!greetingText && !greetingDismissed()));
     bubble.style.display = show ? "flex" : "none";
   };
   bubbleClose.addEventListener(
@@ -280,7 +286,7 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     setOpen(open) {
       isOpen = open;
       btn.style.visibility = open ? "hidden" : "visible";
-      btn.inert = !revealed || open;
+      btn.inert = !revealed || open || isHidden;
       btn.setAttribute("aria-expanded", open ? "true" : "false");
       btn.setAttribute(
         "aria-label",
@@ -341,8 +347,14 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     },
     reveal() {
       revealed = true;
-      btn.inert = isOpen;
+      btn.inert = isOpen || isHidden;
       btn.style.opacity = "1";
+    },
+    setHidden(hidden) {
+      isHidden = hidden;
+      btn.style.display = hidden ? "none" : "flex";
+      btn.inert = !revealed || isOpen || hidden;
+      renderGreeting();
     },
     remove() {
       listeners.abort();

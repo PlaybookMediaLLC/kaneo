@@ -35,8 +35,8 @@ const claimsSchema = z.object({
 
 type Raw = NonNullable<ReturnType<typeof verifyIdentityToken>>;
 
-/** Finds or creates the customer and principal that `raw` names, and applies its claims. */
-export async function identifyCustomer(db: Database, raw: Raw) {
+/** Parses the required (sub/id, email) and optional (name, avatarUrl) claims of a verified token. */
+export function parseCoreIdentityClaims(raw: Raw) {
   const fullName = [raw.firstName, raw.lastName]
     .filter((part) => typeof part === "string" && part.trim())
     .join(" ");
@@ -50,8 +50,17 @@ export async function identifyCustomer(db: Database, raw: Raw) {
     throw new HTTPException(403, {
       message: "The ssoToken needs a sub (or id) and a valid email claim",
     });
-  const { sub, name, avatarUrl } = claims.data;
-  const email = claims.data.email.toLowerCase();
+  return {
+    sub: claims.data.sub,
+    email: claims.data.email.toLowerCase(),
+    name: claims.data.name,
+    avatarUrl: claims.data.avatarUrl,
+  };
+}
+
+/** Finds or creates the customer and principal that `raw` names, and applies its claims. */
+export async function identifyCustomer(db: Database, raw: Raw) {
+  const { sub, email, name, avatarUrl } = parseCoreIdentityClaims(raw);
 
   // Two identifies of a new visitor at once would both insert; take the sub and the email in order.
   for (const key of [`sub:${sub}`, `email:${email}`])

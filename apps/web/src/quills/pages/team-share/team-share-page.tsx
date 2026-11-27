@@ -1,5 +1,5 @@
 import { resolveApiBaseUrl } from "@kaneo/libs";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useGetPortalSettings } from "../../hooks/team/use-get-portal-settings";
 import { useListCustomDomains } from "../../hooks/team/use-list-custom-domains";
@@ -52,6 +52,10 @@ export function TeamSharePage({ workspaceId }: TeamSharePageProps) {
   const api = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
   const data = settings.data;
   const name = data?.name ?? "";
+  useEffect(() => {
+    if (!data || window.location.hash !== "#widget-embed") return;
+    document.getElementById("widget-embed")?.scrollIntoView?.();
+  }, [data, workspaceId]);
   return (
     <PageFrame titleKey="team-share.title" variant="app" landmark={false}>
       <SettingsPage
@@ -116,17 +120,19 @@ export function TeamSharePage({ workspaceId }: TeamSharePageProps) {
               >
                 <ReadyMessages workspace={name} url={url} />
               </SettingsSection>
-              <SettingsSection
-                title={label(t("team-share.widget.title"))}
-                description={t("team-share.widget.text")}
-              >
-                <WidgetEmbed
-                  workspaceId={workspaceId}
-                  slug={data.slug}
-                  apiBase={api.startsWith("/") ? `${origin}${api}` : api}
-                  canMintCode={manage}
-                />
-              </SettingsSection>
+              <div id="widget-embed">
+                <SettingsSection
+                  title={label(t("team-share.widget.title"))}
+                  description={t("team-share.widget.text")}
+                >
+                  <WidgetEmbed
+                    workspaceId={workspaceId}
+                    slug={data.slug}
+                    apiBase={api.startsWith("/") ? `${origin}${api}` : api}
+                    canMintCode={manage}
+                  />
+                </SettingsSection>
+              </div>
             </>
           ) : null}
         </TeamStateView>

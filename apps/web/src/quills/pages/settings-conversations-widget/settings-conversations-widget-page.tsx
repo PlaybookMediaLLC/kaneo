@@ -1,9 +1,11 @@
+import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import type { UpdateWidgetSettingsRequest } from "../../api/team/update-widget-settings";
 import { problemOf } from "../../core/problem-of";
 import { useGetWidgetSettings } from "../../hooks/team/use-get-widget-settings";
 import { useUpdateWidgetSettings } from "../../hooks/team/use-update-widget-settings";
 import { useTeamRuntime } from "../../team/runtime";
+import { teamHref } from "../../team/team-href";
 import { TeamStateView } from "../../team/team-state-view";
 import { PageFrame } from "../../ui/page-frame";
 import { SettingSelect } from "../../ui/setting-select";
@@ -128,6 +130,18 @@ export function SettingsConversationsWidgetPage({
                       onSubmit={(values) => problemOf(save(values))}
                     />
                   )}
+                  <SettingsRow
+                    title={t("settings-conversations.widget.install")}
+                    description={t("settings-conversations.widget.installText")}
+                  >
+                    <Link
+                      to={teamHref(workspaceId, "/share")}
+                      hash="widget-embed"
+                      className="inline-flex h-8 items-center rounded-md border border-border px-3 text-xs font-medium text-foreground hover:bg-muted"
+                    >
+                      {t("settings-conversations.widget.installAction")}
+                    </Link>
+                  </SettingsRow>
                 </SettingsCard>
               </SettingsSection>
               <SettingsSection

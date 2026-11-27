@@ -48,6 +48,17 @@ export function WidgetEmbed({
           label={t("team-share.widget.identify")}
           code={code.identify}
         />
+        <CodeBlock
+          label={t("team-share.widget.serverSign")}
+          code={code.serverSign}
+        />
+      </div>
+      <div className="grid gap-2 border-t border-border pt-4">
+        <h3 className="text-sm font-medium">{t("team-share.widget.proxy")}</h3>
+        <p className="text-sm text-muted-foreground">
+          {t("team-share.widget.proxyText")}
+        </p>
+        <CodeBlock label={t("team-share.widget.proxy")} code={code.proxy} />
       </div>
       <div className="flex flex-wrap items-start gap-3">
         <Button
@@ -63,9 +74,16 @@ export function WidgetEmbed({
         >
           {t("team-share.widget.copyAll")}
         </Button>
-        {canMintCode ? <InstallCode workspaceId={workspaceId} /> : null}
+        {canMintCode ? (
+          <InstallCode
+            key={workspaceId}
+            workspaceId={workspaceId}
+            slug={slug}
+            apiBase={apiBase}
+          />
+        ) : null}
         <a
-          href={brandText("https://kaneo.app/docs")}
+          href={brandText("https://kaneo.app/docs/quills/widget")}
           target="_blank"
           rel="noreferrer"
           className="self-center text-sm text-muted-foreground hover:text-foreground"

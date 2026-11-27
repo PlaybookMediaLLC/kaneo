@@ -15439,7 +15439,7 @@
           "Quills"
         ],
         "summary": "Redeem a widget install pairing code",
-        "description": "Returns the widget signing secret to the holder of a live pairing code and turns the widget on. Use HTTPS.",
+        "description": "Returns the widget signing secret and workspace setup metadata (enabled tabs, portal sign-in flags, defined user attributes and manual segment slugs) to the holder of a live pairing code, and turns the widget on. Use HTTPS.",
         "security": [],
         "parameters": [
           {
@@ -15476,7 +15476,7 @@
         },
         "responses": {
           "200": {
-            "description": "The widget signing secret",
+            "description": "The widget signing secret and workspace setup metadata",
             "content": {
               "application/json": {
                 "schema": {
@@ -15484,10 +15484,92 @@
                   "properties": {
                     "signingSecret": {
                       "type": "string"
+                    },
+                    "tabs": {
+                      "type": "object",
+                      "properties": {
+                        "home": {
+                          "type": "boolean"
+                        },
+                        "messenger": {
+                          "type": "boolean"
+                        },
+                        "feedback": {
+                          "type": "boolean"
+                        },
+                        "changelog": {
+                          "type": "boolean"
+                        },
+                        "help": {
+                          "type": "boolean"
+                        },
+                        "tickets": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "home",
+                        "messenger",
+                        "feedback",
+                        "changelog",
+                        "help",
+                        "tickets"
+                      ]
+                    },
+                    "portalEnabled": {
+                      "type": "boolean"
+                    },
+                    "widgetSignIn": {
+                      "type": "boolean"
+                    },
+                    "userAttributes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "label",
+                          "type"
+                        ]
+                      }
+                    },
+                    "manualSegments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "slug": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "slug",
+                          "name"
+                        ]
+                      }
                     }
                   },
                   "required": [
-                    "signingSecret"
+                    "signingSecret",
+                    "tabs",
+                    "portalEnabled",
+                    "widgetSignIn",
+                    "userAttributes",
+                    "manualSegments"
                   ]
                 }
               }
@@ -15685,6 +15767,220 @@
           },
           "409": {
             "description": "The email belongs to another customer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quills-public/{workspace}/widget/verify-token": {
+      "post": {
+        "operationId": "verifyQuillsWidgetToken",
+        "tags": [
+          "Quills"
+        ],
+        "summary": "Verify a host-signed widget identity token without creating a user",
+        "description": "Dry-run check for a host app's HS256 ssoToken. Validates signature, expiry, required claims (sub and email) and optional attributes, manual segments and company claims without creating a customer or session.",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Workspace ID or slug"
+            },
+            "required": true,
+            "description": "Workspace ID or slug",
+            "name": "workspace",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ssoToken": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  }
+                },
+                "required": [
+                  "ssoToken"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The verified token claims and any non-fatal warnings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "valid": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "claims": {
+                      "type": "object",
+                      "properties": {
+                        "sub": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "avatarUrl": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "attributes": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "key": {
+                                "type": "string"
+                              },
+                              "value": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "boolean"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "key",
+                              "value"
+                            ]
+                          }
+                        },
+                        "segments": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "company": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "domain": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name",
+                            "domain"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "sub",
+                        "email",
+                        "name",
+                        "avatarUrl",
+                        "attributes",
+                        "segments",
+                        "company"
+                      ]
+                    },
+                    "warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "code": {
+                            "type": "string",
+                            "enum": [
+                              "ATTRIBUTE_IGNORED",
+                              "SEGMENT_IGNORED",
+                              "COMPANY_IGNORED",
+                              "COMPANY_DOMAIN_IGNORED"
+                            ]
+                          },
+                          "field": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "code",
+                          "field"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "valid",
+                    "claims",
+                    "warnings"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Widget disabled, identify not configured, or invalid/expired token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workspace not found or archived",
             "content": {
               "application/json": {
                 "schema": {
