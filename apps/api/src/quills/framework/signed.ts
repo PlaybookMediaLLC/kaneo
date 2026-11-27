@@ -805,3 +805,60 @@ export function internalTokenValid(headers: Headers) {
   const given = /^Bearer\s+(\S+)$/i.exec(headers.get("authorization") ?? "");
   return safeEqual(given?.[1] ?? "", token);
 }
+
+const RESUME_TTL_SECONDS = 7 * 24 * 60 * 60;
+
+/**
+ * Mints a signed, 7-day resume token embedded in widget continuation emails (#319)
+ * so a customer clicking "Continue in chat" resumes their exact conversation.
+ */
+export function mintWidgetResumeToken(
+  workspaceId: string,
+  conversationId: string,
+  principalId: string,
+  widgetSecret: string,
+): string {
+  const exp = Math.floor(Date.now() / 1000) + RESUME_TTL_SECONDS;
+  const payload = Buffer.from(
+    JSON.stringify({ w: workspaceId, c: conversationId, p: principalId, exp }),
+  ).toString("base64url");
+  const sig = createHmac("sha256", widgetSecret)
+    .update(`widget-resume:${payload}`)
+    .digest("base64url");
+  return `${payload}.${sig}`;
+}
+
+/** Verifies a widget resume token against the workspace's widget secret and expiry. */
+export function verifyWidgetResumeToken(
+  token: string,
+  workspaceId: string,
+  widgetSecret: string,
+): { conversationId: string; principalId: string } | null {
+  const dot = token.indexOf(".");
+  if (dot <= 0 || dot === token.length - 1) return null;
+  const payload = token.slice(0, dot);
+  const sig = token.slice(dot + 1);
+  const expected = createHmac("sha256", widgetSecret)
+    .update(`widget-resume:${payload}`)
+    .digest("base64url");
+  if (!safeEqual(sig, expected)) return null;
+  try {
+    const parsed = JSON.parse(
+      Buffer.from(payload, "base64url").toString("utf8"),
+    ) as { w?: unknown; c?: unknown; p?: unknown; exp?: unknown };
+    if (
+      parsed.w !== workspaceId ||
+      typeof parsed.c !== "string" ||
+      typeof parsed.p !== "string" ||
+      !parsed.c.startsWith("conversation_") ||
+      !parsed.p.startsWith("principal_") ||
+      typeof parsed.exp !== "number" ||
+      parsed.exp < Math.floor(Date.now() / 1000)
+    ) {
+      return null;
+    }
+    return { conversationId: parsed.c, principalId: parsed.p };
+  } catch {
+    return null;
+  }
+}

@@ -205,6 +205,11 @@ export interface WidgetViewProps {
   onConfirmContactEmail?: (email: string, code: string) => Promise<unknown>;
   onReadActivity?: (id: string) => Promise<unknown>;
   onArticleFeedback?: (articleId: string, helpful: boolean) => Promise<unknown>;
+  onSearchHelp?: (
+    query: string,
+    signal?: AbortSignal,
+  ) => Promise<{ queryId: string | null; articles: HelpArticle[] }>;
+  onSearchHelpClick?: (queryId: string, articleId: string) => void;
   /** The host owns loading and connectivity; offline disables mutations, not reading. */
   loadState?: "ready" | "loading" | "error";
   connection?: "online" | "offline" | "reconnecting";

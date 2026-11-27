@@ -148,6 +148,10 @@ export const tickets = quillsSchema
       firstResponseAt: timestamp("first_response_at", { withTimezone: true }),
       waitingSince: timestamp("waiting_since", { withTimezone: true }),
       dueAt: timestamp("due_at", { withTimezone: true }),
+      mergedIntoTicketId: typeIdColumnNullable("ticket")(
+        "merged_into_ticket_id",
+      ),
+      mergedAt: timestamp("merged_at", { withTimezone: true }),
       resolvedAt: timestamp("resolved_at", { withTimezone: true }),
       // How many times the ticket has been reopened after resolution.
       reopenedCount: integer("reopened_count").notNull().default(0),

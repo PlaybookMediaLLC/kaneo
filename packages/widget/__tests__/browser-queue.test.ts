@@ -246,7 +246,11 @@ describe("browser-queue", () => {
     ).not.toBeNull();
 
     // Host's explicit init must destroy + rebuild with the new options.
-    window.Quills!("init", { launcher: false, placement: "left" });
+    window.Quills!("init", {
+      launcher: false,
+      placement: "left",
+      preload: "idle",
+    });
 
     expect(
       document.querySelector('button[aria-label="Open feedback widget"]'),
@@ -271,7 +275,11 @@ describe("browser-queue", () => {
 
     await import("../src/browser-queue");
 
-    window.Quills!("init", { launcher: false, placement: "left" });
+    window.Quills!("init", {
+      launcher: false,
+      placement: "left",
+      preload: "idle",
+    });
     await new Promise((r) => setTimeout(r, 0));
 
     expect(

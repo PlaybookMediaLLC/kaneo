@@ -383,9 +383,11 @@ export async function insertVisitorMessage(
   });
   // The stored microsecond time: a millisecond JS Date would sort before the message itself.
   const at = sql`(select ${conversationMessages.createdAt} from ${conversationMessages} where ${eq(conversationMessages.id, messageId)})`;
-  // A reply reopens a closed or snoozed conversation, except one ended as spam.
+  // A reply reopens a closed or snoozed conversation, except one ended as spam or merged.
   const reopen =
-    conversation.status !== "open" && conversation.endReason !== "spam";
+    conversation.status !== "open" &&
+    conversation.endReason !== "spam" &&
+    conversation.endReason !== "merged";
   await db
     .update(conversations)
     .set({

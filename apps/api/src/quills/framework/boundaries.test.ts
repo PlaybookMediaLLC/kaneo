@@ -100,6 +100,12 @@ const allowedImport = (file: string, specifier: string) => {
         "settings/widget-reply-time",
         // The address hash and block check, on the route's own scoped transaction only.
         "framework/ip-block",
+        // Anti-spam checks (origin allow-list, CIDR/domain/visitor blocks, rate limits, PoW/Turnstile).
+        "framework/anti-spam",
+        // Pure zero-dependency PKZIP reader/writer; never the database.
+        "framework/archive-io",
+        // Full workspace .zip export/import on the route's own scoped transaction only.
+        "transfer/zip-bundle",
         // Portal token sign-in: signed grants and the stored policy; the route's own transaction only.
         "framework/portal-sign-in",
         // The customer a verified host token names, on the route's own scoped transaction only.
@@ -198,7 +204,14 @@ describe("Quills module boundaries", () => {
     const host = quills.find((file) => file.path === "widget/host.ts")!;
     expect(
       [...host.source.matchAll(/from "([^"]+)"/g)].map((match) => match[1]),
-    ).toEqual(["node:crypto", "node:fs", "node:path", "node:url", "hono"]);
+    ).toEqual([
+      "node:crypto",
+      "node:fs",
+      "node:path",
+      "node:url",
+      "node:zlib",
+      "hono",
+    ]);
   });
 
   it("keeps the exempt connector client to the MCP SDK and the destination guard: no database", () => {

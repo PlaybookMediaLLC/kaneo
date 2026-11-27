@@ -249,17 +249,69 @@ async function portalReply(
     : undefined;
 }
 
-/** A reply that reaches the customer by mail: on an email pair, or on a portal conversation. */
+/** A widget visitor with a reachable email address (identified or contact_email) (#319). */
+async function widgetReply(
+  db: Database,
+  event: DeliveryEvent,
+  target?: string,
+) {
+  const reply = await agentReply(db, event, target);
+  if (
+    !reply ||
+    reply.conversation.channel !== "messenger" ||
+    reply.conversation.source !== "widget"
+  ) {
+    return undefined;
+  }
+  const [cfg] = await db
+    .select({ widgetConfig: settings.widgetConfig })
+    .from(settings)
+    .limit(1);
+  let widgetOn = true;
+  if (cfg?.widgetConfig) {
+    try {
+      const parsed = JSON.parse(cfg.widgetConfig) as {
+        enabled?: boolean;
+        tabs?: { messenger?: boolean } | string[];
+      };
+      const messengerOff = Array.isArray(parsed.tabs)
+        ? !parsed.tabs.includes("messages") &&
+          !parsed.tabs.includes("messenger")
+        : parsed.tabs?.messenger === false;
+      widgetOn = parsed.enabled !== false && !messengerOff;
+    } catch {
+      widgetOn = false;
+    }
+  }
+  if (!widgetOn) return undefined;
+  const [visitor] = await db
+    .select({
+      blockedAt: principal.blockedAt,
+      test: principal.testOwnerPrincipalId,
+      kaneoUserId: principal.kaneoUserId,
+    })
+    .from(principal)
+    .where(eq(principal.id, reply.conversation.visitorPrincipalId))
+    .limit(1);
+  if (!visitor || visitor.blockedAt || visitor.test || visitor.kaneoUserId) {
+    return undefined;
+  }
+  const address = await visitorAddress(db, reply.conversation);
+  return address ? { ...reply, to: address } : undefined;
+}
+
+/** A reply that reaches the customer by mail: email pair, portal conversation, or offline widget visitor (#319). */
 const customerReply = async (
   db: Database,
   event: DeliveryEvent,
   target?: string,
 ) =>
   (await emailReply(db, event, target)) ??
-  (await portalReply(db, event, target));
+  (await portalReply(db, event, target)) ??
+  (await widgetReply(db, event, target));
 
 const replyDelay = async (db: Database, event: DeliveryEvent) =>
-  (await portalReply(db, event)) ? PORTAL_REPLY_DELAY_SECONDS : 0;
+  (await emailReply(db, event)) ? 0 : PORTAL_REPLY_DELAY_SECONDS;
 
 /** The conversation's customer address: the captured one, else the contact or profile address. */
 async function visitorAddress(
@@ -355,7 +407,12 @@ const replyMail: NonNullable<Subscribers["mail"]> = async (
   target,
 ) => {
   const reply = await emailReply(db, event, target);
-  if (!reply) return portalReplyMail(db, event, target);
+  if (!reply) {
+    if (await portalReply(db, event, target)) {
+      return portalReplyMail(db, event, target);
+    }
+    return widgetReplyMail(db, event, target);
+  }
   const { message, conversation } = reply;
   const to = await visitorAddress(db, conversation);
   const workspace = await workspaceOf(db);
@@ -489,6 +546,122 @@ async function portalReplyMail(
         conversationSubject: conversation.subject,
         conversationId: conversation.id,
         from,
+      }),
+  };
+}
+
+/**
+ * Chat-to-email continuation for offline widget visitors (#319):
+ * After the quiet delay, if the visitor has NOT read the reply AND has no active presence
+ * heartbeat in the last 60 seconds, mails the reply with Reply-To threading so they can
+ * reply by email right back into the same widget thread, or click the signed resume link.
+ */
+async function widgetReplyMail(
+  db: Database,
+  event: DeliveryEvent,
+  target?: string,
+) {
+  const reply = await widgetReply(db, event, target);
+  const workspace = reply && (await workspaceOf(db));
+  if (!reply || !workspace) return undefined;
+  const { message, conversation, to } = reply;
+
+  const { presenceStream } = await import("../../../database/quills/schema/kv");
+  const { mintWidgetResumeToken } = await import("../../framework/signed");
+
+  // Suppress email if the visitor is actively present in the widget right now.
+  const [liveVisitor] = await db
+    .select({ principalId: presenceStream.principalId })
+    .from(presenceStream)
+    .where(
+      and(
+        eq(presenceStream.principalId, conversation.visitorPrincipalId),
+        eq(presenceStream.isAgent, false),
+        gt(presenceStream.heartbeatAt, sql`now() - interval '60 seconds'`),
+      ),
+    )
+    .limit(1);
+  if (liveVisitor) return undefined;
+
+  // Unread and no newer customer-visible agent reply exists.
+  const newer = alias(conversationMessages, "newer_widget");
+  const [due] = await db
+    .select({ id: conversationMessages.id })
+    .from(conversationMessages)
+    .innerJoin(
+      conversations,
+      eq(conversations.id, conversationMessages.conversationId),
+    )
+    .where(
+      and(
+        eq(conversationMessages.id, message.id),
+        sql`${conversationMessages.createdAt} > coalesce(${conversations.visitorLastReadAt}, '-infinity'::timestamptz)`,
+        notExists(
+          db
+            .select({ id: newer.id })
+            .from(newer)
+            .where(
+              and(
+                eq(newer.conversationId, conversationMessages.conversationId),
+                eq(newer.senderType, "agent"),
+                eq(newer.isInternal, false),
+                isNull(newer.deletedAt),
+                gt(newer.createdAt, conversationMessages.createdAt),
+              ),
+            ),
+        ),
+      ),
+    );
+  if (!due) return undefined;
+
+  if (
+    !(await wants(
+      db,
+      conversation.visitorPrincipalId,
+      "conversation_reply",
+      "email",
+    ))
+  ) {
+    return undefined;
+  }
+
+  const [wsSecretRow] = await db
+    .select({ widgetSecret: settings.widgetSecret })
+    .from(settings)
+    .limit(1);
+  const resumeToken = wsSecretRow?.widgetSecret
+    ? mintWidgetResumeToken(
+        workspace.id,
+        conversation.id,
+        conversation.visitorPrincipalId,
+        wsSecretRow.widgetSecret,
+      )
+    : null;
+  const ctaUrl = resumeToken
+    ? `${portalPaths.home(workspace.id)}#quills_resume=${encodeURIComponent(resumeToken)}`
+    : await customerConversationLink(db, workspace.id, conversation);
+
+  const from = await sendingIdentity(db, conversation);
+  const thread = await threading(db, workspace, conversation.id, message);
+
+  return {
+    type: "conversation_reply",
+    emailType: "ConversationMessageEmail",
+    to,
+    conversationId: conversation.id,
+    send: (address: string) =>
+      sendConversationMessageEmail({
+        to: address as SealedEmail,
+        direction: "agent_reply",
+        senderName: message.author ?? workspace.name,
+        messagePreview: clip(message.content, 500),
+        ctaUrl,
+        workspaceName: workspace.name,
+        channel: conversation.channel,
+        conversationSubject: conversation.subject,
+        conversationId: conversation.id,
+        from,
+        ...thread,
       }),
   };
 }

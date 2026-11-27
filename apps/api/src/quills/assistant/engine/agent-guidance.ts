@@ -28,10 +28,12 @@ export async function loadGuidance(db: Database, agent: Agent) {
     .limit(20);
   const skills = await db
     .select({
+      id: agentSkills.id,
       name: agentSkills.name,
       whenToUse: agentSkills.whenToUse,
       instructions: agentSkills.instructions,
       assignments: agentSkills.assignments,
+      allowedTools: agentSkills.allowedTools,
     })
     .from(agentSkills)
     .where(

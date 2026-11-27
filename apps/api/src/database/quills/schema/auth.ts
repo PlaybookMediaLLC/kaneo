@@ -408,6 +408,17 @@ export const settings = quillsSchema
       assistantConfigRevision: integer("assistant_config_revision")
         .notNull()
         .default(1),
+      /** Workspace AI budget & degradation policy (#302). */
+      assistantBudgetConfig: jsonb("assistant_budget_config").$type<{
+        dailyCapUsd?: number | null;
+        monthlyCapUsd?: number | null;
+        monthlyTokenCap?: number | null;
+        alertThresholdPercent?: number;
+        degradeBehavior?: "draft_mode" | "cheaper_model" | "pause";
+        cheaperModel?: string | null;
+      } | null>(),
+      /** Sealed BYOK AI provider credentials (never exported or returned in plaintext, #302). */
+      assistantProviderSecrets: text("assistant_provider_secrets"),
       /**
        * Widget configuration (JSON)
        * Structure: { enabled, defaultBoard?, position?, buttonText?, identifyVerification? }
@@ -771,6 +782,12 @@ export const principal = quillsSchema
       blockedByPrincipalId: typeIdColumnNullable("principal")(
         "blocked_by_principal_id",
       ),
+      // Reversible contact merge tombstone (#310): when merged into another principal,
+      // the source stays tombstoned for 30 days so undo restores it losslessly.
+      mergedIntoPrincipalId: typeIdColumnNullable("principal")(
+        "merged_into_principal_id",
+      ),
+      mergedAt: timestamp("merged_at", { withTimezone: true }),
     },
     (table) => [
       foreignKey({
@@ -785,6 +802,11 @@ export const principal = quillsSchema
       foreignKey({
         name: "principal_blocked_by_principal_id_principal_id_fk",
         columns: [table.workspaceId, table.blockedByPrincipalId],
+        foreignColumns: [table.workspaceId, table.id],
+      }).onDelete("set null"),
+      foreignKey({
+        name: "principal_merged_into_fk",
+        columns: [table.workspaceId, table.mergedIntoPrincipalId],
         foreignColumns: [table.workspaceId, table.id],
       }).onDelete("set null"),
       // Ensure one principal record per human user (partial index excludes service principals)
@@ -805,6 +827,9 @@ export const principal = quillsSchema
       index("principal_blocked_by_idx")
         .on(table.blockedByPrincipalId)
         .where(sql`"blocked_by_principal_id" IS NOT NULL`),
+      index("principal_merged_into_idx")
+        .on(table.workspaceId, table.mergedIntoPrincipalId)
+        .where(sql`"merged_into_principal_id" IS NOT NULL`),
       // Case-insensitive prefix search for the @-mention typeahead;
       // text_pattern_ops lets the planner use it for LIKE 'prefix%'.
       index("principal_displayname_lower_idx").using(

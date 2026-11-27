@@ -6,6 +6,7 @@ import branding from "./branding";
 import developer from "./developer";
 import labs, { resolveFlags } from "./labs";
 import portal from "./portal";
+import presets from "./presets";
 import receipts from "./receipts";
 import widget from "./widget";
 
@@ -22,11 +23,14 @@ const overview = defineQuillsRoute({
     slug: z.string(),
     modules: z.object({
       feedback: z.boolean(),
+      roadmap: z.boolean(),
       changelog: z.boolean(),
       helpCenter: z.boolean(),
       supportInbox: z.boolean(),
       supportTickets: z.boolean(),
       statusPage: z.boolean(),
+      surveys: z.boolean(),
+      ai: z.boolean(),
     }),
     areas: z.array(z.string()),
   }),
@@ -57,4 +61,5 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", widget)
   .route("/", developer)
   .route("/", labs)
+  .route("/", presets)
   .route("/", receipts);

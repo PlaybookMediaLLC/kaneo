@@ -1,5 +1,6 @@
 import { apiRouter, type BaseVariables } from "../../openapi";
 import analytics from "./analytics";
+import budgetRoutes from "./budget-routes";
 import connectors from "./connectors";
 import copilot from "./copilot";
 import documents from "./documents";
@@ -18,6 +19,7 @@ import webSources from "./web-sources";
 // P8b: the AI assistant and AI features. See ROUTES.md.
 export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route("/", settings)
+  .route("/", budgetRoutes)
   .route("/", guidance)
   .route("/", snippets)
   .route("/", knowledgeSuggestions)

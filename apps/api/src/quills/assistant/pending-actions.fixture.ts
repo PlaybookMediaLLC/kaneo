@@ -14,3 +14,11 @@ const onAction = () =>
 export const getQuillsAssistantPendingAction = onAction();
 export const approveQuillsAssistantAction = onAction();
 export const rejectQuillsAssistantAction = onAction();
+export const decideQuillsAssistantAction = on(
+  ["conversation"],
+  (a) => ({
+    params: { actionId: a.actionId },
+    body: { decision: "reject" as const, reason: "Not needed" },
+  }),
+  (b) => ({ actionId: b.actionId }),
+);

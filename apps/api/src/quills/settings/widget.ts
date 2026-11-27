@@ -21,6 +21,12 @@ import {
   str,
   type SettingsRow,
 } from "./area";
+import {
+  CHALLENGE_MODES,
+  CHALLENGE_PROVIDERS,
+  normalizeOriginPattern,
+  readWidgetAntiSpam,
+} from "../framework/anti-spam";
 import { widgetTabs } from "./widget-tabs";
 import { REPLY_TIMES, replyTimeOf } from "./widget-reply-time";
 
@@ -77,6 +83,33 @@ const tabs = z.object(
   },
 );
 
+const rateLimitsSchema = z.object({
+  conversationsPerIp10m: z.number().int().min(1).max(500),
+  sessionsPerIpHour: z.number().int().min(1).max(500),
+  workspaceConversationsPer10m: z.number().int().min(5).max(10_000),
+});
+
+const antiSpamResponseSchema = z.object({
+  rateLimits: rateLimitsSchema,
+  challengeMode: z.enum(CHALLENGE_MODES),
+  challengeProvider: z.enum(CHALLENGE_PROVIDERS),
+});
+
+const antiSpamPatchSchema = z.object({
+  rateLimits: rateLimitsSchema.partial().optional(),
+  challengeMode: z.enum(CHALLENGE_MODES).optional(),
+  challengeProvider: z.enum(CHALLENGE_PROVIDERS).optional(),
+});
+
+const originPatternSchema = z
+  .string()
+  .min(1)
+  .max(253)
+  .refine(
+    (v) => normalizeOriginPattern(v) !== null,
+    "Must be an http(s) origin such as https://app.example.com or https://*.example.com",
+  );
+
 const config = z.object({
   enabled: z.boolean(),
   defaultBoard: z.string().nullable(),
@@ -90,6 +123,8 @@ const config = z.object({
   tabs,
   visitorAnalytics: z.boolean(),
   visitorDeviceTracking: z.boolean(),
+  allowedOrigins: z.array(z.string()),
+  antiSpam: antiSpamResponseSchema,
   home: z.object({
     greeting: z.string().nullable(),
     subtitle: z.string().nullable(),
@@ -117,6 +152,7 @@ export function readConfig(row: SettingsRow) {
   const stored = parseJson(row.widgetConfig);
   const storedHome = record(stored.home);
   const gradient = record(storedHome.gradient);
+  const antiSpam = readWidgetAntiSpam(stored);
   return {
     enabled: widgetEnabled(row.widgetConfig),
     defaultBoard: str(stored.defaultBoard) ?? null,
@@ -127,6 +163,12 @@ export function readConfig(row: SettingsRow) {
     tabs: widgetTabs(stored),
     visitorAnalytics: bool(stored.visitorAnalytics, true),
     visitorDeviceTracking: bool(stored.visitorDeviceTracking, true),
+    allowedOrigins: antiSpam.allowedOrigins,
+    antiSpam: {
+      rateLimits: antiSpam.rateLimits,
+      challengeMode: antiSpam.challengeMode,
+      challengeProvider: antiSpam.challengeProvider,
+    },
     home: {
       greeting: str(storedHome.greeting) ?? null,
       subtitle: str(storedHome.subtitle) ?? null,
@@ -171,6 +213,8 @@ export const widgetReceipt = [
   "widgetConfig.replyTime",
   "widgetConfig.visitorAnalytics",
   "widgetConfig.visitorDeviceTracking",
+  "widgetConfig.allowedOrigins",
+  "widgetConfig.antiSpam",
   "widgetConfig.tabs",
   "widgetConfig.home",
 ] as const;
@@ -190,6 +234,8 @@ const area = settingsArea({
     replyTime: z.enum(REPLY_TIMES).nullable().optional(),
     visitorAnalytics: z.boolean().optional(),
     visitorDeviceTracking: z.boolean().optional(),
+    allowedOrigins: z.array(originPatternSchema).max(50).optional(),
+    antiSpam: antiSpamPatchSchema.optional(),
     tabs: tabs.partial().optional(),
     /** Merged into the stored Home settings; the hero image key is never written here. */
     home: home.optional(),
@@ -198,7 +244,17 @@ const area = settingsArea({
   apply: (row, patch) => {
     const stored = parseJson(row.widgetConfig);
     const storedHome = record(stored.home);
+    const currentAntiSpam = readWidgetAntiSpam(stored);
     const enabled = patch.enabled ?? widgetEnabled(row.widgetConfig);
+    const normalizedOrigins = patch.allowedOrigins
+      ? Array.from(
+          new Set(
+            patch.allowedOrigins
+              .map(normalizeOriginPattern)
+              .filter((v): v is string => v !== null),
+          ),
+        )
+      : undefined;
     return {
       // Anonymous widget sessions are bound to the secret: an enabled widget without one serves no visitor.
       ...(enabled && !row.widgetSecret && { widgetSecret: newSecret() }),
@@ -213,6 +269,20 @@ const area = settingsArea({
           replyTime: patch.replyTime,
           visitorAnalytics: patch.visitorAnalytics,
           visitorDeviceTracking: patch.visitorDeviceTracking,
+          allowedOrigins: normalizedOrigins,
+        }),
+        ...(patch.antiSpam && {
+          antiSpam: {
+            rateLimits: {
+              ...currentAntiSpam.rateLimits,
+              ...defined(patch.antiSpam.rateLimits ?? {}),
+            },
+            challengeMode:
+              patch.antiSpam.challengeMode ?? currentAntiSpam.challengeMode,
+            challengeProvider:
+              patch.antiSpam.challengeProvider ??
+              currentAntiSpam.challengeProvider,
+          },
         }),
         ...(patch.tabs && {
           tabs: { ...widgetTabs(stored), ...defined(patch.tabs) },

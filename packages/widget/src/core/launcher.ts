@@ -1,4 +1,5 @@
 import { ensureStyles } from "./style.js";
+import { ensureAccessibleForeground } from "./contrast.js";
 import { CHAT_CIRCLE, X } from "../icons/phosphor.js";
 import { launcherCopy } from "./launcher-copy.js";
 
@@ -7,6 +8,8 @@ export interface LauncherOptions {
   /** Pixels from the bottom and the side edge; 20 by default. */
   offset?: { bottom?: number; side?: number };
   onClick: () => void;
+  /** Optional intent callback (hover/focus) so the SDK can warm config on interaction (#316). */
+  onIntent?: () => void;
   /**
    * Mount the button (and greeting) inside this element with absolute
    * positioning. Used by the admin live preview so the real launcher sits in
@@ -54,6 +57,17 @@ const DEFAULT_FG = "#171717";
 
 const MESSENGER_ICON = `<svg aria-hidden="true" width="22" height="22" viewBox="0 0 256 256" fill="currentColor"><path d="${CHAT_CIRCLE}"/></svg>`;
 
+function rectsOverlap(a: DOMRect, b: DOMRect, margin = 8): boolean {
+  if (a.width <= 0 || a.height <= 0 || b.width <= 0 || b.height <= 0)
+    return false;
+  return !(
+    a.right + margin < b.left ||
+    a.left - margin > b.right ||
+    a.bottom + margin < b.top ||
+    a.top - margin > b.bottom
+  );
+}
+
 export function createLauncher(opts: LauncherOptions): LauncherHandle {
   ensureStyles(opts.placement);
   const listeners = new AbortController();
@@ -66,9 +80,6 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
   let revealed = false;
   // Visible button label — when set, it doubles as the accessible name.
   let labelText = "";
-  // Proactive greeting bubble state. Dismissal persists per browser session so
-  // the bubble invites once without nagging on every page. A contained preview
-  // must not write that key — it would hide the bubble for a later host visit.
   let greetingText: string | null = null;
   let announcement: { text: string; onClick: () => void } | null = null;
   let localDismissed = false;
@@ -116,7 +127,15 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
       "opacity 450ms ease, background-color 200ms cubic-bezier(0.32,0.72,0,1), transform 150ms ease-out",
   });
   let copy = launcherCopy(opts.locale ?? navigator.language);
-  btn.setAttribute("aria-label", copy.open);
+
+  const syncAriaLabel = () => {
+    const base = isOpen ? copy.close : labelText || copy.open;
+    btn.setAttribute(
+      "aria-label",
+      !isOpen && unreadCount > 0 ? `${base} (${unreadCount} unread)` : base,
+    );
+  };
+  syncAriaLabel();
   btn.setAttribute("aria-expanded", "false");
 
   const wrapper = document.createElement("div");
@@ -143,9 +162,9 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
   });
   btn.appendChild(labelSpan);
 
-  // Unread-count badge, top-right of the button. Its own colors (not the theme
-  // fg/bg) so it always reads as an alert against any launcher color.
+  // Unread-count badge, top-right of the button. High-contrast red (#dc2626 on #fff >= 4.8:1).
   const badge = document.createElement("span");
+  badge.setAttribute("aria-hidden", "true");
   Object.assign(badge.style, {
     position: "absolute",
     top: "-2px",
@@ -158,7 +177,7 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     alignItems: "center",
     justifyContent: "center",
     borderRadius: "10px",
-    backgroundColor: "#ef4444",
+    backgroundColor: "#dc2626",
     color: "#ffffff",
     fontSize: "11px",
     fontWeight: "700",
@@ -172,13 +191,15 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     const show = unreadCount > 0 && !isOpen;
     badge.textContent = unreadCount > 9 ? "9+" : String(unreadCount);
     badge.style.display = show ? "flex" : "none";
+    syncAriaLabel();
   };
 
-  // Proactive greeting bubble — a fixed card sitting just above the button on
-  // the same side. Clicking the text opens the widget; the × dismisses it for
-  // the session. Its own light card colors so it reads over any launcher color.
+  // Proactive greeting bubble — WCAG 2.2 AA: role="status", dismissible via >=24px button & Escape.
   const side = opts.placement === "left" ? "left" : "right";
   const bubble = document.createElement("div");
+  bubble.className = "quackback-bubble";
+  bubble.setAttribute("role", "status");
+  bubble.setAttribute("aria-live", "polite");
   Object.assign(bubble.style, {
     position: contained ? "absolute" : "fixed",
     bottom: `${bottom + 64}px`,
@@ -208,14 +229,14 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     color: "inherit",
     font: "inherit",
     textAlign: "start",
-    padding: "0",
+    padding: "2px 0",
+    minHeight: "24px",
   });
   bubbleText.addEventListener(
     "click",
     () => {
       const open = announcement?.onClick;
       if (!open) return opts.onClick();
-      // An update is announced once: the greeting comes back.
       announcement = null;
       renderGreeting();
       open();
@@ -226,15 +247,19 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
   bubbleClose.type = "button";
   bubbleClose.setAttribute("aria-label", copy.dismiss);
   bubbleClose.innerHTML = `<svg aria-hidden="true" width="12" height="12" viewBox="0 0 256 256" fill="currentColor"><path d="${X}"/></svg>`;
+  // WCAG 2.5.8 target size >= 24x24px (28x28) and >= 4.5:1 contrast (#374151 on #ffffff = 10.3:1).
   Object.assign(bubbleClose.style, {
     flexShrink: "0",
-    width: "18px",
-    height: "18px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "28px",
+    height: "28px",
     padding: "0",
     border: "none",
     borderRadius: "50%",
     background: "transparent",
-    color: "#9ca3af",
+    color: "#374151",
     fontSize: "16px",
     lineHeight: "1",
     cursor: "pointer",
@@ -245,24 +270,31 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
       !isOpen && (!!announcement || (!!greetingText && !greetingDismissed()));
     bubble.style.display = show ? "flex" : "none";
   };
-  bubbleClose.addEventListener(
-    "click",
-    () => {
-      if (announcement) {
-        announcement = null;
-        return renderGreeting();
+  const dismissGreeting = () => {
+    if (announcement) {
+      announcement = null;
+      return renderGreeting();
+    }
+    if (contained) {
+      localDismissed = true;
+    } else {
+      try {
+        sessionStorage.setItem(GREETING_DISMISS_KEY, "1");
+      } catch {
+        greetingText = null;
       }
-      if (contained) {
-        localDismissed = true;
-      } else {
-        try {
-          sessionStorage.setItem(GREETING_DISMISS_KEY, "1");
-        } catch {
-          /* private mode — dismiss for this page load only */
-          greetingText = null;
-        }
+    }
+    renderGreeting();
+  };
+  bubbleClose.addEventListener("click", dismissGreeting, listen);
+  bubble.addEventListener(
+    "keydown",
+    (event) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        dismissGreeting();
+        btn.focus();
       }
-      renderGreeting();
     },
     listen,
   );
@@ -272,6 +304,92 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
   mount.appendChild(bubble);
 
   btn.addEventListener("click", opts.onClick, listen);
+  if (opts.onIntent) {
+    const fireIntent = () => opts.onIntent?.();
+    btn.addEventListener("pointerenter", fireIntent, { ...listen, once: true });
+    btn.addEventListener("focus", fireIntent, { ...listen, once: true });
+  }
+
+  // WCAG 1.4.10 / 1.4.13 / 2.4.11: never cover focused host form fields or visible validation errors (#317).
+  let occlusionRaf = 0;
+  if (!contained) {
+    const checkOcclusion = (
+      target?: EventTarget | null,
+      ignoreActiveElement = false,
+    ) => {
+      const el =
+        target instanceof Element
+          ? target
+          : ignoreActiveElement
+            ? null
+            : document.activeElement;
+      const isWidgetEl = (node: Element | null) =>
+        Boolean(node && (btn.contains(node) || bubble.contains(node)));
+      const candidates: Element[] = [];
+      if (
+        el instanceof HTMLElement &&
+        !isWidgetEl(el) &&
+        el.matches(
+          'input, textarea, select, [contenteditable=""], [contenteditable="true"], [aria-invalid="true"]',
+        )
+      ) {
+        candidates.push(el);
+      }
+      for (const err of document.querySelectorAll(
+        '[aria-invalid="true"], [role="alert"]',
+      )) {
+        if (!isWidgetEl(err)) candidates.push(err);
+      }
+      const btnRect = btn.getBoundingClientRect();
+      const bubbleVisible = bubble.style.display !== "none";
+      const bubbleRect = bubbleVisible ? bubble.getBoundingClientRect() : null;
+      let hideBtn = false;
+      let hideBubble = false;
+      for (const candidate of candidates) {
+        const rect = candidate.getBoundingClientRect();
+        if (rectsOverlap(btnRect, rect)) hideBtn = true;
+        if (bubbleRect && rectsOverlap(bubbleRect, rect)) hideBubble = true;
+        if (hideBtn && hideBubble) break;
+      }
+      const btnFocused = btn.contains(document.activeElement);
+      const bubbleFocused = bubble.contains(document.activeElement);
+      const nextHideBtn = hideBtn && !btnFocused;
+      const nextHideBubble = hideBubble && !bubbleFocused;
+      btn.classList.toggle("quackback-occluded", nextHideBtn);
+      bubble.classList.toggle("quackback-occluded", nextHideBubble);
+      btn.inert = !revealed || isOpen || nextHideBtn;
+      bubble.inert = nextHideBubble;
+    };
+    const scheduleOcclusionCheck = () => {
+      if (occlusionRaf) cancelAnimationFrame(occlusionRaf);
+      occlusionRaf = requestAnimationFrame(() => {
+        occlusionRaf = 0;
+        checkOcclusion();
+      });
+    };
+    document.addEventListener(
+      "focusin",
+      (event) => checkOcclusion(event.target),
+      { ...listen, passive: true },
+    );
+    document.addEventListener(
+      "focusout",
+      (event) => {
+        const next = (event as FocusEvent).relatedTarget;
+        checkOcclusion(next, !(next instanceof Element));
+      },
+      { ...listen, passive: true },
+    );
+    window.addEventListener("scroll", scheduleOcclusionCheck, {
+      ...listen,
+      passive: true,
+      capture: true,
+    });
+    window.addEventListener("resize", scheduleOcclusionCheck, {
+      ...listen,
+      passive: true,
+    });
+  }
 
   mount.appendChild(btn);
 
@@ -282,10 +400,7 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
       btn.style.visibility = open ? "hidden" : "visible";
       btn.inert = !revealed || open;
       btn.setAttribute("aria-expanded", open ? "true" : "false");
-      btn.setAttribute(
-        "aria-label",
-        open ? copy.close : labelText || copy.open,
-      );
+      syncAriaLabel();
       renderBadge();
       renderGreeting();
     },
@@ -294,8 +409,8 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
         bg = colors.backgroundColor;
         btn.style.backgroundColor = bg;
       }
-      if (colors.foregroundColor) {
-        fg = colors.foregroundColor;
+      if (colors.foregroundColor || colors.backgroundColor) {
+        fg = ensureAccessibleForeground(bg, colors.foregroundColor ?? fg, 4.5);
         btn.style.color = fg;
       }
     },
@@ -323,15 +438,12 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
       btn.style.borderRadius = show ? "20px" : "50%";
       btn.style.padding = show ? "0 16px 0 10px" : "0";
       btn.style.gap = show ? "8px" : "0";
-      if (!isOpen) btn.setAttribute("aria-label", labelText || copy.open);
+      syncAriaLabel();
     },
     setLocale(locale) {
       copy = launcherCopy(locale ?? navigator.language);
       bubbleClose.setAttribute("aria-label", copy.dismiss);
-      btn.setAttribute(
-        "aria-label",
-        isOpen ? copy.close : labelText || copy.open,
-      );
+      syncAriaLabel();
     },
     setPlacement(side) {
       btn.style.left = side === "left" ? edge : "";
@@ -345,6 +457,10 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
       btn.style.opacity = "1";
     },
     remove() {
+      if (occlusionRaf) {
+        cancelAnimationFrame(occlusionRaf);
+        occlusionRaf = 0;
+      }
       listeners.abort();
       btn.remove();
       bubble.remove();

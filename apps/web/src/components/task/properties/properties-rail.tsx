@@ -20,6 +20,7 @@ import { dueDateTextClass } from "./due-date-text-class";
 import { LabelsValue } from "./labels-value";
 import { PropertyRow } from "./property-row";
 import { PropertyValue } from "./property-value";
+import { TaskCustomerContext } from "./task-customer-context";
 import { useTaskProperties } from "./use-task-properties";
 
 type PropertiesRailProps = {
@@ -170,6 +171,7 @@ export function PropertiesRail({
       </div>
 
       <TaskCustomFieldRows taskId={taskId} projectId={projectId} />
+      <TaskCustomerContext workspaceId={workspaceId} taskId={taskId} />
     </aside>
   );
 }

@@ -44,6 +44,10 @@ export const agentSkills = quillsSchema
         .$type<SkillAssignments>()
         .notNull()
         .default(DEFAULT_SKILL_ASSIGNMENTS),
+      allowedTools: jsonb("allowed_tools")
+        .$type<string[]>()
+        .notNull()
+        .default([]),
       enabled: boolean("enabled").notNull().default(true),
       createdByPrincipalId: typeIdColumnNullable("principal")(
         "created_by_principal_id",

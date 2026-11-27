@@ -147,7 +147,7 @@ async function resolveQuietAgentConversations(db: Database) {
  */
 async function announceScheduledChangelog(db: Database) {
   const due = await db
-    .select({ id: changelogEntries.id })
+    .select({ id: changelogEntries.id, title: changelogEntries.title })
     .from(changelogEntries)
     .where(
       and(
@@ -162,6 +162,7 @@ async function announceScheduledChangelog(db: Database) {
     .for("update", { skipLocked: true });
   if (!due.length) return;
   const ids = due.map((entry) => entry.id);
+  const titleById = new Map(due.map((entry) => [entry.id, entry.title]));
   const announced = new Set(
     (
       await db
@@ -176,8 +177,10 @@ async function announceScheduledChangelog(db: Database) {
         )
     ).map((row) => row.id),
   );
-  for (const id of ids)
-    if (!announced.has(id))
+  const newlyPublished: (typeof due)[number]["id"][] = [];
+  for (const id of ids) {
+    if (!announced.has(id)) {
+      newlyPublished.push(id);
       // Scheduled entries store no notify choice, so subscribers hear about them.
       await recordQuillsChange(db, null, {
         type: "changelog.published",
@@ -185,6 +188,41 @@ async function announceScheduledChangelog(db: Database) {
         entityId: id,
         payload: { notify: "true" },
       });
+    }
+  }
+  if (newlyPublished.length) {
+    const [{ changelogEntryPosts }, { flagLinkedArticlesOnChangelogPublish }] =
+      await Promise.all([
+        import("../../../database/quills/schema/changelog"),
+        import("../../content/help-center/freshness"),
+      ]);
+    const linkedRows = await db
+      .select({
+        entryId: changelogEntryPosts.changelogEntryId,
+        postId: changelogEntryPosts.postId,
+      })
+      .from(changelogEntryPosts)
+      .where(
+        inArray(
+          changelogEntryPosts.changelogEntryId,
+          newlyPublished as never[],
+        ),
+      );
+    const postsByEntry = new Map<string, string[]>();
+    for (const r of linkedRows) {
+      const list = postsByEntry.get(r.entryId) ?? [];
+      list.push(r.postId);
+      postsByEntry.set(r.entryId, list);
+    }
+    for (const id of newlyPublished) {
+      await flagLinkedArticlesOnChangelogPublish(
+        db,
+        id,
+        titleById.get(id) ?? "Changelog update",
+        postsByEntry.get(id) ?? [],
+      );
+    }
+  }
   await db
     .update(changelogEntries)
     .set({ notifiedAt: sql`now()` })
@@ -291,9 +329,79 @@ async function refreshStaleWebSources(db: Database) {
   }
 }
 
+/** Marks overdue proposed assistant actions as expired (15-minute TTL, #300). */
+async function expirePendingAssistantActions(db: Database) {
+  await db.execute(sql`
+    UPDATE quills.assistant_pending_actions
+    SET status = 'expired', approval_token_hash = NULL
+    WHERE (workspace_id, id) IN (
+      SELECT workspace_id, id
+      FROM quills.assistant_pending_actions
+      WHERE status = 'proposed' AND expires_at <= now()
+      ORDER BY expires_at
+      LIMIT 50
+      FOR UPDATE SKIP LOCKED
+    )
+  `);
+}
+
+/** Flags KB articles that passed review_by or crossed >=40% unhelpful rate with >=5 post-review votes (#314). */
+export async function flagOverdueAndUnhelpfulArticles(db: Database) {
+  const { helpCenterArticles } =
+    await import("../../../database/quills/schema/kb");
+  const now = new Date();
+  await db
+    .update(helpCenterArticles)
+    .set({
+      staleReason: "review_overdue",
+      staleDetails: "Scheduled review date passed",
+      staleFlaggedAt: now,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        isNull(helpCenterArticles.deletedAt),
+        isNull(helpCenterArticles.staleFlaggedAt),
+        isNotNull(helpCenterArticles.reviewBy),
+        lte(helpCenterArticles.reviewBy, sql`now()`),
+      ),
+    );
+  // If an article was already reviewed, only votes cast AFTER last_reviewed_at count toward
+  // unhelpful_spike so marking an article reviewed does not immediately re-flag it on the next sweep.
+  await db.execute(sql`
+    UPDATE quills.kb_articles a
+    SET
+      stale_reason = 'unhelpful_spike',
+      stale_details = 'Unhelpful feedback ratio reached 40% or higher',
+      stale_flagged_at = ${now},
+      updated_at = ${now}
+    WHERE a.deleted_at IS NULL
+      AND a.stale_flagged_at IS NULL
+      AND (
+        (
+          a.last_reviewed_at IS NULL
+          AND (a.helpful_count + a.not_helpful_count) >= 5
+          AND (a.not_helpful_count * 10) >= ((a.helpful_count + a.not_helpful_count) * 4)
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM quills.kb_article_feedback f
+          WHERE f.article_id = a.id
+            AND a.last_reviewed_at IS NOT NULL
+            AND f.created_at > a.last_reviewed_at
+          GROUP BY f.article_id
+          HAVING count(*) >= 5
+            AND (count(*) FILTER (WHERE f.helpful = false) * 10) >= (count(*) * 4)
+        )
+      )
+  `);
+}
+
 const SWEEPS = [
   wakeSnoozedConversations,
   resolveQuietAgentConversations,
+  expirePendingAssistantActions,
+  flagOverdueAndUnhelpfulArticles,
   refreshStaleWebSources,
   announceScheduledChangelog,
   runMaintenanceWindows,

@@ -47,12 +47,17 @@ function message(data: unknown) {
 }
 
 it("stale fetches and reveal timers cannot apply any state to a later init", async () => {
-  sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+  sdk.dispatch("init", {
+    instanceUrl: ORIGIN,
+    workspace: WORKSPACE,
+    preload: "idle",
+  });
   await vi.advanceTimersByTimeAsync(1000);
   sdk.dispatch("init", {
     instanceUrl: ORIGIN,
     workspace: WORKSPACE,
     placement: "right",
+    preload: "idle",
   });
   expect(signals[0].aborted).toBe(true);
   await vi.advanceTimersByTimeAsync(800);
@@ -86,12 +91,20 @@ it("stale fetches and reveal timers cannot apply any state to a later init", asy
 });
 
 it("destroy invalidates callbacks, aborts fetches and leaves no owned timers", async () => {
-  sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+  sdk.dispatch("init", {
+    instanceUrl: ORIGIN,
+    workspace: WORKSPACE,
+    preload: "idle",
+  });
   const oldIdle = idle[0];
   sdk.dispatch("destroy");
   expect(signals[0].aborted).toBe(true);
   expect(vi.getTimerCount()).toBe(0);
-  sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+  sdk.dispatch("init", {
+    instanceUrl: ORIGIN,
+    workspace: WORKSPACE,
+    preload: "idle",
+  });
   oldIdle();
   expect(document.querySelector("iframe")).toBeNull();
   sdk.dispatch("open", { articleId: "article_saved" });
@@ -127,7 +140,11 @@ it.each([
   { instanceUrl: ORIGIN, workspace: WORKSPACE, identity: { id: 4 } },
   { instanceUrl: ORIGIN, workspace: WORKSPACE, placement: "center" },
 ])("invalid re-init keeps the working instance: %j", (options) => {
-  sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+  sdk.dispatch("init", {
+    instanceUrl: ORIGIN,
+    workspace: WORKSPACE,
+    preload: "idle",
+  });
   const existing = button();
   expect(() => sdk.dispatch("init", options)).toThrow();
   expect(button()).toBe(existing);
@@ -153,7 +170,11 @@ it("does not apply a baked config from another instance", () => {
     visitorAnalytics: true,
     visitorDeviceTracking: true,
   };
-  sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+  sdk.dispatch("init", {
+    instanceUrl: ORIGIN,
+    workspace: WORKSPACE,
+    preload: "idle",
+  });
   expect(responses).toHaveLength(1);
   expect(localStorage.getItem("quackback:device-id")).toBeNull();
 });

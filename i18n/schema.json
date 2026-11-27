@@ -14133,6 +14133,75 @@
 						},
 						"project": {
 							"type": "string"
+						},
+						"customerContext": {
+							"type": "string"
+						},
+						"votesCount": {
+							"type": "string"
+						},
+						"votesCount_zero": {
+							"type": "string"
+						},
+						"votesCount_one": {
+							"type": "string"
+						},
+						"votesCount_two": {
+							"type": "string"
+						},
+						"votesCount_few": {
+							"type": "string"
+						},
+						"votesCount_many": {
+							"type": "string"
+						},
+						"votesCount_other": {
+							"type": "string"
+						},
+						"requestersCount": {
+							"type": "string"
+						},
+						"requestersCount_zero": {
+							"type": "string"
+						},
+						"requestersCount_one": {
+							"type": "string"
+						},
+						"requestersCount_two": {
+							"type": "string"
+						},
+						"requestersCount_few": {
+							"type": "string"
+						},
+						"requestersCount_many": {
+							"type": "string"
+						},
+						"requestersCount_other": {
+							"type": "string"
+						},
+						"companiesCount": {
+							"type": "string"
+						},
+						"companiesCount_zero": {
+							"type": "string"
+						},
+						"companiesCount_one": {
+							"type": "string"
+						},
+						"companiesCount_two": {
+							"type": "string"
+						},
+						"companiesCount_few": {
+							"type": "string"
+						},
+						"companiesCount_many": {
+							"type": "string"
+						},
+						"companiesCount_other": {
+							"type": "string"
+						},
+						"churnRisk": {
+							"type": "string"
 						}
 					},
 					"required": [
@@ -14147,7 +14216,9 @@
 						"startDate",
 						"noDate",
 						"dates",
-						"project"
+						"project",
+						"customerContext",
+						"churnRisk"
 					]
 				},
 				"move": {

@@ -13,3 +13,6 @@ export * from "./conversation-assistant.fixture";
 export * from "./read-batch.fixture";
 export * from "./test-conversations.fixture";
 export * from "./ip-blocks.fixture";
+export * from "./spam-blocks.fixture";
+export * from "./conversation-handoff.fixture";
+export * from "./support-merge.fixture";

@@ -3472,7 +3472,12 @@
 			"startDate": "Başlama tarixi",
 			"noDate": "Tarix yoxdur",
 			"dates": "Tarixlər",
-			"project": "Layihə"
+			"project": "Layihə",
+			"churnRisk": "Churn risk",
+			"companiesCount": "{{count}} companies",
+			"customerContext": "Customer context",
+			"requestersCount": "{{count}} requesters",
+			"votesCount": "{{count}} votes"
 		},
 		"move": {
 			"title": "Tapşırığı köçür",

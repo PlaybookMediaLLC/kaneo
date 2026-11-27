@@ -280,6 +280,14 @@ const createComment = defineQuillsRoute({
       })
       .returning();
     await countComment(db, comment!, 1, target);
+    if (!comment!.isPrivate) {
+      await db
+        .update(posts)
+        .set({
+          firstTeamResponseAt: sql`coalesce(${posts.firstTeamResponseAt}, now())`,
+        })
+        .where(eq(posts.id, post.id));
+    }
     return loadComment(db, actor, comment!.id);
   },
 });

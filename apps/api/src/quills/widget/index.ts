@@ -1,5 +1,6 @@
 import { apiRouter } from "../../openapi";
 import activity from "./activity";
+import challenge from "./challenge";
 import config from "./config";
 import contactEmail from "./contact-email";
 import identify from "./identify";
@@ -12,6 +13,7 @@ import session from "./session";
 // ../framework/define-route.
 export default apiRouter()
   .route("/", config)
+  .route("/", challenge)
   .route("/", install)
   .route("/", identify)
   .route("/", portalSignIn)

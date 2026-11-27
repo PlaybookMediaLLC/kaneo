@@ -54,26 +54,30 @@ export type QuillsPublicRouters = [
   typeof widgetSurveys,
 ];
 
-export default apiRouter()
-  .route("/", widgetHost)
-  .route("/", integrationWebhooks)
-  .route("/", oauthCallback)
-  .route("/", connectorOAuthCallback)
-  .route("/", inboundEmail)
-  .route("/", emailEvents)
-  .route("/", jobWake)
-  .route("/", portalTokenSignIn)
-  .route("/", portal)
-  .route("/", widget)
-  .route("/", portalFeedback)
-  .route("/", widgetFeedback)
-  .route("/", widgetHelp)
-  .route("/", contentPublic)
-  .route("/", widgetKbAsk)
-  .route("/", portalSupport)
-  .route("/", widgetSupport)
-  .route("/", customerFiles)
-  .route("/", avatarImage)
-  .route("/", track)
-  .route("/", portalSurveys)
-  .route("/", widgetSurveys);
+// Mount sub-routers imperatively so TypeScript does not compute a 22-deep nested
+// Hono MergeSchemaPath generic on the default export (typed clients use QuillsPublicRouters).
+const quillsPublicRouter = apiRouter();
+quillsPublicRouter.route("/", widgetHost);
+quillsPublicRouter.route("/", integrationWebhooks);
+quillsPublicRouter.route("/", oauthCallback);
+quillsPublicRouter.route("/", connectorOAuthCallback);
+quillsPublicRouter.route("/", inboundEmail);
+quillsPublicRouter.route("/", emailEvents);
+quillsPublicRouter.route("/", jobWake);
+quillsPublicRouter.route("/", portalTokenSignIn);
+quillsPublicRouter.route("/", portal);
+quillsPublicRouter.route("/", widget);
+quillsPublicRouter.route("/", portalFeedback);
+quillsPublicRouter.route("/", widgetFeedback);
+quillsPublicRouter.route("/", widgetHelp);
+quillsPublicRouter.route("/", contentPublic);
+quillsPublicRouter.route("/", widgetKbAsk);
+quillsPublicRouter.route("/", portalSupport);
+quillsPublicRouter.route("/", widgetSupport);
+quillsPublicRouter.route("/", customerFiles);
+quillsPublicRouter.route("/", avatarImage);
+quillsPublicRouter.route("/", track);
+quillsPublicRouter.route("/", portalSurveys);
+quillsPublicRouter.route("/", widgetSurveys);
+
+export default quillsPublicRouter;

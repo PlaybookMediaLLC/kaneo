@@ -298,4 +298,42 @@ export function registerQuillsTools(
         }),
       ),
   );
+
+  registerTool(
+    "get_task_customer_context",
+    {
+      description:
+        "Get customer demand context for a Kaneo task: linked feedback posts, unique requesters (no emails), companies, and vote totals. Enforces both Kaneo task project visibility and Quills permissions; MRR is omitted without quills:view_revenue.",
+      inputSchema: z.object({
+        workspaceId,
+        taskId: id("Task"),
+      }),
+    },
+    async ({ workspaceId: ws, taskId }) =>
+      run(() =>
+        client.json(
+          quills(ws, `/tasks/${encodeURIComponent(taskId)}/customer-context`),
+        ),
+      ),
+  );
+
+  registerTool(
+    "quills_find_similar_feedback",
+    {
+      description:
+        "Find similar or duplicate feedback posts using hybrid PostgreSQL FTS and trigram search (works without AI configured).",
+      inputSchema: z.object({
+        workspaceId,
+        q: z.string().trim().min(2).max(200),
+        boardId: id("Board").optional(),
+        limit: z.number().int().min(1).max(20).optional(),
+      }),
+    },
+    async ({ workspaceId: ws, q, boardId, limit }) =>
+      run(() =>
+        client.json(
+          quills(ws, `/posts/similar${query({ q, boardId, limit })}`),
+        ),
+      ),
+  );
 }

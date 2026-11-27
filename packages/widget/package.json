@@ -43,6 +43,7 @@
   ],
   "scripts": {
     "build": "tsup && tsc --emitDeclarationOnly",
+    "check:size": "node scripts/check-size.mjs",
     "test": "vp test run --config vitest.config.ts",
     "test:watch": "vp test --config vitest.config.ts",
     "typecheck": "tsc --noEmit && tsc -p .storybook/tsconfig.json --noEmit",

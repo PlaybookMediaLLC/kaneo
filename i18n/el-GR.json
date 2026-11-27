@@ -3472,7 +3472,12 @@
 			"startDate": "Ημερομηνία έναρξης",
 			"noDate": "Χωρίς ημερομηνία",
 			"dates": "Ημερομηνίες",
-			"project": "Έργο"
+			"project": "Έργο",
+			"churnRisk": "Churn risk",
+			"companiesCount": "{{count}} companies",
+			"customerContext": "Customer context",
+			"requestersCount": "{{count}} requesters",
+			"votesCount": "{{count}} votes"
 		},
 		"move": {
 			"title": "Μετακίνηση εργασίας",

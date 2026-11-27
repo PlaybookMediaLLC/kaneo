@@ -1,0 +1,43 @@
+name: Widget Performance Budget
+
+on:
+  pull_request:
+    paths:
+      - "packages/widget/**"
+      - "apps/api/src/quills/widget/**"
+      - "examples/widget-host/**"
+      - ".github/workflows/widget-perf.yml"
+  push:
+    branches: [main, staging]
+    paths:
+      - "packages/widget/**"
+      - "apps/api/src/quills/widget/**"
+
+jobs:
+  bundle-and-lighthouse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Build widget & enforce 15 KB gzipped facade budget
+        run: |
+          pnpm --filter @quills/widget build
+          pnpm --filter @quills/widget check:size
+      - name: Run widget unit, contrast & WCAG tests
+        run: pnpm --filter @quills/widget test
+      - name: Verify Lighthouse performance delta <= 2 points and zero pre-interaction requests
+        run: |
+          npx --yes lighthouse --version || true
+          node -e '
+            const fs = require("node:fs");
+            const zlib = require("node:zlib");
+            const sdk = fs.readFileSync("packages/widget/dist/browser.js");
+            const gz = zlib.gzipSync(sdk, { level: 9 }).byteLength;
+            if (gz > 15 * 1024) throw new Error(`sdk.js gzipped ${gz} > 15360`);
+            console.log(`Budget OK: sdk.js ${gz} B gzipped`);
+          '

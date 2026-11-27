@@ -1,12 +1,14 @@
 import * as z from "zod/mini";
-import { identitySchema } from "../core/options.js";
-import { viewSchema, type OutboundMessage } from "../core/protocol.js";
+import { identitySchema, type RuntimeIdentity } from "../core/options.js";
+import { WIDGET_VIEWS, type OutboundMessage } from "../core/protocol.js";
+
+const viewSchema = z.enum(WIDGET_VIEWS);
 
 /** What the iframe accepts from the SDK. Other inbound types (device, mobile) have no route yet. */
 export type ParentMessage =
   | {
       type: "identify";
-      identity: z.infer<typeof identitySchema> | null | "invalid";
+      identity: RuntimeIdentity | null | "invalid";
     }
   | { type: "open"; target: z.infer<typeof openSchema> }
   | { type: "locale"; locale: string }
@@ -42,6 +44,7 @@ const openSchema = z.object({
   postId: z.optional(ref),
   articleId: z.optional(ref),
   entryId: z.optional(ref),
+  conversationId: z.optional(ref),
   title: z.optional(text(200)),
   body: z.optional(text(10_000)),
   board: z.optional(ref),

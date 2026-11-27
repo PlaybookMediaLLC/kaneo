@@ -119,6 +119,7 @@ describe("sdk host-page tracking", () => {
       instanceUrl: ORIGIN,
       workspace: WORKSPACE,
       tracking: false,
+      preload: "idle",
     });
     sdk.dispatch("tracking", true);
     expect(trackers).toHaveLength(0);
@@ -208,7 +209,11 @@ describe("sdk host-page tracking", () => {
       postMessage,
     } as unknown as Window);
     sdk = createSDK();
-    sdk.dispatch("init", { instanceUrl: ORIGIN, workspace: WORKSPACE });
+    sdk.dispatch("init", {
+      instanceUrl: ORIGIN,
+      workspace: WORKSPACE,
+      preload: "idle",
+    });
     window.dispatchEvent(
       new MessageEvent("message", {
         origin: ORIGIN,

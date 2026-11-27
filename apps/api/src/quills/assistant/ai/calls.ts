@@ -2,7 +2,7 @@
 import type { ModelRole } from "@quills/ai/capability";
 import { embedMany, generateText, NoObjectGeneratedError, Output } from "ai";
 import { z } from "../../../openapi";
-import { aiConfig } from "./config";
+import { aiConfig, type AiConfig } from "./config";
 import { AiError, toAiError } from "./errors";
 import { toModelMessages } from "./messages";
 import { embeddingModel, languageModel } from "./registry";
@@ -90,8 +90,12 @@ export async function chatJson<S extends z.ZodType>(
 }
 
 /** Embeddings for up to 64 texts, in input order. */
-export async function embed(texts: string[], timeoutMs = TIMEOUT_MS) {
-  const config = aiConfig();
+export async function embed(
+  texts: string[],
+  timeoutMs = TIMEOUT_MS,
+  configOverride?: AiConfig,
+) {
+  const config = configOverride ?? aiConfig();
   if (!config) throw new AiError("not_configured");
   if (!config.embeddingModel) throw new AiError("embeddings_not_configured");
   const started = Date.now();

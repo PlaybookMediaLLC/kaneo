@@ -12,7 +12,11 @@ import { createSDK } from "../src/core/sdk";
 vi.mock("../src/core/capture", () => ({ capturePage: vi.fn() }));
 
 const ORIGIN = "https://feedback.acme.com";
-const init = { instanceUrl: ORIGIN, workspace: "acme" };
+const init = {
+  instanceUrl: ORIGIN,
+  workspace: "acme",
+  preload: "idle" as const,
+};
 let sdk: ReturnType<typeof createSDK> | undefined;
 
 function stubIframe() {

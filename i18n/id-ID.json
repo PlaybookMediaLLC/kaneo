@@ -3418,7 +3418,12 @@
 			"startDate": "Tanggal mulai",
 			"noDate": "Tanpa tanggal",
 			"dates": "Tanggal",
-			"project": "Proyek"
+			"project": "Proyek",
+			"churnRisk": "Churn risk",
+			"companiesCount": "{{count}} companies",
+			"customerContext": "Customer context",
+			"requestersCount": "{{count}} requesters",
+			"votesCount": "{{count}} votes"
 		},
 		"move": {
 			"title": "Pindahkan tugas",

@@ -3526,7 +3526,12 @@
 			"startDate": "Fecha de inicio",
 			"noDate": "Sin fecha",
 			"dates": "Fechas",
-			"project": "Proyecto"
+			"project": "Proyecto",
+			"churnRisk": "Churn risk",
+			"companiesCount": "{{count}} companies",
+			"customerContext": "Customer context",
+			"requestersCount": "{{count}} requesters",
+			"votesCount": "{{count}} votes"
 		},
 		"popover": {
 			"assignee": {

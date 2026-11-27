@@ -3459,7 +3459,12 @@
 			"startDate": "Start date",
 			"noDate": "No date",
 			"dates": "Dates",
-			"project": "Project"
+			"project": "Project",
+			"customerContext": "Customer context",
+			"votesCount": "{{count}} votes",
+			"requestersCount": "{{count}} requesters",
+			"companiesCount": "{{count}} companies",
+			"churnRisk": "Churn risk"
 		},
 		"move": {
 			"title": "Move task",

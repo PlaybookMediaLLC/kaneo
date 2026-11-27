@@ -1,7 +1,16 @@
 // The host-page screenshot for the widget's "Capture screenshot" action (RFC 0003 feature 6).
-// The SDK renders the visible part of the page with html-to-image. It never renders the widget's
-// own elements, and it never renders a private field: such a field is left out of the copy and
-// covered with an opaque box where it shows on the page.
+// In the browser IIFE (sdk.js), html-to-image is never bundled up front (#316): it loads lazily
+// from `{widgetBase}/capture.js` only when the visitor clicks "Capture screenshot".
+
+declare const process: { env: { QUILLS_BROWSER_IIFE?: string } };
+
+type ToCanvasFn = typeof import("html-to-image").toCanvas;
+
+declare global {
+  interface Window {
+    __QUILLS_CAPTURE__?: { toCanvas: ToCanvasFn };
+  }
+}
 
 /** Fields whose content never leaves the page. A host can mark any element with data-private. */
 export const PRIVATE_FIELDS = [
@@ -26,6 +35,49 @@ const MASK = "#171717";
 const TRANSPARENT_PIXEL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
+let pendingLoad: Promise<ToCanvasFn> | null = null;
+
+function loadCaptureScript(url: string): Promise<ToCanvasFn> {
+  if (window.__QUILLS_CAPTURE__?.toCanvas) {
+    return Promise.resolve(window.__QUILLS_CAPTURE__.toCanvas);
+  }
+  if (pendingLoad) return pendingLoad;
+  pendingLoad = new Promise<ToCanvasFn>((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = url;
+    script.async = true;
+    script.onload = () => {
+      const fn = window.__QUILLS_CAPTURE__?.toCanvas;
+      if (fn) resolve(fn);
+      else {
+        pendingLoad = null;
+        reject(new Error("Screenshot capture helper did not initialize."));
+      }
+    };
+    script.onerror = () => {
+      pendingLoad = null;
+      script.remove();
+      reject(new Error("Could not load screenshot capture helper."));
+    };
+    (document.head ?? document.documentElement).appendChild(script);
+  });
+  return pendingLoad;
+}
+
+async function resolveToCanvas(captureScriptUrl?: string): Promise<ToCanvasFn> {
+  if (window.__QUILLS_CAPTURE__?.toCanvas) {
+    return window.__QUILLS_CAPTURE__.toCanvas;
+  }
+  if (process.env.QUILLS_BROWSER_IIFE === "true") {
+    if (!captureScriptUrl) {
+      throw new Error("Screenshot capture URL is not configured.");
+    }
+    return loadCaptureScript(captureScriptUrl);
+  }
+  const mod = await import("html-to-image");
+  return mod.toCanvas;
+}
+
 function pageBackground() {
   for (const element of [document.documentElement, document.body]) {
     const color = element ? getComputedStyle(element).backgroundColor : "";
@@ -41,8 +93,9 @@ function pageBackground() {
  */
 export async function capturePage(
   own: (element: Element) => boolean,
+  captureScriptUrl?: string,
 ): Promise<Blob> {
-  const { toCanvas } = await import("html-to-image");
+  const toCanvas = await resolveToCanvas(captureScriptUrl);
   const width = window.innerWidth;
   const height = window.innerHeight;
   const ratio = Math.min(

@@ -20,6 +20,8 @@ export const OMITTED_TABLES = [
   "push_devices",
   "import_runs",
   "export_runs",
+  // Scheduled S3/R2 export targets hold sealed credentials and belong to the source instance (#327).
+  "export_schedules",
   "onboarding_emails",
   // A domain points at this instance and belongs to one workspace; the target sets and verifies its own.
   "custom_domains",
@@ -33,7 +35,22 @@ export const OMITTED_TABLES = [
   "ai_knowledge_suggestions",
   "ai_knowledge_questions",
   "ai_knowledge_sources",
+  // Platform-level OAuth/integration credentials bound to this deployment (#327).
+  "integration_platform_credentials",
 ] as const;
+
+// Secret columns stripped from exported rows so portable archives never leak plaintext or
+// deployment-bound credentials (#302, #327).
+const REDACTED_COLUMNS: Readonly<Record<string, readonly string[]>> = {
+  settings: ["widget_secret", "assistant_provider_secrets"],
+  webhooks: ["secret"],
+  integrations: ["secrets"],
+  connectors: ["secrets"],
+  email_sending_domains: ["pending_signing_key"],
+  oauth_client: ["client_secret"],
+  assistant_pending_actions: ["approval_token_hash"],
+};
+
 export const portableTables = Object.values(schema)
   .filter((value) => is(value, PgTable))
   .map((table) => ({ table, config: getTableConfig(table) }))
@@ -77,12 +94,16 @@ export async function exportWorkspaceArchive(
     const extra = bigints.length
       ? ` || jsonb_build_object(${bigints.flatMap((c) => ["'" + c.name + "'", `t.${quote(c.name)}::text`]).join(",")})`
       : "";
+    const redacted = REDACTED_COLUMNS[config.name];
+    const strip = redacted?.length
+      ? redacted.map((col) => ` - '${col}'`).join("")
+      : "";
     const result = await db.execute<{
       row: WorkspaceArchive["tables"][string][number] | null;
     }>(
       sql.raw(
         boundedArchiveQuery(
-          `SELECT to_jsonb(t)${extra} AS row FROM ${quote(config.schema!)}.${quote(config.name)} t LIMIT 100001`,
+          `SELECT (to_jsonb(t)${extra}${strip}) AS row FROM ${quote(config.schema!)}.${quote(config.name)} t LIMIT 100001`,
           MAX_ARCHIVE_BYTES - size,
         ),
       ),

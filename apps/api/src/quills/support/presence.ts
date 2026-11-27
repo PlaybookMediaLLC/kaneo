@@ -21,7 +21,7 @@ const PRESENCE_TTL_SECONDS = 90;
  * kaneo_user_id), then their own keys by the kv_store primary key. A LIKE on the key prefix
  * would scan every widget session, because the key column does not use the C collation.
  */
-async function agentsOnline(db: Database) {
+export async function agentsOnline(db: Database) {
   const teammates = await db
     .select({ id: principal.id })
     .from(principal)

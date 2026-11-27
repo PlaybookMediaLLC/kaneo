@@ -3472,7 +3472,12 @@
 			"startDate": "Startdatum",
 			"noDate": "Geen datum",
 			"dates": "Datums",
-			"project": "Project"
+			"project": "Project",
+			"churnRisk": "Churn risk",
+			"companiesCount": "{{count}} companies",
+			"customerContext": "Customer context",
+			"requestersCount": "{{count}} requesters",
+			"votesCount": "{{count}} votes"
 		},
 		"popover": {
 			"assignee": {
