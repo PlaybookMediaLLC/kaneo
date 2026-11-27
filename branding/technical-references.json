@@ -230,12 +230,7 @@
 		"reason": "Inline theme initialization uses the existing browser storage key."
 	},
 	{
-		"file": "apps/site/components/landing/theme-sync.tsx",
-		"value": "kaneo-site-theme",
-		"reason": "Existing internal protocol, storage, editor or command identifier; preserve compatibility."
-	},
-	{
-		"file": "apps/site/components/landing/theme-toggle.tsx",
+		"file": "apps/site/lib/theme.ts",
 		"value": "kaneo-site-theme",
 		"reason": "Existing internal protocol, storage, editor or command identifier; preserve compatibility."
 	},

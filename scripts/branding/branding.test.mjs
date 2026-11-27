@@ -526,3 +526,91 @@ test("upstream attribution is approved only in its reviewed public document", as
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("exported docs matcher allows file-scoped reviewed identifiers while rejecting leaks", async () => {
+  const { createExportedDocsMatcher, resolveExportedDocsTarget } =
+    await import("./docs-output.mjs");
+  const { matches } = await import("./check.mjs");
+  const exceptions = JSON.parse(
+    await readFile(
+      path.join(root, "branding/technical-references.json"),
+      "utf8",
+    ),
+  );
+  const matcher = createExportedDocsMatcher({
+    exceptions,
+    reviewedCode: new Set(),
+    exceptionValue,
+    brandText,
+    matches,
+  });
+
+  const indexTarget = resolveExportedDocsTarget(
+    "apps/site/out/docs.html",
+    root,
+  );
+  assert.deepEqual(indexTarget, {
+    kind: "docs-file",
+    sourceFile: "apps/docs/index.mdx",
+  });
+
+  // Reviewed sidebar route is allowed on docs.html, while unreviewed product copy is rejected
+  assert.equal(
+    matcher(
+      {
+        file: "apps/site/out/docs.html",
+        line: 1,
+        term: "kaneo",
+        value: '<a href="/docs/core/migrations/from-kaneo">Import</a>',
+      },
+      indexTarget,
+      null,
+    ),
+    true,
+  );
+  assert.equal(
+    matcher(
+      {
+        file: "apps/site/out/docs.html",
+        line: 2,
+        term: "Kaneo",
+        value: "<p>Welcome to Kaneo</p>",
+      },
+      indexTarget,
+      null,
+    ),
+    false,
+  );
+  // A technical token reviewed only in storage-backends.mdx must NOT be accepted on docs.html
+  assert.equal(
+    matcher(
+      {
+        file: "apps/site/out/docs.html",
+        line: 3,
+        term: "kaneo",
+        value: "<p>kaneo-uploads</p>",
+      },
+      indexTarget,
+      null,
+    ),
+    false,
+  );
+
+  const storageTarget = resolveExportedDocsTarget(
+    "apps/site/out/docs/core/installation/storage-backends/__next.docs.$oc$slug.__PAGE__.txt",
+    root,
+  );
+  assert.equal(
+    matcher(
+      {
+        file: "apps/site/out/docs/core/installation/storage-backends/__next.docs.$oc$slug.__PAGE__.txt",
+        line: 41,
+        term: "kaneo",
+        value: '21:["$","span",null,{"children":"kaneo-uploads"}]',
+      },
+      storageTarget,
+      null,
+    ),
+    true,
+  );
+});
