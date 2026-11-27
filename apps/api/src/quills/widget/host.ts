@@ -46,8 +46,11 @@ type Asset = { body: string; version: string; mtimeMs: number };
 export function widgetHost(findDist: () => string | null) {
   const cache = new Map<string, Asset>();
   let dist: string | null = null;
-  /** A built file with its content hash; read again after a rebuild. */
+  const immutableFs = process.env.NODE_ENV === "production";
+  /** A built file with its content hash; read again after a rebuild outside production. */
   const asset = (name: string) => {
+    const cached = cache.get(name);
+    if (immutableFs && cached) return cached;
     dist ??= findDist();
     if (!dist) return null;
     const file = join(dist, name);
@@ -57,7 +60,6 @@ export function widgetHost(findDist: () => string | null) {
     } catch {
       return null;
     }
-    const cached = cache.get(name);
     if (cached?.mtimeMs === mtimeMs) return cached;
     const body = readFileSync(file, "utf8");
     const version = createHash("sha256")
@@ -66,6 +68,13 @@ export function widgetHost(findDist: () => string | null) {
       .slice(0, 16);
     cache.set(name, { body, version, mtimeMs });
     return cache.get(name)!;
+  };
+  const matchesEtag = (c: Context, etag: string) => {
+    const header = c.req.header("if-none-match");
+    if (!header) return false;
+    return header
+      .split(",")
+      .some((part) => part.trim().replace(/^W\//, "") === etag);
   };
   const unbuilt = (c: Context) =>
     c.json(
@@ -79,14 +88,16 @@ export function widgetHost(findDist: () => string | null) {
   const file = (name: string, type: string) => (c: Context) => {
     const found = asset(name);
     if (!found) return unbuilt(c);
-    c.header("Content-Type", type);
-    c.header("X-Content-Type-Options", "nosniff");
-    c.header(
-      "Cache-Control",
+    const etag = `"${found.version}"`;
+    const cacheControl =
       c.req.query("v") === found.version
         ? "public, max-age=31536000, immutable"
-        : "public, max-age=300",
-    );
+        : "public, max-age=300";
+    c.header("ETag", etag);
+    c.header("Cache-Control", cacheControl);
+    c.header("X-Content-Type-Options", "nosniff");
+    if (matchesEtag(c, etag)) return c.body(null, 304);
+    c.header("Content-Type", type);
     return c.body(found.body);
   };
   return (
@@ -103,9 +114,12 @@ export function widgetHost(findDist: () => string | null) {
         const script = asset("host.js");
         const style = asset("host.css");
         if (!script || !style) return unbuilt(c);
+        const etag = `"${script.version}-${style.version}"`;
         c.header("Content-Security-Policy", PAGE_POLICY);
         c.header("Cache-Control", "no-cache");
+        c.header("ETag", etag);
         c.header("X-Content-Type-Options", "nosniff");
+        if (matchesEtag(c, etag)) return c.body(null, 304);
         return c.html(
           `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Support</title><link rel="stylesheet" href="widget/host.css?v=${style.version}"><script src="widget/host.js?v=${script.version}" defer></script></head><body><div id="root"></div></body></html>`,
         );

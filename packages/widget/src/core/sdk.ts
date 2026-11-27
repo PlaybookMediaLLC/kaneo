@@ -556,8 +556,26 @@ export function createSDK(): SDK {
           )
             .then((serverConfig) => {
               if (serverConfig) return applyServerConfig(serverConfig, next);
-              // The widget is off or the workspace does not exist: no launcher, even after the fallback reveal.
+              // The widget is off or the workspace does not exist: remove the launcher and cancel
+              // any idle panel preload, but keep `config` so an explicit host `open()` still shows
+              // the unavailable panel.
               if (config !== next) return;
+              if (bound) {
+                bound.el.removeEventListener("click", bound.onClick);
+                bound.el.removeAttribute("data-quills-unread");
+                bound = null;
+              }
+              cancelPanelPreload();
+              if (!panelOpen) {
+                mobileCleanup?.();
+                mobileCleanup = null;
+                mobileMql = null;
+                panel?.destroy();
+                panel = null;
+                bridge?.dispose();
+                bridge = null;
+                ready = false;
+              }
               launcher?.remove();
               launcher = null;
               fail("WIDGET_DISABLED", "The widget is off for this workspace");

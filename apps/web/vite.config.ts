@@ -63,7 +63,9 @@ export default defineConfig({
         if (/\/i18n\/[a-z]{2}-[A-Z]{2}\.json$/.test(filename))
           return JSON.stringify(brandResources(JSON.parse(source)));
         if (
-          filename.includes("/apps/web/src/") &&
+          // The shared API client is bundled from source and brands its headers too.
+          (filename.includes("/apps/web/src/") ||
+            filename.includes("/packages/libs/src/")) &&
           /\.[jt]sx?$/.test(filename) &&
           source.includes("@kaneo/branding")
         )
@@ -74,6 +76,15 @@ export default defineConfig({
       },
       async closeBundle() {
         await packageOutput("apps/web/public", "apps/web/dist");
+      },
+    },
+    {
+      // The Quills barrel only re-exports. Without this, one eager import of it
+      // loads every re-exported module (settings, billing, team pages) up front.
+      name: "quills-upstream-side-effect-free",
+      transform(code, id) {
+        if (id.split("?")[0]?.endsWith("/src/quills/ui/upstream.ts"))
+          return { code, map: null, moduleSideEffects: false };
       },
     },
     tanstackRouter({

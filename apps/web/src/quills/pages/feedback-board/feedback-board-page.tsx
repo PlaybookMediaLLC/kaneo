@@ -1,3 +1,4 @@
+import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { feedbackStages, type FeedbackStage } from "../../core/feedback-stages";
 import { portalHref } from "../../core/portal-href";
@@ -26,6 +27,7 @@ export interface FeedbackBoardPageProps {
   search: Record<string, unknown>;
 }
 export function FeedbackBoardPage(props: FeedbackBoardPageProps) {
+  const navigate = useNavigate();
   const portal = usePortalRuntime();
   const { viewer } = portal;
   const boardId = props.params.boardId ?? "";
@@ -169,6 +171,7 @@ export function FeedbackBoardPage(props: FeedbackBoardPageProps) {
                 votePostId={votePostId}
                 voteProblem={vote.error}
                 onLoadMore={() => void posts.fetchNextPage()}
+                onNavigate={(href) => void navigate({ href })}
                 onRetryVote={() => {
                   vote.reset();
                   setVotePostId(null);

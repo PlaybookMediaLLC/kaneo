@@ -126,8 +126,8 @@ describe("PostPage", () => {
       });
       api.reply(created);
       api.reply(first);
-      api.reply(listPortalPostCommentsFixture.ok({ items: [last, created] }));
       api.reply(post);
+      api.reply(listPortalPostCommentsFixture.ok({ items: [last, created] }));
       fill("Comment", created.content);
       press("Post comment");
       await view.findByText(created.content);

@@ -1,4 +1,4 @@
-import { client } from "@kaneo/libs";
+import { quillsClient as client } from "@kaneo/libs";
 import { HttpError } from "@/lib/http-error";
 
 export default async function getQuillsWorkspaceContext(workspaceId: string) {

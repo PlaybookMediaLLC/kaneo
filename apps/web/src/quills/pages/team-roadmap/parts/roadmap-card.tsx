@@ -27,11 +27,12 @@ export interface RoadmapCardProps extends Omit<
  * drag state; the memoized body does not render again while a drag moves over the board.
  */
 export function RoadmapCard({ focus, onFocused, ...body }: RoadmapCardProps) {
+  const title = plainText(body.post.title);
   const data: DragItem = {
     type: "card",
     post: body.post,
     statusId: body.statusId,
-    label: plainText(body.post.title),
+    label: title,
   };
   const drag = useSortable({
     id: body.post.id,
@@ -67,6 +68,7 @@ export function RoadmapCard({ focus, onFocused, ...body }: RoadmapCardProps) {
       <div className={cn(drag.isDragging && "invisible")}>
         <Body
           {...body}
+          title={title}
           activatorRef={activatorRef}
           describedBy={
             body.onMove ? drag.attributes["aria-describedby"] : undefined

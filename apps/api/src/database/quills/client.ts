@@ -1,8 +1,14 @@
-import { initializeQuillsWorkspace } from "./initialize-workspace";
+import {
+  initializeQuillsWorkspace,
+  markQuillsWorkspaceInitialized,
+} from "./initialize-workspace";
+import { supportsHnswIterativeScan } from "../../quills/assistant/engine/distance";
+import { CATALOGUE_VERSION } from "./seed-system";
 import { eq, sql, type SQL } from "drizzle-orm";
 import { hasInstanceAdminRole } from "../../utils/instance-admin-role";
 import {
   drizzle,
+  NodePgSession,
   NodePgTransaction,
   type NodePgDatabase,
 } from "drizzle-orm/node-postgres";
@@ -15,6 +21,16 @@ type Transaction = Parameters<
 >[0];
 declare const workspaceScope: unique symbol;
 export type Database = Transaction & { readonly [workspaceScope]: true };
+
+// Pre-extract the ~90-table relational schema metadata and PgDialect once at module load
+// instead of rebuilding them on every scoped Quills transaction.
+const quillsDialect = new PgDialect();
+const schemaTemplate = drizzle.mock({ schema });
+const quillsSchemaConfig = {
+  fullSchema: schemaTemplate._.fullSchema,
+  schema: schemaTemplate._.schema!,
+  tableNamesMap: schemaTemplate._.tableNamesMap,
+};
 
 async function scopedTransaction<T>(
   work: (tx: Transaction) => Promise<T>,
@@ -36,15 +52,15 @@ async function scopedTransaction<T>(
   try {
     return await drizzle(client).transaction(
       async () => {
-        const db = drizzle(guarded, { schema });
+        const session = new NodePgSession(
+          guarded,
+          quillsDialect,
+          quillsSchemaConfig,
+        );
         const tx = new NodePgTransaction<
           typeof schema,
-          NonNullable<typeof db._.schema>
-        >(new PgDialect(), db._.session, {
-          fullSchema: db._.fullSchema,
-          schema: db._.schema!,
-          tableNamesMap: db._.tableNamesMap,
-        });
+          NonNullable<typeof schemaTemplate._.schema>
+        >(quillsDialect, session, quillsSchemaConfig);
         try {
           return await work(tx);
         } finally {
@@ -69,41 +85,89 @@ export type QuillsActor = {
 export async function withQuillsWorkspace<T>(
   context: { workspaceId: string; userId: string },
   work: (db: Database, actor: QuillsActor) => Promise<T>,
-  options: { exclusiveWorkspace?: boolean; snapshot?: boolean } = {},
+  options: {
+    exclusiveWorkspace?: boolean;
+    snapshot?: boolean;
+    readOnly?: boolean;
+  } = {},
 ): Promise<T> {
   if (!context.workspaceId || !context.userId)
     throw new Error("Workspace and user are required");
   return scopedTransaction(async (tx) => {
-    const workspace = await tx.execute<{
+    let identity: {
       name: string;
       slug: string;
+      createdAt: string | Date;
       userName: string;
       image: string | null;
       role: string | null;
-    }>(sql`
-      SELECT w.name, w.slug, u.name AS "userName", u.image, u.role
-      FROM public.workspace w, public."user" u
-      WHERE w.id = ${context.workspaceId} AND u.id = ${context.userId}
-      AND w.archived_at IS NULL ${options.exclusiveWorkspace ? sql`FOR UPDATE OF w` : sql`FOR SHARE OF w, u`}
-    `);
-    if (workspace.rows.length !== 1)
-      throw new Error("Quills workspace access denied");
-    const membership = await tx.execute(sql`
-      SELECT id FROM public.workspace_member
-      WHERE workspace_id = ${context.workspaceId} AND user_id = ${context.userId} FOR SHARE
-    `);
-    const identity = workspace.rows[0]!;
-    if (membership.rows.length !== 1 && !hasInstanceAdminRole(identity.role))
-      throw new Error("Quills workspace access denied");
+    };
+    if (options.readOnly && !options.exclusiveWorkspace) {
+      // Read-only routes skip FOR SHARE row locks (matching withQuillsAudience) and check
+      // workspace, user, and membership in one round-trip.
+      const res = await tx.execute<{
+        name: string;
+        slug: string;
+        createdAt: string | Date;
+        userName: string;
+        image: string | null;
+        role: string | null;
+        memberId: string | null;
+      }>(sql`
+        SELECT w.name, w.slug, w.created_at AS "createdAt", u.name AS "userName", u.image, u.role, m.id AS "memberId"
+        FROM public.workspace w
+        JOIN public."user" u ON u.id = ${context.userId}
+        LEFT JOIN public.workspace_member m
+          ON m.workspace_id = w.id AND m.user_id = u.id
+        WHERE w.id = ${context.workspaceId} AND w.archived_at IS NULL
+        LIMIT 1
+      `);
+      if (res.rows.length !== 1)
+        throw new Error("Quills workspace access denied");
+      const row = res.rows[0]!;
+      if (!row.memberId && !hasInstanceAdminRole(row.role))
+        throw new Error("Quills workspace access denied");
+      identity = row;
+    } else {
+      const workspace = await tx.execute<{
+        name: string;
+        slug: string;
+        createdAt: string | Date;
+        userName: string;
+        image: string | null;
+        role: string | null;
+      }>(sql`
+        SELECT w.name, w.slug, w.created_at AS "createdAt", u.name AS "userName", u.image, u.role
+        FROM public.workspace w, public."user" u
+        WHERE w.id = ${context.workspaceId} AND u.id = ${context.userId}
+        AND w.archived_at IS NULL ${options.exclusiveWorkspace ? sql`FOR UPDATE OF w` : sql`FOR SHARE OF w, u`}
+      `);
+      if (workspace.rows.length !== 1)
+        throw new Error("Quills workspace access denied");
+      const membership = await tx.execute(sql`
+        SELECT id FROM public.workspace_member
+        WHERE workspace_id = ${context.workspaceId} AND user_id = ${context.userId} FOR SHARE
+      `);
+      identity = workspace.rows[0]!;
+      if (membership.rows.length !== 1 && !hasInstanceAdminRole(identity.role))
+        throw new Error("Quills workspace access denied");
+    }
     await tx.execute(
-      sql`select set_config('quills.workspace_id', ${context.workspaceId}, true)`,
+      supportsHnswIterativeScan()
+        ? sql`select set_config('quills.workspace_id', ${context.workspaceId}, true), set_config('pg_trgm.word_similarity_threshold', '0.4', true), set_config('hnsw.iterative_scan', 'strict_order', true)`
+        : sql`select set_config('quills.workspace_id', ${context.workspaceId}, true), set_config('pg_trgm.word_similarity_threshold', '0.4', true)`,
     );
     await tx.execute(sql`SET LOCAL ROLE quills_runtime`);
-    await initializeQuillsWorkspace(tx as Database, {
+    const initializedWorkspace = {
       workspaceId: context.workspaceId,
       name: identity.name,
       slug: identity.slug,
-    });
+      createdAt: String(identity.createdAt),
+    };
+    const wroteInit = await initializeQuillsWorkspace(
+      tx as Database,
+      initializedWorkspace,
+    );
     let actor = (
       await tx
         .select({ id: schema.principal.id })
@@ -130,12 +194,16 @@ export async function withQuillsWorkspace<T>(
       )[0];
     }
     if (!actor) throw new Error("Quills actor could not be initialized");
-    return work(tx as Database, {
+    const result = await work(tx as Database, {
       principalId: actor.id,
       userId: context.userId,
       workspaceId: context.workspaceId,
     });
-  }, options.snapshot);
+    return { result, markInit: wroteInit ? initializedWorkspace : null };
+  }, options.snapshot).then(({ result, markInit }) => {
+    if (markInit) markQuillsWorkspaceInitialized(markInit);
+    return result;
+  });
 }
 
 /** The workspace a portal, widget or public caller named does not exist or is archived. */
@@ -231,18 +299,34 @@ async function audienceTransaction<T>(
     const workspace = result.rows[0];
     if (!workspace) throw new QuillsWorkspaceUnavailable();
     await tx.execute(
-      sql`select set_config('quills.workspace_id', ${workspace.id}, true), set_config('quills.customer_user_id', ${context.kaneoUserId ?? ""}, true)`,
+      supportsHnswIterativeScan()
+        ? sql`select set_config('quills.workspace_id', ${workspace.id}, true), set_config('quills.customer_user_id', ${context.kaneoUserId ?? ""}, true), set_config('pg_trgm.word_similarity_threshold', '0.4', true), set_config('hnsw.iterative_scan', 'strict_order', true)`
+        : sql`select set_config('quills.workspace_id', ${workspace.id}, true), set_config('quills.customer_user_id', ${context.kaneoUserId ?? ""}, true), set_config('pg_trgm.word_similarity_threshold', '0.4', true)`,
     );
     await tx.execute(sql`SET LOCAL ROLE quills_runtime`);
     const [initialized] = await tx
-      .select({ id: schema.settings.id })
+      .select({
+        id: schema.settings.id,
+        name: schema.settings.name,
+        slug: schema.settings.slug,
+        version: schema.settings.catalogueVersion,
+      })
       .from(schema.settings)
       .limit(1);
     if (!initialized) throw new QuillsWorkspaceUnavailable();
-    await initializeQuillsWorkspace(tx as Database, {
-      workspaceId: workspace.id,
-      ...workspace,
-    });
+    if (initialized.version !== CATALOGUE_VERSION) {
+      await initializeQuillsWorkspace(tx as Database, {
+        workspaceId: workspace.id,
+        ...workspace,
+      });
+    } else if (
+      initialized.name !== workspace.name ||
+      initialized.slug !== workspace.slug
+    ) {
+      await tx
+        .update(schema.settings)
+        .set({ name: workspace.name, slug: workspace.slug });
+    }
     return work(tx as Database, workspace);
   });
 }
@@ -255,20 +339,36 @@ export async function withQuillsSystemWorkspace<T>(
 ): Promise<T> {
   if (!workspaceId) throw new Error("Workspace is required");
   return scopedTransaction(async (tx) => {
-    const result = await tx.execute<{ id: string; name: string; slug: string }>(
-      sql`SELECT id, name, slug FROM public.workspace WHERE id = ${workspaceId} AND (${options.allowArchived === true} OR archived_at IS NULL) FOR SHARE`,
+    const result = await tx.execute<{
+      id: string;
+      name: string;
+      slug: string;
+      createdAt: string | Date;
+    }>(
+      sql`SELECT id, name, slug, created_at AS "createdAt" FROM public.workspace WHERE id = ${workspaceId} AND (${options.allowArchived === true} OR archived_at IS NULL) FOR SHARE`,
     );
     if (result.rows.length !== 1)
       throw new Error("Quills workspace is unavailable");
     await tx.execute(
-      sql`select set_config('quills.workspace_id', ${workspaceId}, true)`,
+      supportsHnswIterativeScan()
+        ? sql`select set_config('quills.workspace_id', ${workspaceId}, true), set_config('pg_trgm.word_similarity_threshold', '0.4', true), set_config('hnsw.iterative_scan', 'strict_order', true)`
+        : sql`select set_config('quills.workspace_id', ${workspaceId}, true), set_config('pg_trgm.word_similarity_threshold', '0.4', true)`,
     );
     await tx.execute(sql`SET LOCAL ROLE quills_runtime`);
-    if (!options.allowArchived)
-      await initializeQuillsWorkspace(tx as Database, {
-        workspaceId,
-        ...result.rows[0]!,
-      });
-    return work(tx as Database);
-  }, options.snapshot);
+    const row = result.rows[0]!;
+    const initializedWorkspace = {
+      workspaceId,
+      name: row.name,
+      slug: row.slug,
+      createdAt: String(row.createdAt),
+    };
+    const wroteInit =
+      !options.allowArchived &&
+      (await initializeQuillsWorkspace(tx as Database, initializedWorkspace));
+    const value = await work(tx as Database);
+    return { value, markInit: wroteInit ? initializedWorkspace : null };
+  }, options.snapshot).then(({ value, markInit }) => {
+    if (markInit) markQuillsWorkspaceInitialized(markInit);
+    return value;
+  });
 }

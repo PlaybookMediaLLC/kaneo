@@ -1,6 +1,12 @@
 import { useEffect, type ReactNode } from "react";
 import { DirectionProvider } from "@base-ui/react/direction-provider";
-import { Outlet, useLocation, useParams } from "@tanstack/react-router";
+import {
+  Link,
+  Outlet,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { portalReturnPath } from "../core/portal-return-path";
 import { portalSignInHref } from "../core/portal-sign-in-href";
@@ -20,6 +26,7 @@ import { PortalAccountMenu } from "./portal-account-menu";
 import { PortalSearch } from "./portal-search";
 import { PortalWidgetLink } from "./widget-link";
 import { PortalRuntimeProvider } from "./runtime";
+import { usePortalRealtime } from "./use-portal-realtime";
 
 export interface PortalLayoutProps {
   workspaceName: string;
@@ -50,6 +57,7 @@ export function PortalLayout({
 
 export function PortalRoute() {
   const { t } = useTranslation("quills");
+  const navigate = useNavigate();
   const currentPath = useLocation({ select: (location) => location.href });
   const params = useParams({ strict: false });
   const workspaceId = String(params.workspaceId);
@@ -75,11 +83,17 @@ export function PortalRoute() {
   }, [direction]);
   // The portal pages read the nav from the runtime, so this one fallback covers them all.
   const nav = navOf(config.data?.nav);
+  const basePath = currentPath.split(/[?#]/)[0]!;
   const section =
-    currentPath
-      .split(/[?#]/)[0]!
-      .slice(portalHref(workspaceId).length)
-      .split("/")[1] ?? "";
+    basePath.slice(portalHref(workspaceId).length).split("/")[1] ?? "";
+  const isSupportSection = ["support", "conversations", "tickets"].includes(
+    section,
+  );
+  usePortalRealtime(
+    workspaceId,
+    viewer,
+    viewer.kind === "user" && isSupportSection,
+  );
   const signInHref = portalSignInHref(
     workspaceId,
     portalReturnPath(currentPath),
@@ -127,8 +141,9 @@ export function PortalRoute() {
               navigation={
                 <PortalNavigation
                   workspaceId={workspaceId}
-                  currentPath={currentPath.split(/[?#]/)[0]}
+                  currentPath={basePath}
                   nav={nav}
+                  onNavigate={(href) => void navigate({ href })}
                 />
               }
               actions={
@@ -144,12 +159,13 @@ export function PortalRoute() {
                       {t("core.signIn")}
                     </a>
                   ) : null}
-                  <a
+                  <Link
                     className="hidden bg-primary text-primary-foreground hover:bg-primary/90 sm:inline-flex"
-                    href={portalHref(workspaceId, "", { openFeedback: "1" })}
+                    to={portalHref(workspaceId)}
+                    search={{ openFeedback: 1 }}
                   >
                     {t("feedback.submit")}
-                  </a>
+                  </Link>
                 </>
               }
             >
@@ -168,12 +184,13 @@ export function PortalRoute() {
               ) : null}
               <Outlet />
               {floatSubmit ? (
-                <a
+                <Link
                   className="fixed inset-x-0 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-30 mx-auto w-fit rounded-full bg-primary px-5 py-3 font-medium text-primary-foreground shadow-lg outline-none hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:hidden"
-                  href={portalHref(workspaceId, "", { openFeedback: "1" })}
+                  to={portalHref(workspaceId)}
+                  search={{ openFeedback: 1 }}
                 >
                   {t("feedback.submit")}
-                </a>
+                </Link>
               ) : null}
             </PortalLayout>
           </PortalRuntimeProvider>

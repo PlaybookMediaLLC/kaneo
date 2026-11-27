@@ -31,11 +31,12 @@ export function postSearch(search: string): SQL {
   );
   if (!plain.length) return sql.join([full, ...excluded], sql` and `);
   // Each word is a sanitized prefix term ("expor" finds "export") or, from three letters, a
-  // close title word ("quartrely" finds "quarterly").
+  // close title word ("quartrely" finds "quarterly"). Uses `<%` without lower() so PostgreSQL
+  // hits posts_title_trgm_idx (pg_trgm is case-insensitive; client.ts sets word_similarity_threshold=0.4).
   const each = plain.map((word) =>
     word.length < 3
       ? sql`${posts.searchVector} @@ to_tsquery('simple', ${`${word}:*`})`
-      : sql`(${posts.searchVector} @@ to_tsquery('simple', ${`${word}:*`}) or word_similarity(${word}, lower(${posts.title})) >= 0.4)`,
+      : sql`(${posts.searchVector} @@ to_tsquery('simple', ${`${word}:*`}) or ${word} <% ${posts.title})`,
   );
   return sql.join(
     [sql`(${full} or (${sql.join(each, sql` and `)}))`, ...excluded],

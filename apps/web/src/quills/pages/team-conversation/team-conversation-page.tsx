@@ -169,6 +169,7 @@ export function TeamConversationPage(props: TeamConversationPageProps) {
               <MessageList
                 workspaceId={workspaceId}
                 conversationId={conversationId}
+                closed={data.status === "closed"}
                 messages={messages.data.items}
                 customerName={customer}
                 customerAvatarUrl={data.visitorAvatarUrl}

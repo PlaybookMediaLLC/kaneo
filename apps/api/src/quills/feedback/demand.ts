@@ -111,37 +111,53 @@ export async function demandOf(
     importance
       ? sql<number>`(count(distinct ${counted.principalId}) filter (where ${counted.importance} = ${importance}))::int`
       : sql<number>`count(distinct ${counted.principalId})::int`;
-  const voters = await db
-    .with(counted)
+  const voters = db
     .select({
-      postId: counted.postId,
-      voters: people(),
-      nice: people("nice"),
-      important: people("important"),
-      critical: people("critical"),
+      postId: sql<PostId>`${counted.postId}`
+        .mapWith(voted.id)
+        .as("voter_post_id"),
+      voters: people().as("voters"),
+      nice: people("nice").as("nice"),
+      important: people("important").as("important"),
+      critical: people("critical").as("critical"),
     })
     .from(counted)
-    .groupBy(counted.postId);
+    .groupBy(counted.postId)
+    .as("voters");
   const pairs = db
     .selectDistinct({ postId: counted.postId, companyId: counted.companyId })
     .from(counted)
     .as("pairs");
-  const revenue = await db
-    .with(counted)
+  const companyStats = db
     .select({
-      postId: pairs.postId,
-      companies: sql<number>`count(*)::int`,
-      mrrCents: sql<number>`coalesce(sum(${companies.mrrCents}), 0)::float8`,
+      postId: sql<PostId>`${pairs.postId}`.as("company_post_id"),
+      companies: sql<number>`count(*)::int`.as("companies"),
+      mrrCents: sql<number>`coalesce(sum(${companies.mrrCents}), 0)::float8`.as(
+        "mrr_cents",
+      ),
     })
     .from(pairs)
     .innerJoin(companies, eq(companies.id, pairs.companyId))
-    .groupBy(pairs.postId);
-  for (const row of voters) {
-    const money = revenue.find((r) => r.postId === row.postId);
+    .groupBy(pairs.postId)
+    .as("company_stats");
+  const rows = await db
+    .with(counted)
+    .select({
+      postId: voters.postId,
+      voters: voters.voters,
+      nice: voters.nice,
+      important: voters.important,
+      critical: voters.critical,
+      companies: sql<number>`coalesce(${companyStats.companies}, 0)::int`,
+      mrrCents: sql<number>`coalesce(${companyStats.mrrCents}, 0)::float8`,
+    })
+    .from(voters)
+    .leftJoin(companyStats, eq(companyStats.postId, voters.postId));
+  for (const row of rows) {
     found.set(row.postId, {
       voters: row.voters,
-      companies: money?.companies ?? 0,
-      mrrCents: money?.mrrCents ?? 0,
+      companies: row.companies,
+      mrrCents: row.mrrCents,
       importance: {
         nice: row.nice,
         important: row.important,

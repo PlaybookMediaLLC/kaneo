@@ -11,22 +11,24 @@ export function useMuteTicket(viewer: Viewer) {
   return useMutation<MuteTicketResponse, PortalProblem, MuteTicketRequest>({
     mutationFn: (input) => muteTicket(input),
     onSuccess: async (_data, input) => {
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspaceId,
-          viewer,
-          "team",
-          "getTicketWatchStatus",
-        ),
-      });
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspaceId,
-          viewer,
-          "team",
-          "listTicketWatchers",
-        ),
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspaceId,
+            viewer,
+            "team",
+            "getTicketWatchStatus",
+          ),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspaceId,
+            viewer,
+            "team",
+            "listTicketWatchers",
+          ),
+        }),
+      ]);
     },
   });
 }

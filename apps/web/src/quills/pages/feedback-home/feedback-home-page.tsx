@@ -1,3 +1,4 @@
+import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { feedbackStages, type FeedbackStage } from "../../core/feedback-stages";
 import { portalHref } from "../../core/portal-href";
@@ -27,8 +28,8 @@ export interface FeedbackHomePageProps {
   params: Record<string, string>;
   search: Record<string, unknown>;
 }
-
 export function FeedbackHomePage(props: FeedbackHomePageProps) {
+  const navigate = useNavigate();
   const portal = usePortalRuntime();
   const { viewer } = portal;
   const [stage, setStage] = useState(
@@ -91,6 +92,8 @@ export function FeedbackHomePage(props: FeedbackHomePageProps) {
   const submittable =
     boards.data?.items.filter((board) => board.canSubmit) ?? [];
 
+  const canVoteBoard = (id: string) =>
+    Boolean(boards.data?.items.some((b) => b.id === id && b.canVote));
   return (
     <PageFrame
       hub
@@ -137,13 +140,7 @@ export function FeedbackHomePage(props: FeedbackHomePageProps) {
               title={title}
               posts={similar.data?.items ?? []}
               stages={rail?.stages}
-              canVote={(id) =>
-                Boolean(
-                  boards.data?.items.some(
-                    (item) => item.id === id && item.canVote,
-                  ),
-                )
-              }
+              canVote={canVoteBoard}
             />
             <HelpSuggestions workspaceId={props.workspaceId} title={title} />
             <SurveyPrompt workspaceId={workspace} viewer={viewer} />
@@ -165,18 +162,14 @@ export function FeedbackHomePage(props: FeedbackHomePageProps) {
                 posts={posts.data?.pages.flatMap((page) => page.items) ?? []}
                 workspaceId={props.workspaceId}
                 canVote={(post) =>
-                  votePostId === null &&
-                  Boolean(
-                    boards.data?.items.some(
-                      (board) => board.id === post.board.id && board.canVote,
-                    ),
-                  )
+                  votePostId === null && canVoteBoard(post.board.id)
                 }
                 canLoadMore={Boolean(posts.hasNextPage)}
                 loadingMore={posts.isFetchingNextPage}
                 votePostId={votePostId}
                 voteProblem={vote.error}
                 onLoadMore={() => void posts.fetchNextPage()}
+                onNavigate={(href) => void navigate({ href })}
                 onRetryVote={() => {
                   vote.reset();
                   setVotePostId(null);

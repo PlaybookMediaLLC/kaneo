@@ -1,10 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ensureQuillsI18n } from "@/quills/i18n/load";
 import { TeamRoute } from "@/quills/team/team-route";
 
 export const Route = createFileRoute(
   "/_layout/_authenticated/feedback/$workspaceId",
 )({
-  beforeLoad: ensureQuillsI18n,
+  beforeLoad: async () => {
+    const { ensureQuillsI18n } = await import("@/quills/i18n/load");
+    await ensureQuillsI18n();
+  },
   component: TeamRoute,
 });

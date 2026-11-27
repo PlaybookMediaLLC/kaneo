@@ -46,7 +46,8 @@ const navigationLinks: NavigationLink[] = [
     label: landing.navigation.resources,
     submenu: true,
     items: [
-      { href: "/docs/core", label: landing.navigation.docs },
+      { href: "/docs", label: landing.navigation.docs },
+      { href: "/api-reference", label: "API Reference" },
       { href: "/guides", label: landing.navigation.guides },
       { href: "/alternatives", label: landing.navigation.comparisons },
       { href: "/community", label: landing.navigation.community },

@@ -15,22 +15,24 @@ export function useSetPortalChangelogReaction(viewer: Viewer) {
   >({
     mutationFn: (input) => setPortalChangelogReaction(input),
     onSuccess: async (_data, input) => {
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspace,
-          viewer,
-          "changelog",
-          "listPortalChangelog",
-        ),
-      });
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspace,
-          viewer,
-          "changelog",
-          "getPortalChangelogEntry",
-        ),
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspace,
+            viewer,
+            "changelog",
+            "listPortalChangelog",
+          ),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspace,
+            viewer,
+            "changelog",
+            "getPortalChangelogEntry",
+          ),
+        }),
+      ]);
     },
   });
 }

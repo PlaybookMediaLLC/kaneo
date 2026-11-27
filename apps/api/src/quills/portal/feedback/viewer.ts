@@ -87,7 +87,10 @@ export async function viewerFor(
     : [];
   if (audience === "portal") {
     if (!portalOn(row?.portalConfig ?? null)) throw closed();
-    if (!(await evaluatePortalAccess(db, caller)).granted)
+    if (
+      !(await evaluatePortalAccess(db, caller, row?.portalConfig ?? null))
+        .granted
+    )
       throw forbidden("Portal access required");
   } else {
     if (!widgetEnabled(row?.widgetConfig ?? null)) throw closed();

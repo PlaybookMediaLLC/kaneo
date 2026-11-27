@@ -1,6 +1,7 @@
 import { blogPath, getPosts } from "@/lib/blog";
 import { alternativePath, comparisonList } from "@/lib/comparisons";
 import type { Cell } from "@/lib/comparisons/types";
+import { docsSource, getDocsMarkdown } from "@/lib/docs/source";
 import { guideList, guidePath } from "@/lib/guides";
 import { productMarkdown } from "@/lib/product";
 
@@ -16,6 +17,22 @@ function cell(value: Cell) {
   if (value === true) return "Yes";
   if (value === false) return "No";
   return value;
+}
+
+function docsMarkdown() {
+  return docsSource
+    .getPages()
+    .map((page) => {
+      const content = getDocsMarkdown(page.slug) ?? "";
+      return `## ${page.title}
+
+URL: ${SITE}${page.url}
+Raw Markdown: ${SITE}${page.rawUrl}
+Section: ${page.section} / ${page.group}
+
+${content}`;
+    })
+    .join("\n\n---\n\n");
 }
 
 function comparisonMarkdown() {
@@ -113,11 +130,15 @@ ${post.markdown}`,
 export function GET() {
   const body = `# Kaneo, full content
 
-> Kaneo is a project management platform, available as managed Kaneo Cloud or self-hosted under the MIT license. This file contains the full text of Kaneo's comparison pages, guides, and blog posts. Written by the Kaneo team, who build one of the tools discussed.
+> Kaneo is a project management platform, available as managed Kaneo Cloud or self-hosted under the MIT license. This file contains the full text of Kaneo's documentation, comparison pages, guides, and blog posts. Written by the Kaneo team, who build one of the tools discussed.
 
 ## Product facts
 
 ${productMarkdown()}
+
+# Documentation
+
+${docsMarkdown()}
 
 # Comparisons
 

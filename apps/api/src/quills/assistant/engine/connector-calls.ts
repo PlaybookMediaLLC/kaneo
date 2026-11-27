@@ -81,14 +81,17 @@ export const loadConnectorTools = (
 export function connectorBudget() {
   let calls = 0;
   let used = 0;
+  let reserved = 0;
   return async <T>(work: (timeoutMs: number) => Promise<T>) => {
-    const left = Math.min(STEP_MS, BUDGET_MS - used);
+    const left = Math.min(STEP_MS, BUDGET_MS - used - reserved);
     if (calls >= MAX_CALLS || left < MIN_STEP_MS) return null;
     calls++;
+    reserved += left;
     const started = Date.now();
     try {
       return await work(left);
     } finally {
+      reserved -= left;
       used += Date.now() - started;
     }
   };

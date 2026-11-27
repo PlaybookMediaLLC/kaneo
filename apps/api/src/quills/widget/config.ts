@@ -24,6 +24,7 @@ const widgetConfig = defineQuillsRoute({
   description:
     "config is null while the widget is disabled. Identify always needs an ssoToken signed with the widget secret.",
   action: "read",
+  cacheControl: "public, max-age=60, stale-while-revalidate=300",
   response: z.object({
     enabled: z.boolean(),
     config: z
@@ -127,6 +128,7 @@ const capabilities = defineQuillsRoute({
   summary: "Get the widget's realtime capabilities",
   description: "Kaneo has no Quills chat stream yet, so the widget polls.",
   action: "read",
+  cacheControl: "public, max-age=300, stale-while-revalidate=600",
   response: z.object({
     chat: z.object({
       mode: z.enum(["live", "poll"]),
@@ -209,6 +211,8 @@ const locale = defineQuillsRoute({
   description:
     "An explicit supported locale wins; otherwise the best Accept-Language match; otherwise en.",
   action: "read",
+  cacheControl: "public, max-age=300",
+  vary: "Accept-Language",
   query: z.object({ locale: z.string().max(35).optional() }),
   response: z.object({ locale: z.enum(LOCALES) }),
   responseDescription: "The resolved locale",

@@ -1,1 +1,1 @@
-export { client } from "@kaneo/libs";
+export { quillsClient as client } from "@kaneo/libs";

@@ -1,4 +1,8 @@
-import { runQuillsJobs } from "../quills/jobs/worker";
+import {
+  disableQuillsAutoWake,
+  enableQuillsAutoWake,
+  runQuillsJobs,
+} from "../quills/jobs/worker";
 import { runQuillsRetention } from "../quills/jobs/retention";
 import { maintainPageViewPartitions } from "../database/quills/page-view-partitions";
 import { resolveDatabaseConnectionString } from "../database/resolve-database-url";
@@ -24,26 +28,39 @@ type JobOutcome = { degraded?: boolean };
 // up the monitor without aborting the rest of the work. Unexpected throws are
 // captured as exception events and swallowed so one bad tick can't take down
 // the scheduler via an unhandled rejection.
-function withCheckIn<T>(name: string, fn: () => Promise<T>) {
+function withCheckIn<T>(
+  name: string,
+  fn: () => Promise<T>,
+  minOkIntervalMs = 0,
+) {
+  let lastOkAt = 0;
   return async (): Promise<void> => {
-    const checkInId = Sentry.captureCheckIn({
-      monitorSlug: name,
-      status: "in_progress",
-    });
+    const checkInId =
+      minOkIntervalMs > 0
+        ? undefined
+        : Sentry.captureCheckIn({
+            monitorSlug: name,
+            status: "in_progress",
+          });
     try {
       const result = await fn();
       const degraded = Boolean(
         (result as JobOutcome | null | undefined)?.degraded,
       );
-      Sentry.captureCheckIn({
-        checkInId,
-        monitorSlug: name,
-        status: degraded ? "error" : "ok",
-      });
+      if (degraded || minOkIntervalMs <= 0) {
+        Sentry.captureCheckIn({
+          ...(checkInId ? { checkInId } : {}),
+          monitorSlug: name,
+          status: degraded ? "error" : "ok",
+        });
+      } else if (Date.now() - lastOkAt >= minOkIntervalMs) {
+        lastOkAt = Date.now();
+        Sentry.captureCheckIn({ monitorSlug: name, status: "ok" });
+      }
     } catch (error) {
       Sentry.captureException(error, { tags: { area: "cron", job: name } });
       Sentry.captureCheckIn({
-        checkInId,
+        ...(checkInId ? { checkInId } : {}),
         monitorSlug: name,
         status: "error",
       });
@@ -53,11 +70,12 @@ function withCheckIn<T>(name: string, fn: () => Promise<T>) {
 }
 
 export function initializeScheduler(): void {
+  enableQuillsAutoWake();
   jobs.push(
     new Cron(
       "*/10 * * * * *",
       { protect: true },
-      withCheckIn("quills-jobs", runQuillsJobs),
+      withCheckIn("quills-jobs", runQuillsJobs, 5 * 60_000),
     ),
   );
   jobs.push(
@@ -133,6 +151,7 @@ export function initializeScheduler(): void {
 }
 
 export function shutdownScheduler(): void {
+  disableQuillsAutoWake();
   for (const job of jobs) {
     job.stop();
   }

@@ -15,22 +15,24 @@ export function useDismissKnowledgeSuggestion(viewer: Viewer) {
   >({
     mutationFn: (input) => dismissKnowledgeSuggestion(input),
     onSuccess: async (_data, input) => {
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspaceId,
-          viewer,
-          "team",
-          "listKnowledgeSuggestions",
-        ),
-      });
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspaceId,
-          viewer,
-          "team",
-          "getKnowledgeSuggestion",
-        ),
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspaceId,
+            viewer,
+            "team",
+            "listKnowledgeSuggestions",
+          ),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspaceId,
+            viewer,
+            "team",
+            "getKnowledgeSuggestion",
+          ),
+        }),
+      ]);
     },
   });
 }

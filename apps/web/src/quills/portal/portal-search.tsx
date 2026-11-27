@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { IconMagnifierOutline18 } from "nucleo-ui-essential-outline-18";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -115,9 +116,10 @@ export function PortalSearch({ workspaceId }: PortalSearchProps) {
                   <ul>
                     {postItems.map((post) => (
                       <li key={post.id}>
-                        <a
+                        <Link
                           className={row}
-                          href={portalHref(workspaceId, `posts/${post.id}`)}
+                          to={portalHref(workspaceId, `posts/${post.id}`)}
+                          onClick={() => setOpen(false)}
                         >
                           <StatusIcon
                             stage={post.stage}
@@ -132,7 +134,7 @@ export function PortalSearch({ workspaceId }: PortalSearchProps) {
                               {t("post.votes", { count: post.voteCount })}
                             </span>
                           )}
-                        </a>
+                        </Link>
                       </li>
                     ))}
                   </ul>
@@ -144,9 +146,10 @@ export function PortalSearch({ workspaceId }: PortalSearchProps) {
                   <ul>
                     {articleItems.map((article) => (
                       <li key={article.id}>
-                        <a
+                        <Link
                           className={row}
-                          href={portalHref(workspaceId, article.path)}
+                          to={portalHref(workspaceId, article.path)}
+                          onClick={() => setOpen(false)}
                         >
                           <span className="min-w-0 flex-1 truncate">
                             {article.title}
@@ -154,7 +157,7 @@ export function PortalSearch({ workspaceId }: PortalSearchProps) {
                           <span className="text-xs text-muted-foreground">
                             {article.category.name}
                           </span>
-                        </a>
+                        </Link>
                       </li>
                     ))}
                   </ul>
@@ -166,15 +169,14 @@ export function PortalSearch({ workspaceId }: PortalSearchProps) {
                 </p>
               ) : null}
               {/* A search that found nothing useful is feedback, so offer to send it. */}
-              <a
+              <Link
                 className={`${row} mt-2 border-t border-border pt-3 text-muted-foreground`}
-                href={portalHref(workspaceId, "", {
-                  openFeedback: "1",
-                  title: term,
-                })}
+                to={portalHref(workspaceId)}
+                search={{ openFeedback: 1, title: term }}
+                onClick={() => setOpen(false)}
               >
                 {t("core.submitAsFeedback", { query: term })}
-              </a>
+              </Link>
             </StateView>
           </div>
         ) : null}

@@ -1,5 +1,6 @@
 import { blogPath, getPosts } from "@/lib/blog";
 import { alternativePath, comparisonList } from "@/lib/comparisons";
+import { docsSource } from "@/lib/docs/source";
 import { guideList, guidePath } from "@/lib/guides";
 import { productMarkdown } from "@/lib/product";
 
@@ -8,6 +9,14 @@ export const dynamic = "force-static";
 const SITE = "https://kaneo.app";
 
 export function GET() {
+  const docsLinks = docsSource
+    .getPages()
+    .map(
+      (page) =>
+        `- [${page.title}](${SITE}${page.url}) ([Markdown](${SITE}${page.rawUrl})): ${page.description}`,
+    )
+    .join("\n");
+
   const comparisonLinks = comparisonList
     .map(
       (comparison) =>
@@ -47,10 +56,15 @@ Key facts:
 
 - [Kaneo](${SITE}): product overview.
 - [Pricing](${SITE}/pricing): Kaneo Cloud plans and managed instances.
-- [Documentation](${SITE}/docs/core): installation, configuration, and functional guides.
+- [Documentation](${SITE}/docs): installation, configuration, and functional guides.
 - [Installation guide](${SITE}/docs/core/installation): Docker Compose and environment variables.
-- [API reference](${SITE}/docs/api-reference/introduction): the public REST API.
+- [Interactive API reference](${SITE}/api-reference): explore every REST endpoint interactively.
+- [OpenAPI specification](${SITE}/openapi.json): machine-readable REST API schema.
 - [GitHub repository](https://github.com/usekaneo/kaneo): source code, issues, and releases.
+
+## Documentation
+
+${docsLinks}
 
 ## Comparisons
 

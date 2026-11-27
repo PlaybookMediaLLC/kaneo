@@ -170,7 +170,7 @@ export async function refreshVisitorAnalytics(
     // A day or surface with no traffic has no row.
     const rows = stats
       .filter((s) => s.pageviews > 0)
-      .map((s) => ({ date, ...s, computedAt: new Date() }));
+      .map((s) => ({ date, ...s, computedAt: now }));
     if (rows.length === 0) continue;
     await db
       .insert(visitorStatsDaily)
@@ -188,6 +188,22 @@ export async function refreshVisitorAnalytics(
           computedAt: sql`excluded.computed_at`,
         },
       });
+  }
+
+  // Skip the 72 full-range top-stat scans when snapshots were already computed on the same UTC day
+  // (so rolling windows still age out across midnight) and no new page_views arrived since then.
+  const latestSnapshot = await db.execute<{ computedAt: Date | null }>(
+    sql`SELECT max(computed_at) AS "computedAt" FROM quills."visitor_top_stats"`,
+  );
+  const lastComputedAt = latestSnapshot.rows[0]?.computedAt;
+  if (
+    lastComputedAt &&
+    utcDay(new Date(lastComputedAt), 0) === utcDay(now, 0)
+  ) {
+    const fresh = await db.execute(
+      sql`SELECT 1 FROM quills."page_views" WHERE occurred_at >= ${lastComputedAt} AND ${sql.raw(REAL_VISITOR)} LIMIT 1`,
+    );
+    if (!fresh.rows.length) return;
   }
 
   // Top snapshots: each period scans every surface, then swaps its snapshot
@@ -211,7 +227,7 @@ export async function refreshVisitorAnalytics(
           rank,
           label: row.label,
           count: row.visitors,
-          computedAt: new Date(),
+          computedAt: now,
         });
       }
     }

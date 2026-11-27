@@ -11,6 +11,9 @@
 		"typecheck": "vp run check:types",
 		"test:watch": "vp test --config vitest.config.ts"
 	},
+	"dependencies": {
+		"@kaneo/branding": "workspace:*"
+	},
 	"devDependencies": {
 		"@kaneo/api": "workspace:*",
 		"@kaneo/typescript-config": "workspace:*",

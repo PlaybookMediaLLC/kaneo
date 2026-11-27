@@ -55,7 +55,12 @@ import { githubCommentDue } from "./handlers/github-comment";
 import { shippedSubscribers } from "./handlers/shipped-mail";
 import { statusSubscribers } from "./handlers/status-mail";
 import { supportSubscribers } from "./handlers/support-mail";
-import { enqueueQuillsJob, type QuillsQueue } from "./queue";
+import {
+  enqueueQuillsJob,
+  enqueueQuillsJobs,
+  type QuillsJobInput,
+  type QuillsQueue,
+} from "./queue";
 import { postReplyAddress } from "../framework/signed";
 import { recipientDirection } from "./handlers/recipient-language";
 
@@ -676,19 +681,29 @@ export async function fanOut(workspaceId: string, eventId: string) {
     workspaceId,
     plan.teammates.map((teammate) => teammate.userId!),
   );
-  const recipients: string[] = [];
-  // ponytail: one project-access query per teammate; batch it if posts gain many teammate subscribers.
-  for (const teammate of plan.teammates)
-    if (
-      readers.has(teammate.userId!) &&
-      seesBoard(
-        plan.links.length
-          ? await accessibleProjectIds(workspaceId, teammate.userId!)
-          : [],
-        plan.links,
-      )
-    )
-      recipients.push(teammate.id);
+  const permittedTeammates = plan.teammates.filter((teammate) =>
+    readers.has(teammate.userId!),
+  );
+  let recipients: string[];
+  if (!plan.links.length) {
+    recipients = permittedTeammates.map((teammate) => teammate.id);
+  } else {
+    // Bound concurrency so large subscriber lists never saturate the database pool.
+    const ACCESS_BATCH = 5;
+    recipients = [];
+    for (let i = 0; i < permittedTeammates.length; i += ACCESS_BATCH) {
+      const slice = permittedTeammates.slice(i, i + ACCESS_BATCH);
+      const projectSets = await Promise.all(
+        slice.map((teammate) =>
+          accessibleProjectIds(workspaceId, teammate.userId!),
+        ),
+      );
+      for (const [index, teammate] of slice.entries()) {
+        if (seesBoard(projectSets[index]!, plan.links))
+          recipients.push(teammate.id);
+      }
+    }
+  }
   const direct = Boolean(plan.direct && plan.entry?.mail);
   if (
     !plan.hooks.length &&
@@ -698,69 +713,65 @@ export async function fanOut(workspaceId: string, eventId: string) {
     !direct
   )
     return;
-  await withQuillsSystemWorkspace(workspaceId, async (db) => {
-    // The address is read at send time from the event's own record (for example the invite).
-    if (direct)
-      await enqueueQuillsJob(
-        db,
-        "quills.mail",
-        { eventId },
-        `${eventId}:direct`,
-        5,
-        plan.directDelay,
-      );
-    for (const messageId of plan.copies)
-      await enqueueQuillsJob(
-        db,
-        "quills.mail",
-        { eventId, messageId },
-        `${eventId}:${messageId}`,
-        5,
-      );
-    for (const webhookId of plan.hooks)
-      await enqueueQuillsJob(
-        db,
-        "quills.webhook",
-        { eventId, webhookId },
-        `${eventId}:${webhookId}`,
-        5,
-      );
-    for (const principalId of recipients) {
-      if (plan.entry?.notification)
-        await enqueueQuillsJob(
-          db,
-          "quills.notification",
-          { eventId, principalId },
-          `${eventId}:${principalId}`,
-          3,
-        );
-      // A direct entry mails its one address only; the mail handler refuses per-principal mail for it.
-      if (plan.entry?.mail && !plan.entry.direct)
-        await enqueueQuillsJob(
-          db,
-          "quills.mail",
-          { eventId, principalId },
-          `${eventId}:${principalId}`,
-          5,
-        );
-    }
-    for (const principalId of plan.customers) {
-      // The widget's activity feed reads these; it rechecks the post's visibility at read time.
-      if (plan.entry?.notification)
-        await enqueueQuillsJob(
-          db,
-          "quills.notification",
-          { eventId, principalId },
-          `${eventId}:${principalId}`,
-          3,
-        );
-      await enqueueQuillsJob(
-        db,
-        "quills.mail",
-        { eventId, principalId },
-        `${eventId}:${principalId}`,
-        5,
-      );
-    }
-  });
+  const jobs: QuillsJobInput[] = [];
+  // The address is read at send time from the event's own record (for example the invite).
+  if (direct)
+    jobs.push({
+      queue: "quills.mail",
+      payload: { eventId },
+      dedupeKey: `${eventId}:direct`,
+      maxAttempts: 5,
+      delaySeconds: plan.directDelay,
+    });
+  for (const messageId of plan.copies)
+    jobs.push({
+      queue: "quills.mail",
+      payload: { eventId, messageId },
+      dedupeKey: `${eventId}:${messageId}`,
+      maxAttempts: 5,
+    });
+  for (const webhookId of plan.hooks)
+    jobs.push({
+      queue: "quills.webhook",
+      payload: { eventId, webhookId },
+      dedupeKey: `${eventId}:${webhookId}`,
+      maxAttempts: 5,
+    });
+  for (const principalId of recipients) {
+    if (plan.entry?.notification)
+      jobs.push({
+        queue: "quills.notification",
+        payload: { eventId, principalId },
+        dedupeKey: `${eventId}:${principalId}`,
+        maxAttempts: 3,
+      });
+    // A direct entry mails its one address only; the mail handler refuses per-principal mail for it.
+    if (plan.entry?.mail && !plan.entry.direct)
+      jobs.push({
+        queue: "quills.mail",
+        payload: { eventId, principalId },
+        dedupeKey: `${eventId}:${principalId}`,
+        maxAttempts: 5,
+      });
+  }
+  for (const principalId of plan.customers) {
+    // The widget's activity feed reads these; it rechecks the post's visibility at read time.
+    if (plan.entry?.notification)
+      jobs.push({
+        queue: "quills.notification",
+        payload: { eventId, principalId },
+        dedupeKey: `${eventId}:${principalId}`,
+        maxAttempts: 3,
+      });
+    jobs.push({
+      queue: "quills.mail",
+      payload: { eventId, principalId },
+      dedupeKey: `${eventId}:${principalId}`,
+      maxAttempts: 5,
+    });
+  }
+  if (!jobs.length) return;
+  await withQuillsSystemWorkspace(workspaceId, (db) =>
+    enqueueQuillsJobs(db, jobs),
+  );
 }

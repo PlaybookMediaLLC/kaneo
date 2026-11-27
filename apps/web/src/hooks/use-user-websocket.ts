@@ -10,6 +10,11 @@ import {
 } from "@/lib/evict-workspace-cache";
 import { authClient } from "@/lib/auth-client";
 import { reconcileProjectAccess } from "@/lib/reconcile-project-access";
+import {
+  affectsQuillsLinks,
+  matchesQuillsEntityChange,
+  needsFullQuillsInvalidation,
+} from "@/quills/core/quills-realtime-scope";
 
 export function getUserWsUrl() {
   const base = getApiUrl("ws");
@@ -45,7 +50,11 @@ export function useUserWebSocket() {
 
     // A previous session's delayed socket events must not control this session.
     let disposed = false;
-    const quillsRefetch = new Map<string, ReturnType<typeof setTimeout>>();
+    const quillsRefetch = new Map<
+      string,
+      { timer: ReturnType<typeof setTimeout>; entities: Set<string | null> }
+    >();
+    let hasSyncedAccess = false;
     let userRevoked = false;
     let activeSocket: WebSocket | null = null;
     let retryDelay = BASE_DELAY;
@@ -122,6 +131,7 @@ export function useUserWebSocket() {
             workspaceId?: string;
             workspaceIds?: string[] | null;
             reason?: string;
+            entityType?: string;
           };
           if (message.type === "USER_ACCESS_REVOKED") {
             leaveSession();
@@ -132,16 +142,20 @@ export function useUserWebSocket() {
             Array.isArray(message.workspaceIds) &&
             message.workspaceIds.every((id) => typeof id === "string")
           ) {
+            const isReconnect = hasSyncedAccess;
+            hasSyncedAccess = true;
             evictInaccessibleWorkspaceCache(queryClient, message.workspaceIds);
             void queryClient.invalidateQueries({
               queryKey: ["workspace-status"],
             });
             for (const workspaceId of message.workspaceIds) {
               reconcileProjectAccess(queryClient, workspaceId, () => !disposed);
-              // Each connect sends this sync: Quills changes missed while the socket was down reload.
-              void queryClient.invalidateQueries({
-                queryKey: ["quills", workspaceId, userId],
-              });
+              // Only invalidate Quills caches on reconnect so initial page load doesn't double-fetch.
+              if (isReconnect) {
+                void queryClient.invalidateQueries({
+                  queryKey: ["quills", workspaceId, userId],
+                });
+              }
             }
             refreshOrganizationState();
             const path = pathnameRef.current;
@@ -204,15 +218,22 @@ export function useUserWebSocket() {
             typeof message.workspaceId === "string"
           ) {
             const workspaceId = message.workspaceId;
+            const entityType =
+              typeof message.entityType === "string"
+                ? message.entityType
+                : null;
             // A burst of changes refetches once: the first event opens a short window and the
-            // others in it join that refetch.
-            if (!quillsRefetch.has(workspaceId))
-              quillsRefetch.set(
-                workspaceId,
-                setTimeout(() => {
-                  quillsRefetch.delete(workspaceId);
-                  if (disposed) return;
-                  // quills-web keys start with ["quills", workspaceId, userId].
+            // others in it join that refetch with their entity scope.
+            const pending = quillsRefetch.get(workspaceId);
+            if (pending) {
+              pending.entities.add(entityType);
+            } else {
+              const entities = new Set<string | null>([entityType]);
+              const timer = setTimeout(() => {
+                quillsRefetch.delete(workspaceId);
+                if (disposed) return;
+                // quills-web keys start with ["quills", workspaceId, userId].
+                if (needsFullQuillsInvalidation(entities)) {
                   void queryClient.invalidateQueries({
                     queryKey: ["quills", workspaceId, userId],
                   });
@@ -228,8 +249,33 @@ export function useUserWebSocket() {
                       query.queryKey[1] === userId &&
                       query.queryKey[2] === workspaceId,
                   });
-                }, QUILLS_REFETCH_MS),
-              );
+                } else {
+                  const includeLinks = affectsQuillsLinks(entities);
+                  void queryClient.invalidateQueries({
+                    predicate: (query) =>
+                      matchesQuillsEntityChange(
+                        query.queryKey,
+                        workspaceId,
+                        userId,
+                        entities,
+                      ) ||
+                      (includeLinks &&
+                        query.queryKey[0] === "quills-links" &&
+                        query.queryKey[1] === userId &&
+                        query.queryKey[2] === workspaceId),
+                  });
+                }
+              }, QUILLS_REFETCH_MS);
+              quillsRefetch.set(workspaceId, { timer, entities });
+            }
+          }
+          if (
+            message.type === "QUILLS_CUSTOMER_CHANGED" &&
+            typeof message.workspaceId === "string"
+          ) {
+            void queryClient.invalidateQueries({
+              queryKey: ["quills", message.workspaceId, userId, "support"],
+            });
           }
           if (message.type === "NOTIFICATION_CREATED") {
             queryClient.invalidateQueries({ queryKey: ["notifications"] });
@@ -261,7 +307,7 @@ export function useUserWebSocket() {
 
     return () => {
       disposed = true;
-      for (const timer of quillsRefetch.values()) clearTimeout(timer);
+      for (const entry of quillsRefetch.values()) clearTimeout(entry.timer);
       clearPing();
       if (retryTimeout !== null) {
         clearTimeout(retryTimeout);

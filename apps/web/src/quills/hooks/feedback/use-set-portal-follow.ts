@@ -15,22 +15,24 @@ export function useSetPortalFollow(viewer: Viewer) {
   >({
     mutationFn: (input) => setPortalFollow(input),
     onSuccess: async (_data, input) => {
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspace,
-          viewer,
-          "feedback",
-          "getPortalPost",
-        ),
-      });
-      await queryClient.invalidateQueries({
-        queryKey: quillsOperationKey(
-          input.param.workspace,
-          viewer,
-          "feedback",
-          "listPortalPosts",
-        ),
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspace,
+            viewer,
+            "feedback",
+            "getPortalPost",
+          ),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: quillsOperationKey(
+            input.param.workspace,
+            viewer,
+            "feedback",
+            "listPortalPosts",
+          ),
+        }),
+      ]);
     },
   });
 }

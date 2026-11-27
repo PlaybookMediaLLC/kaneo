@@ -17,7 +17,7 @@ import {
   tickets,
 } from "../../../database/quills/schema/tickets";
 import { broadcastToUserAndWait } from "../../../ws";
-import { portalAccount } from "../../framework/platform-reads";
+import { portalAccounts } from "../../framework/platform-reads";
 import { requireSurface } from "../../support/customer/model";
 import { loadEvent } from "../fanout";
 import { trackerTargets } from "./support-mail";
@@ -184,10 +184,10 @@ export async function deliverCustomerChange(
 ) {
   const targets = await targetsOf(workspaceId, eventId);
   if (!targets.length) return;
-  const accounts = new Map<string, Awaited<ReturnType<typeof portalAccount>>>();
-  for (const { userId } of targets)
-    if (!accounts.has(userId))
-      accounts.set(userId, await portalAccount(workspaceId, userId));
+  const accounts = await portalAccounts(
+    workspaceId,
+    targets.map((target) => target.userId),
+  );
   // One transaction checks every target's surface (a tracker can reach many linked requesters).
   const admitted = await withQuillsSystemWorkspace(workspaceId, async (db) => {
     const passed = [];
@@ -212,11 +212,19 @@ export async function deliverCustomerChange(
     }
     return passed;
   });
-  for (const { userId, principalId: _p, customerId: _c, ...ids } of admitted)
-    await broadcastToUserAndWait(userId, {
-      type: "QUILLS_CUSTOMER_CHANGED",
-      workspaceId,
-      eventId,
-      ...ids,
-    });
+  const BATCH = 20;
+  for (let i = 0; i < admitted.length; i += BATCH) {
+    await Promise.all(
+      admitted
+        .slice(i, i + BATCH)
+        .map(({ userId, principalId: _p, customerId: _c, ...ids }) =>
+          broadcastToUserAndWait(userId, {
+            type: "QUILLS_CUSTOMER_CHANGED",
+            workspaceId,
+            eventId,
+            ...ids,
+          }),
+        ),
+    );
+  }
 }

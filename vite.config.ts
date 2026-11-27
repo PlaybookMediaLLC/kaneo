@@ -96,6 +96,7 @@ export default defineConfig({
       "apps/api/vitest.config.ts",
       "apps/web/vitest.config.ts",
       "apps/mobile/vitest.config.ts",
+      "apps/site/vitest.config.ts",
       "packages/*/vitest.config.ts",
     ],
   },

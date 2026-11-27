@@ -48,37 +48,76 @@ export async function enqueueQuillsJob(
     .returning();
   return row;
 }
+export interface QuillsJobInput {
+  queue: QuillsQueue;
+  payload: Record<string, string>;
+  dedupeKey: string;
+  maxAttempts: number;
+  delaySeconds?: number;
+}
+
+/** Bulk-enqueues jobs in bounded batches; duplicates per (queue, dedupeKey) are ignored. */
+export async function enqueueQuillsJobs(
+  db: Database,
+  jobs: readonly QuillsJobInput[],
+): Promise<void> {
+  const BATCH = 250;
+  for (let i = 0; i < jobs.length; i += BATCH) {
+    const chunk = jobs.slice(i, i + BATCH);
+    await db
+      .insert(jobQueue)
+      .values(
+        chunk.map((job) => ({
+          jobId: createId("job"),
+          queue: job.queue,
+          payload: job.payload,
+          dedupeKey: job.dedupeKey,
+          maxAttempts: job.maxAttempts,
+          ...(job.delaySeconds && job.delaySeconds > 0
+            ? {
+                runAt: sql`now()+${job.delaySeconds}*interval '1 second'`,
+              }
+            : {}),
+        })),
+      )
+      .onConflictDoNothing();
+  }
+}
+
 export async function enqueueQuillsEvent(db: Database, eventId: string) {
   const payload = eventPayloadSchema.parse({ eventId });
   return enqueueQuillsJob(db, "quills.event", payload, payload.eventId, 3);
 }
 /** A claimer for the next due job of `queues`, in list order. */
 export const claimFrom =
-  (queues: readonly QuillsQueue[]) => async (db: Database) => {
-    await db.execute(
-      sql`UPDATE quills.job_queue SET status=CASE WHEN attempts<max_attempts THEN 'pending' ELSE 'failed' END,run_at=now(),finished_at=CASE WHEN attempts>=max_attempts THEN now() ELSE NULL END,lease_token=NULL,locked_until=NULL,locked_by=NULL,last_error='Worker lease expired',updated_at=now() WHERE queue IN (${sql.join(
-        queues.map((queue) => sql`${queue}`),
-        sql`,`,
-      )}) AND status='running' AND locked_until<=now()`,
+  (queues: readonly QuillsQueue[], options: { reapExpired?: boolean } = {}) =>
+  async (db: Database) => {
+    if (!queues.length) return;
+    const queueList = sql.join(
+      queues.map((queue) => sql`${queue}`),
+      sql`,`,
     );
-    // One indexed query per queue, in list order: cache invalidations never wait behind deliveries.
-    // ponytail: fixed priority; a constantly ready webhook backlog delays mail. Add a fair order if both grow.
-    let job: typeof jobQueue.$inferSelect | undefined;
-    for (const queue of queues) {
-      [job] = await db
-        .select()
-        .from(jobQueue)
-        .where(
-          and(
-            eq(jobQueue.queue, queue),
-            sql`${jobQueue.status}='pending' AND ${jobQueue.runAt}<=now()`,
-          ),
-        )
-        .orderBy(jobQueue.runAt, jobQueue.id)
-        .for("update", { skipLocked: true })
-        .limit(1);
-      if (job) break;
+    if (options.reapExpired !== false) {
+      await db.execute(
+        sql`UPDATE quills.job_queue SET status=CASE WHEN attempts<max_attempts THEN 'pending' ELSE 'failed' END,run_at=now(),finished_at=CASE WHEN attempts>=max_attempts THEN now() ELSE NULL END,lease_token=NULL,locked_until=NULL,locked_by=NULL,last_error='Worker lease expired',updated_at=now() WHERE queue IN (${queueList}) AND status='running' AND locked_until<=now()`,
+      );
     }
+    // Single round-trip priority claim using LATERAL + unnest WITH ORDINALITY so PostgreSQL
+    // drives an O(1) index scan per queue on job_queue_claim_idx without sorting the backlog.
+    const picked = await db.execute<{ id: string; attempts: number }>(sql`
+      SELECT j.id, j.attempts
+      FROM unnest(ARRAY[${queueList}]::text[]) WITH ORDINALITY AS q(queue, ord)
+      CROSS JOIN LATERAL (
+        SELECT id, attempts
+        FROM quills.job_queue
+        WHERE queue = q.queue AND status = 'pending' AND run_at <= now()
+        ORDER BY run_at, id
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
+      ) j
+      LIMIT 1
+    `);
+    const job = picked.rows[0];
     if (!job) return;
     const token = randomUUID();
     const [claimed] = await db
@@ -93,7 +132,7 @@ export const claimFrom =
         updatedAt: new Date(),
         finishedAt: null,
       })
-      .where(eq(jobQueue.id, job.id))
+      .where(eq(jobQueue.id, BigInt(job.id)))
       .returning();
     return claimed;
   };
