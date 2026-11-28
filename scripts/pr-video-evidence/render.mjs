@@ -213,8 +213,8 @@ export async function renderEvidenceVideo({
   }
   const mixChain =
     timeline.length === 1
-      ? `${filterParts[0]};[a0]alimiter=limit=0.95[outa]`
-      : `${filterParts.join(";")};${mixLabels.join("")}amix=inputs=${timeline.length}:duration=longest:dropout_transition=0:normalize=0,alimiter=limit=0.95[outa]`;
+      ? `${filterParts[0]};[a0]highpass=f=70,loudnorm=I=-16:TP=-1.5:LRA=11[outa]`
+      : `${filterParts.join(";")};${mixLabels.join("")}amix=inputs=${timeline.length}:duration=longest:dropout_transition=0:normalize=0,highpass=f=70,loudnorm=I=-16:TP=-1.5:LRA=11[outa]`;
 
   runFfmpeg(
     [

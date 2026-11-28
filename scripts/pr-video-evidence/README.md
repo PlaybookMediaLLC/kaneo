@@ -40,10 +40,11 @@ Setting `ONNXRUNTIME_NODE_INSTALL_CUDA=skip` (also configured in `.npmrc`) ensur
    - `transcript.txt`, `captions.srt`, `captions.vtt`
    - `evidence.json` (evidence manifest) and `evidence.md` (sanitized PR description block)
 
-## TTS providers
+## TTS providers & human-sounding narration
 
-- **Default**: Local Kokoro (`--tts kokoro`, voice `am_michael`, `onnx-community/Kokoro-82M-v1.0-ONNX` `q8` quantized).
-- **Optional approved cloud fallback**: `--tts openai` or `--fallback openai` with `OPENAI_API_KEY`.
+- **Default**: Local Kokoro (`--tts kokoro`, Grade-A voice `af_heart`, `onnx-community/Kokoro-82M-v1.0-ONNX` full `fp32` precision, `--speed 0.98`), with sentence-level synthesis + natural 220ms breath pauses, spoken-text normalization (keeping written captions exact while expanding shorthand for speech), and broadcast voice loudness mastering (`-16 LUFS`).
+- **Optional approved cloud fallback**: `--tts openai` or `--fallback openai` with `OPENAI_API_KEY` (uses `gpt-4o-mini-tts` with conversational engineering-walkthrough instructions and voice `marin`).
+- Write narration copy in natural, conversational spoken English (contractions, clear everyday phrasing, no robotic boilerplate or hype).
 
 ## Validation & GitHub Actions check
 

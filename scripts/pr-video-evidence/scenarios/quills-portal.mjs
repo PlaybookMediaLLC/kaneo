@@ -28,7 +28,7 @@ export default {
     {
       id: "portal-landing",
       narration:
-        "Opening the isolated Quills portal verifies that seeded workspace boards and posts render directly from the running API without mocked fixtures.",
+        "Here's the isolated Quills portal loading seeded feedback boards and posts directly from the live API, with no mocked data.",
       async run({ page, baseUrl, state, helpers }) {
         await page.goto(`${baseUrl}/portal/${state.workspace}`, {
           waitUntil: "networkidle",
@@ -44,7 +44,7 @@ export default {
     {
       id: "portal-interaction",
       narration:
-        "Interacting with a live portal control verifies navigation and confirms zero uncaught page errors occurred during the session.",
+        "Clicking a live portal control confirms navigation responds smoothly and the session finishes with zero page errors.",
       async run({ page, state, helpers }) {
         const interactive = page.locator("main a, main button").first();
         const isVisible = await interactive.isVisible().catch(() => false);
