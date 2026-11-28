@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { parseArgs } from "./cli.mjs";
 import {
   buildCaptionCues,
   buildSrt,
@@ -9,7 +10,13 @@ import {
   formatVttTimestamp,
 } from "./render.mjs";
 import { redactTerminalOutput } from "./scenarios/terminal.mjs";
-import { parseWavDurationSeconds } from "./tts.mjs";
+import {
+  concatFloat32Audio,
+  parseTtsSpeed,
+  parseWavDurationSeconds,
+  prepareSpokenText,
+  splitIntoSentences,
+} from "./tts.mjs";
 
 function makeMinimalWav(
   durationSeconds,
@@ -17,6 +24,7 @@ function makeMinimalWav(
     sampleRate = 24_000,
     channels = 1,
     bitsPerSample = 16,
+    audioFormat = 1,
     declaredDataSize = null,
   } = {},
 ) {
@@ -29,7 +37,7 @@ function makeMinimalWav(
   buffer.write("WAVE", 8, "ascii");
   buffer.write("fmt ", 12, "ascii");
   buffer.writeUInt32LE(16, 16);
-  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(audioFormat, 20);
   buffer.writeUInt16LE(channels, 22);
   buffer.writeUInt32LE(sampleRate, 24);
   buffer.writeUInt32LE(byteRate, 28);
@@ -70,8 +78,14 @@ test("splits narration into synchronized SRT/VTT caption cues and sanitizes ASS 
   assert.match(transcript, /\[00:00:01\.000 - 00:00:07\.000\] \(signin\)/);
 });
 
-test("parses standard and streaming (0xFFFFFFFF / 0) PCM WAV durations cleanly", () => {
+test("parses PCM, IEEE-float32, and streaming (0xFFFFFFFF / 0) WAV durations cleanly", () => {
   assert.equal(parseWavDurationSeconds(makeMinimalWav(3.5)), 3.5);
+  assert.equal(
+    parseWavDurationSeconds(
+      makeMinimalWav(1.25, { audioFormat: 3, bitsPerSample: 32 }),
+    ),
+    1.25,
+  );
   assert.equal(
     parseWavDurationSeconds(
       makeMinimalWav(2.0, { declaredDataSize: 0xffffffff }),
@@ -96,4 +110,41 @@ test("redacts tokens and strips ANSI escapes from terminal output", () => {
     clean,
     "PASS Bearer [REDACTED] [REDACTED_API_KEY] [REDACTED_GH_TOKEN]",
   );
+});
+
+test("normalizes technical shorthand without breaking natural acronyms", () => {
+  assert.equal(
+    prepareSpokenText("Verify `AC-2` PRs in PostgreSQL -> API & UI (H.264)."),
+    "Verify acceptance criterion 2 pull requests in Postgres to API & UI (H 2 64).",
+  );
+});
+
+test("splits sentences cleanly without breaking decimals, versions, URLs, paths, or abbreviations", () => {
+  assert.deepEqual(
+    splitIntoSentences(
+      "Node.js v2.5.1 fixes the 0.98x rate. Open http://127.0.0.1:5190/dashboard?tab=1 and check apps/api/src/index.ts, e.g. routes.ts! Does Dr. Smith approve?",
+    ),
+    [
+      "Node.js v2.5.1 fixes the 0.98x rate.",
+      "Open http://127.0.0.1:5190/dashboard?tab=1 and check apps/api/src/index.ts, e.g. routes.ts!",
+      "Does Dr. Smith approve?",
+    ],
+  );
+});
+
+test("concatenates float32 audio segments with exact inter-sentence silence pause", () => {
+  const a = new Float32Array([0.25, -0.25]);
+  const b = new Float32Array([0.5, -0.5]);
+  const merged = concatFloat32Audio([a, b], 1000, 3);
+  assert.deepEqual(Array.from(merged), [0.25, -0.25, 0, 0, 0, 0.5, -0.5]);
+});
+
+test("validates TTS speed bounds consistently in parseTtsSpeed and CLI --speed", () => {
+  assert.equal(parseTtsSpeed(undefined), 0.98);
+  assert.equal(parseTtsSpeed("1.05"), 1.05);
+  assert.equal(parseArgs(["--speed", "0.95"]).ttsSpeed, 0.95);
+  assert.throws(() => parseTtsSpeed("1.5"), /Invalid TTS speed/);
+  assert.throws(() => parseTtsSpeed("0.5"), /Invalid TTS speed/);
+  assert.throws(() => parseTtsSpeed(""), /Invalid TTS speed/);
+  assert.throws(() => parseArgs(["--speed", "abc"]), /Invalid TTS speed/);
 });

@@ -30,6 +30,7 @@ export async function recordScenario({
   outputDir,
   ttsProvider = "kokoro",
   ttsVoice,
+  ttsSpeed,
   ttsFallback,
   width = 1920,
   height = 1080,
@@ -56,6 +57,7 @@ export async function recordScenario({
   const clips = await synthesizeSteps(scenario.steps, audioDir, {
     provider: ttsProvider,
     voice: ttsVoice,
+    speed: ttsSpeed,
     fallback: ttsFallback,
   });
 

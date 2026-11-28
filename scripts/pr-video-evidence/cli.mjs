@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { formatEvidenceMarkdown } from "./markdown.mjs";
 import { recordScenario } from "./recorder.mjs";
+import { parseTtsSpeed } from "./tts.mjs";
 import { validateEvidenceManifest } from "./validate-pr.mjs";
 
 function git(args) {
@@ -101,6 +102,9 @@ export function parseArgs(argv) {
     } else if (arg === "--voice") {
       options.ttsVoice = requireValue(argv, i, arg);
       i += 1;
+    } else if (arg === "--speed") {
+      options.ttsSpeed = parseTtsSpeed(requireValue(argv, i, arg));
+      i += 1;
     } else if (arg === "--fallback") {
       options.ttsFallback = requireValue(argv, i, arg);
       i += 1;
@@ -157,7 +161,8 @@ Options:
   --base-url <url>                  Running application URL (default: http://127.0.0.1:5190)
   --out <dir>                       Output directory (default: .cache/pr-video-evidence/<timestamp>)
   --tts <kokoro|openai>             TTS provider (default: kokoro)
-  --voice <id>                      Voice name (default: am_michael for kokoro)
+  --voice <id>                      Voice name (default: af_heart for kokoro)
+  --speed <0.7-1.3>                 Speech rate (default: 0.98)
   --fallback <openai>               Optional cloud TTS fallback when local Kokoro fails
   --pr <number>                     Pull request number once assigned
   --video-url <https://...>         Accessible hosted video URL for PR description
@@ -274,6 +279,7 @@ async function main() {
       outputDir,
       ttsProvider: options.ttsProvider,
       ttsVoice: options.ttsVoice,
+      ttsSpeed: options.ttsSpeed,
       ttsFallback: options.ttsFallback,
       width: options.width,
       height: options.height,

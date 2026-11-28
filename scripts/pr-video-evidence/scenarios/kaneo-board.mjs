@@ -98,7 +98,7 @@ export default {
     {
       id: "context-and-signin",
       narration:
-        "Previously, reviewers had to check out pull request branches locally to verify application behavior. This change adds a permanent narrated video evidence pipeline and GitHub check. Signing into the isolated seeded Kaneo workspace confirms live authentication against the real API.",
+        "Before this change, reviewers had to check out pull request branches locally just to see if the app actually worked. Now we've added a narrated video evidence pipeline and a GitHub check. Let's sign into the isolated Kaneo workspace to confirm live authentication against the real API.",
       async prepare({ page, baseUrl }) {
         await page.goto(`${baseUrl}/auth/sign-in`, {
           waitUntil: "networkidle",
@@ -156,7 +156,7 @@ export default {
     {
       id: "project-validation-and-create",
       narration:
-        "Next, we demonstrate acceptance criterion two, including empty-form validation. Opening the Add project dialog keeps the Create Project button disabled while the name is empty. Entering a valid project name enables submission and creates the project in PostgreSQL.",
+        "Next, let's check empty-form validation for acceptance criterion two. When we open the Add project dialog with no name yet, Create Project stays disabled. Once we type a valid project name, the button enables and saves the new project to Postgres.",
       async run({ page, baseUrl, state, helpers }) {
         const addProjectBtn = page.getByRole("button", { name: "Add project" });
         await helpers.moveAndClick(addProjectBtn, {
@@ -219,7 +219,7 @@ export default {
     {
       id: "board-create-task",
       narration:
-        "On the live project board, we verify acceptance criterion three by adding a task to the To Do column and confirming the backend persists the new record.",
+        "Now we're on the live project board for acceptance criterion three. We'll add a task to the To Do column and verify the card renders right after the API saves it.",
       async run({ page, state, helpers }) {
         const addTaskBtn = page.locator('[title="Add task"]').first();
         await helpers.moveAndClick(addTaskBtn, {
@@ -257,7 +257,7 @@ export default {
     {
       id: "task-status-and-reload",
       narration:
-        "Opening the task detail view, we zoom smoothly onto the status control, switch the task from To Do to In Progress, and reload the page to prove the update persisted cleanly.",
+        "Inside the task view, we'll zoom in on the status menu, move the task from To Do to In Progress, and do a full page reload to confirm the change actually persisted.",
       async prepare({ page, baseUrl, state, helpers }) {
         await helpers.clearAnnotations();
         await page.goto(
@@ -306,7 +306,7 @@ export default {
     {
       id: "quills-portal-and-summary",
       narration:
-        "Finally, navigating to the shared Quills portal confirms both surfaces operate on the same isolated workspace. All four acceptance criteria passed. As a limitation, GitHub branch protection remains advisory until the maintainer tests and approves enforcement.",
+        "Finally, jumping over to the Quills portal shows both apps sharing the same isolated workspace. All four acceptance criteria passed. One note on scope: GitHub branch protection stays advisory until you test and turn it on.",
       async prepare({ page, baseUrl, state, helpers }) {
         await helpers.clearAnnotations();
         await page.goto(`${baseUrl}/portal/${state.workspace}`, {

@@ -898,7 +898,7 @@ In `PlaybookMediaLLC/kaneo`, use this repository's isolated DevX verification pi
    pnpm dev:demo
    ```
 2. Complete independent engineering review first (core review lenses: `ponytail-review`, `senior-code-critic`, `review-changes`, plus applicable domain checks such as `apps/api/AGENTS.md` Kaneo/Quills boundaries, `review-animations`, Drizzle migrations, and workflow `actionlint`/`zizmor`).
-3. Record narrated, visually annotated 1920x1080 @ 30fps H.264/AAC video evidence (local Kokoro TTS default; optional `openai` fallback) and Playwright trace (`trace.zip`):
+3. Record narrated, visually annotated 1920x1080 @ 30fps H.264/AAC video evidence (local Kokoro TTS Grade-A `af_heart` `fp32` default with sentence breathing pauses and `-16 LUFS` voice mastering; optional `openai` `gpt-4o-mini-tts` fallback) and Playwright trace (`trace.zip`). Write narration in natural, conversational engineering prose (like a calm teammate walking through a screen recording — use contractions and plain spoken phrasing, never stiff robotic templates):
    ```sh
    # Built-in isolated Kaneo board + Quills shared workspace workflow
    pnpm devx:video-evidence --app kaneo --base-url http://127.0.0.1:5190 \
