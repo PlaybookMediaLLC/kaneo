@@ -1,0 +1,35 @@
+name: PR Video Evidence
+
+on:
+  # zizmor: ignore[dangerous-triggers] Only executes trusted target-branch policy code
+  # with read-only permissions; never checks out or executes pull-request head content.
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: pr-video-evidence-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-video-evidence:
+    name: pr-video-evidence
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      # Check out the target base branch's policy so pull requests cannot modify the validator or workflow to bypass the check.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24.22.2
+          package-manager-cache: false
+      - name: Validate PR video evidence metadata and commit freshness
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/pr-video-evidence/validate-pr.mjs

@@ -10,4 +10,10 @@ Details: CONTRIBUTING.md#contribution-eligibility -->
 
 ## How did you check it?
 
-<!-- List tests or manual checks. Add screenshots for visual changes when useful. -->
+<!-- List unit, integration, contract, and e2e tests run. -->
+
+## Video evidence
+
+<!-- Mandatory before marking ready for review (see AGENTS.md and .agents/skills/pr-video-evidence/SKILL.md).
+Run `pnpm devx:video-evidence` against an isolated running instance and paste the generated `evidence.md` block below.
+For genuinely non-demonstrable changes, paste the generated non-demonstrable `evidence.md` block with justification and equivalent verification artifacts. -->

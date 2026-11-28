@@ -7,6 +7,8 @@
     "dev": "vp run build:dependencies && vp run --filter \"@kaneo/*\" --filter \"!@kaneo/cli\" --parallel dev",
     "dev:demo": "node scripts/dev-demo/index.mjs",
     "dev:desktop": "node scripts/dev-desktop/index.mjs",
+    "devx:video-evidence": "node scripts/pr-video-evidence/cli.mjs",
+    "devx:video-evidence:validate": "node scripts/pr-video-evidence/validate-pr.mjs",
     "i18n:check": "node ./scripts/i18n/check.mjs",
     "i18n:check:fix": "node ./scripts/i18n/check.mjs --fix",
     "openapi:check": "node ./scripts/openapi/check.mjs",

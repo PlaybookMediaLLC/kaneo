@@ -888,3 +888,34 @@ document the justification and equivalent evidence.
 Do not mark the implementation complete until all
 applicable requirements are satisfied.
 Never merge a pull request without explicit authorization.
+
+## 21. Kaneo & Quills repository integration
+
+In `PlaybookMediaLLC/kaneo`, use this repository's isolated DevX verification pipeline in `scripts/pr-video-evidence/`:
+
+1. Start the isolated seeded Kaneo + Quills stack (PostgreSQL on `54480`, Mailpit on `51390/51391`, API on `1390`, Web on `5190`, workspace `quills_portal_demo`):
+   ```sh
+   pnpm dev:demo
+   ```
+2. Complete independent engineering review first (core review lenses: `ponytail-review`, `senior-code-critic`, `review-changes`, plus applicable domain checks such as `apps/api/AGENTS.md` Kaneo/Quills boundaries, `review-animations`, Drizzle migrations, and workflow `actionlint`/`zizmor`).
+3. Record narrated, visually annotated 1920x1080 @ 30fps H.264/AAC video evidence (local Kokoro TTS default; optional `openai` fallback) and Playwright trace (`trace.zip`):
+   ```sh
+   # Built-in isolated Kaneo board + Quills shared workspace workflow
+   pnpm devx:video-evidence --app kaneo --base-url http://127.0.0.1:5190 \
+     --reviewer ponytail-review --reviewer senior-code-critic \
+     --review-summary "Independent review completed with zero open blockers."
+
+   # Built-in isolated Quills portal workflow
+   pnpm devx:video-evidence --app quills --base-url http://127.0.0.1:5190 \
+     --reviewer ponytail-review --review-summary "Independent review passed."
+
+   # Custom PR scenario or backend/infra terminal scenario
+   pnpm devx:video-evidence --script path/to/scenario.mjs --base-url http://127.0.0.1:5190 \
+     --pr 123 --reviewer ponytail-review --review-summary "Independent review passed."
+   ```
+4. Validate generated evidence locally and embed `evidence.md` in the pull request description:
+   ```sh
+   pnpm devx:video-evidence:validate --manifest .cache/pr-video-evidence/<run>/evidence.json --allow-local-video
+   pnpm devx:video-evidence:validate --pr-body-file .cache/pr-video-evidence/<run>/evidence.md --pr 123 --head-sha "$(git rev-parse HEAD)"
+   ```
+5. GitHub Actions check `pr-video-evidence` (`.github/workflows/pr-video-evidence.yml`) validates metadata presence, exact commit SHA freshness, assigned PR number, test assertions, independent review attestation, and absence of committed binary media or `trace.zip`.
