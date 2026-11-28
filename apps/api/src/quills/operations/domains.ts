@@ -7,6 +7,7 @@ import {
 } from "../../database/quills/schema/custom-domains";
 import { defineQuillsRoute } from "../framework/define-route";
 import {
+  clearWidgetHostCache,
   hasWorkspaceEntitlement,
   requireWorkspaceEntitlement,
 } from "../framework/platform-reads";
@@ -20,7 +21,7 @@ import { MAX_DOMAIN_LENGTH, normalizeDomain } from "./normalize-domain";
 type Row = typeof customDomains.$inferSelect;
 
 const domainOut = z.object({
-  kind: z.enum(["portal", "help_center"]),
+  kind: z.enum(["portal", "help_center", "widget"]),
   domain: z.string(),
   /** True once the TXT record was found. */
   active: z.boolean(),
@@ -139,6 +140,10 @@ function kindRoutes(
         })
         .returning()
         .catch(inUse);
+      if (kind === "widget") {
+        if (current?.domain) clearWidgetHostCache(current.domain);
+        clearWidgetHostCache(domain);
+      }
       return { changed: true, domain: present(row!) };
     },
   });
@@ -165,6 +170,7 @@ function kindRoutes(
         .delete(customDomains)
         .where(eq(customDomains.kind, kind))
         .returning({ domain: customDomains.domain });
+      if (kind === "widget" && row?.domain) clearWidgetHostCache(row.domain);
       return { removed: Boolean(row), domain: row?.domain ?? null };
     },
   });
@@ -207,4 +213,5 @@ export default apiRouter<BaseVariables & { workspaceId: string }>()
   .route(
     "/",
     kindRoutes("help_center", "HelpCenter", "help-center", "help center"),
-  );
+  )
+  .route("/", kindRoutes("widget", "Widget", "widget", "widget"));

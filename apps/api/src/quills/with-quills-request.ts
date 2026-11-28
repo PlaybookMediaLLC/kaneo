@@ -25,7 +25,7 @@ export type QuillsAction = (typeof statement.quills)[number];
 export async function withQuillsRequest<T>(
   c: Context,
   access: {
-    action: QuillsAction;
+    action: QuillsAction | readonly QuillsAction[];
     /** Further Quills actions that the caller must also hold (role and API-key scope). */
     also?: readonly QuillsAction[];
     projectId?: string | (() => Promise<string | undefined>);
@@ -45,24 +45,33 @@ export async function withQuillsRequest<T>(
     throw new HTTPException(400, { message: "Workspace is required" });
   if (!access.workspaceAccessChecked)
     await validateWorkspaceAccess(userId, workspaceId, c.get("apiKey")?.id);
-  const required = {
+  const actionOptions = Array.isArray(access.action)
+    ? access.action
+    : [access.action];
+  const also = access.also ?? [];
+  const primaryRequired = {
     workspace: ["read"] as string[],
-    quills: [access.action, ...(access.also ?? [])] as string[],
+    quills: [actionOptions[0]!, ...also] as string[],
   };
-  if (access.onActions) {
+  if (access.onActions || actionOptions.length > 1) {
     const can = await workspacePermissionChecker(c);
-    if (!can(required))
-      // Delegate denial so API_KEY_SCOPE / MISSING_PERMISSION error bodies stay identical.
-      await requireWorkspacePermission(required)(c, async () => {});
-    access.onActions(
-      new Set(
-        statement.quills.filter((action) =>
-          can({ workspace: ["read"], quills: [action] }),
-        ),
-      ),
+    const allowed = actionOptions.some((one) =>
+      can({ workspace: ["read"], quills: [one, ...also] }),
     );
+    if (!allowed)
+      // Delegate denial so API_KEY_SCOPE / MISSING_PERMISSION error bodies stay identical.
+      await requireWorkspacePermission(primaryRequired)(c, async () => {});
+    if (access.onActions) {
+      access.onActions(
+        new Set(
+          statement.quills.filter((action) =>
+            can({ workspace: ["read"], quills: [action] }),
+          ),
+        ),
+      );
+    }
   } else {
-    await requireWorkspacePermission(required)(c, async () => {});
+    await requireWorkspacePermission(primaryRequired)(c, async () => {});
   }
   const projectId =
     typeof access.projectId === "function"

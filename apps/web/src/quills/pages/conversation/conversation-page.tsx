@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Button } from "../../ui/upstream";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { apiOrigin } from "../../core/api-origin";
 import { portalHref } from "../../core/portal-href";
 import type { PortalProblem } from "../../core/types";
 import { useGetMyConversation } from "../../hooks/support/use-get-my-conversation";
@@ -81,6 +82,8 @@ export function ConversationPage(props: ConversationPageProps) {
   const thread = [...(messages.data?.pages ?? [])]
     .reverse()
     .flatMap((page) => page.items);
+  const [confirming, setConfirming] = useState(false);
+  const [confirmError, setConfirmError] = useState(false);
   const sendReply = async (content: string): Promise<PortalProblem | void> => {
     try {
       await send.mutateAsync({
@@ -165,6 +168,51 @@ export function ConversationPage(props: ConversationPageProps) {
                     />
                   )}
                 />
+                {conversation.data.conversation.status !== "closed" &&
+                (
+                  conversation.data.conversation as {
+                    solutionOfferedAt?: string | null;
+                  }
+                ).solutionOfferedAt ? (
+                  <div className="my-3 flex flex-col gap-2 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <span>{t("conversation.solutionOfferedBanner")}</span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        loading={confirming}
+                        disabled={confirming}
+                        onClick={async () => {
+                          setConfirming(true);
+                          setConfirmError(false);
+                          try {
+                            const res = await fetch(
+                              `${apiOrigin()}/api/quills-public/${encodeURIComponent(props.workspaceId)}/support/conversations/${encodeURIComponent(conversationId)}/confirm-resolution`,
+                              { method: "POST", credentials: "include" },
+                            );
+                            if (!res.ok) {
+                              setConfirmError(true);
+                              return;
+                            }
+                            void conversation.refetch();
+                            void messages.refetch();
+                          } catch {
+                            setConfirmError(true);
+                          } finally {
+                            setConfirming(false);
+                          }
+                        }}
+                      >
+                        {t("conversation.confirmSolved")}
+                      </Button>
+                    </div>
+                    {confirmError ? (
+                      <p role="alert" className="text-xs text-destructive">
+                        {t("core.problem.failed")}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
                 {conversation.data.conversation.isReadOnly ? null : (
                   <ConversationReplyForm onSubmit={sendReply} />
                 )}

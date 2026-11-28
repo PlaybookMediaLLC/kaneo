@@ -14,6 +14,18 @@ export const assignConversationTeam = defineWriteTool({
   approval: "required",
   available: (context) => Boolean(context.conversationId),
   summary: (args) => `Assign the conversation to the team ${args.teamId}`,
+  previewDiff: (conversation, args) => ({
+    targetType: "conversation",
+    targetId: conversation?.id ?? null,
+    fields: [
+      {
+        field: "assignedTeamId",
+        before: conversation?.assignedTeamId ?? null,
+        after: args.teamId,
+      },
+    ],
+    recordCount: 1,
+  }),
   execute: async (db, actor, conversation, args) => {
     const team = await resolveTeam(db, args.teamId as TypeId<"team">);
     return (await assignTeam(db, actor, conversation, team))

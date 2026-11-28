@@ -136,6 +136,15 @@ export const posts = quillsSchema
       // Nullable target ship date for time-based roadmap columns. Stored as a full
       // timestamp (single-datetime ETA model); presented at month granularity.
       eta: timestamp("eta", { withTimezone: true }),
+      // Feedback hygiene SLA & burst detection (#304).
+      firstTeamResponseAt: timestamp("first_team_response_at", {
+        withTimezone: true,
+      }),
+      ackDueAt: timestamp("ack_due_at", { withTimezone: true }),
+      voteBurstFlaggedAt: timestamp("vote_burst_flagged_at", {
+        withTimezone: true,
+      }),
+      voteBurstCount: integer("vote_burst_count").notNull().default(0),
       // RICE inputs (RFC 0003, D5). The score is computed at read time.
       scoreReach: integer("score_reach"),
       scoreImpact: real("score_impact"),
@@ -314,6 +323,9 @@ export const postVotes = quillsSchema
       addedByPrincipalId: typeIdColumnNullable("principal")(
         "added_by_principal_id",
       ),
+      // Implicit vote created from an accepted feedback signal (#304).
+      sourceSignalId:
+        typeIdColumnNullable("feedback_signal")("source_signal_id"),
       // How much the voter needs it (RFC 0003, D4). A vote without one stays valid.
       importance: text("importance", {
         enum: ["nice", "important", "critical"],

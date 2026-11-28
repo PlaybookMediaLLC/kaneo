@@ -286,6 +286,11 @@ const uk: Catalog = {
   Remove: "Видалити",
   "Picture updated": "Фото оновлено",
   "Could not save the picture.": "Не вдалося зберегти фото.",
+  Sources: "Джерела",
+  "Talk to a person": "Поговорити з оператором",
+  "Connecting you with the team…": "З’єднуємо вас із командою…",
+  "Could not connect to a person. Please try again.":
+    "Не вдалося з’єднатися з оператором. Спробуйте ще раз.",
 };
 
 export default uk;

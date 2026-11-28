@@ -257,6 +257,11 @@ const th: Catalog = {
   Remove: "ลบ",
   "Picture updated": "อัปเดตรูปแล้ว",
   "Could not save the picture.": "ไม่สามารถบันทึกรูปได้",
+  Sources: "แหล่งที่มา",
+  "Talk to a person": "คุยกับเจ้าหน้าที่",
+  "Connecting you with the team…": "กำลังเชื่อมต่อคุณกับทีมงาน…",
+  "Could not connect to a person. Please try again.":
+    "ไม่สามารถเชื่อมต่อกับเจ้าหน้าที่ได้ โปรดลองอีกครั้ง",
 };
 
 export default th;

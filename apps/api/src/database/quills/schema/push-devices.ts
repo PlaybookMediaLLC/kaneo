@@ -28,9 +28,10 @@ export const pushDevices = quillsSchema
       // The agent this device belongs to. `cascade` so deleting a principal
       // cleans up their device rows.
       principalId: typeIdColumn("principal")("principal_id").notNull(),
-      // The APNs/FCM registration token. Unique so a re-register upserts in place
-      // (a token can only ever belong to one principal at a time).
+      // The SHA-256 hash of the APNs/FCM registration token for dedupe/lookup.
       token: text("token").notNull(),
+      // AES-256-GCM encrypted raw APNs/FCM registration token for outbound push delivery (#321).
+      tokenEncrypted: text("token_encrypted"),
       platform: text("platform", { enum: ["ios", "android"] }).notNull(),
       // Bumped on every re-register so stale tokens can be pruned later.
       lastSeenAt: timestamp("last_seen_at", { withTimezone: true })

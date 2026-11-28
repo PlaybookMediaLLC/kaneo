@@ -42,6 +42,7 @@ const seedTables = new Set([
   "principal_role_assignments",
   "post_statuses",
   "ticket_statuses",
+  "agent_decline_topics",
 ]);
 export function prepareArchive(
   input: unknown,
@@ -97,7 +98,10 @@ export function prepareArchive(
         row.finished_at = new Date().toISOString();
       }
       // An imported webhook must not send this workspace's events until an admin turns it on here.
-      if (name === "webhooks") row.status = "disabled";
+      if (name === "webhooks") {
+        row.status = "disabled";
+        if (row.secret == null) row.secret = "";
+      }
       // The same for an imported integration: it delivers nothing until an admin enables it here.
       if (name === "integrations") row.status = "paused";
       // An imported connector sends no thread text to its server until a manager here enables it.
@@ -116,11 +120,12 @@ export function prepareArchive(
         row.state = "interrupted";
         row.ended_at = new Date().toISOString();
       }
-      if (
-        name === "assistant_pending_actions" &&
-        ["proposed", "approved"].includes(String(row.status))
-      )
-        row.status = "expired";
+      if (name === "assistant_pending_actions") {
+        row.approval_token_hash = null;
+        if (["proposed", "approved"].includes(String(row.status))) {
+          row.status = "expired";
+        }
+      }
 
       if (name === "audit_log" && !row.actor_principal_id && row.actor_user_id)
         row.actor_principal_id = actorByCustomer.get(row.actor_user_id) ?? null;
@@ -284,6 +289,7 @@ export async function importWorkspaceArchive(
     "permissions",
     "post_statuses",
     "ticket_statuses",
+    "agent_decline_topics",
     "settings",
     "principal",
   ])

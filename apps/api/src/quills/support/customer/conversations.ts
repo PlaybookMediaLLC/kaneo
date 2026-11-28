@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { createId } from "@kaneo/ids";
 import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
 import {
@@ -7,11 +7,23 @@ import {
   responseTimestamp,
   z,
 } from "../../../openapi";
+import { assistantInvolvements } from "../../../database/quills/schema/assistant";
+import {
+  principal,
+  settings,
+  user as customer,
+} from "../../../database/quills/schema/auth";
 import {
   conversationMessages,
   conversations,
 } from "../../../database/quills/schema/conversation";
 import { files } from "../../../database/quills/schema/files";
+import { looksLikeSpam } from "../../feedback/content-checks";
+import {
+  challengeInputSchema,
+  enforceWidgetAntiSpam,
+  isTrustedSender,
+} from "../../framework/anti-spam";
 import { defineQuillsRoute } from "../../framework/define-route";
 import { createDownload } from "../../framework/files";
 import { widgetMetadata } from "../../portal/feedback/posts";
@@ -43,6 +55,7 @@ import {
 } from "./model";
 import { sendAwayReply } from "../away-reply";
 import { rememberSender } from "../ip-blocks";
+import { readReopenPolicy } from "../support-settings";
 import { posts } from "../../../database/quills/schema/posts";
 import { HTTPException } from "hono/http-exception";
 
@@ -288,6 +301,7 @@ export function conversationRoutes(audience: Customer) {
             isNull(files.deletedAt),
             eq(conversationMessages.conversationId, conversation.id),
             eq(conversationMessages.isInternal, false),
+            eq(conversationMessages.sendStatus, "sent"),
             isNull(conversationMessages.deletedAt),
           ),
         )
@@ -343,17 +357,25 @@ export function conversationRoutes(audience: Customer) {
     description:
       "Creates the conversation and its first message. A retry with the same idempotencyKey and text returns the first result; other text with that key is 409.",
     action: "create",
-    rateLimit: { limit: 20, windowSeconds: 600 },
+    rateLimit: { limit: widget ? 500 : 20, windowSeconds: 600 },
     body: z.object({
       content: messageText,
       idempotencyKey,
       /** The visitor's own uploads (POST /uploads, then /files), at most 10. */
       attachmentIds,
-      ...(widget && { metadata: messageMetadata }),
+      ...(widget && {
+        metadata: messageMetadata,
+        challenge: challengeInputSchema.optional(),
+      }),
     }),
     response: sent,
     responseDescription: "The new conversation and its first message",
-    errors: sendErrors,
+    errors: {
+      ...sendErrors,
+      ...(widget && {
+        403: "Anti-spam challenge required or failed, or origin/sender blocked",
+      }),
+    },
     event: (_input, result) =>
       !result.replayed && {
         type: "conversation.created",
@@ -361,9 +383,16 @@ export function conversationRoutes(audience: Customer) {
         entityId: result.conversation.id,
         payload: { messageId: result.message.id },
       },
-    handler: async ({ db, caller, body, request }) => {
+    handler: async ({ db, workspaceId, caller, body, request }) => {
       await requireSurface(db, audience, caller, "messenger");
       const me = caller.principalId!;
+      const [cfgRow] = await db
+        .select({
+          widgetConfig: settings.widgetConfig,
+          spamFilterConfig: settings.spamFilterConfig,
+        })
+        .from(settings)
+        .limit(1);
       const receipt = await claimReceipt(
         db,
         me,
@@ -376,6 +405,32 @@ export function conversationRoutes(audience: Customer) {
         },
       );
       if (receipt.claimed) {
+        if (widget) {
+          const bodyChallenge = (
+            body as { challenge?: z.output<typeof challengeInputSchema> }
+          ).challenge;
+          await enforceWidgetAntiSpam(db, {
+            workspaceId,
+            widgetConfig: cfgRow?.widgetConfig,
+            kind: "conversation",
+            ip: request.ip,
+            sessionId: me,
+            challenge: bodyChallenge ?? request.challenge,
+          });
+        }
+        const [senderRow] = await db
+          .select({
+            contactEmail: principal.contactEmail,
+            userEmail: customer.email,
+          })
+          .from(principal)
+          .leftJoin(customer, eq(customer.id, principal.userId))
+          .where(eq(principal.id, me))
+          .limit(1);
+        const senderEmail = senderRow?.userEmail ?? senderRow?.contactEmail;
+        const quarantined =
+          !isTrustedSender(cfgRow?.spamFilterConfig, senderEmail) &&
+          looksLikeSpam(body.content);
         const [created] = await db
           .insert(conversations)
           .values({
@@ -383,7 +438,12 @@ export function conversationRoutes(audience: Customer) {
             visitorPrincipalId: me,
             channel: "messenger",
             source: widget ? "widget" : "portal",
-            status: "open",
+            status: quarantined ? "closed" : "open",
+            ...(quarantined && {
+              endReason: "spam",
+              spamReason: "heuristic",
+              resolvedAt: new Date(),
+            }),
             subject: body.content.slice(0, 140),
           })
           .returning();
@@ -396,7 +456,9 @@ export function conversationRoutes(audience: Customer) {
           metadataOf(body),
         );
         await rememberSender(db, created!.id, request.ip);
-        await sendAwayReply(db, created!.id);
+        if (!quarantined) {
+          await sendAwayReply(db, created!.id);
+        }
         await attachMessageFiles(
           db,
           me,
@@ -456,6 +518,31 @@ export function conversationRoutes(audience: Customer) {
         params.conversationId,
         true,
       );
+      let shouldSpawnFollowUp = false;
+      if (
+        conversation.status === "closed" &&
+        conversation.endReason !== "spam"
+      ) {
+        const policy = await readReopenPolicy(db);
+        if (policy.mode === "never_link_new") {
+          shouldSpawnFollowUp = true;
+        } else if (policy.mode === "within_days") {
+          const closedAt =
+            conversation.resolvedAt ??
+            conversation.updatedAt ??
+            conversation.lastMessageAt;
+          if (closedAt) {
+            const ageMs = Date.now() - closedAt.getTime();
+            if (ageMs > policy.windowDays * 24 * 60 * 60 * 1000) {
+              shouldSpawnFollowUp = true;
+            }
+          }
+        }
+      }
+
+      const targetConversationId = shouldSpawnFollowUp
+        ? createId("conversation")
+        : conversation.id;
       const receipt = await claimReceipt(
         db,
         me,
@@ -463,20 +550,62 @@ export function conversationRoutes(audience: Customer) {
         body.idempotencyKey,
         receiptText(body),
         {
-          conversationId: conversation.id,
+          conversationId: targetConversationId,
           messageId: createId("conversation_message"),
         },
       );
       if (receipt.claimed) {
+        let target = conversation;
+        if (receipt.conversationId !== conversation.id) {
+          const [created] = await db
+            .insert(conversations)
+            .values({
+              id: receipt.conversationId,
+              visitorPrincipalId: me,
+              channel: conversation.channel,
+              source: widget ? "widget" : "portal",
+              status: "open",
+              subject: conversation.subject
+                ? `Follow-up: ${conversation.subject}`.slice(0, 140)
+                : body.content.slice(0, 140),
+            })
+            .returning();
+          target = created!;
+          await db.insert(conversationMessages).values({
+            conversationId: target.id,
+            senderType: "system",
+            isInternal: true,
+            content: `Follow-up to closed conversation ${conversation.id}.`,
+            metadata: {
+              systemKind: "follow_up_created",
+              previousConversationId: conversation.id,
+            },
+          });
+        }
         await insertVisitorMessage(
           db,
           me,
-          conversation,
+          target,
           receipt.messageId,
           body.content,
           metadataOf(body),
         );
-        await sendAwayReply(db, conversation.id);
+        // Honest resolution tracking (#302): a customer follow-up after an assumed or confirmed
+        // assistant resolution marks the involvement as reopened so resolution rates stay truthful.
+        await db
+          .update(assistantInvolvements)
+          .set({ reopenedAfterResolutionAt: new Date() })
+          .where(
+            and(
+              eq(assistantInvolvements.conversationId, conversation.id),
+              inArray(assistantInvolvements.status, [
+                "resolved_confirmed",
+                "resolved_assumed",
+              ]),
+              isNull(assistantInvolvements.reopenedAfterResolutionAt),
+            ),
+          );
+        await sendAwayReply(db, target.id);
         await attachMessageFiles(
           db,
           me,
@@ -488,10 +617,77 @@ export function conversationRoutes(audience: Customer) {
       return loadSent(
         db,
         me,
-        conversation.id,
+        receipt.conversationId,
         receipt.messageId,
         !receipt.claimed,
       );
+    },
+  });
+
+  const confirmResolution = defineQuillsRoute({
+    audience,
+    ...writer,
+    method: "post",
+    path: `${base}/conversations/{conversationId}/confirm-resolution`,
+    operationId: name(
+      "confirmQuillsWidgetConversationResolution",
+      "confirmQuillsMyConversationResolution",
+    ),
+    summary: `Confirm a conversation is solved as ${who}`,
+    description:
+      "Allows the customer to confirm that an offered solution resolved their issue, closing the conversation cleanly (#311).",
+    action: "update",
+    rateLimit: { limit: 30, windowSeconds: 600 },
+    params: conversationParams,
+    response: z.object({ conversation: customerConversationSchema }),
+    responseDescription: "The closed conversation",
+    errors,
+    event: ({ params }, _result, raw) =>
+      Boolean((raw as { changed?: boolean } | null)?.changed) && {
+        type: "conversation.status_changed",
+        entityType: "conversation",
+        entityId: params.conversationId,
+        payload: { status: "closed", confirmedByCustomer: "true" },
+      },
+    handler: async ({ db, caller, params }) => {
+      await requireSurface(db, audience, caller, "messenger");
+      const me = caller.principalId!;
+      const conversation = await ownConversation(
+        db,
+        me,
+        params.conversationId,
+        true,
+      );
+      const changed = conversation.status !== "closed";
+      if (changed) {
+        const now = new Date();
+        await db
+          .update(conversations)
+          .set({
+            status: "closed",
+            endReason: "resolved",
+            resolvedAt: now,
+            waitingSince: null,
+            snoozedUntil: null,
+            solutionOfferedAt: null,
+            autoCloseAt: null,
+            closeReminderSentAt: null,
+            updatedAt: now,
+          })
+          .where(eq(conversations.id, conversation.id));
+        await db.insert(conversationMessages).values({
+          conversationId: conversation.id,
+          senderType: "system",
+          isInternal: false,
+          content: "Customer confirmed the solution",
+          metadata: { systemKind: "solution_confirmed" },
+        });
+      }
+      const fresh = await ownConversation(db, me, conversation.id);
+      return {
+        changed,
+        conversation: (await toConversations(db, me, [fresh]))[0]!,
+      };
     },
   });
 
@@ -617,13 +813,40 @@ export function conversationRoutes(audience: Customer) {
     response: z.object({ rating: z.number(), changed: z.boolean() }),
     responseDescription: "The stored rating",
     errors,
-    event: ({ params }, result) =>
-      result.changed && {
-        type: "conversation.csat_submitted",
-        entityType: "conversation",
+    event: ({ params }, result, raw) => {
+      if (!result.changed) return false;
+      const extra = (raw ?? {}) as {
+        isLow?: boolean;
+        followUpTicketId?: string | null;
+      };
+      const csatEvent = {
+        type: "conversation.csat_submitted" as const,
+        entityType: "conversation" as const,
         entityId: params.conversationId,
-        payload: { rating: String(result.rating) },
-      },
+        payload: {
+          rating: String(result.rating),
+          isLow: String(extra.isLow ?? false),
+          ...(extra.followUpTicketId
+            ? { followUpTicketId: extra.followUpTicketId }
+            : {}),
+        },
+      };
+      if (extra.followUpTicketId) {
+        return [
+          csatEvent,
+          {
+            type: "ticket.created" as const,
+            entityType: "ticket" as const,
+            entityId: extra.followUpTicketId,
+            payload: {
+              source: "low_csat",
+              conversationId: params.conversationId,
+            },
+          },
+        ];
+      }
+      return csatEvent;
+    },
     handler: async ({ db, caller, params, body }) => {
       await requireSurface(db, audience, caller, "messenger");
       const conversation = await ownConversation(
@@ -710,6 +933,97 @@ export function conversationRoutes(audience: Customer) {
     },
   });
 
+  const resolutionFeedback = defineQuillsRoute({
+    audience,
+    ...writer,
+    method: "post",
+    path: `${base}/conversations/{conversationId}/resolution-feedback`,
+    operationId: name(
+      "submitQuillsWidgetResolutionFeedback",
+      "submitQuillsResolutionFeedback",
+    ),
+    summary: `Confirm whether the assistant resolved a conversation of ${who}`,
+    description:
+      "Records explicit customer confirmation (resolved: true -> resolved_confirmed) or rejection (resolved: false -> handed_off with reopenedAfterResolutionAt stamped).",
+    action: "update",
+    rateLimit: { limit: 30, windowSeconds: 600 },
+    params: conversationParams,
+    body: z.object({ resolved: z.boolean() }),
+    response: z.object({
+      involvementId: z.string(),
+      status: z.enum([
+        "active",
+        "handed_off",
+        "resolved_confirmed",
+        "resolved_assumed",
+        "abandoned",
+      ]),
+    }),
+    responseDescription: "Updated assistant involvement status",
+    errors,
+    event: (_input, result) => ({
+      type: "assistant.resolution_feedback_recorded",
+      entityType: "assistant_involvement",
+      entityId: result.involvementId,
+      payload: { status: result.status },
+    }),
+    handler: async ({ db, caller, params, body }) => {
+      await requireSurface(db, audience, caller, "messenger");
+      const conversation = await ownConversation(
+        db,
+        caller.principalId,
+        params.conversationId,
+        true,
+      );
+      const [latest] = await db
+        .select({
+          id: assistantInvolvements.id,
+          status: assistantInvolvements.status,
+          endedAt: assistantInvolvements.endedAt,
+        })
+        .from(assistantInvolvements)
+        .where(eq(assistantInvolvements.conversationId, conversation.id))
+        .orderBy(desc(assistantInvolvements.createdAt))
+        .limit(1)
+        .for("update");
+      if (!latest) throw notFound("Assistant involvement");
+      const now = new Date();
+      if (body.resolved) {
+        await db
+          .update(assistantInvolvements)
+          .set({
+            status: "resolved_confirmed",
+            endedAt: latest.endedAt ?? now,
+          })
+          .where(eq(assistantInvolvements.id, latest.id));
+        return {
+          involvementId: latest.id,
+          status: "resolved_confirmed" as const,
+        };
+      }
+      await db
+        .update(assistantInvolvements)
+        .set({
+          status: "handed_off",
+          handoffReason: "explicit_request",
+          endedAt: latest.endedAt ?? now,
+          reopenedAfterResolutionAt: now,
+        })
+        .where(eq(assistantInvolvements.id, latest.id));
+      if (conversation.endReason !== "spam") {
+        await db
+          .update(conversations)
+          .set({
+            status: "open",
+            waitingSince: sql`coalesce(${conversations.waitingSince}, now())`,
+            updatedAt: now,
+          })
+          .where(eq(conversations.id, conversation.id));
+      }
+      return { involvementId: latest.id, status: "handed_off" as const };
+    },
+  });
+
   return apiRouter()
     .openapi(...list)
     .openapi(...unread)
@@ -718,8 +1032,10 @@ export function conversationRoutes(audience: Customer) {
     .openapi(...listMessages)
     .openapi(...file)
     .openapi(...send)
+    .openapi(...confirmResolution)
     .openapi(...markRead)
     .openapi(...typing)
     .openapi(...csat)
-    .openapi(...confirmCard);
+    .openapi(...confirmCard)
+    .openapi(...resolutionFeedback);
 }

@@ -12,6 +12,7 @@ export class OutboundRequestError extends Error {
   constructor(
     readonly reason: Failure,
     readonly status?: number,
+    readonly snippet?: string,
   ) {
     super(
       `Outbound request failed: ${reason}${status ? ` (HTTP ${status})` : ""}`,
@@ -23,6 +24,54 @@ export function safeOutboundError(error: unknown): string {
   return error instanceof OutboundRequestError
     ? error.message
     : "Outbound request failed";
+}
+
+async function readBoundedSnippet(
+  response: Response,
+  maxBytes: number,
+): Promise<string> {
+  const cap = Math.max(0, Math.min(maxBytes, 2048));
+  if (cap === 0 || !response.body) {
+    void response.body?.cancel().catch(() => {});
+    return "";
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (size < cap) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const take = Math.min(value.byteLength, cap - size);
+      chunks.push(take === value.byteLength ? value : value.subarray(0, take));
+      size += take;
+    }
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    const decoded = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+    let out = "";
+    for (let i = 0; i < decoded.length; i++) {
+      const code = decoded.charCodeAt(i);
+      if (
+        (code >= 0x20 && code !== 0x7f) ||
+        code === 0x09 ||
+        code === 0x0a ||
+        code === 0x0d
+      ) {
+        out += decoded[i];
+      }
+    }
+    return out;
+  } catch {
+    return "";
+  } finally {
+    void reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
 }
 
 async function readSmallJson(response: Response): Promise<unknown> {
@@ -62,6 +111,7 @@ export async function sendOutboundRequest(
   options: {
     readJson?: boolean;
     readStatus?: boolean;
+    readSnippetBytes?: number;
     publicDestination?: boolean;
     timeoutMs?: number;
   } = {},
@@ -97,6 +147,15 @@ export async function sendOutboundRequest(
         signal: controller.signal,
       }),
     );
+    if (options.readSnippetBytes !== undefined) {
+      const snippet = await readBoundedSnippet(
+        response,
+        options.readSnippetBytes,
+      );
+      if (!response.ok)
+        throw new OutboundRequestError("http", response.status, snippet);
+      return { status: response.status, snippet };
+    }
     if (!response.ok || !options.readJson) {
       void response.body?.cancel().catch(() => {});
       if (!response.ok) throw new OutboundRequestError("http", response.status);

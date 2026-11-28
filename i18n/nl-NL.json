@@ -1230,7 +1230,8 @@
 			"defaultRoleDescriptions": {
 				"viewer": "Kan taken bekijken en erop reageren.",
 				"member": "Kan taken en projecten aanmaken en beheren.",
-				"admin": "Heeft volledige toegang tot de werkruimte."
+				"admin": "Heeft volledige toegang tot de werkruimte.",
+				"collaborator": "Free internal seat: can view threads and add internal notes without replying externally."
 			},
 			"resources": {
 				"project": "Projecten",
@@ -1411,6 +1412,10 @@
 					"manage_settings": {
 						"label": "Manage Quills settings",
 						"description": "Change Quills configuration for this workspace."
+					},
+					"comment_internal": {
+						"description": "Add internal notes and @mention teammates without sending external customer replies.",
+						"label": "Comment internally"
 					}
 				}
 			},
@@ -1430,7 +1435,8 @@
 			"deleteDialog": {
 				"title": "Rol verwijderen",
 				"description": "Dit zal de rol \"{{role}}\" permanent verwijderen. Leden met deze rol verliezen de bijbehorende permissies."
-			}
+			},
+			"freeSeatBadge": "Free seat"
 		},
 		"workspaceLabels": {
 			"pageTitle": "Labels",
@@ -3472,7 +3478,12 @@
 			"startDate": "Startdatum",
 			"noDate": "Geen datum",
 			"dates": "Datums",
-			"project": "Project"
+			"project": "Project",
+			"churnRisk": "Churn risk",
+			"companiesCount": "{{count}} companies",
+			"customerContext": "Customer context",
+			"requestersCount": "{{count}} requesters",
+			"votesCount": "{{count}} votes"
 		},
 		"popover": {
 			"assignee": {
@@ -4049,7 +4060,8 @@
 			"owner": "Eigenaar",
 			"admin": "Beheerder",
 			"member": "Lid",
-			"viewer": "Kijker"
+			"viewer": "Kijker",
+			"collaborator": "Collaborator"
 		},
 		"members": {
 			"pageTitle": "Leden",

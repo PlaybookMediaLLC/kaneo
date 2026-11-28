@@ -1310,7 +1310,8 @@
 			"defaultRoleDescriptions": {
 				"viewer": "Може переглядати та коментувати завдання.",
 				"member": "Може створювати завдання і проєкти та керувати ними.",
-				"admin": "Має повний доступ до робочого простору."
+				"admin": "Має повний доступ до робочого простору.",
+				"collaborator": "Free internal seat: can view threads and add internal notes without replying externally."
 			},
 			"resources": {
 				"project": "Проєкти",
@@ -1491,6 +1492,10 @@
 					"manage_settings": {
 						"label": "Manage Quills settings",
 						"description": "Change Quills configuration for this workspace."
+					},
+					"comment_internal": {
+						"description": "Add internal notes and @mention teammates without sending external customer replies.",
+						"label": "Comment internally"
 					}
 				}
 			},
@@ -1510,7 +1515,8 @@
 			"deleteDialog": {
 				"title": "Видалити роль",
 				"description": "Це назавжди видалить роль «{{role}}». Учасники з цією роллю втратять її дозволи."
-			}
+			},
+			"freeSeatBadge": "Free seat"
 		},
 		"workspaceLabels": {
 			"pageTitle": "Мітки",
@@ -3580,7 +3586,12 @@
 			"startDate": "Дата початку",
 			"noDate": "Немає дати",
 			"dates": "Дати",
-			"project": "Проєкт"
+			"project": "Проєкт",
+			"churnRisk": "Churn risk",
+			"companiesCount": "{{count}} companies",
+			"customerContext": "Customer context",
+			"requestersCount": "{{count}} requesters",
+			"votesCount": "{{count}} votes"
 		},
 		"move": {
 			"title": "Перемістити завдання",
@@ -4201,7 +4212,8 @@
 			"owner": "Власник",
 			"admin": "Адміністратор",
 			"member": "Учасник",
-			"viewer": "Спостерігач"
+			"viewer": "Спостерігач",
+			"collaborator": "Collaborator"
 		},
 		"members": {
 			"pageTitle": "Учасники",

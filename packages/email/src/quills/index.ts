@@ -461,6 +461,7 @@ async function dispatch(input: DispatchOptions): Promise<EmailResult> {
       from,
       ...(tenantName ? { tenantName } : {}),
       to: options.to,
+      ...(options.cc && options.cc.length > 0 ? { cc: options.cc } : {}),
       subject: options.subject,
       ...(html !== undefined ? { html } : {}),
       ...(text !== undefined ? { text } : {}),
@@ -509,6 +510,7 @@ async function dispatch(input: DispatchOptions): Promise<EmailResult> {
         {
           from,
           to: options.to,
+          ...(options.cc && options.cc.length > 0 ? { cc: options.cc } : {}),
           subject: options.subject,
           ...(html !== undefined ? { html } : {}),
           ...(text !== undefined ? { text } : {}),
@@ -565,6 +567,7 @@ async function dispatch(input: DispatchOptions): Promise<EmailResult> {
     const result = await getSmtpTransporter().sendMail({
       from,
       to: options.to,
+      ...(options.cc && options.cc.length > 0 ? { cc: options.cc } : {}),
       subject: options.subject,
       html,
       text,
@@ -577,6 +580,10 @@ async function dispatch(input: DispatchOptions): Promise<EmailResult> {
         filename: attachment.filename,
         contentType: attachment.contentType,
         content: Buffer.from(attachment.content),
+        ...(attachment.contentId ? { cid: attachment.contentId } : {}),
+        ...(attachment.disposition
+          ? { contentDisposition: attachment.disposition }
+          : {}),
       })),
     });
     log.info({ provider: "smtp", message_id: result.messageId }, "email sent");
@@ -1338,6 +1345,10 @@ interface SendConversationMessageEmailParams {
   /** Display name for the From header (`Alex (Acme)`). */
   fromDisplayName?: string;
   conversationId?: string | null;
+  /** Optional CC recipients (preserved from forwarded or multi-party email threads). */
+  cc?: string[];
+  /** Optional extra RFC 5322 headers (e.g. Auto-Submitted, Precedence, X-Auto-Response-Suppress for #331). */
+  extraHeaders?: Record<string, string>;
   /** Real files to carry as MIME attachments. */
   attachments?: EmailAttachment[];
 }
@@ -1351,6 +1362,8 @@ export async function sendConversationMessageEmail(
 ): Promise<EmailResult> {
   const {
     to,
+    cc,
+    extraHeaders,
     direction,
     senderName,
     messagePreview,
@@ -1408,6 +1421,8 @@ export async function sendConversationMessageEmail(
 
   return sendEmail({
     to,
+    ...(cc && cc.length > 0 ? { cc } : {}),
+    ...(extraHeaders ? { extraHeaders } : {}),
     subject: copy.subject,
     react,
     replyTo,
@@ -2171,3 +2186,13 @@ export async function sendVerifyAddressEmail(
     emailType: "VerifyAddressEmail",
   });
 }
+
+export {
+  renderBrandedEmail,
+  sanitizeEmailTemplateHtml,
+  interpolateVariables,
+  type BrandStyleInput,
+  type EmailBlock,
+  type RenderBrandedEmailInput,
+  type RenderedBrandedEmail,
+} from "./brand-renderer";

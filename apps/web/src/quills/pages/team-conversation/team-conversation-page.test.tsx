@@ -56,6 +56,11 @@ const reads = (overrides: Record<string, unknown> = {}) => ({
   markQuillsConversationRead: markConversationReadFixture.ok(),
   replyQuillsConversation: replyConversationFixture.ok(),
   sendQuillsConversationTyping: sendConversationTypingFixture.ok(),
+  listQuillsConversationViewers: { viewers: [] },
+  setQuillsConversationViewer: {
+    ok: true,
+    expiresAt: "2026-11-01T10:00:25.000Z",
+  },
   ...overrides,
 });
 
@@ -132,6 +137,12 @@ describe("TeamConversationPage", () => {
                 flaggedAt: null,
                 createdAt: "2026-11-01T10:00:00.000Z",
                 editedAt: null,
+                redactedAt: null,
+                redactedByPrincipalId: null,
+                redactedByName: null,
+                redactionReason: null,
+                sendStatus: "sent",
+                scheduledSendAt: null,
               },
             ],
           }),
@@ -178,6 +189,10 @@ describe("TeamConversationPage", () => {
         flaggedAt: null,
         createdAt: "2026-11-01T10:00:00.000Z",
         editedAt: null,
+        redactedAt: null,
+        redactedByPrincipalId: null,
+        redactedByName: null,
+        redactionReason: null,
       });
       answer(
         mockApi(),

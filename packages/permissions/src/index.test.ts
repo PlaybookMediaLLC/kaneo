@@ -85,9 +85,10 @@ describe("built-in role privileges", () => {
     );
   });
 
-  it("groups all four roles under builtInRoles by name", () => {
+  it("groups all five roles under builtInRoles by name", () => {
     expect(Object.keys(builtInRoles).sort()).toEqual([
       "admin",
+      "collaborator",
       "member",
       "owner",
       "viewer",
@@ -101,10 +102,16 @@ describe("built-in role privileges", () => {
 
 describe("default-role seed payloads", () => {
   it("names the seedable defaults but excludes owner (kept as static role)", () => {
-    expect(DEFAULT_ROLE_NAMES).toEqual(["viewer", "member", "admin"]);
+    expect(DEFAULT_ROLE_NAMES).toEqual([
+      "viewer",
+      "collaborator",
+      "member",
+      "admin",
+    ]);
     expect(DEFAULT_ROLE_NAMES).not.toContain("owner");
     expect(Object.keys(defaultRolePayloads).sort()).toEqual([
       "admin",
+      "collaborator",
       "member",
       "viewer",
     ]);

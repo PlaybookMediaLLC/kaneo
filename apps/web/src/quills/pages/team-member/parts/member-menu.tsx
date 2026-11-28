@@ -1,6 +1,10 @@
-import { Ban, Ellipsis, UserMinus } from "lucide-react";
+import { Ban, Download, Ellipsis, ShieldOff, UserMinus } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import {
+  createPrivacyAccessRequest,
+  eraseCustomerData,
+} from "@/fetchers/quills/privacy";
 import type { PortalProblem } from "../../../core/types";
 import { useBlockUser } from "../../../hooks/team/use-block-user";
 import { useDeleteUser } from "../../../hooks/team/use-delete-user";
@@ -23,7 +27,7 @@ export interface MemberMenuProps {
   onRemoved: () => void;
 }
 
-/** The kebab menu of a member: block or unblock, and remove after a confirmation. */
+/** The kebab menu of a member: block/unblock, export/erase personal data, and remove. */
 export function MemberMenu({
   workspaceId,
   member,
@@ -35,6 +39,9 @@ export function MemberMenu({
   const unblock = useUnblockUser(team.viewer);
   const remove = useDeleteUser(team.viewer);
   const [confirm, setConfirm] = useState(false);
+  const [confirmErase, setConfirmErase] = useState(false);
+  const [erasing, setErasing] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const input = {
     param: { workspaceId, principalId: member.principalId },
   };
@@ -60,6 +67,33 @@ export function MemberMenu({
         ),
       )
       .catch(fail);
+
+  const exportData = async () => {
+    setExporting(true);
+    try {
+      await createPrivacyAccessRequest(workspaceId, member.principalId);
+      toast.success(t("team-members.exportQueued"));
+    } catch {
+      toast.error(t("team-members.failed"));
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const eraseData = async () => {
+    setErasing(true);
+    try {
+      await eraseCustomerData(workspaceId, member.principalId, "anonymize");
+      setConfirmErase(false);
+      toast.success(t("team-members.erased"));
+      onRemoved();
+    } catch {
+      toast.error(t("team-members.failed"));
+    } finally {
+      setErasing(false);
+    }
+  };
+
   return (
     <>
       <Menu>
@@ -76,7 +110,22 @@ export function MemberMenu({
               member.blockedAt ? "team-members.unblock" : "team-members.block",
             )}
           </MenuItem>
+          <MenuItem
+            disabled={!team.permissions.manageSettings || exporting}
+            onClick={() => void exportData()}
+          >
+            <Download aria-hidden="true" />
+            {t("team-members.exportData")}
+          </MenuItem>
           <MenuSeparator />
+          <MenuItem
+            variant="destructive"
+            disabled={!team.permissions.manageSettings}
+            onClick={() => setConfirmErase(true)}
+          >
+            <ShieldOff aria-hidden="true" />
+            {t("team-members.eraseData")}
+          </MenuItem>
           <MenuItem
             variant="destructive"
             disabled={!team.permissions.delete}
@@ -104,6 +153,15 @@ export function MemberMenu({
             })
             .catch(fail)
         }
+      />
+      <ConfirmDialog
+        open={confirmErase}
+        onOpenChange={setConfirmErase}
+        title={t("team-members.eraseTitle", { name: member.name })}
+        description={t("team-members.eraseText")}
+        confirmLabel={t("team-members.eraseData")}
+        pending={erasing}
+        onConfirm={() => void eraseData()}
       />
     </>
   );

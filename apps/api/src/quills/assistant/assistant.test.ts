@@ -344,7 +344,12 @@ describe.skipIf(!url)("Quills assistant", () => {
     ).toBe(409);
   });
 
-  it("adds a private note from the copilot at once, with one tool-call record", async () => {
+  it("adds a private note from the copilot at once when opted into auto_write, with one tool-call record", async () => {
+    const cfg = (await call(h.owner, "/assistant/settings", "GET")).body;
+    await call(h.owner, "/assistant/settings", "PATCH", {
+      revision: cfg.revision,
+      copilotToolRules: [{ tool: "add_private_note", mode: "auto_write" }],
+    });
     const id = await thread();
     toolThenAnswer("add_private_note", { content: "Customer wants a refund." });
     const run = await ask(h.mate, id);
@@ -377,6 +382,12 @@ describe.skipIf(!url)("Quills assistant", () => {
         ),
     );
     expect(notes).toEqual([{ isInternal: true }]);
+    // Restore default ask-first rule
+    const cfgAfter = (await call(h.owner, "/assistant/settings", "GET")).body;
+    await call(h.owner, "/assistant/settings", "PATCH", {
+      revision: cfgAfter.revision,
+      copilotToolRules: [],
+    });
   });
 
   it("runs an approved team assignment and attribute value through the domain checks", async () => {

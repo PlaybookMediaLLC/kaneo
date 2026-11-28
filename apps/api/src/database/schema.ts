@@ -405,6 +405,7 @@ export const teamTable = pgTable(
   {
     id: text("id").primaryKey(),
     name: text("name").notNull(),
+    isPrivate: boolean("is_private").default(false).notNull(),
     memberCount: integer("member_count").default(0).notNull(),
     workspaceId: text("workspace_id")
       .notNull()
@@ -427,6 +428,7 @@ export const teamMemberTable = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => userTable.id, { onDelete: "cascade" }),
+    role: text("role").default("member").notNull(),
     membershipKey: text("membership_key").unique(),
     createdAt: timestamp("created_at"),
   },
@@ -1476,6 +1478,52 @@ export const mcpOauthStateTable = pgTable(
     index("mcp_oauth_state_expiresAt_idx").on(table.expiresAt),
   ],
 );
+
+/** Maps OIDC `groups` claim values to Kaneo workspace roles per workspace (#306). */
+export const oidcGroupRoleMappingTable = pgTable(
+  "oidc_group_role_mapping",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaceTable.id, { onDelete: "cascade" }),
+    groupName: text("group_name").notNull(),
+    role: text("role").notNull(),
+    priority: integer("priority").default(0).notNull(),
+    createdAt: timestamp("created_at", { mode: "date" })
+      .default(utcNow)
+      .notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .default(utcNow)
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("oidc_group_role_mapping_ws_group_uidx").on(
+      table.workspaceId,
+      table.groupName,
+    ),
+    index("oidc_group_role_mapping_ws_idx").on(table.workspaceId),
+  ],
+);
+
+/**
+ * AES-256-GCM encrypted instance-level provider configuration (SMTP, OIDC) sealed with an
+ * `AUTH_SECRET`-derived key (#306). Environment variables take precedence and lock UI edits.
+ */
+export const instanceProviderConfigTable = pgTable("instance_provider_config", {
+  providerKey: text("provider_key").primaryKey(),
+  encryptedPayload: text("encrypted_payload").notNull(),
+  updatedByUserId: text("updated_by_user_id").references(() => userTable.id, {
+    onDelete: "set null",
+  }),
+  updatedAt: timestamp("updated_at", { mode: "date" })
+    .default(utcNow)
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
 
 // Auth-schema compatible aliases in schema.ts
 export const user = userTable;

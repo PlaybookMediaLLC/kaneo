@@ -15,12 +15,24 @@ import {
   integrations,
 } from "../../database/quills/schema/integrations";
 import { kvStore } from "../../database/quills/schema/kv";
+import { destinationFetch } from "../../import/destination-fetch";
+import { assertPublicDestination } from "../../utils/assert-public-destination";
 import {
   openCredentials,
   ProviderCallError,
   providerJson,
 } from "./integration-config";
-import { memberHoldsQuillsAction } from "./platform-reads";
+import {
+  findWorkspaceTeammateByEmail,
+  memberHoldsQuillsAction,
+} from "./platform-reads";
+import {
+  inboundEmailFileKey,
+  isQuillsStorageConfigured,
+  putObject,
+  registerInboundStorageObject,
+} from "./files";
+export { findWorkspaceTeammateByEmail };
 
 // The signed audience: machine callers that prove themselves with a signature or a shared secret,
 // never with a session. A verifier has two steps:
@@ -646,19 +658,260 @@ export function ownMessageIds(ids: readonly string[]) {
  * the body comes from its Received Emails API with the instance Resend key. Null without a key or
  * when Resend no longer has the mail; another failure throws, so the provider redelivers.
  */
-export async function receivedEmailText(emailId: string) {
+export interface ReceivedEmailAttachmentInput {
+  id?: string;
+  filename: string;
+  contentType: string;
+  contentId?: string;
+  disposition?: string;
+  contentBase64?: string;
+  downloadUrl?: string;
+}
+
+export interface ReceivedEmailPayload {
+  text: string | null;
+  html: string | null;
+  cc: string[];
+  replyTo: string[];
+  headers: Record<string, string> | { name: string; value: string }[] | null;
+  attachments: ReceivedEmailAttachmentInput[];
+}
+
+export interface StoredInboundFile {
+  storageKey: string;
+  name: string;
+  contentType: string;
+  size: number;
+  sha256: string;
+  contentId: string | null;
+  inline: boolean;
+  placeholder: string | null;
+}
+
+const MAX_INBOUND_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_INBOUND_TOTAL_BYTES = 25 * 1024 * 1024;
+
+function extensionForMime(contentType: string, filename: string): string {
+  const extMatch = /\.([a-z0-9]{1,8})$/i.exec(filename);
+  if (extMatch) return extMatch[1]!.toLowerCase();
+  const map: Record<string, string> = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/gif": "gif",
+    "image/webp": "webp",
+    "application/pdf": "pdf",
+    "text/plain": "txt",
+    "text/csv": "csv",
+  };
+  return map[contentType.toLowerCase()] ?? "bin";
+}
+
+/**
+ * Uploads verified inbound email attachment bytes to object storage outside any
+ * database transaction. Returns null when object storage is not configured or
+ * the file exceeds the size budget.
+ */
+export async function storeInboundEmailAttachments(
+  workspaceId: string,
+  items: readonly {
+    filename: string;
+    contentType: string;
+    bytes: Uint8Array;
+    contentId?: string | null;
+    inline?: boolean;
+    placeholder?: string | null;
+  }[],
+): Promise<StoredInboundFile[]> {
+  if (!isQuillsStorageConfigured() || items.length === 0) return [];
+  const stored: StoredInboundFile[] = [];
+  let total = 0;
+  for (const item of items.slice(0, 10)) {
+    if (
+      item.bytes.byteLength === 0 ||
+      item.bytes.byteLength > MAX_INBOUND_FILE_BYTES ||
+      total + item.bytes.byteLength > MAX_INBOUND_TOTAL_BYTES
+    ) {
+      continue;
+    }
+    const ext = extensionForMime(item.contentType, item.filename);
+    const key = inboundEmailFileKey(workspaceId, ext);
+    await putObject(key, item.bytes, item.contentType);
+    await registerInboundStorageObject(workspaceId, key);
+    const sha256 = createHash("sha256").update(item.bytes).digest("hex");
+    total += item.bytes.byteLength;
+    stored.push({
+      storageKey: key,
+      name: item.filename.slice(0, 255) || `attachment.${ext}`,
+      contentType: item.contentType,
+      size: item.bytes.byteLength,
+      sha256,
+      contentId: item.contentId ?? null,
+      inline: Boolean(item.inline),
+      placeholder: item.placeholder ?? null,
+    });
+  }
+  return stored;
+}
+
+/**
+ * Fetches full received email metadata, HTML, text, CCs, headers, and attachment descriptors
+ * from Resend's Received Emails API (outside any DB transaction).
+ */
+export async function fetchReceivedEmail(
+  emailId: string,
+): Promise<ReceivedEmailPayload | null> {
   const key = resendApiKey();
   if (!key || !/^[A-Za-z0-9_-]{1,200}$/.test(emailId)) return null;
   try {
     const mail = (await providerJson(
       `https://api.resend.com/emails/receiving/${emailId}`,
       { headers: { authorization: `Bearer ${key}` } },
-    )) as { text?: unknown } | null;
-    return typeof mail?.text === "string" ? mail.text : null;
+    )) as {
+      text?: unknown;
+      html?: unknown;
+      cc?: unknown;
+      reply_to?: unknown;
+      headers?: unknown;
+      attachments?: unknown;
+    } | null;
+    if (!mail) return null;
+    const cc = Array.isArray(mail.cc)
+      ? mail.cc.filter((x): x is string => typeof x === "string")
+      : [];
+    const replyTo = Array.isArray(mail.reply_to)
+      ? mail.reply_to.filter((x): x is string => typeof x === "string")
+      : [];
+    const rawAttachments = Array.isArray(mail.attachments)
+      ? mail.attachments
+      : [];
+    const attachments: ReceivedEmailAttachmentInput[] = [];
+    for (const att of rawAttachments.slice(0, 10)) {
+      if (!att || typeof att !== "object") continue;
+      const rec = att as Record<string, unknown>;
+      const filename =
+        typeof rec.filename === "string" && rec.filename.trim()
+          ? rec.filename.trim()
+          : "attachment";
+      const contentType =
+        typeof rec.content_type === "string" && rec.content_type.trim()
+          ? rec.content_type.trim()
+          : "application/octet-stream";
+      attachments.push({
+        id: typeof rec.id === "string" ? rec.id : undefined,
+        filename,
+        contentType,
+        contentId:
+          typeof rec.content_id === "string" ? rec.content_id : undefined,
+        disposition:
+          typeof rec.content_disposition === "string"
+            ? rec.content_disposition
+            : undefined,
+        downloadUrl:
+          typeof rec.download_url === "string" ? rec.download_url : undefined,
+      });
+    }
+    return {
+      text: typeof mail.text === "string" ? mail.text : null,
+      html: typeof mail.html === "string" ? mail.html : null,
+      cc,
+      replyTo,
+      headers:
+        mail.headers && typeof mail.headers === "object"
+          ? (mail.headers as ReceivedEmailPayload["headers"])
+          : null,
+      attachments,
+    };
   } catch (error) {
     if (error instanceof ProviderCallError && error.status === 404) return null;
     throw error;
   }
+}
+
+async function readBoundedResponseBytes(
+  response: Response,
+  limit: number,
+): Promise<Uint8Array | null> {
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > limit) {
+    await response.body?.cancel().catch(() => {});
+    return null;
+  }
+  const reader = response.body?.getReader();
+  if (!reader) return null;
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      total += value.byteLength;
+      if (total > limit) {
+        await reader.cancel().catch(() => {});
+        return null;
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
+}
+
+/** Downloads a Resend attachment binary payload using SSRF protection and a bounded stream (outside DB tx). */
+export async function downloadResendAttachment(
+  emailId: string,
+  attachment: ReceivedEmailAttachmentInput,
+): Promise<Uint8Array | null> {
+  if (attachment.contentBase64) {
+    const buf = Buffer.from(attachment.contentBase64, "base64");
+    return buf.byteLength <= MAX_INBOUND_FILE_BYTES
+      ? new Uint8Array(buf)
+      : null;
+  }
+  const key = resendApiKey();
+  if (!key) return null;
+  let targetUrl: URL | null = null;
+  if (attachment.downloadUrl && attachment.downloadUrl.startsWith("https://")) {
+    try {
+      targetUrl = new URL(attachment.downloadUrl);
+    } catch {
+      return null;
+    }
+  } else if (
+    /^[A-Za-z0-9_-]{1,200}$/.test(emailId) &&
+    attachment.id &&
+    /^[A-Za-z0-9_-]{1,200}$/.test(attachment.id)
+  ) {
+    targetUrl = new URL(
+      `https://api.resend.com/emails/receiving/${emailId}/attachments/${attachment.id}`,
+    );
+  }
+  if (!targetUrl || targetUrl.protocol !== "https:") return null;
+  try {
+    await assertPublicDestination(targetUrl, "Attachment");
+  } catch {
+    return null;
+  }
+  const response = await destinationFetch(targetUrl.toString(), {
+    headers:
+      targetUrl.origin === "https://api.resend.com"
+        ? { authorization: `Bearer ${key}` }
+        : undefined,
+    redirect: "manual",
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => {});
+    return null;
+  }
+  return readBoundedResponseBytes(response, MAX_INBOUND_FILE_BYTES);
 }
 
 /** OAuth state lifetime: the provider redirect must come back within ten minutes. */
@@ -804,4 +1057,61 @@ export function internalTokenValid(headers: Headers) {
   if (!token) return undefined;
   const given = /^Bearer\s+(\S+)$/i.exec(headers.get("authorization") ?? "");
   return safeEqual(given?.[1] ?? "", token);
+}
+
+const RESUME_TTL_SECONDS = 7 * 24 * 60 * 60;
+
+/**
+ * Mints a signed, 7-day resume token embedded in widget continuation emails (#319)
+ * so a customer clicking "Continue in chat" resumes their exact conversation.
+ */
+export function mintWidgetResumeToken(
+  workspaceId: string,
+  conversationId: string,
+  principalId: string,
+  widgetSecret: string,
+): string {
+  const exp = Math.floor(Date.now() / 1000) + RESUME_TTL_SECONDS;
+  const payload = Buffer.from(
+    JSON.stringify({ w: workspaceId, c: conversationId, p: principalId, exp }),
+  ).toString("base64url");
+  const sig = createHmac("sha256", widgetSecret)
+    .update(`widget-resume:${payload}`)
+    .digest("base64url");
+  return `${payload}.${sig}`;
+}
+
+/** Verifies a widget resume token against the workspace's widget secret and expiry. */
+export function verifyWidgetResumeToken(
+  token: string,
+  workspaceId: string,
+  widgetSecret: string,
+): { conversationId: string; principalId: string } | null {
+  const dot = token.indexOf(".");
+  if (dot <= 0 || dot === token.length - 1) return null;
+  const payload = token.slice(0, dot);
+  const sig = token.slice(dot + 1);
+  const expected = createHmac("sha256", widgetSecret)
+    .update(`widget-resume:${payload}`)
+    .digest("base64url");
+  if (!safeEqual(sig, expected)) return null;
+  try {
+    const parsed = JSON.parse(
+      Buffer.from(payload, "base64url").toString("utf8"),
+    ) as { w?: unknown; c?: unknown; p?: unknown; exp?: unknown };
+    if (
+      parsed.w !== workspaceId ||
+      typeof parsed.c !== "string" ||
+      typeof parsed.p !== "string" ||
+      !parsed.c.startsWith("conversation_") ||
+      !parsed.p.startsWith("principal_") ||
+      typeof parsed.exp !== "number" ||
+      parsed.exp < Math.floor(Date.now() / 1000)
+    ) {
+      return null;
+    }
+    return { conversationId: parsed.c, principalId: parsed.p };
+  } catch {
+    return null;
+  }
 }

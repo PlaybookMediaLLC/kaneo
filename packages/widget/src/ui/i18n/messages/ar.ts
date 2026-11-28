@@ -280,6 +280,11 @@ const ar: Catalog = {
   Remove: "إزالة",
   "Picture updated": "تم تحديث الصورة",
   "Could not save the picture.": "تعذّر حفظ الصورة.",
+  Sources: "المصادر",
+  "Talk to a person": "التحدث إلى شخص",
+  "Connecting you with the team…": "جارٍ توصيلك بالفريق…",
+  "Could not connect to a person. Please try again.":
+    "تعذّر الاتصال بشخص. يرجى المحاولة مرة أخرى.",
 };
 
 export default ar;

@@ -282,6 +282,11 @@ const de: Catalog = {
   Remove: "Entfernen",
   "Picture updated": "Bild aktualisiert",
   "Could not save the picture.": "Das Bild konnte nicht gespeichert werden.",
+  Sources: "Quellen",
+  "Talk to a person": "Mit einer Person sprechen",
+  "Connecting you with the team…": "Verbindung zum Team wird hergestellt…",
+  "Could not connect to a person. Please try again.":
+    "Verbindung zu einer Person fehlgeschlagen. Bitte versuchen Sie es erneut.",
 };
 
 export default de;

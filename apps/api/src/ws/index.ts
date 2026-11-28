@@ -193,13 +193,18 @@ function deliverToLocalUserConnections(
     return;
   }
   if (
-    message.type === "WORKSPACE_ACCESS_REVOKED" &&
+    (message.type === "WORKSPACE_ACCESS_REVOKED" ||
+      message.type === "ROLE_PERMISSIONS_CHANGED") &&
     typeof message.workspaceId === "string"
   ) {
     revokeLocalWorkspaceConnections(
       userId,
       message.workspaceId,
-      message.reason === "archived" ? "Workspace archived" : undefined,
+      message.type === "ROLE_PERMISSIONS_CHANGED"
+        ? "Workspace role permissions changed"
+        : message.reason === "archived"
+          ? "Workspace archived"
+          : undefined,
     );
   }
   if (
@@ -606,6 +611,19 @@ export async function revokeApiKeyConnections(
 ) {
   if (apiKeyIds.length === 0) return;
   const message = { type: "API_KEYS_REVOKED", apiKeyIds };
+  deliverToLocalUserConnections(userId, message);
+  await revocationDelivery?.send({ userId, message, origin: INSTANCE_ID });
+}
+
+/**
+ * Immediately close workspace project sockets and notify user sockets on every API instance
+ * when a member's workspace role or custom role permissions change (#306).
+ */
+export async function revokeWorkspaceRoleChange(
+  userId: string,
+  workspaceId: string,
+) {
+  const message = { type: "ROLE_PERMISSIONS_CHANGED", workspaceId };
   deliverToLocalUserConnections(userId, message);
   await revocationDelivery?.send({ userId, message, origin: INSTANCE_ID });
 }

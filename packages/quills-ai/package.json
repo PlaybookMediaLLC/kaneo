@@ -22,6 +22,10 @@
     "./capability": {
       "types": "./dist/capability.d.ts",
       "default": "./dist/capability.js"
+    },
+    "./customer-agent": {
+      "types": "./dist/customer-agent/index.d.ts",
+      "default": "./dist/customer-agent/index.js"
     }
   },
   "scripts": {

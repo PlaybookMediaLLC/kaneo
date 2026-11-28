@@ -141,6 +141,12 @@ export interface UpdateEntry {
   }>;
 }
 
+export interface MessageCitation {
+  title: string;
+  url: string;
+  sourceType: "article" | "web";
+}
+
 export interface Conversation {
   id: string;
   title: string;
@@ -157,6 +163,8 @@ export interface Conversation {
     files?: ReadonlyArray<{ id: string; name: string }>;
     /** The workspace's assistant wrote it. */
     fromAssistant?: boolean;
+    /** Grounded sources cited by the assistant reply (#299). */
+    citations?: readonly MessageCitation[];
     /** A request the assistant proposed; the visitor submits it once. */
     feedbackCard?: { title: string; body: string; confirmed: boolean };
   }>;
@@ -205,6 +213,11 @@ export interface WidgetViewProps {
   onConfirmContactEmail?: (email: string, code: string) => Promise<unknown>;
   onReadActivity?: (id: string) => Promise<unknown>;
   onArticleFeedback?: (articleId: string, helpful: boolean) => Promise<unknown>;
+  onSearchHelp?: (
+    query: string,
+    signal?: AbortSignal,
+  ) => Promise<{ queryId: string | null; articles: HelpArticle[] }>;
+  onSearchHelpClick?: (queryId: string, articleId: string) => void;
   /** The host owns loading and connectivity; offline disables mutations, not reading. */
   loadState?: "ready" | "loading" | "error";
   connection?: "online" | "offline" | "reconnecting";
@@ -212,7 +225,13 @@ export interface WidgetViewProps {
   /** Display only availability verified by the host; omit when unknown. */
   teamAvailability?: string;
   /** The team's live availability and up to four teammate avatars, from the API. */
-  team?: { online: boolean; avatars: readonly WidgetPerson[] };
+  team?: {
+    online: boolean;
+    avatars: readonly WidgetPerson[];
+    withinOfficeHours?: boolean;
+    waitEstimateLabel?: string | null;
+    nextOpenAt?: string | null;
+  };
   /** How soon the team usually replies, as a teammate set it. */
   replyTime?: "minutes" | "hours" | "day";
   /** Home's greeting and subtitle from the workspace; null keeps the default. */
@@ -274,6 +293,8 @@ export interface WidgetViewProps {
     messageId: string,
     card: { title: string; body: string },
   ) => Promise<unknown>;
+  /** Immediately connects the visitor with a human teammate (zero LLM call, #299). */
+  onHandoffConversation?: (conversationId: string) => Promise<unknown>;
   onReadConversation?: (
     conversationId: string,
     throughMessageId: string,

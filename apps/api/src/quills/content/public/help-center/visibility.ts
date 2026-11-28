@@ -164,18 +164,17 @@ export async function openHelpCenter(
       widgetConfig: settings.widgetConfig,
     })
     .from(settings);
+  const access = await evaluatePortalAccess(
+    db,
+    options.anonymous
+      ? { principalId: null, customerId: null, account: null }
+      : caller,
+  );
   const open =
     resolveFlags(parseJson(row?.featureFlags ?? null)).helpCenter &&
+    access.granted &&
     (surface === "portal"
-      ? portalOn(row?.portalConfig ?? null) &&
-        (
-          await evaluatePortalAccess(
-            db,
-            options.anonymous
-              ? { principalId: null, customerId: null, account: null }
-              : caller,
-          )
-        ).granted
+      ? portalOn(row?.portalConfig ?? null)
       : widgetEnabled(row?.widgetConfig ?? null));
   if (!open) throw notFound("Help center");
   const config = await readConfig(db);

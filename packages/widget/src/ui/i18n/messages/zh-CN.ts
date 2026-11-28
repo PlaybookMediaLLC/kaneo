@@ -256,6 +256,11 @@ const zh_CN: Catalog = {
   Remove: "移除",
   "Picture updated": "头像已更新",
   "Could not save the picture.": "无法保存头像。",
+  Sources: "来源",
+  "Talk to a person": "转接人工",
+  "Connecting you with the team…": "正在为您转接团队…",
+  "Could not connect to a person. Please try again.":
+    "无法转接人工客服，请重试。",
 };
 
 export default zh_CN;

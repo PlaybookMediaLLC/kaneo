@@ -1455,7 +1455,8 @@
 			"defaultRoleDescriptions": {
 				"viewer": "Kann Aufgaben ansehen und kommentieren.",
 				"member": "Kann Aufgaben und Projekte erstellen und verwalten.",
-				"admin": "Hat vollen Zugriff auf den Workspace."
+				"admin": "Hat vollen Zugriff auf den Workspace.",
+				"collaborator": "Free internal seat: can view threads and add internal notes without replying externally."
 			},
 			"resources": {
 				"project": "Projekte",
@@ -1636,6 +1637,10 @@
 					"manage_settings": {
 						"label": "Manage Quills settings",
 						"description": "Change Quills configuration for this workspace."
+					},
+					"comment_internal": {
+						"description": "Add internal notes and @mention teammates without sending external customer replies.",
+						"label": "Comment internally"
 					}
 				}
 			},
@@ -1655,7 +1660,8 @@
 			"deleteDialog": {
 				"title": "Rolle löschen",
 				"description": "Dadurch wird die Rolle \"{{role}}\" dauerhaft gelöscht. Mitglieder mit dieser Rolle verlieren deren Berechtigungen."
-			}
+			},
+			"freeSeatBadge": "Free seat"
 		},
 		"workspaceLabels": {
 			"pageTitle": "Labels",
@@ -3472,7 +3478,12 @@
 			"startDate": "Startdatum",
 			"noDate": "Kein Datum",
 			"dates": "Termine",
-			"project": "Projekt"
+			"project": "Projekt",
+			"churnRisk": "Churn risk",
+			"companiesCount": "{{count}} companies",
+			"customerContext": "Customer context",
+			"requestersCount": "{{count}} requesters",
+			"votesCount": "{{count}} votes"
 		},
 		"move": {
 			"title": "Aufgabe verschieben",
@@ -4049,7 +4060,8 @@
 			"owner": "Eigentümer",
 			"admin": "Administrator",
 			"member": "Mitglied",
-			"viewer": "Betrachter"
+			"viewer": "Betrachter",
+			"collaborator": "Collaborator"
 		},
 		"members": {
 			"pageTitle": "Mitglieder",

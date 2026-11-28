@@ -281,7 +281,12 @@ describe.skipIf(!url)("customer agent", () => {
     provider.reply((request) =>
       request.path.endsWith("/embeddings")
         ? { status: 503, json: {} }
-        : answer({ reply: "Within 45 days." }),
+        : answer({
+            reply: "Within 45 days.",
+            confidence: 0.95,
+            sourceIds: [refundId],
+            quotedExcerpt: "Refunds are available within 45 days of purchase.",
+          }),
     );
     const reply = await ask("What is the refund window?");
     expect(reply!.content).toBe("Within 45 days.");

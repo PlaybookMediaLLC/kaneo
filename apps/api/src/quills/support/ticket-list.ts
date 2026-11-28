@@ -57,6 +57,8 @@ export type TicketFilters = {
   excludeConversationLinked?: boolean;
   /** The unified inbox: leaves out tickets whose requester is a teammate's test customer. */
   realOnly?: boolean;
+  /** Optional team-scoped visibility restriction for limited collaborator roles (#328). */
+  allowedTeamIds?: readonly TypeId<"team">[] | null;
 };
 
 /** A customer ticket with a conversation link: the inbox lists it once, as its conversation. */
@@ -93,10 +95,17 @@ export async function listTicketPage(
       .select({
         key: sql<string>`${sort.key}::text`,
         id: sql<string>`${tickets.id}::text`,
+        assigneeTeamId: tickets.assigneeTeamId,
       })
       .from(tickets)
       .where(and(eq(tickets.id, query.cursor), isNull(tickets.deletedAt)));
-    if (!cursor) throw notFound("Ticket");
+    if (
+      !cursor ||
+      (query.allowedTeamIds &&
+        (!cursor.assigneeTeamId ||
+          !query.allowedTeamIds.includes(cursor.assigneeTeamId)))
+    )
+      throw notFound("Ticket");
     const cast = sort.key === rank ? sql.raw("int") : sql.raw("timestamptz");
     after = sql`(${sort.key}, ${tickets.id}) ${before} (${cursor.key}::${cast}, ${cursor.id}::uuid)`;
   }
@@ -133,6 +142,11 @@ export async function listTicketPage(
           ? sql`not ${conversationLinked}`
           : undefined,
         query.realOnly ? sql`not ${testRequester}` : undefined,
+        query.allowedTeamIds
+          ? query.allowedTeamIds.length === 0
+            ? sql`false`
+            : inArray(tickets.assigneeTeamId, query.allowedTeamIds)
+          : undefined,
         after,
       ),
     )

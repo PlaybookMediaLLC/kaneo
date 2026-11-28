@@ -98,7 +98,7 @@ describe("TicketThread", () => {
     api.reply(addTicketNoteFixture.ok());
     refreshed(api);
     fill("Write an internal note…", "Ask billing.");
-    press("Send");
+    press("Add note");
     await waitFor(() =>
       expect(api.calls("addQuillsTicketNote")).toHaveLength(1),
     );
@@ -117,7 +117,7 @@ describe("TicketThread", () => {
     await view.findByText("The login fails.");
     api.reply({ message: "Too long" }, 400);
     fill("Reply to Grace…", "We fixed it.");
-    press("Send");
+    press("Send to customer");
     expect(await view.findByRole("alert")).toHaveTextContent(
       "The message was not sent.",
     );

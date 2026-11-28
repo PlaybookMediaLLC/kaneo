@@ -3,6 +3,7 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import db, { schema } from "../database";
 import { rolesAllow, type StoredRolePermission } from "./role-permissions";
 import { splitRoles } from "./split-roles";
+import { canAccessTeam } from "./team-visibility";
 
 type AuthContext = Parameters<typeof getSessionFromCtx>[0];
 
@@ -118,12 +119,24 @@ export async function assertNativeOrganizationReadAllowed(
     const teamId = input?.teamId || viewer.session.activeTeamId;
     if (!teamId) return;
     const [team] = await db
-      .select({ workspaceId: schema.teamTable.workspaceId })
+      .select({
+        workspaceId: schema.teamTable.workspaceId,
+        isPrivate: schema.teamTable.isPrivate,
+      })
       .from(schema.teamTable)
       .where(eq(schema.teamTable.id, teamId))
       .limit(1);
     workspaceId = team?.workspaceId;
     if (!workspaceId) return; // Provider reports team-not-found, with no data.
+    if (team?.isPrivate) {
+      const allowed = await canAccessTeam(viewer.user.id, teamId, false);
+      if (!allowed) {
+        throw new APIError("FORBIDDEN", {
+          code: "PRIVATE_TEAM_ACCESS_DENIED",
+          message: "Private team membership is required",
+        });
+      }
+    }
   }
   // Full/member reads give slug precedence over ID; set-active prefers ID.
   if (

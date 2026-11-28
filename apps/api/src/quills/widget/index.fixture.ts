@@ -1,3 +1,4 @@
+export * from "./challenge.fixture";
 export * from "./config.fixture";
 export {
   confirmQuillsEmailChange,
@@ -11,5 +12,7 @@ export * from "./install.fixture";
 export * from "./portal-link.fixture";
 export * from "./session.fixture";
 export * from "./activity.fixture";
+export * from "./my-requests.fixture";
 export * from "./help/index.fixture";
 export * from "./surveys.fixture";
+export * from "./verify-token.fixture";

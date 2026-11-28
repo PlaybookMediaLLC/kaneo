@@ -106,6 +106,7 @@ export const conversationItem = z.object({
   endNote: z.string().nullable(),
   spamReason: z.string().nullable(),
   csatRating: z.number().nullable(),
+  forwardParseFailed: z.boolean(),
   agentLastReadAt: nullableResponseTimestamp,
   visitorLastReadAt: nullableResponseTimestamp,
   tags: z.array(tagRef),
@@ -165,6 +166,7 @@ const columns = {
   endNote: conversations.endNote,
   spamReason: conversations.spamReason,
   csatRating: conversations.csatRating,
+  forwardParseFailed: conversations.forwardParseFailed,
   agentLastReadAt: conversations.agentLastReadAt,
   visitorLastReadAt: conversations.visitorLastReadAt,
 };

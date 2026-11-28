@@ -99,6 +99,11 @@ export const CONCURRENT_INDEX_SPECS: readonly ConcurrentIndexSpec[] = [
     ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS email_log_workspace_retention_idx ON quills.email_log (workspace_id, created_at)",
   },
   {
+    name: "ai_usage_log_workspace_created_idx",
+    concurrent: true,
+    ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS ai_usage_log_workspace_created_idx ON quills.ai_usage_log (workspace_id, created_at)",
+  },
+  {
     name: "job_queue_workspace_terminal_idx",
     concurrent: true,
     ddl: "CREATE INDEX CONCURRENTLY IF NOT EXISTS job_queue_workspace_terminal_idx ON quills.job_queue (workspace_id, finished_at) WHERE status IN ('failed','succeeded')",

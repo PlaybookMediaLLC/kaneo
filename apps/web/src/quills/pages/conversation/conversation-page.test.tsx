@@ -91,6 +91,7 @@ describe("ConversationPage", () => {
         editedAt: null,
         fromAssistant: false,
         feedbackCard: null,
+        citations: [],
       });
       api.reply(getMyConversationFixture.ok());
       api.reply(
@@ -149,6 +150,7 @@ describe("ConversationPage", () => {
               editedAt: null,
               fromAssistant: false,
               feedbackCard: null,
+              citations: [],
             },
           ],
         });
@@ -198,6 +200,7 @@ describe("ConversationPage", () => {
             editedAt: null,
             fromAssistant: false,
             feedbackCard: null,
+            citations: [],
           },
         ],
       });
@@ -254,6 +257,7 @@ describe("ConversationPage", () => {
           status: "proposed" as const,
           postId: null,
         },
+        citations: [],
       };
       api.reply(getMyConversationFixture.ok());
       api.reply(listMyConversationMessagesFixture.ok({ items: [answer] }));

@@ -916,6 +916,10 @@ export const setVote = (audience: Customer) =>
               .where(mine)
               .returning({ id: postVotes.id })
           ).length > 0;
+      if (body.voted && changed) {
+        const { checkVoteBurst } = await import("../../feedback/hygiene");
+        await checkVoteBurst(db, post.id);
+      }
       const [moved] = changed
         ? await db
             .update(posts)

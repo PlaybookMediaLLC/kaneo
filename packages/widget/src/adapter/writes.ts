@@ -112,6 +112,29 @@ export const writes = (api: Api) => ({
       { helpful },
       signal,
     ),
+  searchHelp: (queryText: string, locale?: string, signal?: AbortSignal) =>
+    api.request<{
+      locale: string;
+      queryId: string | null;
+      articles: Array<{
+        id: string;
+        title: string;
+        description: string | null;
+        snippet: string;
+        category: { id: string; slug: string; name: string };
+      }>;
+    }>(
+      "POST",
+      "/widget/kb-search",
+      { query: queryText, ...(locale && { locale }), limit: 15, record: true },
+      signal,
+    ),
+  recordHelpSearchClick: (queryId: string, articleId: string) =>
+    api.request<{ recorded: true }>(
+      "POST",
+      `/widget/kb-search/${id(queryId)}/click`,
+      { articleId },
+    ),
   /** `metadata`: the host page context, kept with the message for the team. */
   startConversation: (
     content: string,
@@ -172,6 +195,14 @@ export const writes = (api: Api) => ({
       "PUT",
       `/widget/conversations/${id(conversationId)}/messages/${id(messageId)}/feedback-card`,
       { postId },
+      signal,
+    ),
+  /** Immediately hand off the conversation to a human teammate (zero LLM call, #299). */
+  handoffConversation: (conversationId: string, signal?: AbortSignal) =>
+    api.request<{ handedOff: true; message: ApiMessage }>(
+      "POST",
+      `/widget/conversations/${id(conversationId)}/handoff`,
+      undefined,
       signal,
     ),
   markRead: (

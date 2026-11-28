@@ -37,18 +37,16 @@ describe("tool registry", () => {
     );
   });
 
-  it("registers each tool once under its own name, and only the private note skips approval", () => {
+  it("registers each tool once under its own name, and all write tools default to required approval with previewDiff (#300)", () => {
     expect(Object.keys(nativeTools).sort()).toEqual([...TOOL_NAMES].sort());
     for (const [name, tool] of Object.entries(nativeTools))
       expect(tool.name).toBe(name);
     for (const tool of Object.values(writeTools)) {
-      // A note is internal to the team and easy to delete (add-private-note.ts). It needs the
-      // note route's action, create; the others need update, which the approval route checks.
-      const note = tool.name === "add_private_note";
-      expect(tool.approval).toBe(note ? "auto" : "required");
-      expect(tool.action).toBe(note ? "create" : "update");
+      expect(tool.approval).toBe("required");
+      expect(tool.action).toBe("update");
+      expect(typeof tool.previewDiff).toBe("function");
     }
-    expect(names({ actions: ["read", "update"] })).not.toContain(
+    expect(names({ actions: ["read", "create"] })).not.toContain(
       "add_private_note",
     );
   });

@@ -284,6 +284,11 @@ const ru: Catalog = {
   Remove: "Удалить",
   "Picture updated": "Фото обновлено",
   "Could not save the picture.": "Не удалось сохранить фото.",
+  Sources: "Источники",
+  "Talk to a person": "Связаться с оператором",
+  "Connecting you with the team…": "Соединяем с командой…",
+  "Could not connect to a person. Please try again.":
+    "Не удалось связаться с оператором. Попробуйте ещё раз.",
 };
 
 export default ru;

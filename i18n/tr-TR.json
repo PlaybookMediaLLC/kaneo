@@ -1292,7 +1292,8 @@
 			"defaultRoleDescriptions": {
 				"viewer": "Talepleri görüntüleyebilir ve yorum yapabilir.",
 				"member": "Talep ve proje oluşturabilir ve yönetebilir.",
-				"admin": "Çalışma alanına tam erişimi vardır."
+				"admin": "Çalışma alanına tam erişimi vardır.",
+				"collaborator": "Free internal seat: can view threads and add internal notes without replying externally."
 			},
 			"resources": {
 				"project": "Projeler",
@@ -1473,6 +1474,10 @@
 					"manage_settings": {
 						"label": "Manage Quills settings",
 						"description": "Change Quills configuration for this workspace."
+					},
+					"comment_internal": {
+						"description": "Add internal notes and @mention teammates without sending external customer replies.",
+						"label": "Comment internally"
 					}
 				}
 			},
@@ -1492,7 +1497,8 @@
 			"deleteDialog": {
 				"title": "Rolü sil",
 				"description": "Bu, \"{{role}}\" rolünü kalıcı olarak silecek. Bu role atanmış üyeler rolün izinlerini kaybedecek."
-			}
+			},
+			"freeSeatBadge": "Free seat"
 		},
 		"workspaceLabels": {
 			"pageTitle": "Etiketler",
@@ -3472,7 +3478,12 @@
 			"startDate": "Başlangıç tarihi",
 			"noDate": "Tarih yok",
 			"dates": "Tarihler",
-			"project": "Proje"
+			"project": "Proje",
+			"churnRisk": "Churn risk",
+			"companiesCount": "{{count}} companies",
+			"customerContext": "Customer context",
+			"requestersCount": "{{count}} requesters",
+			"votesCount": "{{count}} votes"
 		},
 		"move": {
 			"title": "Talebi taşı",
@@ -4049,7 +4060,8 @@
 			"owner": "Sahip",
 			"admin": "Yönetici",
 			"member": "Üye",
-			"viewer": "Görüntüleyici"
+			"viewer": "Görüntüleyici",
+			"collaborator": "Collaborator"
 		},
 		"members": {
 			"pageTitle": "Üyeler",

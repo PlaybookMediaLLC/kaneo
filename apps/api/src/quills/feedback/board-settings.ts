@@ -6,6 +6,8 @@ import { defineQuillsRoute } from "../framework/define-route";
 import {
   checkTaskSyncStatus,
   statusOnTaskDone,
+  statusOnTaskInProgress,
+  statusOnTaskPlanned,
   taskSyncInput,
   taskSyncView,
 } from "../integrations/task-sync";
@@ -40,13 +42,21 @@ const voting = z.object({
   delivery: deliveryView,
 });
 /** The response view of the stored settings. */
-const view = (boardId: string, settings: unknown) => ({
-  boardId,
-  ...votingOf(settings),
-  taskSync: { statusOnTaskDone: statusOnTaskDone(settings) },
-  customFields: fieldsOf(settings),
-  delivery: deliveryOf(settings),
-});
+const view = (boardId: string, settings: unknown) => {
+  const planned = statusOnTaskPlanned(settings);
+  const inProgress = statusOnTaskInProgress(settings);
+  return {
+    boardId,
+    ...votingOf(settings),
+    taskSync: {
+      statusOnTaskDone: statusOnTaskDone(settings),
+      ...(planned !== null && { statusOnTaskPlanned: planned }),
+      ...(inProgress !== null && { statusOnTaskInProgress: inProgress }),
+    },
+    customFields: fieldsOf(settings),
+    delivery: deliveryOf(settings),
+  };
+};
 const errors = { 404: "Board or status not found" };
 
 const getSettings = defineQuillsRoute({
@@ -76,7 +86,7 @@ const updateSettings = defineQuillsRoute({
   operationId: "updateQuillsBoardSettings",
   summary: "Change a board's voting, task sync and custom field settings",
   description:
-    "Changes only the given keys and keeps every other board setting. defaultSort null removes the board's default. taskSync.statusOnTaskDone must be a live post status of the workspace; null turns the sync off. customFields replaces the board's whole field list; values that posts already hold stay stored.",
+    "Changes only the given keys and keeps every other board setting. defaultSort null removes the board's default. taskSync status IDs must be live post statuses of the workspace; null turns the sync off. customFields replaces the board's whole field list; values that posts already hold stay stored.",
   action: "manage_settings",
   params: boardParams,
   body: z
@@ -112,11 +122,24 @@ const updateSettings = defineQuillsRoute({
   handler: async ({ db, params, body, loaded: projects }) => {
     const board = await findBoard(db, params.boardId, projects);
     await checkTaskSyncStatus(db, body.taskSync?.statusOnTaskDone ?? null);
+    await checkTaskSyncStatus(db, body.taskSync?.statusOnTaskPlanned ?? null);
+    await checkTaskSyncStatus(
+      db,
+      body.taskSync?.statusOnTaskInProgress ?? null,
+    );
     const patch = {
       ...(body.voteDisplay !== undefined && { voteDisplay: body.voteDisplay }),
       ...(body.defaultSort !== undefined && { defaultSort: body.defaultSort }),
       ...(body.taskSync && {
-        taskSync: { statusOnTaskDone: body.taskSync.statusOnTaskDone },
+        taskSync: {
+          statusOnTaskDone: body.taskSync.statusOnTaskDone,
+          ...(body.taskSync.statusOnTaskPlanned !== undefined && {
+            statusOnTaskPlanned: body.taskSync.statusOnTaskPlanned,
+          }),
+          ...(body.taskSync.statusOnTaskInProgress !== undefined && {
+            statusOnTaskInProgress: body.taskSync.statusOnTaskInProgress,
+          }),
+        },
       }),
       ...(body.customFields && { customFields: body.customFields }),
     };

@@ -1,8 +1,20 @@
-import { and, asc, desc, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNull,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
 import { apiRouter, z, type BaseVariables } from "../../openapi";
 import { principal, user } from "../../database/quills/schema/auth";
+import { contactIdentities } from "../../database/quills/schema/contact-identities";
 import { conversationMessages } from "../../database/quills/schema/conversation";
 import {
   postCommentReactions,
@@ -97,6 +109,7 @@ const listUsers = defineQuillsRoute({
     const leads = query.lifecycle === "leads";
     const where = and(
       isCustomer,
+      isNull(principal.mergedIntoPrincipalId),
       eq(principal.type, leads ? "anonymous" : "user"),
       leads ? leadEngaged : undefined,
       query.search
@@ -104,6 +117,13 @@ const listUsers = defineQuillsRoute({
             ilike(user.name, `%${query.search}%`),
             ilike(user.email, `%${query.search}%`),
             ilike(principal.contactEmail, `%${query.search}%`),
+            inArray(
+              principal.id,
+              db
+                .select({ id: contactIdentities.principalId })
+                .from(contactIdentities)
+                .where(ilike(contactIdentities.value, `%${query.search}%`)),
+            ),
           )
         : undefined,
       query.verified

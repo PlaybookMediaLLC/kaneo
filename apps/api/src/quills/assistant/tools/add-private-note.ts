@@ -7,18 +7,24 @@ import {
 import { z } from "../../../openapi";
 import { defineWriteTool } from "../ai/tool";
 
-// A note only teammates see. It runs without approval (`auto`): it is internal to the team, a
-// teammate can delete it, and it never reaches the customer.
+// A note only teammates see. Defaults to `required` approval under safe AI actions (#300)
+// unless an admin explicitly opts it into `auto_write`.
 export const addPrivateNote = defineWriteTool({
   name: "add_private_note",
   description:
-    "Add a private note to the current conversation, for example a summary or a next step. Only teammates see it; the customer never does.",
+    "Propose adding a private note to the current conversation, for example a summary or a next step. Only teammates see it; the customer never does.",
   args: z.object({ content: z.string().trim().min(1).max(4000) }),
-  // The note route's action (support/conversation-messages.ts).
-  action: "create",
-  approval: "auto",
+  // Requires update so the approval route (quills:update) matches the tool action.
+  action: "update",
+  approval: "required",
   available: (context) => Boolean(context.conversationId),
   summary: (args) => `Add a private note: ${args.content.slice(0, 120)}`,
+  previewDiff: (conversation, args) => ({
+    targetType: "conversation",
+    targetId: conversation?.id ?? null,
+    fields: [{ field: "privateNote", before: null, after: args.content }],
+    recordCount: 1,
+  }),
   execute: async (db, actor, conversation, args) => {
     const [message] = await db
       .insert(conversationMessages)

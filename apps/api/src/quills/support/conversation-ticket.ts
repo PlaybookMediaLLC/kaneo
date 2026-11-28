@@ -11,6 +11,7 @@ import {
   errors,
   findConversation,
 } from "./conversation-model";
+import { assertTeamVisible, resolveAllowedTeamIds } from "./team-scope";
 
 // The customer ticket that shares a conversation's thread (the 1:1 pair in
 // ticket_conversations). Tickets opened from a conversation are not its pair.
@@ -23,6 +24,7 @@ const getTicketLink = defineQuillsRoute({
   description:
     "The customer ticket paired with the conversation, or null. A deleted ticket is null.",
   action: "read",
+  callerActions: true,
   params: conversationParams,
   response: z.object({
     ticket: z
@@ -40,8 +42,19 @@ const getTicketLink = defineQuillsRoute({
   }),
   responseDescription: "The paired customer ticket",
   errors,
-  handler: async ({ db, params }) => {
-    await findConversation(db, params.conversationId);
+  handler: async ({ db, workspaceId, actor, actions, params }) => {
+    const allowedTeams = await resolveAllowedTeamIds(
+      db,
+      workspaceId,
+      actor,
+      actions,
+    );
+    const conversation = await findConversation(db, params.conversationId);
+    assertTeamVisible(
+      allowedTeams,
+      conversation.assignedTeamId,
+      "Conversation",
+    );
     const [row] = await db
       .select({
         id: tickets.id,

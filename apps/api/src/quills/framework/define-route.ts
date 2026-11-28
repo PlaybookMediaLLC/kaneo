@@ -50,6 +50,12 @@ import {
   type SignedVerifier,
 } from "./signed";
 import { readClientIp } from "../../utils/client-ip";
+import { settings } from "../../database/quills/schema/auth";
+import {
+  isOriginAllowed,
+  isSpamBlocked,
+  readWidgetAntiSpam,
+} from "./anti-spam";
 import { addressBlocked } from "./ip-block";
 
 export type { Database, QuillsActor };
@@ -232,7 +238,7 @@ export type QuillsRouteDeclaration<
   summary: string;
   description?: string;
   /** Teammate: the checked Quills action. Other audiences: recorded for the ledger, not checked. */
-  action: QuillsAction;
+  action: QuillsAction | readonly QuillsAction[];
   /**
    * Teammate: give the handler `actions`, every Quills action that the caller holds. Use it when the
    * declared action is the minimum and another person's record needs more. Without it, `actions` is empty.
@@ -990,6 +996,63 @@ export function buildQuillsRoute<
           d.rateLimit,
           credentials.account.id,
         );
+      const enforceAudienceAccess = async (
+        db: Database,
+        caller: QuillsCaller,
+      ) => {
+        // Widget origin lock (#320): when the workspace configures allowedOrigins, reject other host origins.
+        if (d.path.startsWith("/widget/")) {
+          const [row] = await db
+            .select({ widgetConfig: settings.widgetConfig })
+            .from(settings)
+            .limit(1);
+          let stored: Record<string, unknown> = {};
+          if (row?.widgetConfig) {
+            try {
+              const parsed = JSON.parse(row.widgetConfig);
+              if (parsed && typeof parsed === "object")
+                stored = parsed as Record<string, unknown>;
+            } catch {
+              // ignore invalid json
+            }
+          }
+          const antiSpam = readWidgetAntiSpam(stored);
+          let selfOrigin: string | null = null;
+          try {
+            selfOrigin = new URL(c.req.url).origin;
+          } catch {
+            selfOrigin = null;
+          }
+          if (
+            !isOriginAllowed(
+              c.req.header("origin"),
+              c.req.header("referer"),
+              antiSpam.allowedOrigins,
+              selfOrigin,
+            )
+          ) {
+            throw new HTTPException(403, {
+              message: "Origin is not allowed for this widget",
+            });
+          }
+        }
+        // A customer write from an address, CIDR, domain or visitor that the team blocked.
+        if (d.method !== "get") {
+          const clientIp = readClientIp(c.req.raw.headers);
+          if (
+            (await addressBlocked(db, clientIp)) ||
+            (
+              await isSpamBlocked(db, {
+                ip: clientIp,
+                principalId: caller.principalId,
+              })
+            ).blocked
+          )
+            throw new HTTPException(403, {
+              message: "Requests from this address are blocked",
+            });
+        }
+      };
       // `call` may wait on a provider or object storage, so it holds no pooled connection: `prepare`
       // reads with the caller first, and the handler's transaction must find the same caller again.
       let seen: { workspaceId: string; caller: QuillsCaller } | undefined;
@@ -1006,6 +1069,7 @@ export function buildQuillsRoute<
               signIn,
               ensureCustomer: false,
             });
+            await enforceAudienceAccess(db, caller);
             return {
               scoped,
               caller,
@@ -1032,14 +1096,7 @@ export function buildQuillsRoute<
             signIn,
             ensureCustomer: d.ensureCustomer === true,
           });
-          // A customer write from an address that the team blocked (support/ip-blocks.ts).
-          if (
-            d.method !== "get" &&
-            (await addressBlocked(db, readClientIp(c.req.raw.headers)))
-          )
-            throw new HTTPException(403, {
-              message: "Requests from this address are blocked",
-            });
+          await enforceAudienceAccess(db, caller);
           if (
             seen &&
             (seen.workspaceId !== workspace.id ||
@@ -1073,6 +1130,8 @@ export function buildQuillsRoute<
         return c.body(null, 302, {
           Location: target.url,
           "Cache-Control": `private, max-age=${target.maxAge}`,
+          "Referrer-Policy": "no-referrer",
+          "X-Content-Type-Options": "nosniff",
         });
       }
       if (d.raw) {

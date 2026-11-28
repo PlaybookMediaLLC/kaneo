@@ -1,3 +1,7 @@
+import {
+  getStorageDriver,
+  probeLocalStorage,
+} from "../../storage/local-driver";
 import { headStorageBucket, isStorageConfigured } from "../../storage/s3";
 import { safeErrorCode } from "./safe-error-code";
 import type { ServiceStatus } from "./service-status";
@@ -33,6 +37,19 @@ export function storageFailureStatus(error: unknown): ServiceStatus {
 }
 
 export async function probeStorage(timeoutMs: number): Promise<StorageProbe> {
+  if (getStorageDriver() === "local") {
+    try {
+      await withTimeout(() => probeLocalStorage(), timeoutMs);
+      return { status: "ok", configured: true, errorCode: null };
+    } catch (error) {
+      return {
+        status: "down",
+        configured: true,
+        errorCode: safeErrorCode(error),
+      };
+    }
+  }
+
   if (!isStorageConfigured()) {
     const partlySet = STORAGE_ENV.some((name) => process.env[name]?.trim());
     return partlySet

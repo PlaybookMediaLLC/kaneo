@@ -62,7 +62,9 @@ describe("Quills MCP tools", () => {
       "quills_set_post_status",
       "quills_list_feedback_signals",
       "quills_draft_changelog",
+      "quills_find_similar_feedback",
     ]);
+    expect(tools.has("get_task_customer_context")).toBe(true);
   });
 
   it("calls the teammate REST routes with the caller's API key", async () => {
@@ -101,6 +103,18 @@ describe("Quills MCP tools", () => {
         { workspaceId: ws, postId: "post_1" },
         "GET",
         "/api/quills/ws_1/posts/post_1",
+      ],
+      [
+        "get_task_customer_context",
+        { workspaceId: ws, taskId: "task_1" },
+        "GET",
+        "/api/quills/ws_1/tasks/task_1/customer-context",
+      ],
+      [
+        "quills_find_similar_feedback",
+        { workspaceId: ws, q: "dark mode", limit: 5 },
+        "GET",
+        "/api/quills/ws_1/posts/similar?q=dark+mode&limit=5",
       ],
       [
         "quills_create_post",
@@ -271,6 +285,18 @@ describe("Quills MCP tools", () => {
           workspaceId: "ws_1",
           postIds: Array.from({ length: 26 }, (_, i) => `post_${i}`),
         },
+      ],
+      [
+        "get_task_customer_context",
+        { workspaceId: "ws_1", taskId: "../other" },
+      ],
+      [
+        "quills_find_similar_feedback",
+        { workspaceId: "ws_1", q: "a", limit: 5 },
+      ],
+      [
+        "quills_find_similar_feedback",
+        { workspaceId: "ws_1", q: "dark mode", limit: 50 },
       ],
     ];
     for (const [name, args] of bad) {

@@ -8,13 +8,23 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { createId } from "@paralleldrive/cuid2";
 import { and, eq, inArray, like, lt } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
+import mainDb from "../../database";
 import type { Database } from "../../database/quills/client";
 import { jobLeaseTable } from "../../database/schema";
 import {
   lockStorageObjects,
+  queueStorageCleanup,
   withStorageObject,
 } from "../../storage/cleanup-queue";
 import { describeStorageError } from "../../storage/describe-storage-error";
+import {
+  buildLocalSignedUrl,
+  getLocalObject,
+  getStorageDriver,
+  headLocalObject,
+  putLocalObject,
+  signLocalStorageToken,
+} from "../../storage/local-driver";
 import {
   applyKeyPrefix,
   getFileExtension,
@@ -32,8 +42,11 @@ import {
   MAX_CUSTOMER_AVATAR_BYTES,
 } from "../files/customer-avatar";
 
-// Managed Quills uploads on Kaneo's storage: server-derived keys, presigned PUT, then a
-// verification lease that protects the object until the scoped transaction commits its reference.
+export { isImageContentType };
+
+// Managed Quills uploads on Kaneo's storage: server-derived keys, presigned PUT (or signed local
+// upload route when STORAGE_DRIVER=local), then a verification lease that protects the object
+// until the scoped transaction commits its reference.
 
 export const contentPurposes = [
   "file",
@@ -110,6 +123,7 @@ export const uploadedObject = z.object({
 });
 
 export const isQuillsStorageConfigured = () => {
+  if (getStorageDriver() === "local") return true;
   try {
     quillsStorageConfig();
     return true;
@@ -158,7 +172,7 @@ function client(config: StorageConfig) {
 
 /** A customer purpose takes the customer's ID as `owner`; no other purpose takes one. */
 function namespace(
-  config: StorageConfig,
+  keyPrefix: string,
   workspaceId: string,
   purpose: Purpose | "export",
   owner?: string,
@@ -172,7 +186,7 @@ function namespace(
     purpose,
     ...(owner ? [sanitizePathSegment(owner)] : []),
   ];
-  return `${applyKeyPrefix(config.keyPrefix, segments.join("/"))}/`;
+  return `${applyKeyPrefix(keyPrefix, segments.join("/"))}/`;
 }
 
 function checkUpload(purpose: Purpose, type: string, bytes: number) {
@@ -212,9 +226,28 @@ export async function createUpload(
   customer?: string,
 ): Promise<z.input<typeof uploadResponse>> {
   checkUpload(input.purpose, input.contentType, input.size);
-  const config = storage();
   const extension = getFileExtension(input.filename);
-  const key = `${namespace(config, workspaceId, input.purpose, customer)}${createId()}${extension ? `.${extension}` : ""}`;
+  if (getStorageDriver() === "local") {
+    const ttl = 300;
+    const key = `${namespace("", workspaceId, input.purpose, customer)}${createId()}${extension ? `.${extension}` : ""}`;
+    const token = signLocalStorageToken(
+      {
+        op: "upload",
+        key,
+        contentType: input.contentType,
+        maxBytes: input.size,
+      },
+      ttl,
+    );
+    return {
+      key,
+      uploadUrl: buildLocalSignedUrl("upload", token),
+      headers: { "Content-Type": input.contentType },
+      expiresAt: new Date(Date.now() + ttl * 1000).toISOString(),
+    };
+  }
+  const config = storage();
+  const key = `${namespace(config.keyPrefix, workspaceId, input.purpose, customer)}${createId()}${extension ? `.${extension}` : ""}`;
   const uploadUrl = await getSignedUrl(
     client(config),
     new PutObjectCommand({
@@ -255,6 +288,26 @@ export async function createDownload(file: {
   name: string;
   contentType: string;
 }) {
+  const disp = disposition(
+    isImageContentType(file.contentType) ? "inline" : "attachment",
+    file.name,
+  );
+  if (getStorageDriver() === "local") {
+    const ttl = 300;
+    const token = signLocalStorageToken(
+      {
+        op: "download",
+        key: file.storageKey,
+        contentType: file.contentType,
+        disposition: disp,
+      },
+      ttl,
+    );
+    return {
+      downloadUrl: buildLocalSignedUrl("download", token),
+      downloadExpiresAt: new Date(Date.now() + ttl * 1000),
+    };
+  }
   const config = storage();
   return {
     downloadUrl: await getSignedUrl(
@@ -263,10 +316,7 @@ export async function createDownload(file: {
         Bucket: config.bucket,
         Key: file.storageKey,
         ResponseContentType: file.contentType,
-        ResponseContentDisposition: disposition(
-          isImageContentType(file.contentType) ? "inline" : "attachment",
-          file.name,
-        ),
+        ResponseContentDisposition: disp,
       }),
       { expiresIn: config.presignTtlSeconds },
     ),
@@ -278,8 +328,15 @@ export async function createDownload(file: {
  * A short-lived inline GET for a verified image key that has no file row (a customer avatar). The
  * object keeps the image type that its verified upload stored. Null when storage is not configured.
  */
-export async function imageUrl(key: string) {
+export async function imageUrl(key: string, contentType?: string) {
   if (!isQuillsStorageConfigured()) return null;
+  if (getStorageDriver() === "local") {
+    const token = signLocalStorageToken(
+      { op: "download", key, disposition: "inline" },
+      300,
+    );
+    return buildLocalSignedUrl("download", token);
+  }
   const config = storage();
   return getSignedUrl(
     client(config),
@@ -287,6 +344,7 @@ export async function imageUrl(key: string) {
       Bucket: config.bucket,
       Key: key,
       ResponseContentDisposition: "inline",
+      ...(contentType ? { ResponseContentType: contentType } : {}),
     }),
     { expiresIn: config.presignTtlSeconds },
   );
@@ -297,16 +355,29 @@ export async function imageUrl(key: string) {
  * on its row before `putObject`, so the storage trigger queues cleanup when the row lets it go.
  */
 /** A signed image URL and how long a client may keep it: until a minute before it expires. */
-export async function imageRedirect(key: string) {
-  const url = await imageUrl(key);
-  return url && { url, maxAge: Math.max(0, storage().presignTtlSeconds - 60) };
+export async function imageRedirect(key: string, contentType?: string) {
+  const url = await imageUrl(key, contentType);
+  const ttl =
+    getStorageDriver() === "local" ? 300 : storage().presignTtlSeconds;
+  return url && { url, maxAge: Math.max(0, ttl - 60) };
 }
 
 export const exportKey = (workspaceId: string, extension: string) =>
-  `${namespace(storage(), workspaceId, "export")}${createId()}.${extension}`;
+  `${namespace(getStorageDriver() === "local" ? "" : storage().keyPrefix, workspaceId, "export")}${createId()}.${extension}`;
 
-/** Writes a file that the server generated, with a time limit. */
-export async function putObject(key: string, body: string, type: string) {
+export const inboundEmailFileKey = (workspaceId: string, extension: string) =>
+  `${namespace(getStorageDriver() === "local" ? "" : storage().keyPrefix, workspaceId, "file")}${createId()}.${extension}`;
+
+/** Writes a file that the server generated or received from inbound email, with a time limit. */
+export async function putObject(
+  key: string,
+  body: string | Uint8Array | Buffer,
+  type: string,
+) {
+  if (getStorageDriver() === "local") {
+    await putLocalObject(key, body, type);
+    return;
+  }
   const config = storage();
   await client(config).send(
     new PutObjectCommand({
@@ -321,6 +392,12 @@ export async function putObject(key: string, body: string, type: string) {
 
 /** Reads a stored object with a time limit. More than `maxBytes` throws. */
 export async function readObject(key: string, maxBytes: number) {
+  if (getStorageDriver() === "local") {
+    const obj = await getLocalObject(key);
+    if (!obj) throw new Error("Stored object not found");
+    if (obj.size > maxBytes) throw new Error("Stored object exceeds the limit");
+    return obj.body;
+  }
   const config = storage();
   const object = await client(config).send(
     new GetObjectCommand({ Bucket: config.bucket, Key: key }),
@@ -383,9 +460,11 @@ export async function verifyUpload(
   input: z.output<typeof uploadedObject>,
   options: { digest?: boolean; customer?: string } = {},
 ): Promise<VerifiedUpload & { sha256?: string }> {
-  const config = storage();
+  const isLocal = getStorageDriver() === "local";
+  const config = isLocal ? null : storage();
+  const keyPrefix = config ? config.keyPrefix : "";
   const prefix = (p: Purpose) =>
-    namespace(config, workspaceId, p, options.customer);
+    namespace(keyPrefix, workspaceId, p, options.customer);
   const purpose = purposes.find((p) => input.key.startsWith(prefix(p)));
   const suffix = purpose ? input.key.slice(prefix(purpose).length) : "";
   // Another workspace's or customer's key, another purpose's key or a path suffix is not this upload.
@@ -429,22 +508,42 @@ export async function verifyUpload(
     );
   });
   try {
-    const stored = await verifyTaskAssetUpload(input.key, input, config).catch(
-      (error) => {
-        throw new HTTPException(
-          error instanceof InvalidUploadedAssetError ? 400 : 503,
-          {
-            message:
-              error instanceof InvalidUploadedAssetError
-                ? error.message
-                : "Unable to verify uploaded object.",
-          },
-        );
-      },
-    );
-    const sha256 = options.digest
-      ? await digest(config, input.key, deadline)
-      : undefined;
+    let stored: { contentType: string; size: number };
+    let sha256: string | undefined;
+    if (isLocal) {
+      const meta = await headLocalObject(input.key);
+      if (!meta) {
+        throw new HTTPException(404, { message: "Upload not found" });
+      }
+      stored = {
+        contentType: meta.contentType || input.contentType,
+        size: meta.size,
+      };
+      if (options.digest) {
+        const obj = await getLocalObject(input.key);
+        if (!obj) {
+          throw new HTTPException(404, { message: "Upload not found" });
+        }
+        sha256 = createHash("sha256").update(obj.body).digest("hex");
+      }
+    } else {
+      stored = await verifyTaskAssetUpload(input.key, input, config!).catch(
+        (error) => {
+          throw new HTTPException(
+            error instanceof InvalidUploadedAssetError ? 400 : 503,
+            {
+              message:
+                error instanceof InvalidUploadedAssetError
+                  ? error.message
+                  : "Unable to verify uploaded object.",
+            },
+          );
+        },
+      );
+      sha256 = options.digest
+        ? await digest(config!, input.key, deadline)
+        : undefined;
+    }
     // A lease that was taken over or removed while the object was read protects nothing.
     await withStorageObject(input.key, async (tx) => {
       const lease = await tx.query.jobLeaseTable.findFirst({
@@ -504,4 +603,28 @@ async function digest(config: StorageConfig, key: string, deadline: number) {
 export async function holdVerifiedUpload(db: Database, upload: VerifiedUpload) {
   await lockStorageObjects(db, [upload.key]);
   if (Date.now() >= upload.deadline) throw expired();
+}
+
+/**
+ * Registers a short verification lease and storage cleanup queue entry for an object
+ * uploaded outside a DB transaction (such as an inbound email attachment), so rejected
+ * or rolled-back webhooks automatically reap orphaned objects.
+ */
+export async function registerInboundStorageObject(
+  workspaceId: string,
+  key: string,
+) {
+  const leaseUntil = new Date(Date.now() + 5 * 60_000);
+  await mainDb
+    .insert(jobLeaseTable)
+    .values({
+      name: `storage-verification:${key}`,
+      owner: `inbound-email:${workspaceId}`,
+      expiresAt: leaseUntil,
+    })
+    .onConflictDoUpdate({
+      target: jobLeaseTable.name,
+      set: { expiresAt: leaseUntil },
+    });
+  await queueStorageCleanup(mainDb, [key]);
 }

@@ -1,4 +1,5 @@
 import { brandText } from "@kaneo/branding";
+import { syncWorkspaceSeats } from "./billing/controllers/sync-seats";
 import { readClientIp } from "./utils/client-ip";
 import { deleteNativeWorkspace } from "./workspace/lifecycle/delete-native-workspace";
 import {
@@ -6,6 +7,7 @@ import {
   revokeSessionConnections,
   revokeUserConnections,
   revokeWorkspaceConnections,
+  revokeWorkspaceRoleChange,
 } from "./ws";
 import { apiKey } from "@better-auth/api-key";
 import {
@@ -658,6 +660,12 @@ export const auth = betterAuth({
         afterUpdateMemberRole: async ({ member }) => {
           if (isOwnerRole(member.role)) {
             await handleOwnerPromoted(member.organizationId, member.userId);
+          }
+          await revokeWorkspaceRoleChange(member.userId, member.organizationId);
+          if (member?.organizationId) {
+            void syncWorkspaceSeats(member.organizationId).catch((error) => {
+              console.error("Seat sync failed:", error);
+            });
           }
         },
         afterAddMember: async ({ member }) => {

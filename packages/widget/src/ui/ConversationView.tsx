@@ -1,13 +1,19 @@
-import { Fragment, useEffect, useRef, type RefObject } from "react";
+import { Fragment, useEffect, useRef, useState, type RefObject } from "react";
 import { useConversationScroll } from "./useConversationScroll.js";
 import { AttachmentGallery } from "./AttachmentGallery.js";
 import { Composer } from "./Composer.js";
 import { FeedbackCard } from "./FeedbackCard.js";
 import { MessageFiles } from "./MessageFiles.js";
+import { safeMediaUrl } from "./media.js";
 import { messageTime } from "./message-time.js";
 import type { Conversation } from "./types.js";
 import type { Draft } from "./useDrafts.js";
 import { useLocale, useT } from "./i18n/useT.js";
+
+function safeCitationHref(url: string): string | undefined {
+  if (url.startsWith("/") && !url.startsWith("//")) return url;
+  return safeMediaUrl(url);
+}
 
 export function ConversationView({
   conversation,
@@ -24,6 +30,7 @@ export function ConversationView({
   scrollContainer,
   onOpenFile,
   onConfirmCard,
+  onHandoff,
 }: {
   conversation: Conversation;
   attachmentsEnabled?: boolean;
@@ -43,10 +50,14 @@ export function ConversationView({
     messageId: string,
     card: { title: string; body: string },
   ) => Promise<unknown>;
+  /** Immediately hand off the conversation to a human teammate (#299). */
+  onHandoff?: () => Promise<unknown>;
 }) {
   const t = useT();
   const locale = useLocale();
   const scroll = useConversationScroll(conversation, scrollContainer);
+  const [handoffPending, setHandoffPending] = useState(false);
+  const [handoffError, setHandoffError] = useState("");
   const acknowledged = useRef(false);
   useEffect(() => {
     // Capture and position the opening unread boundary before a host can clear it.
@@ -58,9 +69,28 @@ export function ConversationView({
   const stamps = conversation.messages.map((message) =>
     messageTime(message.sentAt, locale),
   );
+  const handleHandoff = async () => {
+    if (!onHandoff || handoffPending || offline) return;
+    setHandoffPending(true);
+    setHandoffError("");
+    try {
+      await onHandoff();
+    } catch {
+      setHandoffError(t("Could not connect to a person. Please try again."));
+    } finally {
+      setHandoffPending(false);
+    }
+  };
   return (
     <article className="qb-conversation-view">
-      <div className="qb-thread" ref={scroll.thread}>
+      <div
+        className="qb-thread"
+        ref={scroll.thread}
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions text"
+        aria-label={conversation.title}
+      >
         <h1>{conversation.title}</h1>
         {(conversation.unreadCount ?? 0) > 0 && onRead && (
           <button
@@ -85,6 +115,10 @@ export function ConversationView({
             !newDay &&
             previous?.author === message.author &&
             previous?.fromVisitor === message.fromVisitor;
+          const citations = (message.citations ?? []).flatMap((item) => {
+            const href = safeCitationHref(item.url);
+            return href ? [{ ...item, href }] : [];
+          });
           return (
             <Fragment key={message.id}>
               {message.id === scroll.firstUnread && (
@@ -102,6 +136,22 @@ export function ConversationView({
                   {message.fromAssistant ? t("Assistant") : message.author}
                 </strong>
                 <p>{message.body}</p>
+                {citations.length > 0 && (
+                  <div className="qb-citations" aria-label={t("Sources")}>
+                    <span className="qb-citations-label">{t("Sources")}:</span>
+                    {citations.map((citation) => (
+                      <a
+                        key={`${citation.href}:${citation.title}`}
+                        className="qb-citation-chip"
+                        href={citation.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {citation.title}
+                      </a>
+                    ))}
+                  </div>
+                )}
                 {message.feedbackCard && (
                   <FeedbackCard
                     card={message.feedbackCard}
@@ -136,6 +186,25 @@ export function ConversationView({
         >
           {t("Jump to latest")}
         </button>
+      )}
+      {onHandoff && (
+        <div className="qb-handoff-bar">
+          <button
+            type="button"
+            className="qb-handoff-button"
+            disabled={handoffPending || offline}
+            onClick={() => void handleHandoff()}
+          >
+            {handoffPending
+              ? t("Connecting you with the team…")
+              : t("Talk to a person")}
+          </button>
+          {handoffError && (
+            <p className="qb-form-error" role="alert">
+              {handoffError}
+            </p>
+          )}
+        </div>
       )}
       <Composer
         kind="reply"

@@ -129,6 +129,10 @@ export const assistantInvolvements = quillsSchema
         .notNull()
         .defaultNow(),
       endedAt: timestamp("ended_at", { withTimezone: true }),
+      // Set when a customer replies again after an AI resolution, so resolution reporting stays honest (#302).
+      reopenedAfterResolutionAt: timestamp("reopened_after_resolution_at", {
+        withTimezone: true,
+      }),
     },
     (t) => [
       index("assistant_involvements_conversation_id_idx").on(t.conversationId),

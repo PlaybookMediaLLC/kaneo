@@ -3,6 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import { flexibleToTypeIdSchema } from "@kaneo/ids/zod";
 import { apiRouter, z, type BaseVariables } from "../../openapi";
 import { principal } from "../../database/quills/schema/auth";
+import { ticketPosts } from "../../database/quills/schema/releases";
 import { tickets } from "../../database/quills/schema/tickets";
 import { defineQuillsRoute } from "../framework/define-route";
 import { insertPost } from "../feedback/posts";
@@ -96,6 +97,14 @@ const createPost = defineQuillsRoute({
         actor,
         "ticket",
       );
+      await db
+        .insert(ticketPosts)
+        .values({
+          ticketId: params.ticketId,
+          postId: vote.postId,
+          createdByPrincipalId: actor.principalId,
+        })
+        .onConflictDoNothing();
       return {
         postId: vote.postId,
         created: false,
@@ -111,6 +120,14 @@ const createPost = defineQuillsRoute({
       author: customer.id,
       source: "ticket",
     });
+    await db
+      .insert(ticketPosts)
+      .values({
+        ticketId: params.ticketId,
+        postId,
+        createdByPrincipalId: actor.principalId,
+      })
+      .onConflictDoNothing();
     return { postId, created: true, voted: false, onBehalfOf: customer.id };
   },
 });

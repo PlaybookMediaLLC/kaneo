@@ -1292,7 +1292,8 @@
 			"defaultRoleDescriptions": {
 				"viewer": "Μπορεί να βλέπει και να σχολιάζει εργασίες.",
 				"member": "Μπορεί να δημιουργεί και να διαχειρίζεται εργασίες και έργα.",
-				"admin": "Έχει πλήρη πρόσβαση στον χώρο εργασίας."
+				"admin": "Έχει πλήρη πρόσβαση στον χώρο εργασίας.",
+				"collaborator": "Free internal seat: can view threads and add internal notes without replying externally."
 			},
 			"resources": {
 				"project": "Έργα",
@@ -1473,6 +1474,10 @@
 					"manage_settings": {
 						"label": "Manage Quills settings",
 						"description": "Change Quills configuration for this workspace."
+					},
+					"comment_internal": {
+						"description": "Add internal notes and @mention teammates without sending external customer replies.",
+						"label": "Comment internally"
 					}
 				}
 			},
@@ -1492,7 +1497,8 @@
 			"deleteDialog": {
 				"title": "Διαγραφή ρόλου",
 				"description": "Αυτό θα διαγράψει οριστικά τον ρόλο \"{{role}}\". Τα μέλη με αυτόν τον ρόλο θα χάσουν τα δικαιώματά του."
-			}
+			},
+			"freeSeatBadge": "Free seat"
 		},
 		"workspaceLabels": {
 			"pageTitle": "Ετικέτες",
@@ -3472,7 +3478,12 @@
 			"startDate": "Ημερομηνία έναρξης",
 			"noDate": "Χωρίς ημερομηνία",
 			"dates": "Ημερομηνίες",
-			"project": "Έργο"
+			"project": "Έργο",
+			"churnRisk": "Churn risk",
+			"companiesCount": "{{count}} companies",
+			"customerContext": "Customer context",
+			"requestersCount": "{{count}} requesters",
+			"votesCount": "{{count}} votes"
 		},
 		"move": {
 			"title": "Μετακίνηση εργασίας",
@@ -4049,7 +4060,8 @@
 			"owner": "Ιδιοκτήτης",
 			"admin": "Διαχειριστής",
 			"member": "Μέλος",
-			"viewer": "Θεατής"
+			"viewer": "Θεατής",
+			"collaborator": "Collaborator"
 		},
 		"members": {
 			"pageTitle": "Μέλη",

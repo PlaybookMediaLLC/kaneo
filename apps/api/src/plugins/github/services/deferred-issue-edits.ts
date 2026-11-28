@@ -63,17 +63,29 @@ async function issueAccess(
     throw new Error("Invalid issue number");
   const config = JSON.parse(integration.config);
   const { repositoryOwner: owner, repositoryName: repo } = config;
-  const payload = (field: IssueField, value: string) =>
-    field === "description"
-      ? { body: formatIssueBody(value, link.taskId) }
-      : { [field]: value };
+  const payload = async (field: IssueField, value: string) => {
+    if (field !== "description") return { [field]: value };
+    const customerContext =
+      integration.type === "github"
+        ? await (
+            await import("./customer-context")
+          ).loadPiiSafeTaskCustomerContext(link.taskId)
+        : null;
+    return { body: formatIssueBody(value, link.taskId, customerContext) };
+  };
   if (integration.type === "gitea") {
     const client = createGiteaClient(config as GiteaConfig);
     return {
       read: () => client.getIssue(owner, repo, number),
       write: async (field: IssueField, value: string) =>
-        (await client.updateIssue(owner, repo, number, payload(field, value)))
-          ?.updated_at,
+        (
+          await client.updateIssue(
+            owner,
+            repo,
+            number,
+            await payload(field, value),
+          )
+        )?.updated_at,
     };
   }
   const octokit = await getVerifiedInstallationOctokit(
@@ -96,7 +108,7 @@ async function issueAccess(
           owner,
           repo,
           issue_number: number,
-          ...payload(field, value),
+          ...(await payload(field, value)),
           request: { timeout: 10_000 },
         })
       )?.data?.updated_at,

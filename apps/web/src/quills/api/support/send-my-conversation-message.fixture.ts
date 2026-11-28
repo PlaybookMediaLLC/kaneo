@@ -16,6 +16,7 @@ export const sendMyConversationMessageFixture = {
           editedAt: null,
           fromAssistant: false,
           feedbackCard: null,
+          citations: [],
         },
         conversation: {
           id: "id_test_1",

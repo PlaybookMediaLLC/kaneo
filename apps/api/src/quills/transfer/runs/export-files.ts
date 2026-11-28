@@ -210,6 +210,7 @@ async function conversationsCsv(db: Database, page: Page) {
     .where(
       and(
         isNotNull(conversationMessages.conversationId),
+        eq(conversationMessages.sendStatus, "sent"),
         isNull(conversationMessages.deletedAt),
         notTestConversation,
       ),

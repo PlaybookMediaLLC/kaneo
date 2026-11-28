@@ -16,6 +16,7 @@ import { resolve } from "node:path";
 import { Hono } from "hono";
 import * as kaneo from "../schema";
 import { runQuillsMigrations } from "./migrate";
+import { CATALOGUE_VERSION } from "./seed-system";
 import { withQuillsWorkspace } from "./client";
 import { boards } from "./schema/boards";
 import { posts } from "./schema/posts";
@@ -289,7 +290,9 @@ describe.skipIf(!url)("Quills completion", () => {
   });
   it("initializes only once and keeps workspace custom status changes", async () => {
     await scoped(async (tx) => {
-      expect((await tx.select().from(settings))[0]!.catalogueVersion).toBe(1);
+      expect((await tx.select().from(settings))[0]!.catalogueVersion).toBe(
+        CATALOGUE_VERSION,
+      );
       await tx.update(postStatuses).set({ name: "Custom status" });
     });
     expect(

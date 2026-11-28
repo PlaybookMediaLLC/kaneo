@@ -76,39 +76,67 @@ export async function runQuillsMigrations(
     const ledger = await client.query(
       "SELECT to_regclass('quills_migrations.__drizzle_migrations') AS name",
     );
+    let forwardExpandedRollback = false;
     if (ledger.rows[0].name) {
       const applied = await client.query<{ hash: string; created_at: string }>(
-        "SELECT hash,created_at FROM quills_migrations.__drizzle_migrations",
+        "SELECT hash,created_at FROM quills_migrations.__drizzle_migrations ORDER BY created_at ASC",
       );
       appliedCount = applied.rows.length;
       const hashes = new Map(
         applied.rows.map((row) => [Number(row.created_at), row.hash]),
       );
       const bundled = readMigrationFiles({ migrationsFolder });
-      if (
-        applied.rows.length > bundled.length ||
-        applied.rows.some(
-          (row) =>
-            !bundled.some(
-              (file) => file.folderMillis === Number(row.created_at),
-            ),
-        )
-      )
-        throw new Error(
-          "Quills database contains migrations unknown to this application",
-        );
-      if (
-        bundled
-          .slice(0, applied.rows.length)
-          .some((file) => !hashes.has(file.folderMillis))
-      )
-        throw new Error("Quills migration history is not a contiguous prefix");
-      for (const file of bundled)
+
+      // Verify no applied bundled migration was tampered with.
+      for (const file of bundled) {
         if (
           hashes.has(file.folderMillis) &&
           hashes.get(file.folderMillis) !== file.hash
-        )
+        ) {
           throw new Error("An applied Quills migration was changed");
+        }
+      }
+
+      if (applied.rows.length > bundled.length) {
+        // #303 Expand-then-contract rollback safety: allow an older app version to boot against
+        // a forward-expanded database ONLY when all bundled migrations are an intact contiguous
+        // prefix of the applied ledger (every bundled folderMillis exists at the prefix with
+        // matching hash).
+        const prefixMatches = bundled.every(
+          (file, idx) =>
+            Number(applied.rows[idx]?.created_at) === file.folderMillis &&
+            applied.rows[idx]?.hash === file.hash,
+        );
+        if (!prefixMatches) {
+          throw new Error(
+            "Quills database contains migrations unknown to this application",
+          );
+        }
+        forwardExpandedRollback = true;
+        console.warn(
+          `[quills-migrate] Database has ${applied.rows.length} migrations (${bundled.length} bundled). Running in expand-contract rollback compatibility mode.`,
+        );
+      } else {
+        if (
+          applied.rows.some(
+            (row) =>
+              !bundled.some(
+                (file) => file.folderMillis === Number(row.created_at),
+              ),
+          )
+        )
+          throw new Error(
+            "Quills database contains migrations unknown to this application",
+          );
+        if (
+          bundled
+            .slice(0, applied.rows.length)
+            .some((file) => !hashes.has(file.folderMillis))
+        )
+          throw new Error(
+            "Quills migration history is not a contiguous prefix",
+          );
+      }
     }
     const manifest = await client.query(
       "SELECT to_regclass('quills_migrations.schema_manifest') AS name",
@@ -116,7 +144,7 @@ export async function runQuillsMigrations(
     // Operational indexes that the saved manifest does not list: the migration that added one
     // committed, and its first build after the migrations did not finish.
     let unrecorded: typeof CONCURRENT_INDEX_SPECS = [];
-    if (manifest.rows[0].name) {
+    if (manifest.rows[0].name && !forwardExpandedRollback) {
       const saved = await client.query<{
         tables: Record<string, { indexes: Record<string, string> | null }>;
       }>(
@@ -155,11 +183,13 @@ export async function runQuillsMigrations(
           "Quills restored schema differs from its migration manifest",
         );
     }
-    await migrate(drizzle(client), {
-      migrationsFolder,
-      migrationsSchema: "quills_migrations",
-      migrationsTable: "__drizzle_migrations",
-    });
+    if (!forwardExpandedRollback) {
+      await migrate(drizzle(client), {
+        migrationsFolder,
+        migrationsSchema: "quills_migrations",
+        migrationsTable: "__drizzle_migrations",
+      });
+    }
     await client.query(
       `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='quills_runtime') THEN CREATE ROLE quills_runtime NOLOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS; END IF; END $$`,
     );
@@ -190,7 +220,7 @@ export async function runQuillsMigrations(
       await client.query("GRANT quills_runtime TO CURRENT_USER");
     await client.query(`GRANT USAGE ON SCHEMA quills TO ${grantee}`);
     await client.query(
-      `GRANT EXECUTE ON FUNCTION quills.storage_references(), quills.storage_keys_for_workspace(text), quills.storage_object_is_referenced(text), quills.runnable_workspaces(text), quills.integration_workspace(uuid) TO ${grantee}`,
+      `GRANT EXECUTE ON FUNCTION quills.storage_references(), quills.storage_keys_for_workspace(text), quills.storage_object_is_referenced(text), quills.runnable_workspaces(text), quills.integration_workspace(uuid), quills.custom_domain_workspace(text, text) TO ${grantee}`,
     );
     await client.query("GRANT USAGE ON SCHEMA quills TO quills_runtime");
     await client.query(
@@ -219,7 +249,10 @@ export async function runQuillsMigrations(
         process.env.QUILLS_STRICT_STARTUP_VERIFY === "1" ||
         process.env.CI === "true",
     });
-    if (!(await getMigrationStatus(client, migrationsFolder)).upToDate)
+    if (
+      !forwardExpandedRollback &&
+      !(await getMigrationStatus(client, migrationsFolder)).upToDate
+    )
       throw new Error("Quills migration ledger does not match the bundled SQL");
     const workspaces = await client.query<{ id: string }>(
       "SELECT w.id FROM public.workspace w LEFT JOIN quills.settings s ON s.workspace_id=w.id WHERE w.archived_at IS NULL AND (s.catalogue_version IS NULL OR s.catalogue_version<>$1)",

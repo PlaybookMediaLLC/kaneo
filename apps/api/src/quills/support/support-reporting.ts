@@ -1,6 +1,7 @@
 import { and, count, eq, gte, inArray, lt, sql, type SQL } from "drizzle-orm";
 import { apiRouter, z, type BaseVariables } from "../../openapi";
 import { conversations } from "../../database/quills/schema/conversation";
+import { supportDailyStats } from "../../database/quills/schema/privacy";
 import { slaEvents, slaPolicies } from "../../database/quills/schema/sla";
 import { defineQuillsRoute } from "../framework/define-route";
 import { notTestConversation } from "./conversation-model";
@@ -105,11 +106,55 @@ const reporting = defineQuillsRoute({
       realConversation,
       realTicket,
     );
-    const totals = await db
+    const liveTotals = await db
       .select({ kind: slaEvents.kind, n: count() })
       .from(slaEvents)
       .where(range)
       .groupBy(slaEvents.kind);
+    const fromDay = new Date(query.from).toISOString().slice(0, 10);
+    const toDay = new Date(Date.parse(query.to) - 1).toISOString().slice(0, 10);
+    const [archived] = await db
+      .select({
+        firstResponseMet: sql<number>`coalesce(sum(${supportDailyStats.slaFirstResponseMet}), 0)::int`,
+        firstResponseBreached: sql<number>`coalesce(sum(${supportDailyStats.slaFirstResponseBreached}), 0)::int`,
+        nextResponseMet: sql<number>`coalesce(sum(${supportDailyStats.slaNextResponseMet}), 0)::int`,
+        nextResponseBreached: sql<number>`coalesce(sum(${supportDailyStats.slaNextResponseBreached}), 0)::int`,
+        resolutionMet: sql<number>`coalesce(sum(${supportDailyStats.slaResolutionMet}), 0)::int`,
+        resolutionBreached: sql<number>`coalesce(sum(${supportDailyStats.slaResolutionBreached}), 0)::int`,
+        timeToResolveMet: sql<number>`coalesce(sum(${supportDailyStats.slaTimeToResolveMet}), 0)::int`,
+        timeToResolveBreached: sql<number>`coalesce(sum(${supportDailyStats.slaTimeToResolveBreached}), 0)::int`,
+      })
+      .from(supportDailyStats)
+      .where(
+        and(
+          gte(supportDailyStats.day, fromDay),
+          sql`${supportDailyStats.day} <= ${toDay}`,
+        ),
+      );
+    const totals = [
+      ...liveTotals,
+      ...(archived
+        ? [
+            { kind: "first_response_met", n: archived.firstResponseMet },
+            {
+              kind: "first_response_breached",
+              n: archived.firstResponseBreached,
+            },
+            { kind: "next_response_met", n: archived.nextResponseMet },
+            {
+              kind: "next_response_breached",
+              n: archived.nextResponseBreached,
+            },
+            { kind: "resolution_met", n: archived.resolutionMet },
+            { kind: "resolution_breached", n: archived.resolutionBreached },
+            { kind: "time_to_resolve_met", n: archived.timeToResolveMet },
+            {
+              kind: "time_to_resolve_breached",
+              n: archived.timeToResolveBreached,
+            },
+          ]
+        : []),
+    ];
     const perPolicy = await db
       .select({
         policyId: slaEvents.policyId,

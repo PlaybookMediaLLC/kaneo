@@ -27,4 +27,26 @@ export const updateQuillsSpamFilterConfig = body({
   trustedSenders: ["Acme.com", "not an address"],
   aiClassifier: false,
 });
+export const getQuillsUndoSendSettings = empty;
+export const setQuillsUndoSendSettings = body({
+  enabled: true,
+  delaySeconds: 15,
+});
+export const getQuillsReopenPolicy = empty;
+export const setQuillsReopenPolicy = body({
+  mode: "within_days",
+  windowDays: 14,
+  autoCloseAfterDays: 5,
+  reminderBeforeCloseHours: 24,
+});
+export const getQuillsCsatSettings = empty;
+export const setQuillsCsatSettings = body({
+  enabled: true,
+  samplingRate: 50,
+  cooldownDays: 14,
+  delayMinutes: 15,
+  excludeTrivialUnderMessages: 2,
+  lowScoreThreshold: 2,
+  autoCreateFollowUpOnLow: true,
+});
 export const getQuillsEmailChannelStatus = empty;

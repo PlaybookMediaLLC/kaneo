@@ -1,6 +1,15 @@
-import { Lock, MessageSquareReply } from "lucide-react";
-import { useRef, useState } from "react";
+import { Lock, MessageSquareReply, Send } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import {
+  detectInternalContentInReply,
+  extractMentionedPrincipalIds,
+} from "../../../core/reply-safety";
+import {
+  clearThreadDraft,
+  readThreadDraft,
+  writeThreadDraft,
+} from "../../../core/thread-draft";
 import type { PortalProblem } from "../../../core/types";
 import { uploadObject } from "../../../core/upload-object";
 import { useAddConversationNote } from "../../../hooks/team/use-add-conversation-note";
@@ -8,18 +17,27 @@ import { useCreateFiles } from "../../../hooks/team/use-create-files";
 import { useCreateUpload } from "../../../hooks/team/use-create-upload";
 import { useReplyConversation } from "../../../hooks/team/use-reply-conversation";
 import { useSendConversationTyping } from "../../../hooks/team/use-send-conversation-typing";
+import type { ThreadViewer } from "../../../hooks/team/use-thread-presence";
 import { useTeamRuntime } from "../../../team/runtime";
 import { AttachmentPicker } from "../../../ui/attachment-picker";
 import { Composer } from "../../../ui/inbox/composer";
 import { EmojiMenu } from "../../../ui/inbox/emoji-menu";
 import type { ComposerMode } from "../../../ui/inbox/inbox-types";
+import { ReplyGuardrailBanner } from "../../../ui/inbox/reply-guardrail-banner";
+import { ScheduleSendMenu } from "../../../ui/inbox/schedule-send-menu";
 import { useKeyShortcuts } from "../../../ui/inbox/use-key-shortcuts";
+import type { Teammate } from "../../team-conversations/conversation-list";
 import { ActionProblem } from "./action-problem";
 
 export interface ConversationComposerProps {
   workspaceId: string;
   conversationId: string;
   customerName: string;
+  people?: readonly Teammate[];
+  viewers?: readonly ThreadViewer[];
+  onReplyingChange?: (replying: boolean) => void;
+  restoredDraft?: { text: string; seq: number } | null;
+  onRestoredDraftConsumed?: () => void;
 }
 
 type Mode = "reply" | "note";
@@ -30,8 +48,7 @@ const TYPING_INTERVAL = 4000;
 
 /**
  * The composer at the bottom of the thread: a reply to the customer or an internal note, with
- * files. R and N choose the mode and focus the box. A reply tells the customer that it is being
- * typed. Files upload when the message is sent; a file keeps its upload if the send fails.
+ * files. R and N choose the mode and focus the box while preserving the draft (#324).
  */
 export function ConversationComposer(props: ConversationComposerProps) {
   const { t } = useTranslation("quills");
@@ -41,9 +58,32 @@ export function ConversationComposer(props: ConversationComposerProps) {
   const typing = useSendConversationTyping(team.viewer);
   const lastTyping = useRef(0);
   const input = useRef<HTMLTextAreaElement>(null);
-  const can = { reply: team.permissions.update, note: team.permissions.create };
-  const [mode, setMode] = useState<Mode>(can.reply ? "reply" : "note");
-  const [text, setText] = useState("");
+  const can = {
+    reply: team.permissions.update,
+    note: Boolean(team.permissions.update || team.permissions.commentInternal),
+  };
+  const savedDraft = useMemo(
+    () =>
+      readThreadDraft(
+        props.workspaceId,
+        "conversation",
+        props.conversationId,
+        team.viewer.id,
+      ),
+    [props.workspaceId, props.conversationId, team.viewer.id],
+  );
+  const initialMode: Mode =
+    savedDraft && can[savedDraft.mode]
+      ? savedDraft.mode
+      : can.reply
+        ? "reply"
+        : "note";
+  const [mode, setMode] = useState<Mode>(initialMode);
+  const effectiveMode: Mode = can[mode] ? mode : can.reply ? "reply" : "note";
+  const [text, setText] = useState(savedDraft?.text ?? "");
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    scheduledAt?: string;
+  } | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProblem, setUploadProblem] = useState<PortalProblem | null>(
@@ -57,14 +97,50 @@ export function ConversationComposer(props: ConversationComposerProps) {
     workspaceId: props.workspaceId,
     conversationId: props.conversationId,
   };
+
+  const { onRestoredDraftConsumed } = props;
+  useEffect(() => {
+    if (!props.restoredDraft) return;
+    if (can.reply) setMode("reply");
+    setText(props.restoredDraft.text);
+    setPendingConfirm(null);
+    onRestoredDraftConsumed?.();
+    requestAnimationFrame(() => input.current?.focus());
+  }, [props.restoredDraft, can.reply, onRestoredDraftConsumed]);
+
+  useEffect(() => {
+    writeThreadDraft(
+      props.workspaceId,
+      "conversation",
+      props.conversationId,
+      { text, mode: effectiveMode },
+      team.viewer.id,
+    );
+  }, [
+    props.workspaceId,
+    props.conversationId,
+    text,
+    effectiveMode,
+    team.viewer.id,
+  ]);
+
+  const { onReplyingChange } = props;
+  const isReplyingState = effectiveMode === "reply" && Boolean(text.trim());
+  useEffect(() => {
+    onReplyingChange?.(isReplyingState);
+  }, [isReplyingState, onReplyingChange]);
+
+  const switchMode = (next: Mode, shouldFocus = false) => {
+    if (!can[next]) return;
+    setMode(next);
+    setPendingConfirm(null);
+    if (shouldFocus) input.current?.focus();
+  };
+
   const focus = (next: Mode) =>
-    can[next]
-      ? () => {
-          setMode(next);
-          input.current?.focus();
-        }
-      : undefined;
+    can[next] ? () => switchMode(next, true) : undefined;
   useKeyShortcuts({ r: focus("reply"), n: focus("note") });
+
   const modes: ComposerMode[] = [
     ...(can.reply
       ? [
@@ -72,6 +148,9 @@ export function ConversationComposer(props: ConversationComposerProps) {
             value: "reply",
             label: t("team-conversations.reply"),
             icon: MessageSquareReply,
+            description: t("inbox.replyContext", { name: props.customerName }),
+            sendLabel: t("inbox.replySend"),
+            sendIcon: Send,
           },
         ]
       : []),
@@ -82,11 +161,31 @@ export function ConversationComposer(props: ConversationComposerProps) {
             label: t("team-conversations.note"),
             icon: Lock,
             private: true,
+            description: t("inbox.noteContext"),
+            sendLabel: t("inbox.noteSend"),
+            sendIcon: Lock,
           },
         ]
       : []),
   ];
-  const sending = mode === "reply" ? reply : note;
+
+  const people = useMemo(() => props.people ?? [], [props.people]);
+  const internalWarning = useMemo(
+    () =>
+      effectiveMode === "reply"
+        ? detectInternalContentInReply(text, people)
+        : null,
+    [effectiveMode, text, people],
+  );
+  const replyingTeammates = useMemo(
+    () =>
+      effectiveMode === "reply"
+        ? (props.viewers ?? []).filter((viewer) => viewer.state === "replying")
+        : [],
+    [effectiveMode, props.viewers],
+  );
+
+  const sending = effectiveMode === "reply" ? reply : note;
   // Puts an emoji at the caret (or over the selection) and keeps the caret after it.
   const insert = (emoji: string) => {
     const box = input.current;
@@ -120,7 +219,8 @@ export function ConversationComposer(props: ConversationComposerProps) {
     uploaded.current.set(file, id);
     return id;
   };
-  const send = async () => {
+  const performSend = async (scheduledAt?: string) => {
+    if (uploading || sending.isPending) return;
     setUploadProblem(null);
     let attachmentIds: string[];
     setUploading(true);
@@ -132,11 +232,7 @@ export function ConversationComposer(props: ConversationComposerProps) {
     } finally {
       setUploading(false);
     }
-    const json = {
-      content: text.trim(),
-      ...(attachmentIds.length ? { attachmentIds } : {}),
-    };
-    const request = { param, json };
+    const trimmed = text.trim();
     const sent = text;
     const options = {
       // A file that retention removed (a retry a day later) is 404: upload again next time.
@@ -146,49 +242,157 @@ export function ConversationComposer(props: ConversationComposerProps) {
       onSuccess: () => {
         // Text typed while the files uploaded stays in the box.
         setText((current) => (current === sent ? "" : current));
+        setPendingConfirm(null);
         setFiles([]);
         uploaded.current.clear();
+        clearThreadDraft(
+          props.workspaceId,
+          "conversation",
+          props.conversationId,
+          team.viewer.id,
+        );
       },
     };
-    if (mode === "reply") reply.mutate(request, options);
-    else note.mutate(request, options);
+    if (effectiveMode === "reply") {
+      reply.mutate(
+        {
+          param,
+          json: {
+            content: trimmed,
+            ...(attachmentIds.length ? { attachmentIds } : {}),
+            ...(scheduledAt ? { scheduledAt } : {}),
+          },
+        },
+        options,
+      );
+    } else {
+      const mentionPrincipalIds = extractMentionedPrincipalIds(trimmed, people);
+      note.mutate(
+        {
+          param,
+          json: {
+            content: trimmed,
+            ...(attachmentIds.length ? { attachmentIds } : {}),
+            ...(mentionPrincipalIds.length ? { mentionPrincipalIds } : {}),
+          },
+        },
+        options,
+      );
+    }
   };
+  const send = (scheduledAt?: string) => {
+    if (
+      effectiveMode === "reply" &&
+      internalWarning?.flagged &&
+      !pendingConfirm
+    ) {
+      setPendingConfirm({ scheduledAt });
+      return;
+    }
+    void performSend(scheduledAt ?? pendingConfirm?.scheduledAt);
+  };
+
   return (
     <div className="mx-auto w-full max-w-200 px-4 pb-4">
       <Composer
         label={
-          mode === "reply"
+          effectiveMode === "reply"
             ? t("team-conversations.replyTo", { name: props.customerName })
             : t("team-conversations.noteLabel")
         }
         value={text}
         onChange={(value) => {
           setText(value);
-          if (mode !== "reply") return;
+          setPendingConfirm(null);
+          if (effectiveMode !== "reply") return;
           if (Date.now() - lastTyping.current < TYPING_INTERVAL) return;
           lastTyping.current = Date.now();
           typing.mutate({ param });
         }}
-        onSend={() => void send()}
+        onSend={() => send()}
+        onPaste={
+          team.permissions.create
+            ? (event) => {
+                const items = event.clipboardData?.items;
+                if (!items) return;
+                const pastedImages: File[] = [];
+                const now = Date.now();
+                Array.from(items).forEach((item, idx) => {
+                  if (
+                    item.kind === "file" &&
+                    item.type.startsWith("image/") &&
+                    item.type !== "image/svg+xml"
+                  ) {
+                    const file = item.getAsFile();
+                    if (file) {
+                      const ext =
+                        file.type.split("/")[1]?.replace(/[^a-z0-9]/gi, "") ||
+                        "png";
+                      const named =
+                        file.name && file.name !== "image.png"
+                          ? file
+                          : new File(
+                              [file],
+                              `screenshot-${now}-${idx}.${ext}`,
+                              {
+                                type: file.type,
+                              },
+                            );
+                      pastedImages.push(named);
+                    }
+                  }
+                });
+                if (pastedImages.length > 0) {
+                  if (!event.clipboardData?.getData("text/plain")) {
+                    event.preventDefault();
+                  }
+                  setFiles((prev) => [...prev, ...pastedImages].slice(0, 10));
+                }
+              }
+            : undefined
+        }
         modes={modes}
-        mode={mode}
-        onModeChange={(value) => setMode(value as Mode)}
+        mode={effectiveMode}
+        onModeChange={(value) => switchMode(value as Mode)}
         sending={uploading || sending.isPending}
         disabled={!modes.length}
         inputRef={input}
+        sendExtra={
+          effectiveMode === "reply" && can.reply ? (
+            <ScheduleSendMenu
+              disabled={!text.trim() || uploading || sending.isPending}
+              onSchedule={(isoDate) => send(isoDate)}
+            />
+          ) : null
+        }
+        banner={
+          <ReplyGuardrailBanner
+            internalWarning={internalWarning}
+            confirmingSend={pendingConfirm !== null}
+            sending={uploading || sending.isPending}
+            replyingTeammates={replyingTeammates}
+            canSwitchToNote={can.note}
+            onSwitchToNote={() => switchMode("note", true)}
+            onConfirmSendAnyway={() =>
+              void performSend(pendingConfirm?.scheduledAt)
+            }
+          />
+        }
         tools={
           <>
-            <AttachmentPicker
-              attachments={[]}
-              files={files}
-              disabled={uploading || sending.isPending || !modes.length}
-              onFilesChange={setFiles}
-              onRemove={() => undefined}
-              onRemoveFile={(file) => {
-                uploaded.current.delete(file);
-                setFiles((list) => list.filter((item) => item !== file));
-              }}
-            />
+            {team.permissions.create ? (
+              <AttachmentPicker
+                attachments={[]}
+                files={files}
+                disabled={uploading || sending.isPending || !modes.length}
+                onFilesChange={setFiles}
+                onRemove={() => undefined}
+                onRemoveFile={(file) => {
+                  uploaded.current.delete(file);
+                  setFiles((list) => list.filter((item) => item !== file));
+                }}
+              />
+            ) : null}
             <EmojiMenu disabled={!modes.length} onPick={insert} />
           </>
         }

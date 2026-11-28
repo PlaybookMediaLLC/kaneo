@@ -50,6 +50,13 @@ export const ID_PREFIXES = {
   conversation_message_translation: "conversation_msg_translation",
   // A stored upload attached to conversation and ticket messages.
   file: "file",
+  // Signed magic-link access records for email-only customers (#313).
+  request_link: "request_link",
+  // Multi-brand and customizable email templates (#332).
+  brand: "brand",
+  email_template: "email_template",
+  // Webhook delivery log rows (#330).
+  webhook_delivery: "webhook_delivery",
 
   // Help center
   kb_category: "kb_category",
@@ -87,6 +94,9 @@ export const ID_PREFIXES = {
   assistant_document: "assistant_document",
   assistant_web_source: "assistant_web_source",
   assistant_event: "assistant_event",
+  agent_decline_topic: "agent_decline_topic",
+  ai_eval_run: "ai_eval_run",
+  assistant_draft_reply: "assistant_draft_reply",
 
   // Tickets (support platform §4.2)
   ticket: "ticket",
@@ -95,6 +105,11 @@ export const ID_PREFIXES = {
   ticket_activity: "ticket_activity",
   ticket_summary: "ticket_summary",
   ticket_sub: "ticket_sub",
+  ticket_post: "ticket_post",
+
+  // Verified releases (#298)
+  verified_release: "verified_release",
+  release_notification: "release_notification",
 
   // Email channel (support platform §4.8)
   channel_account: "channel_account",
@@ -121,6 +136,10 @@ export const ID_PREFIXES = {
   // Imports & exports hub
   import_run: "import_run",
   export_run: "export_run",
+
+  // Privacy & retention (#329)
+  retention_policy: "retention_policy",
+  privacy_request: "privacy_request",
 
   // Notifications
   post_subscription: "post_sub",

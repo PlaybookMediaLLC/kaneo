@@ -93,7 +93,12 @@
 					},
 					{
 						"group": "Customer portal",
-						"pages": ["quills/admin", "quills/customer", "quills/deployment"]
+						"pages": [
+							"quills/widget",
+							"quills/admin",
+							"quills/customer",
+							"quills/deployment"
+						]
 					}
 				]
 			},
