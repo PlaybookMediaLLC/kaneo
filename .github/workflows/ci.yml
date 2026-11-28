@@ -216,7 +216,7 @@ jobs:
         if: matrix.tests == 'packages'
         run: |
           docker pull nginx:1.30.6-alpine
-          node --test scripts/security/*.test.mjs scripts/ci/*.test.mjs scripts/contribution-eligibility/*.test.mjs
+          node --test scripts/security/*.test.mjs scripts/ci/*.test.mjs scripts/contribution-eligibility/*.test.mjs scripts/pr-video-evidence/*.test.mjs
 
       - name: Run unit tests
         if: matrix.tests == 'packages'

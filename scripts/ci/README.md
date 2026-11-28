@@ -70,7 +70,7 @@ Majors and replacements require Dependency Dashboard approval before PR creation
 Actions non-major updates remain grouped, including digest pinning, and retain full SHA pins.
 All updates require manual merge.
 PRs generated from GitHub vulnerability alerts bypass the routine schedule, release-age delay, dashboard approval, and routine PR limit; detection and immediate creation of every security fix are not guaranteed.
-Root npm updates include the pnpm workspace/catalog and root lockfile; `tests/e2e`, `scripts/slop-labeler`, and `scripts/ui-review-bot` keep independent locks.
+Root npm updates include the pnpm workspace/catalog and root lockfile; `tests/e2e`, `scripts/slop-labeler`, `scripts/ui-review-bot`, and `scripts/pr-video-evidence` keep independent locks.
 CI frozen-lockfile checks catch inconsistencies.
 See the owner cutover steps in [the contribution guide](../../CONTRIBUTING.md#contribution-eligibility).
 
